@@ -1,0 +1,18 @@
+[package]
+name = "synapse-learn"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+rusqlite.workspace = true
+rand.workspace = true
+statrs.workspace = true
+synapse-core = { path = "../synapse-core" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+doctest = false

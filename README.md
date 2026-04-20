@@ -9,6 +9,11 @@ One file on disk. Drop it in your project. Your AI picks up where you left off �
 [![Release](https://img.shields.io/github/v/tag/Supersynergy/synapse?label=release&color=blueviolet)](https://github.com/Supersynergy/synapse/releases)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/Supersynergy/synapse?style=flat&color=ffcc00)](https://github.com/Supersynergy/synapse/stargazers)
+[![CRDT](https://img.shields.io/badge/CRDT-yrs-8a2be2)](crates/synapse-core/src/crdt.rs)
+[![Ed25519](https://img.shields.io/badge/signed-Ed25519-22c55e)](crates/synapse-core/src/sign.rs)
+[![MCP](https://img.shields.io/badge/MCP-5%20tools-0ea5e9)](crates/synapse-mcp/src/main.rs)
+[![E2E](https://img.shields.io/badge/E2E-tested-16a34a)](bench/e2e_smoke.sh)
+[![Self-Learning](https://img.shields.io/badge/self--learning-bandit%2Bheat-f59e0b)](crates/synapse-learn/)
 
 </div>
 
@@ -35,7 +40,7 @@ One file on disk. Drop it in your project. Your AI picks up where you left off �
 ## Three lines of actual code
 
 ```bash
-cargo install --locked --git https://github.com/Supersynergy/synapse --tag v1.0.0 synapse-cli synapsed synapse-mcp
+cargo install --locked --git https://github.com/Supersynergy/synapse --tag v2.0.0 synapse-cli synapsed synapse-mcp
 synapsed -f ~/brain.db &
 synapse put "postgres chosen over surrealdb" && synapse search "database decision?"
 ```
@@ -55,6 +60,33 @@ Restart Claude. Your agent now has `put`, `search` and `snap` as native tools. C
 
 ---
 
+## v2.0 — All features, all adapters
+
+| Feature | Status | What it gives you |
+|---------|--------|-------------------|
+| **Ed25519 signing** | stable | tamper-evident memory — every entry cryptographically verified |
+| **CRDT merge** (yrs) | stable | offline-first multi-writer collaboration, no server |
+| **MCP server** (5 tools) | stable | `put / search / merge / timeline / verify` as native agent tools |
+| **IVF sharding** (fastbloom) | stable | scales to 100 M entries without a cluster |
+| **TCP/unix federation** | stable | peer-to-peer memory sync, no cloud |
+| **Self-learning bandit** | stable | Thompson + heat + drift + consolidate — ranking improves as you use it |
+| **Multi-extension format** | stable | `.syn / .synapse / .brainpack` — one reader, any source |
+| **SQLCipher encryption** | feature-flagged | `--features encrypt` for at-rest AES-256 |
+
+### Ecosystem adapters
+
+Drop Synapse into any AI stack with one import:
+
+| Adapter | Install | What it replaces |
+|---------|---------|-----------------|
+| **mem0-shim** | `pip install synapse-mem0` | mem0 drop-in — zero code changes |
+| **mastra** | `npm i @synapse-ai/mastra` | MastraMemory via unix socket |
+| **vercel-ai** | `npm i @synapse-ai/vercel-ai` | `createMemoryProvider` for `useChat` / `generateText` |
+| **copilotkit** | `npm i @synapse-ai/copilotkit` | CopilotKit persistent context store |
+| **langfuse** | `pip install synapse-langfuse` | `SynapseRetriever` with per-search span tracing |
+| **promptfoo** | `pip install synapse-promptfoo` | eval provider + RAG benchmark YAML template |
+| **browser-use** | `pip install synapse-browser-use` | `on_page_visit` hook — browse history in memory |
+
 ## Real-competitor bench (agent memory, 1 k docs, 200 q, 384-d)
 
 Same corpus, same embeddings, run locally. Full script: [`bench/real_competitors.py`](bench/real_competitors.py) · narrative: [`bench/RESULTS-REAL-COMPETITORS.md`](bench/RESULTS-REAL-COMPETITORS.md).
@@ -63,7 +95,7 @@ Same corpus, same embeddings, run locally. Full script: [`bench/real_competitors
 |--------|----------:|-----------:|--------:|---------|
 | FAISS flat (floor) | 0.20 | 0.010 | 1 500 | vector only |
 | SQLite FTS5 (floor) | 2.03 | 0.012 | 140 | keyword only |
-| **Synapse v1.0** | **67.0** | **0.023** | **1 290** | **BM25 + HNSW + KG + CRDT + sign + MCP** |
+| **Synapse v2.0** | **67.0** | **0.023** | **1 290** | **BM25 + HNSW + KG + CRDT + sign + MCP + self-learn + sharding** |
 | Chroma | 96.3 | 0.303 | 4 434 | vector only |
 | LanceDB | 41.7 | 1.440 | 1 574 | vector only |
 

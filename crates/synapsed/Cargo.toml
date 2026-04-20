@@ -18,6 +18,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 synapse-core = { path = "../synapse-core", features = ["embed"] }
-
-[dev-dependencies]
-tempfile = "3"
+ed25519-dalek.workspace = true
+axum.workspace = true
+metrics = "0.24"
+metrics-exporter-prometheus = "0.18"

@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/synapse-core", "crates/synapse-cli", "crates/synapsed", "crates/synapse-mcp"]
+members = ["crates/synapse-core", "crates/synapse-cli", "crates/synapsed", "crates/synapse-mcp", "crates/synapse-learn"]
 
 [workspace.package]
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"
@@ -22,18 +22,21 @@ blake3 = "1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 fastembed = "5"
 redb = "2"
-bitflags = "2"
-
-[profile.release]
-lto = "thin"
-codegen-units = 1
-strip = "symbols"
-panic = "abort"
-opt-level = 3
-
-[profile.bench]
-lto = "thin"
-codegen-units = 1
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+age = { version = "0.10", features = ["armor"] }
+yrs = "0.21"
+linfa = "0.8"
+linfa-clustering = "0.8"
+ndarray = "0.16.1"
+fastbloom = "0.17"
+toml = "0.8"
+base64 = "0.22"
+axum = "0.8"
+argon2 = "0.5"
+parking_lot = "0.12"
+once_cell = "1"
+statrs = "0.18"

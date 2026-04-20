@@ -14,8 +14,6 @@ pub enum Error {
     DimMismatch { expected: usize, got: usize },
     #[error("not found: {0}")]
     NotFound(String),
-    #[error("format: {0}")]
-    Format(String),
     #[error("other: {0}")]
     Other(String),
 }

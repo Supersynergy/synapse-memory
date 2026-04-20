@@ -10,18 +10,16 @@ pub enum Request {
     Ping,
     Put(PutReq),
     PutBatch(Vec<PutReq>),
-    Search {
-        mode: SearchMode,
-        q: String,
-        limit: usize,
-        embed_query: bool,
-    },
+    Search { mode: SearchMode, q: String, limit: usize, embed_query: bool },
     Stats,
-    Snap {
-        out: String,
-        level: i32,
-    },
+    Snap { out: String, level: i32 },
     Shutdown,
+    /// Merge CRDT state into a doc. `state` is base64-encoded yrs update bytes.
+    Merge { id: i64, state: Vec<u8> },
+    /// Return docs ordered by timestamp descending.
+    Timeline { limit: usize, offset: usize },
+    /// Verify Ed25519 sig on a doc. `vk` is 32-byte raw verifying key.
+    Verify { id: i64, vk: Vec<u8> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,13 +34,7 @@ pub struct PutReq {
 
 impl From<PutReq> for PutRequest {
     fn from(p: PutReq) -> Self {
-        PutRequest {
-            title: p.title,
-            uri: p.uri,
-            text: p.text,
-            meta: p.meta,
-            embedding: None,
-        }
+        PutRequest { title: p.title, uri: p.uri, text: p.text, meta: p.meta, embedding: None }
     }
 }
 
@@ -52,6 +44,7 @@ pub enum Response {
     Id(i64),
     Ids(Vec<i64>),
     Hits(Vec<Hit>),
+    Docs(Vec<synapse_core::Doc>),
     Stats { docs: i64, vecs: i64 },
     Ok,
     Err(String),

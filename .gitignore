@@ -6,6 +6,3 @@ Cargo.lock
 *.db-shm
 *.brainpack
 .fastembed_cache/
-__pycache__/
-*.pyc
-*.synx

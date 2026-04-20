@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "synapse-browser-use"
+version = "0.1.0"
+description = "browser-use memory plugin — persists browse history to synapse"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Maxim Supersynergy", email = "true@supersynergy.de" }]
+requires-python = ">=3.11"
+dependencies = ["msgpack>=1.0"]
+
+[project.optional-dependencies]
+browser-use = ["browser-use>=0.1"]
