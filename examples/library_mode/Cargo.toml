@@ -6,5 +6,5 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-synapse-core = { path = "../../crates/synapse-core", features = ["embed"] }
+synapsedb-core = { path = "../../crates/synapsedb-core", features = ["embed"] }
 anyhow = "1"

@@ -17,7 +17,7 @@ synapsed -f ~/.synapse/brain.db &
 ```python
 from synapse_memory import Client
 
-c = Client()  # connects to /tmp/synapse.sock
+c = Client()  # connects to /tmp/synapsedb.sock
 c.put("trailbase chosen over pocketbase", title="decision/backend")
 for h in c.search("backend choice?", mode="hybrid", limit=5):
     print(h["score"], h["title"])

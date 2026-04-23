@@ -6,17 +6,17 @@
 
 One file on disk. Drop it in your project. Your AI picks up where you left off — last week, last month, last laptop.
 
-[![Release](https://img.shields.io/github/v/tag/Supersynergy/synapse?label=release&color=blueviolet)](https://github.com/Supersynergy/synapse/releases)
-[![CI](https://github.com/Supersynergy/synapse/actions/workflows/quality.yml/badge.svg)](https://github.com/Supersynergy/synapse/actions/workflows/quality.yml)
-[![Coverage](https://codecov.io/gh/Supersynergy/synapse/branch/main/graph/badge.svg)](https://codecov.io/gh/Supersynergy/synapse)
+[![Release](https://img.shields.io/github/v/tag/Supersynergy/synapsedb?label=release&color=blueviolet)](https://github.com/Supersynergy/synapsedb/releases)
+[![CI](https://github.com/Supersynergy/synapsedb/actions/workflows/quality.yml/badge.svg)](https://github.com/Supersynergy/synapsedb/actions/workflows/quality.yml)
+[![Coverage](https://codecov.io/gh/Supersynergy/synapsedb/branch/main/graph/badge.svg)](https://codecov.io/gh/Supersynergy/synapsedb)
 [![MSRV](https://img.shields.io/badge/MSRV-1.95.0-orange)](rust-toolchain.toml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/Supersynergy/synapse?style=flat&color=ffcc00)](https://github.com/Supersynergy/synapse/stargazers)
-[![CRDT](https://img.shields.io/badge/CRDT-yrs-8a2be2)](crates/synapse-core/src/crdt.rs)
-[![Ed25519](https://img.shields.io/badge/signed-Ed25519-22c55e)](crates/synapse-core/src/sign.rs)
-[![MCP](https://img.shields.io/badge/MCP-5%20tools-0ea5e9)](crates/synapse-mcp/src/main.rs)
+[![Stars](https://img.shields.io/github/stars/Supersynergy/synapsedb?style=flat&color=ffcc00)](https://github.com/Supersynergy/synapsedb/stargazers)
+[![CRDT](https://img.shields.io/badge/CRDT-yrs-8a2be2)](crates/synapsedb-core/src/crdt.rs)
+[![Ed25519](https://img.shields.io/badge/signed-Ed25519-22c55e)](crates/synapsedb-core/src/sign.rs)
+[![MCP](https://img.shields.io/badge/MCP-5%20tools-0ea5e9)](crates/synapsedb-mcp/src/main.rs)
 [![E2E](https://img.shields.io/badge/E2E-tested-16a34a)](bench/e2e_smoke.sh)
-[![Self-Learning](https://img.shields.io/badge/self--learning-bandit%2Bheat-f59e0b)](crates/synapse-learn/)
+[![Self-Learning](https://img.shields.io/badge/self--learning-bandit%2Bheat-f59e0b)](crates/synapsedb-learn/)
 
 </div>
 
@@ -43,8 +43,8 @@ One file on disk. Drop it in your project. Your AI picks up where you left off �
 ## Three lines of actual code
 
 ```bash
-cargo install --locked --git https://github.com/Supersynergy/synapse --tag v2.0.0 synapse-cli synapsed synapse-mcp
-synapsed -f ~/brain.db &
+cargo install --locked --git https://github.com/Supersynergy/synapsedb --tag v2.0.0 synapse synapsedb-daemon synapsedb-mcp
+synapsedb-daemon -f ~/brain.db &
 synapse put "postgres chosen over surrealdb" && synapse search "database decision?"
 ```
 
@@ -53,9 +53,9 @@ synapse put "postgres chosen over surrealdb" && synapse search "database decisio
 Add to `~/.claude/settings.json`:
 
 ```json
-{ "mcpServers": { "synapse": {
-    "command": "synapse-mcp",
-    "args": ["--sock", "/tmp/synapse.sock"]
+{ "mcpServers": { "synapsedb": {
+    "command": "synapsedb-mcp",
+    "args": ["--sock", "/tmp/synapsedb.sock"]
   } } }
 ```
 
@@ -82,13 +82,13 @@ Drop Synapse into any AI stack with one import:
 
 | Adapter | Install | What it replaces |
 |---------|---------|-----------------|
-| **mem0-shim** | `pip install synapse-mem0` | mem0 drop-in — zero code changes |
-| **mastra** | `npm i @synapse-ai/mastra` | MastraMemory via unix socket |
-| **vercel-ai** | `npm i @synapse-ai/vercel-ai` | `createMemoryProvider` for `useChat` / `generateText` |
-| **copilotkit** | `npm i @synapse-ai/copilotkit` | CopilotKit persistent context store |
-| **langfuse** | `pip install synapse-langfuse` | `SynapseRetriever` with per-search span tracing |
-| **promptfoo** | `pip install synapse-promptfoo` | eval provider + RAG benchmark YAML template |
-| **browser-use** | `pip install synapse-browser-use` | `on_page_visit` hook — browse history in memory |
+| **mem0-shim** | `pip install synapsedb-mem0` | mem0 drop-in — zero code changes |
+| **mastra** | `npm i @synapsedb-ai/mastra` | MastraMemory via unix socket |
+| **vercel-ai** | `npm i @synapsedb-ai/vercel-ai` | `createMemoryProvider` for `useChat` / `generateText` |
+| **copilotkit** | `npm i @synapsedb-ai/copilotkit` | CopilotKit persistent context store |
+| **langfuse** | `pip install synapsedb-langfuse` | `SynapseRetriever` with per-search span tracing |
+| **promptfoo** | `pip install synapsedb-promptfoo` | eval provider + RAG benchmark YAML template |
+| **browser-use** | `pip install synapsedb-browser-use` | `on_page_visit` hook — browse history in memory |
 
 ---
 
@@ -124,7 +124,7 @@ Drop-in memory that actually changes what you can build:
 3. **Cursor / Cline / Continue / Aider memory** — same brain, any IDE, switch freely mid-task.
 4. **Offline-first team KB** — CRDT merge = multiple devs, multiple laptops, no server, conflicts auto-resolve.
 5. **Tamper-evident decision log** — Ed25519 signatures on every entry, audit trail for compliance.
-6. **mem0 drop-in replacement** — `pip install synapse-mem0`, zero code change, 10× faster, self-hosted.
+6. **mem0 drop-in replacement** — `pip install synapsedb-mem0`, zero code change, 10× faster, self-hosted.
 7. **RAG without a vector DB** — single file replaces Pinecone/Chroma/Weaviate for up to 100 M entries.
 8. **Agent hand-off** — orchestrator writes plan, workers read it, writers publish results, all through one brain.
 9. **Long-running research agent** — 8-hour browser-use session accumulates findings, next session consumes them.
@@ -224,7 +224,7 @@ Synapse is a single-file binary format (`.synx`) written in Rust. It fuses BM25 
 put → [ BM25 ∥ HNSW+PQ ∥ KG ] → fused rank → Ed25519-signed CRDT log → .synx
 ```
 
-Reproduce: `cargo bench -p synapse-core --features full`. Full 50-usecase bench + CatBoost-picked defaults in [`bench/RESULTS-V1.md`](bench/RESULTS-V1.md). Recall eval (LoCoMo / LongMemEval) roadmap in [`docs/EVAL-HARNESS.md`](docs/EVAL-HARNESS.md).
+Reproduce: `cargo bench -p synapsedb-core --features full`. Full 50-usecase bench + CatBoost-picked defaults in [`bench/RESULTS-V1.md`](bench/RESULTS-V1.md). Recall eval (LoCoMo / LongMemEval) roadmap in [`docs/EVAL-HARNESS.md`](docs/EVAL-HARNESS.md).
 
 </details>
 
@@ -294,7 +294,7 @@ Your agent has a 200 K-token context and zero memory between sessions. The usual
 - **Any MCP agent** — Cursor, Cline, Continue, Aider share the same config
 - **synapse-turbo** — [`tools/turbo`](tools/turbo) — Python daemon for sub-ms queries (3-tier cache: pre-computed + NumPy SIMD + ONNX). 1000x faster than CLI for agent hooks.
 - **Node.js** — [`sdk/node`](sdk/node)
-- **Python** — [`sdk/python/synapse_reader.py`](sdk/python/synapse_reader.py), stdlib + `zstandard` + `blake3`
+- **Python** — [`sdk/python/synapsedb_reader.py`](sdk/python/synapsedb_reader.py), stdlib + `zstandard` + `blake3`
 - **DuckDB analytics** — `ATTACH 'brain.db' AS s (TYPE sqlite, READ_ONLY);`
 
 ## License

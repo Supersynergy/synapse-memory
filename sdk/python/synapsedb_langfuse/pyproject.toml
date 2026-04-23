@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "synapsedb-langfuse"
+version = "0.1.0"
+description = "Synapse retriever with Langfuse span tracing"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Maxim Supersynergy", email = "true@supersynergy.de" }]
+requires-python = ">=3.11"
+dependencies = ["msgpack>=1.0"]
+
+[project.optional-dependencies]
+langfuse = ["langfuse>=3.0"]

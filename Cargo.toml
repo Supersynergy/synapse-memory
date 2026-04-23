@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/synapse-core", "crates/synapse-cli", "crates/synapsed", "crates/synapse-mcp", "crates/synapse-learn"]
+members = ["crates/synapsedb-core", "crates/synapse", "crates/synapsedb-daemon", "crates/synapsedb-mcp", "crates/synapsedb-learn"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"
-repository = "https://github.com/Supersynergy/synapse"
+repository = "https://github.com/Supersynergy/synapsedb"
 
 [workspace.dependencies]
 anyhow = "1"

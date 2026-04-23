@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use std::time::Instant;
-use synapse_core::{embed::Embedder, PutRequest, SearchMode, Store};
+use synapsedb_core::{embed::Embedder, PutRequest, SearchMode, Store};
 
 fn main() -> Result<()> {
     let db_path = "/tmp/libmode_bench.db";
