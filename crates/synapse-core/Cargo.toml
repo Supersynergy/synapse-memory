@@ -40,6 +40,15 @@ encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", default-features = false }
 
 [lib]
 doctest = false
+
+[[bench]]
+name = "fts"
+harness = false
+
+[[bench]]
+name = "vec"
+harness = false
