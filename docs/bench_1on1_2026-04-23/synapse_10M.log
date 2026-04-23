@@ -1,0 +1,1 @@
+{"N":10000000,"Q":100,"build_ms":4719.692083,"dim":384,"disk_bytes":17446821888,"disk_mb":17446.821888,"engine":"Synapse v2","ingest_s":574.4106755,"ok":true,"query_mean_ms":0.32755086000000005,"query_p50_ms":0.315917,"query_p95_ms":0.38754099999999997,"query_p99_ms":0.417209}
