@@ -18,5 +18,9 @@ pub mod simsimd_kernels;
 /// Candle-Metal BGE-small embedder (scaffolding; see SPEC_V2 §4 E).
 pub mod candle_metal_embedder;
 
+/// MRL-wrapping embedder decorator — Matryoshka truncate + L2 renormalize.
+#[cfg(feature = "turbo")]
+pub mod mrl_embedder;
+
 pub mod hybrid_cache;
 pub mod ndarray_search;
