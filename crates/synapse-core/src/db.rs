@@ -22,6 +22,10 @@ impl Store {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "mmap_size", 268_435_456_i64)?;
+        // Schritt 1 optim #3 (SPEC §6 item 4): 64 MB page cache keeps FTS5
+        // BM25 scoring tables and vec0 working-set resident (negative value
+        // means kibibytes, -65536 = 64 MB). Per research_chroma_m4max §Mode B.
+        conn.pragma_update(None, "cache_size", -65536_i64)?;
         let s = Self { conn };
         s.migrate()?;
         Ok(s)
