@@ -15,6 +15,13 @@ pub mod embed;
 #[cfg(feature = "turbo")]
 pub mod turbo;
 
+/// Unified `TextEmbedder` trait + backend selector (`fastembed` / `ollama` / future MLX).
+#[cfg(feature = "turbo")]
+pub mod embedder_trait;
+
+/// Matryoshka (MRL) embedding truncation — 3–6× matvec speed-up, near-full recall.
+pub mod matryoshka;
+
 /// PR-A1-wire: usearch ANN fast-path behind feature `ann-usearch`
 /// (default OFF per SPEC §3 pure-Rust-default rule).
 #[cfg(feature = "ann-usearch")]

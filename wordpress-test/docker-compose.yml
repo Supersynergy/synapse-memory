@@ -1,0 +1,81 @@
+services:
+  wordpress-sqlite:
+    image: wordpress:6.7-php8.3-apache
+    ports:
+      - "8082:80"
+    environment:
+      WORDPRESS_DB_HOST: localhost
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: synapse
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DEBUG: 1
+    volumes:
+      - wordpress-data:/var/www/html
+      - ./plugin-sqlite-database-integration:/var/www/html/wp-content/plugins/sqlite-database-integration
+      - ./plugin-sqlite-database-integration/db.copy:/var/www/html/wp-content/db.php
+      - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
+    entrypoint: ["/usr/local/bin/entrypoint.sh"]
+    command: ["apache2-foreground"]
+    restart: unless-stopped
+
+  wordpress-mysql:
+    image: wordpress:6.7-php8.3-apache
+    ports:
+      - "8083:80"
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: synapse
+      WORDPRESS_DB_NAME: wordpress
+    depends_on:
+      - mysql
+    volumes:
+      - wordpress-mysql-data:/var/www/html
+    restart: unless-stopped
+
+  wordpress-synapse:
+    image: wordpress:6.7-php8.3-apache
+    ports:
+      - "8084:80"
+    environment:
+      WORDPRESS_DB_HOST: host.docker.internal:13306
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: synapse
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DEBUG: 1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - wordpress-synapse-data:/var/www/html
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: synapse
+      MYSQL_DATABASE: wordpress
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: synapse
+      POSTGRES_DB: wordpress
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  wordpress-data:
+  wordpress-mysql-data:
+  wordpress-synapse-data:
+  synapse-db:
+  mysql-data:
+  postgres-data:

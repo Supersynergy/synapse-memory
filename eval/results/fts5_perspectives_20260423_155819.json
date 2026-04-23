@@ -1,0 +1,210 @@
+[
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "query_short",
+    "query_count": 1000,
+    "avg_time_ms": 0.02821804114500992,
+    "ops_per_sec": 35438.32099687898,
+    "p95_ms": 0.036084005841985345
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "query_short",
+    "query_count": 1000,
+    "avg_time_ms": 0.025686026958283037,
+    "ops_per_sec": 38931.6729139976,
+    "p95_ms": 0.03170900163240731
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "query_medium",
+    "query_count": 1000,
+    "avg_time_ms": 0.030100977775873616,
+    "ops_per_sec": 33221.51218627572,
+    "p95_ms": 0.04533299943432212
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "query_medium",
+    "query_count": 1000,
+    "avg_time_ms": 0.024376697867410257,
+    "ops_per_sec": 41022.78353857443,
+    "p95_ms": 0.02883299021050334
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "query_long",
+    "query_count": 2000,
+    "avg_time_ms": 0.04365096936817281,
+    "ops_per_sec": 22908.998688334494,
+    "p95_ms": 0.0365830201189965
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "query_long",
+    "query_count": 2000,
+    "avg_time_ms": 0.027121882056235336,
+    "ops_per_sec": 36870.59762027464,
+    "p95_ms": 0.031458010198548436
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "batch_10",
+    "query_count": 100,
+    "avg_time_ms": 0.02774787077214569,
+    "ops_per_sec": 36038.80125475559,
+    "p95_ms": 0.03600001218728721
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "batch_10",
+    "query_count": 100,
+    "avg_time_ms": 0.02319163060747087,
+    "ops_per_sec": 43119.00344246875,
+    "p95_ms": 0.0296669895760715
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "batch_50",
+    "query_count": 500,
+    "avg_time_ms": 0.025935591955203563,
+    "ops_per_sec": 38557.0532466434,
+    "p95_ms": 0.0338749960064888
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "batch_50",
+    "query_count": 500,
+    "avg_time_ms": 0.025288649136200547,
+    "ops_per_sec": 39543.43289015411,
+    "p95_ms": 0.03333299537189305
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "batch_100",
+    "query_count": 510,
+    "avg_time_ms": 0.029168896406761135,
+    "ops_per_sec": 34283.09340384258,
+    "p95_ms": 0.03999998443759978
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "batch_100",
+    "query_count": 510,
+    "avg_time_ms": 0.023262294159983012,
+    "ops_per_sec": 42988.02143600484,
+    "p95_ms": 0.03066699719056487
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "batch_200",
+    "query_count": 510,
+    "avg_time_ms": 0.025884804199449718,
+    "ops_per_sec": 38632.70482151296,
+    "p95_ms": 0.03383401781320572
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "batch_200",
+    "query_count": 510,
+    "avg_time_ms": 0.022646099529868246,
+    "ops_per_sec": 44157.71460692763,
+    "p95_ms": 0.030166003853082657
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "batch_500",
+    "query_count": 510,
+    "avg_time_ms": 0.029756562606267193,
+    "ops_per_sec": 33606.03216278027,
+    "p95_ms": 0.03883300814777613
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "batch_500",
+    "query_count": 510,
+    "avg_time_ms": 0.023155088203173933,
+    "ops_per_sec": 43187.05207363136,
+    "p95_ms": 0.03037499845959246
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "cache_1",
+    "query_count": 50,
+    "avg_time_ms": 0.03182174114044756,
+    "ops_per_sec": 31425.0560830857,
+    "p95_ms": 0.0432920060120523
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "cache_1",
+    "query_count": 50,
+    "avg_time_ms": 0.039876558003015816,
+    "ops_per_sec": 25077.390077758748,
+    "p95_ms": 0.09849999332800508
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "cache_10",
+    "query_count": 500,
+    "avg_time_ms": 0.03251598327187821,
+    "ops_per_sec": 30754.10611571019,
+    "p95_ms": 0.04437501775100827
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "cache_10",
+    "query_count": 500,
+    "avg_time_ms": 0.025925297872163355,
+    "ops_per_sec": 38572.36298425428,
+    "p95_ms": 0.0323750136885792
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "cache_50",
+    "query_count": 2500,
+    "avg_time_ms": 0.028301641973666847,
+    "ops_per_sec": 35333.6389786305,
+    "p95_ms": 0.03545801155269146
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "cache_50",
+    "query_count": 2500,
+    "avg_time_ms": 0.02401773788733408,
+    "ops_per_sec": 41635.894466454185,
+    "p95_ms": 0.03112500417046249
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "cache_100",
+    "query_count": 5000,
+    "avg_time_ms": 0.03220740151591599,
+    "ops_per_sec": 31048.763729226284,
+    "p95_ms": 0.03562498022802174
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "cache_100",
+    "query_count": 5000,
+    "avg_time_ms": 0.026323971751844512,
+    "ops_per_sec": 37988.18846285726,
+    "p95_ms": 0.03212501178495586
+  },
+  {
+    "engine": "FTS5 Direct",
+    "perspective": "cache_200",
+    "query_count": 10000,
+    "avg_time_ms": 0.03224918585619889,
+    "ops_per_sec": 31008.534741281896,
+    "p95_ms": 0.036874989746138453
+  },
+  {
+    "engine": "FTS5 JOIN",
+    "perspective": "cache_200",
+    "query_count": 10000,
+    "avg_time_ms": 0.027797586357337423,
+    "ops_per_sec": 35974.34637471828,
+    "p95_ms": 0.03183400258421898
+  }
+]

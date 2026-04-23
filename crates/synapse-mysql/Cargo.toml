@@ -1,0 +1,25 @@
+[package]
+name = "synapse-mysql"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "synapse-mysql"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite = { workspace = true, features = ["column_decltype"] }
+synapse-core = { path = "../synapse-core" }
+msql-srv = "0.11"
+mysql_common = "0.32"
+chrono = "0.4"
+regex = "1"
+sha1 = "0.10"

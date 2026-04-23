@@ -1,0 +1,929 @@
+[
+  {
+    "test_id": "qp_001",
+    "category": "unknown",
+    "query": "code",
+    "success": true,
+    "time_ms": 0.5231660034041852,
+    "results_count": 50,
+    "error": ""
+  },
+  {
+    "test_id": "qp_002",
+    "category": "unknown",
+    "query": "model",
+    "success": true,
+    "time_ms": 0.13800000306218863,
+    "results_count": 100,
+    "error": ""
+  },
+  {
+    "test_id": "qp_003",
+    "category": "unknown",
+    "query": "data",
+    "success": true,
+    "time_ms": 0.09054099791683257,
+    "results_count": 48,
+    "error": ""
+  },
+  {
+    "test_id": "qp_004",
+    "category": "unknown",
+    "query": "query",
+    "success": true,
+    "time_ms": 0.10245799785479903,
+    "results_count": 51,
+    "error": ""
+  },
+  {
+    "test_id": "qp_005",
+    "category": "unknown",
+    "query": "tool",
+    "success": true,
+    "time_ms": 0.1265419996343553,
+    "results_count": 100,
+    "error": ""
+  },
+  {
+    "test_id": "qp_006",
+    "category": "unknown",
+    "query": "search",
+    "success": true,
+    "time_ms": 0.07658300455659628,
+    "results_count": 48,
+    "error": ""
+  },
+  {
+    "test_id": "qp_007",
+    "category": "unknown",
+    "query": "file",
+    "success": true,
+    "time_ms": 0.11616700794547796,
+    "results_count": 100,
+    "error": ""
+  },
+  {
+    "test_id": "qp_008",
+    "category": "unknown",
+    "query": "test",
+    "success": true,
+    "time_ms": 0.08866700227372348,
+    "results_count": 58,
+    "error": ""
+  },
+  {
+    "test_id": "qp_009",
+    "category": "unknown",
+    "query": "config",
+    "success": true,
+    "time_ms": 0.05783297820016742,
+    "results_count": 34,
+    "error": ""
+  },
+  {
+    "test_id": "qp_010",
+    "category": "unknown",
+    "query": "api",
+    "success": true,
+    "time_ms": 0.0754169886931777,
+    "results_count": 52,
+    "error": ""
+  },
+  {
+    "test_id": "qp_011",
+    "category": "unknown",
+    "query": "database",
+    "success": true,
+    "time_ms": 0.037250021705403924,
+    "results_count": 13,
+    "error": ""
+  },
+  {
+    "test_id": "qp_012",
+    "category": "unknown",
+    "query": "server",
+    "success": true,
+    "time_ms": 0.03749999450519681,
+    "results_count": 17,
+    "error": ""
+  },
+  {
+    "test_id": "qp_013",
+    "category": "unknown",
+    "query": "client",
+    "success": true,
+    "time_ms": 0.025124987587332726,
+    "results_count": 12,
+    "error": ""
+  },
+  {
+    "test_id": "qp_014",
+    "category": "unknown",
+    "query": "function",
+    "success": true,
+    "time_ms": 0.0272089964710176,
+    "results_count": 8,
+    "error": ""
+  },
+  {
+    "test_id": "qp_015",
+    "category": "unknown",
+    "query": "class",
+    "success": true,
+    "time_ms": 0.03912497777491808,
+    "results_count": 15,
+    "error": ""
+  },
+  {
+    "test_id": "qp_016",
+    "category": "unknown",
+    "query": "error",
+    "success": true,
+    "time_ms": 0.03608397673815489,
+    "results_count": 18,
+    "error": ""
+  },
+  {
+    "test_id": "qp_017",
+    "category": "unknown",
+    "query": "log",
+    "success": true,
+    "time_ms": 0.057958008255809546,
+    "results_count": 33,
+    "error": ""
+  },
+  {
+    "test_id": "qp_018",
+    "category": "unknown",
+    "query": "auth",
+    "success": true,
+    "time_ms": 0.036500015994533896,
+    "results_count": 20,
+    "error": ""
+  },
+  {
+    "test_id": "qp_019",
+    "category": "unknown",
+    "query": "cache",
+    "success": true,
+    "time_ms": 0.0433750101365149,
+    "results_count": 24,
+    "error": ""
+  },
+  {
+    "test_id": "qp_020",
+    "category": "unknown",
+    "query": "sync",
+    "success": true,
+    "time_ms": 0.03933301195502281,
+    "results_count": 12,
+    "error": ""
+  },
+  {
+    "test_id": "dt_021",
+    "category": "unknown",
+    "query": "json",
+    "success": true,
+    "time_ms": 0.05595802213065326,
+    "results_count": 33,
+    "error": ""
+  },
+  {
+    "test_id": "dt_022",
+    "category": "unknown",
+    "query": "xml",
+    "success": true,
+    "time_ms": 0.01966601121239364,
+    "results_count": 4,
+    "error": ""
+  },
+  {
+    "test_id": "dt_023",
+    "category": "unknown",
+    "query": "yaml",
+    "success": true,
+    "time_ms": 0.03262498648837209,
+    "results_count": 11,
+    "error": ""
+  },
+  {
+    "test_id": "dt_024",
+    "category": "unknown",
+    "query": "sql",
+    "success": true,
+    "time_ms": 0.037124991649761796,
+    "results_count": 15,
+    "error": ""
+  },
+  {
+    "test_id": "dt_025",
+    "category": "unknown",
+    "query": "csv",
+    "success": true,
+    "time_ms": 0.02879201201722026,
+    "results_count": 13,
+    "error": ""
+  },
+  {
+    "test_id": "dt_026",
+    "category": "unknown",
+    "query": "markdown",
+    "success": true,
+    "time_ms": 0.030291994335129857,
+    "results_count": 11,
+    "error": ""
+  },
+  {
+    "test_id": "dt_027",
+    "category": "unknown",
+    "query": "python",
+    "success": true,
+    "time_ms": 0.055750017054378986,
+    "results_count": 36,
+    "error": ""
+  },
+  {
+    "test_id": "dt_028",
+    "category": "unknown",
+    "query": "javascript",
+    "success": true,
+    "time_ms": 0.02970799687318504,
+    "results_count": 2,
+    "error": ""
+  },
+  {
+    "test_id": "dt_029",
+    "category": "unknown",
+    "query": "rust",
+    "success": true,
+    "time_ms": 0.05995799438096583,
+    "results_count": 38,
+    "error": ""
+  },
+  {
+    "test_id": "dt_030",
+    "category": "unknown",
+    "query": "go",
+    "success": true,
+    "time_ms": 0.0463749747723341,
+    "results_count": 24,
+    "error": ""
+  },
+  {
+    "test_id": "sc_031",
+    "category": "unknown",
+    "query": "performance optimization benchmark",
+    "success": true,
+    "time_ms": 0.048999994760379195,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "sc_032",
+    "category": "unknown",
+    "query": "scalability architecture design pattern",
+    "success": true,
+    "time_ms": 0.04845901275984943,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sc_033",
+    "category": "unknown",
+    "query": "database migration strategy process",
+    "success": true,
+    "time_ms": 0.05416598287411034,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "sc_034",
+    "category": "unknown",
+    "query": "microservices authentication authorization",
+    "success": true,
+    "time_ms": 0.035834003938362,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sc_035",
+    "category": "unknown",
+    "query": "kubernetes docker container orchestration",
+    "success": true,
+    "time_ms": 0.04741700831800699,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sc_036",
+    "category": "unknown",
+    "query": "machine learning inference deployment",
+    "success": true,
+    "time_ms": 0.04629199975170195,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sc_037",
+    "category": "unknown",
+    "query": "continuous integration pipeline configuration",
+    "success": true,
+    "time_ms": 0.04566702409647405,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sc_038",
+    "category": "unknown",
+    "query": "distributed system consensus algorithm",
+    "success": true,
+    "time_ms": 0.04650000482797623,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sc_039",
+    "category": "unknown",
+    "query": "api gateway rate limiting throttling",
+    "success": true,
+    "time_ms": 0.06041600136086345,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sc_040",
+    "category": "unknown",
+    "query": "message queue async processing event",
+    "success": true,
+    "time_ms": 0.057375000324100256,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "ec_041",
+    "category": "unknown",
+    "query": "<empty>",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "Empty query"
+  },
+  {
+    "test_id": "ec_042",
+    "category": "unknown",
+    "query": "a",
+    "success": true,
+    "time_ms": 0.0710829917807132,
+    "results_count": 42,
+    "error": ""
+  },
+  {
+    "test_id": "ec_043",
+    "category": "unknown",
+    "query": "<empty>",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "Empty query"
+  },
+  {
+    "test_id": "ec_044",
+    "category": "unknown",
+    "query": "test\r\nquery",
+    "success": true,
+    "time_ms": 0.052207993576303124,
+    "results_count": 13,
+    "error": ""
+  },
+  {
+    "test_id": "ec_045",
+    "category": "unknown",
+    "query": "test't query",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "fts5: syntax error near \"'\""
+  },
+  {
+    "test_id": "ec_046",
+    "category": "unknown",
+    "query": "test\" query",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "unterminated string"
+  },
+  {
+    "test_id": "ec_047",
+    "category": "unknown",
+    "query": "<script>alert('xss')</script>",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "fts5: syntax error near \"<\""
+  },
+  {
+    "test_id": "ec_048",
+    "category": "unknown",
+    "query": "test; DROP TABLE docs; --",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "fts5: syntax error near \";\""
+  },
+  {
+    "test_id": "ec_049",
+    "category": "unknown",
+    "query": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...",
+    "success": true,
+    "time_ms": 0.01895899185910821,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "ec_050",
+    "category": "unknown",
+    "query": "test query with unicode \u00f1 \u4e2d\u6587 \u65e5\u672c\u8a9e",
+    "success": true,
+    "time_ms": 0.08916598744690418,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "ec_051",
+    "category": "unknown",
+    "query": "\ud83d\ude92 \ud83d\udd25 \ud83d\udcbb \u26a1 \ud83c\udfaf",
+    "success": true,
+    "time_ms": 0.0040000013541430235,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "ec_052",
+    "category": "unknown",
+    "query": "CamelCase mixedWith snake_case and kebab-case",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "no such column: case"
+  },
+  {
+    "test_id": "ec_053",
+    "category": "unknown",
+    "query": "test    multiple   spaces",
+    "success": true,
+    "time_ms": 0.03679198562167585,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "ec_054",
+    "category": "unknown",
+    "query": "UPPERCASE AND lowercase",
+    "success": true,
+    "time_ms": 0.024209002731367946,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "ec_055",
+    "category": "unknown",
+    "query": "test-123-456 with numbers 2024",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "no such column: 123"
+  },
+  {
+    "test_id": "sec_056",
+    "category": "security",
+    "query": "password secret token",
+    "success": true,
+    "time_ms": 0.03541700425557792,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sec_057",
+    "category": "security",
+    "query": "api_key credentials",
+    "success": true,
+    "time_ms": 0.0395829847548157,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "sec_058",
+    "category": "security",
+    "query": "private key certificate",
+    "success": true,
+    "time_ms": 0.035375007428228855,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sec_059",
+    "category": "security",
+    "query": "sql injection union select",
+    "success": true,
+    "time_ms": 0.05266600055620074,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "sec_060",
+    "category": "security",
+    "query": "xss script alert",
+    "success": true,
+    "time_ms": 0.03500000457279384,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sec_061",
+    "category": "security",
+    "query": "path traversal ../../../etc/passwd",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "fts5: syntax error near \".\""
+  },
+  {
+    "test_id": "sec_062",
+    "category": "security",
+    "query": "command injection; rm -rf",
+    "success": false,
+    "time_ms": 0,
+    "results_count": 0,
+    "error": "fts5: syntax error near \";\""
+  },
+  {
+    "test_id": "sec_063",
+    "category": "security",
+    "query": "csrf token session",
+    "success": true,
+    "time_ms": 0.051041977712884545,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "sec_064",
+    "category": "security",
+    "query": "cors origin access",
+    "success": true,
+    "time_ms": 0.035667006159201264,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "sec_065",
+    "category": "security",
+    "query": "oauth2 bearer token",
+    "success": true,
+    "time_ms": 0.03491700044833124,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_066",
+    "category": "unknown",
+    "query": "index optimization query plan",
+    "success": true,
+    "time_ms": 0.056416000006720424,
+    "results_count": 2,
+    "error": ""
+  },
+  {
+    "test_id": "perf_067",
+    "category": "unknown",
+    "query": "cache hit ratio memory usage",
+    "success": true,
+    "time_ms": 0.058542005717754364,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_068",
+    "category": "unknown",
+    "query": "connection pool thread",
+    "success": true,
+    "time_ms": 0.035582983400672674,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_069",
+    "category": "unknown",
+    "query": "batch insert bulk operation",
+    "success": true,
+    "time_ms": 0.047165987780317664,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_070",
+    "category": "unknown",
+    "query": "async await concurrency",
+    "success": true,
+    "time_ms": 0.0353749783243984,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_071",
+    "category": "unknown",
+    "query": "lazy loading pagination",
+    "success": true,
+    "time_ms": 0.03608397673815489,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_072",
+    "category": "unknown",
+    "query": "connection timeout retry",
+    "success": true,
+    "time_ms": 0.04170800093561411,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "perf_073",
+    "category": "unknown",
+    "query": "rate limit throttle",
+    "success": true,
+    "time_ms": 0.048583984607830644,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_074",
+    "category": "unknown",
+    "query": "circuit breaker fallback",
+    "success": true,
+    "time_ms": 0.036124984035268426,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "perf_075",
+    "category": "unknown",
+    "query": "dead lock mutex semaphore",
+    "success": true,
+    "time_ms": 0.044958986109122634,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "qual_076",
+    "category": "unknown",
+    "query": "documentation readme guide",
+    "success": true,
+    "time_ms": 0.04741700831800699,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "qual_077",
+    "category": "unknown",
+    "query": "test coverage unit integration",
+    "success": true,
+    "time_ms": 0.04612500197254121,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "qual_078",
+    "category": "unknown",
+    "query": "code review lint format",
+    "success": true,
+    "time_ms": 0.05358399357646704,
+    "results_count": 3,
+    "error": ""
+  },
+  {
+    "test_id": "qual_079",
+    "category": "unknown",
+    "query": "refactor clean code",
+    "success": true,
+    "time_ms": 0.03674998879432678,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "qual_080",
+    "category": "unknown",
+    "query": "technical debt legacy",
+    "success": true,
+    "time_ms": 0.035083998227491975,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "qual_081",
+    "category": "unknown",
+    "query": "best practice pattern",
+    "success": true,
+    "time_ms": 0.043917010771110654,
+    "results_count": 3,
+    "error": ""
+  },
+  {
+    "test_id": "qual_082",
+    "category": "unknown",
+    "query": "design principle solid",
+    "success": true,
+    "time_ms": 0.03483297768980265,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "qual_083",
+    "category": "unknown",
+    "query": "comment explanation rationale",
+    "success": true,
+    "time_ms": 0.03491601091809571,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "qual_084",
+    "category": "unknown",
+    "query": "error handling exception",
+    "success": true,
+    "time_ms": 0.03533400013111532,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "qual_085",
+    "category": "unknown",
+    "query": "logging monitoring alert",
+    "success": true,
+    "time_ms": 0.04387498483993113,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "int_086",
+    "category": "integration",
+    "query": "webhook callback event",
+    "success": true,
+    "time_ms": 0.03524997737258673,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_087",
+    "category": "integration",
+    "query": "rest api graphql",
+    "success": true,
+    "time_ms": 0.04037501639686525,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_088",
+    "category": "integration",
+    "query": "database migration seed",
+    "success": true,
+    "time_ms": 0.035083998227491975,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_089",
+    "category": "integration",
+    "query": "service mesh sidecar",
+    "success": true,
+    "time_ms": 0.03374999505467713,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_090",
+    "category": "integration",
+    "query": "configmap secret volume",
+    "success": true,
+    "time_ms": 0.03779199323616922,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_091",
+    "category": "integration",
+    "query": "dns load balancer cdn",
+    "success": true,
+    "time_ms": 0.0505829812027514,
+    "results_count": 1,
+    "error": ""
+  },
+  {
+    "test_id": "int_092",
+    "category": "integration",
+    "query": "ssl tls certificate",
+    "success": true,
+    "time_ms": 0.03529101377353072,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_093",
+    "category": "integration",
+    "query": "ssh git deploy",
+    "success": true,
+    "time_ms": 0.0439169816672802,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_094",
+    "category": "integration",
+    "query": "docker compose kubernetes",
+    "success": true,
+    "time_ms": 0.03491601091809571,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "int_095",
+    "category": "integration",
+    "query": "github actions workflow",
+    "success": true,
+    "time_ms": 0.03654201282188296,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "reg_096",
+    "category": "regression",
+    "query": "bug fix regression test",
+    "success": true,
+    "time_ms": 0.053208001190796494,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "reg_097",
+    "category": "regression",
+    "query": "version semver changelog",
+    "success": true,
+    "time_ms": 0.042333995224907994,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "reg_098",
+    "category": "regression",
+    "query": "rollback backup restore",
+    "success": true,
+    "time_ms": 0.04945899127051234,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "reg_099",
+    "category": "regression",
+    "query": "staging prod environment",
+    "success": true,
+    "time_ms": 0.0356250093318522,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "reg_100",
+    "category": "regression",
+    "query": "maintenance window upgrade",
+    "success": true,
+    "time_ms": 0.03429199568927288,
+    "results_count": 0,
+    "error": ""
+  },
+  {
+    "test_id": "stress_001",
+    "category": "stress",
+    "query": "Rapid fire 2000 queries",
+    "success": true,
+    "time_ms": 63.512291002552956,
+    "results_count": 2000,
+    "error": ""
+  },
+  {
+    "test_id": "stress_002",
+    "category": "stress",
+    "query": "Large result set (1000)",
+    "success": true,
+    "time_ms": 1.4273339766077697,
+    "results_count": 1000,
+    "error": ""
+  },
+  {
+    "test_id": "stress_003",
+    "category": "stress",
+    "query": "10 sequential connections",
+    "success": true,
+    "time_ms": 4.893000004813075,
+    "results_count": 30,
+    "error": ""
+  }
+]

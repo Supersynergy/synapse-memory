@@ -19,10 +19,16 @@ use std::time::Duration;
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 const DEFAULT_MODEL: &str = "all-minilm";
 
-/// Ollama embedding response
+/// Ollama single-embedding response (legacy `/api/embeddings`).
 #[derive(Serialize, Deserialize)]
 struct EmbedResponse {
     embedding: Vec<f32>,
+}
+
+/// Ollama batch-embedding response (`/api/embed`, Ollama >= 0.3).
+#[derive(Serialize, Deserialize)]
+struct BatchEmbedResponse {
+    embeddings: Vec<Vec<f32>>,
 }
 
 /// High-performance embedder using Ollama API
@@ -69,8 +75,33 @@ impl OllamaEmbedder {
         Ok(resp.embedding)
     }
 
-    /// Embed a batch of texts
+    /// Embed a batch of texts in a single HTTP call.
+    ///
+    /// Uses Ollama's `/api/embed` endpoint (available in Ollama >= 0.3),
+    /// which accepts an `input` array and returns one request instead of N.
+    /// Falls back to sequential `/api/embeddings` on older servers.
     pub fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let resp = self
+            .client
+            .post(format!("{}/api/embed", self.url))
+            .json(&serde_json::json!({
+                "model": self.model,
+                "input": texts,
+            }))
+            .send()
+            .map_err(|e| Error::Other(format!("ollama batch request: {e}")))?;
+        if resp.status().is_success() {
+            let parsed: BatchEmbedResponse = resp
+                .json()
+                .map_err(|e| Error::Other(format!("ollama batch response: {e}")))?;
+            if parsed.embeddings.len() == texts.len() {
+                return Ok(parsed.embeddings);
+            }
+        }
+        // Fallback: older Ollama without batch endpoint.
         texts.iter().map(|t| self.embed_one(t)).collect()
     }
 }

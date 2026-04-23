@@ -1,0 +1,58 @@
+[
+  {
+    "engine": "Synapse v1.0 (Rust)",
+    "insert_ms": 67.0,
+    "search_ms_total": 11.5,
+    "search_ms_per_q": 0.023,
+    "size_bytes": 1321000,
+    "notes": "from bench/RESULTS-V1.md; BM25+HNSW+KG+CRDT+sign"
+  },
+  {
+    "engine": "SQLite FTS5",
+    "insert_ms": 18.078833003528416,
+    "search_ms_total": 6.316375016467646,
+    "search_ms_per_q": 0.012632750032935292,
+    "size_bytes": 1105920,
+    "notes": "keyword-only baseline"
+  },
+  {
+    "engine": "sqlite-vec",
+    "insert_ms": 147.69462501863018,
+    "search_ms_total": 1311.2907909962814,
+    "search_ms_per_q": 2.622581581992563,
+    "size_bytes": 16003072,
+    "notes": "brute-force vec0, no HNSW"
+  },
+  {
+    "engine": "DuckDB+VSS",
+    "insert_ms": 7791.471625008853,
+    "search_ms_total": 4385.2072920126375,
+    "search_ms_per_q": 8.770414584025275,
+    "size_bytes": 30945280,
+    "notes": "HNSW index, cosine"
+  },
+  {
+    "engine": "LanceDB",
+    "insert_ms": 83.50262499880046,
+    "search_ms_total": 1775.9344170044642,
+    "search_ms_per_q": 3.5518688340089284,
+    "size_bytes": 16087827,
+    "notes": "Arrow columnar, flat at 10k"
+  },
+  {
+    "engine": "Qdrant in-mem",
+    "insert_ms": 1500.1173749915324,
+    "search_ms_total": 2302.7752909983974,
+    "search_ms_per_q": 4.605550581996795,
+    "size_bytes": 0,
+    "notes": "client 1.17 query_points API"
+  },
+  {
+    "engine": "mem0",
+    "insert_ms": 0,
+    "search_ms_total": 0,
+    "search_ms_per_q": 0,
+    "size_bytes": 0,
+    "notes": "skip-init: The api_key client option must be set either by passing api_key to the client or"
+  }
+]

@@ -40,6 +40,8 @@ once_cell = { workspace = true, optional = true }
 argon2 = { workspace = true, optional = true }
 # Turbo features
 reqwest = { workspace = true, optional = true }
+# M4 Max integration: NEON-native SIMD distances (f32/f16/i8/b8).
+simsimd = { version = "6.5", optional = true }
 # Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
 tikv-jemallocator = { version = "0.6", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
@@ -51,6 +53,10 @@ embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
 encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 turbo = []
 ollama = ["turbo", "dep:reqwest"]
+# M4 Max NEON SIMD (f32/i8/b8). Apple Silicon + Linux aarch64 / x86_64 AVX2+.
+simsimd = ["turbo", "dep:simsimd"]
+# Apple Accelerate framework link (AMX + vDSP). macOS-only; auto via accelerate-src.
+accelerate = []
 # Schritt 1 optim #2: opt-in jemalloc for the scale-bench example only.
 bench-jemalloc = ["dep:tikv-jemallocator"]
 # PR-A1-wire: enable usearch-backed Store::search_vec fast-path with
@@ -68,6 +74,11 @@ sha2 = "0.10"
 name = "synapse_scale_bench"
 path = "examples/synapse_scale_bench.rs"
 
+[[example]]
+name = "bench_progression"
+path = "examples/bench_progression.rs"
+required-features = ["turbo", "simsimd"]
+
 [lib]
 doctest = false
 
@@ -78,3 +89,8 @@ harness = false
 [[bench]]
 name = "vec"
 harness = false
+
+[[bench]]
+name = "kernels_progression"
+harness = false
+required-features = ["turbo", "simsimd"]

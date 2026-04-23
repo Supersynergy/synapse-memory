@@ -1,0 +1,34 @@
+================================================================================
+FTS5 BENCHMARK - 100 TEST REPORT
+================================================================================
+
+📊 RESULTS BY CATEGORY
+------------------------------------------------------------
+Category                 Passed     Failed     Avg ms
+------------------------------------------------------------
+integration                  10          0      0.038
+regression                    5          0      0.043
+security                      8          2      0.040
+stress                        3          0     23.278
+unknown                      67          8      0.057
+------------------------------------------------------------
+TOTAL                        93         10      0.802
+
+❌ FAILED TESTS
+------------------------------------------------------------
+ec_041: Empty query
+ec_043: Empty query
+ec_045: fts5: syntax error near "'"
+ec_046: unterminated string
+ec_047: fts5: syntax error near "<"
+ec_048: fts5: syntax error near ";"
+ec_052: no such column: case
+ec_055: no such column: 123
+sec_061: fts5: syntax error near "."
+sec_062: fts5: syntax error near ";"
+
+⚡ FASTEST TEST
+  ec_051: 0.004ms (🚒 🔥 💻 ⚡ 🎯)
+
+🐌 SLOWEST TEST
+  stress_001: 63.512ms (Rapid fire 2000 queries)

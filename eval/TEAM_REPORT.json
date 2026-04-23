@@ -1,0 +1,43 @@
+{
+  "generated": "2026-04-23T18:51:09.048653",
+  "overview": {
+    "total_docs": 7946,
+    "docs_analyzed": 7946,
+    "api_endpoints": 32,
+    "file_references": 0,
+    "urls": 32,
+    "secrets": 2
+  },
+  "content_types": {
+    "config": 58,
+    "auth_related": 79,
+    "errors": 18,
+    "flows": 162,
+    "api_related": 82,
+    "tests": 86,
+    "deployment": 54,
+    "cache_related": 23,
+    "ml_related": 40,
+    "warnings": 7
+  },
+  "languages": {
+    "JavaScript": 1407,
+    "JSON": 4180,
+    "Python": 39,
+    "Rust": 5,
+    "Go": 1
+  },
+  "topics": {
+    "mcp": 45,
+    "cli": 2850,
+    "vector": 19,
+    "ollama": 2820,
+    "synapse": 94,
+    "brain": 8,
+    "turbo": 3
+  },
+  "secrets_found": [
+    "API Key",
+    "Secret"
+  ]
+}

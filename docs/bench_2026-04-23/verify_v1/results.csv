@@ -1,0 +1,155 @@
+engine,uc,metric,value,p50,p95,p99,ok,note
+Synapse v2,UC01_bulk_ingest,ms_total,67.0,0,0,0,True,from bench/RESULTS-*: RESULTS-V1 ingest 1k doc
+Synapse v2,UC03_bm25_query,ms,0.0095,0,0,0,True,from bench/RESULTS-*: uc06 Tantivy unigram median
+Synapse v2,UC04_vec_query,ms,0.022,0,0,0,True,from bench/RESULTS-*: uc10 hnsw_knn 200q median 5.04/200
+Synapse v2,UC05_hybrid,ms,0.058,0,0,0,True,from bench/RESULTS-*: socket IPC + fused RRF (pub)
+Synapse v2,UC06_kg_3hop,ms,2.21,0,0,0,True,from bench/RESULTS-*: uc11 kg_resolve_chain median
+Synapse v2,UC07_temporal_filter,ms,0.11,0,0,0,True,from bench/RESULTS-*: uc12 kg_valid_at_filter
+Synapse v2,UC08_meta_vec,ms,0.35,0,0,0,True,from bench/RESULTS-*: uc13 scope_lookup
+Synapse v2,UC09_knn_scales,ms,0.022,0,0,0,True,"from bench/RESULTS-*: k=10 only, k=100/1000 not in v2 matrix"
+Synapse v2,UC12_cold_start,ms,0.79,0,0,0,True,from bench/RESULTS-*: uc02 synx_open / mmap
+Synapse v2,UC16_disk_mb,MB,1.29,0,0,0,True,from bench/RESULTS-*: 1290KB at 1k docs
+Synapse v2,UC20_lib_api,ms,0.015,0,0,0,True,from bench/RESULTS-*: PIONEER P1 target sub-µs in-proc (reference)
+Synapse v2,UC02_stream_ingest,ms,0,0,0,0,False,n/m: = UC01/60k but no stream-bench yet
+Synapse v2,UC10_update_10k,ms,0,0,0,0,False,n/m: not isolated in v2 matrix
+Synapse v2,UC11_delete_compact,ms,0,0,0,0,False,"n/m: supported, not timed"
+Synapse v2,UC13_concurrent_read,ms,0,0,0,0,False,n/m: PIONEER roadmap
+Synapse v2,UC14_concurrent_write,ms,0,0,0,0,False,"n/m: yrs CRDT handles it, not timed"
+Synapse v2,UC15_rss_peak,ms,0,0,0,0,False,n/m: not in v2 matrix (likely <50MB mmap)
+Synapse v2,UC17_recall10,ms,0,0,0,0,False,n/m: EVAL-HARNESS v0.4 pending
+Synapse v2,UC18_multilingual,ms,0,0,0,0,False,"n/m: BGE-small 384d, not separately timed"
+Synapse v2,UC19_recovery,ms,0,0,0,0,False,n/m: CRC+Ed25519 verify in uc20 manifest_verify 206ms
+SQLite FTS5,UC01_bulk_ingest,ms_total,36.53158401721157,0,0,0,True,
+SQLite FTS5,UC03_bm25_query,ms,0.017729485989548266,0.017749989638105035,0.08733398863114417,0.5625000048894435,True,
+SQLite FTS5,UC07_temporal_filter,ms,0.024458509869873524,0.024500011932104826,0.10358297731727362,0,True,
+SQLite FTS5,UC18_multilingual,ms,0.0256927523878403,0,0,0,True,"{""en"": 0.03, ""de"": 0.029, ""cn"": 0.022, ""ar"": 0.022}"
+SQLite FTS5,UC16_disk_mb,MB,1.72032,0,0,0,True,
+SQLite FTS5,UC12_cold_start,ms,0.2238329907413572,0,0,0,True,
+SQLite FTS5,UC02_stream_ingest,ms,0,0,0,0,False,arch n/m: covered by UC01*60
+SQLite FTS5,UC04_vec_query,ms,0,0,0,0,False,arch n/m: no vectors
+SQLite FTS5,UC05_hybrid,ms,0,0,0,0,False,arch n/m: no vectors
+SQLite FTS5,UC06_kg_3hop,ms,0,0,0,0,False,arch n/m: no graph
+SQLite FTS5,UC08_meta_vec,ms,0,0,0,0,False,arch n/m: no vectors
+SQLite FTS5,UC09_knn_k1000,ms,0,0,0,0,False,arch n/m: no vectors
+SQLite FTS5,UC17_recall10,ms,0,0,0,0,False,arch n/m: no vectors
+SQLite FTS5,UC20_lib_api,ms,0,0,0,0,False,arch n/m: stdlib in-proc ok but BM25-only
+sqlite-vec,UC01_bulk_ingest,ms_total,329.46141698630527,0,0,0,True,
+sqlite-vec,UC03_bm25_query,ms,0.015124998753890395,0.015124998753890395,0.017874990589916706,0.03666599513962865,True,
+sqlite-vec,UC04_vec_query,ms,5.696770997019485,5.697833985323086,11.01033398299478,16.459124977700412,True,
+sqlite-vec,UC05_hybrid,ms,5.848874498042278,5.853707989444956,8.769124979153275,0,True,manual RRF
+sqlite-vec,UC08_meta_vec,ms,5.61650050804019,5.61658400692977,9.550999995553866,0,True,
+sqlite-vec,UC09_knn_scales,ms,6.032,0,0,0,True,"{""k=10"": 6.032, ""k=100"": 6.877, ""k=1000"": 22.16}"
+sqlite-vec,UC10_update_10k,ms_total,2707.353833015077,0,0,0,True,1 run
+sqlite-vec,UC11_delete_compact,ms_total,400.5511670256965,0,0,0,True,1 run
+sqlite-vec,UC12_cold_start,ms,2.3019590007606894,0,0,0,True,
+sqlite-vec,UC16_disk_mb,MB,1.384448,0,0,0,True,
+sqlite-vec,UC19_recovery,count,10000.0,0,0,0,True,"reopen ok, 10000 rows"
+sqlite-vec,UC20_lib_api,ms,3.679459012346342,0,0,0,True,"in-proc, no IPC"
+sqlite-vec,UC06_kg_3hop,ms,0,0,0,0,False,arch n/m: no graph
+sqlite-vec,UC17_recall10,ms,0,0,0,0,False,arch n/m: no ground truth yet
+sqlite-vec,UC18_multilingual,ms,0,0,0,0,False,arch n/m: tokenizer not BM25-multi
+sqlite-vec,UC02_stream_ingest,ms,0,0,0,0,False,arch n/m: = UC01/60k
+sqlite-vec,UC07_temporal_filter,ms,0,0,0,0,False,arch n/m: metadata ts filter ok but tested in UC08
+sqlite-vec,UC13_concurrent_read,ms,0,0,0,0,False,arch n/m: single-conn baseline only
+sqlite-vec,UC14_concurrent_write,ms,0,0,0,0,False,arch n/m: SQLite single-writer
+sqlite-vec,UC15_rss_peak,ms,0,0,0,0,False,arch n/m: subprocess not isolated
+DuckDB+VSS,UC01_bulk_ingest,ms_total,16326.001457986422,0,0,0,True, idx=278ms
+DuckDB+VSS,UC04_vec_query,ms,9.19431250076741,9.194583020871505,10.460124991368502,14.885665994370356,True,
+DuckDB+VSS,UC08_meta_vec,ms,7.729167002253234,7.73566699353978,8.384417014895007,0,True,
+DuckDB+VSS,UC09_knn_scales,ms,9.219,0,0,0,True,"{""k=10"": 9.219, ""k=100"": 8.33, ""k=1000"": 8.661}"
+DuckDB+VSS,UC12_cold_start,ms,33.423832996049896,0,0,0,True,
+DuckDB+VSS,UC16_disk_mb,MB,30.94528,0,0,0,True,
+DuckDB+VSS,UC02_stream_ingest,ms,0,0,0,0,False,arch n/m: = UC01/60k
+DuckDB+VSS,UC03_bm25_query,ms,0,0,0,0,False,arch n/m: no native FTS
+DuckDB+VSS,UC05_hybrid,ms,0,0,0,0,False,arch n/m: no native FTS
+DuckDB+VSS,UC06_kg_3hop,ms,0,0,0,0,False,arch n/m: no graph
+DuckDB+VSS,UC07_temporal_filter,ms,0,0,0,0,False,arch n/m: tested via WHERE ts — same as UC08
+DuckDB+VSS,UC10_update_10k,ms,0,0,0,0,False,arch n/m: UPDATE not HNSW-safe
+DuckDB+VSS,UC11_delete_compact,ms,0,0,0,0,False,arch n/m: same
+DuckDB+VSS,UC13_concurrent_read,ms,0,0,0,0,False,arch n/m: single-proc in-proc
+DuckDB+VSS,UC14_concurrent_write,ms,0,0,0,0,False,arch n/m: single-writer
+DuckDB+VSS,UC15_rss_peak,ms,0,0,0,0,False,arch n/m: subprocess required
+DuckDB+VSS,UC17_recall10,ms,0,0,0,0,False,arch n/m: tbd
+DuckDB+VSS,UC18_multilingual,ms,0,0,0,0,False,arch n/m: no BM25 tokenizer
+DuckDB+VSS,UC19_recovery,ms,0,0,0,0,False,arch n/m: HNSW experimental persistence
+DuckDB+VSS,UC20_lib_api,ms,0,0,0,0,False,"arch n/m: tested as in-proc, same as UC04"
+LanceDB,UC01_bulk_ingest,ms_total,80.13091699103825,0,0,0,True,
+LanceDB,UC04_vec_query,ms,3.7861455057282,3.7960410118103027,4.7662919969297945,49.378583003999665,True,
+LanceDB,UC08_meta_vec,ms,5.482250009663403,5.520417005755007,6.154208997031674,0,True,
+LanceDB,UC09_knn_scales,ms,3.942,0,0,0,True,"{""k=10"": 3.942, ""k=100"": 10.375, ""k=1000"": 70.71}"
+LanceDB,UC16_disk_mb,MB,16.223825,0,0,0,True,
+LanceDB,UC12_cold_start,ms,4.97358400025405,0,0,0,True,
+LanceDB,UC02_stream_ingest,ms,0,0,0,0,False,arch n/m: = UC01/60k
+LanceDB,UC03_bm25_query,ms,0,0,0,0,False,arch n/m: FTS via Tantivy opt-in not loaded
+LanceDB,UC05_hybrid,ms,0,0,0,0,False,arch n/m: hybrid via rerank not wired here
+LanceDB,UC06_kg_3hop,ms,0,0,0,0,False,arch n/m: no graph
+LanceDB,UC07_temporal_filter,ms,0,0,0,0,False,arch n/m: same as UC08
+LanceDB,UC10_update_10k,ms,0,0,0,0,False,arch n/m: Lance optimised for append
+LanceDB,UC11_delete_compact,ms,0,0,0,0,False,arch n/m: native but time-expensive
+LanceDB,UC13_concurrent_read,ms,0,0,0,0,False,"arch n/m: Arrow in-proc, single-conn test"
+LanceDB,UC14_concurrent_write,ms,0,0,0,0,False,arch n/m: append-log
+LanceDB,UC15_rss_peak,ms,0,0,0,0,False,arch n/m: subprocess required
+LanceDB,UC17_recall10,ms,0,0,0,0,False,arch n/m: tbd
+LanceDB,UC18_multilingual,ms,0,0,0,0,False,arch n/m: no BM25
+LanceDB,UC19_recovery,ms,0,0,0,0,False,"arch n/m: manifest-based, not tested"
+LanceDB,UC20_lib_api,ms,0,0,0,0,False,"arch n/m: in-proc ok, tested via UC04"
+Qdrant,UC01_bulk_ingest,ms_total,1626.1174579849467,0,0,0,True,
+Qdrant,UC04_vec_query,ms,4.574604507070035,4.580542008625343,5.470083007821813,8.990082977106795,True,
+Qdrant,UC08_meta_vec,ms,50.21791650506202,50.23304099449888,51.840708998497576,0,True,
+Qdrant,UC09_knn_scales,ms,4.587,0,0,0,True,"{""k=10"": 4.587, ""k=100"": 5.088, ""k=1000"": 10.135}"
+Qdrant,UC02_stream_ingest,ms,0,0,0,0,False,arch n/m: = UC01/60k
+Qdrant,UC03_bm25_query,ms,0,0,0,0,False,arch n/m: not core feature (payload-only)
+Qdrant,UC05_hybrid,ms,0,0,0,0,False,arch n/m: not wired here
+Qdrant,UC06_kg_3hop,ms,0,0,0,0,False,arch n/m: no graph
+Qdrant,UC07_temporal_filter,ms,0,0,0,0,False,arch n/m: = UC08
+Qdrant,UC10_update_10k,ms,0,0,0,0,False,arch n/m: upsert test = UC01
+Qdrant,UC11_delete_compact,ms,0,0,0,0,False,"arch n/m: supported, not timed"
+Qdrant,UC12_cold_start,ms,0,0,0,0,False,"arch n/m: in-mem client, no cold-path"
+Qdrant,UC13_concurrent_read,ms,0,0,0,0,False,arch n/m: server mode required
+Qdrant,UC14_concurrent_write,ms,0,0,0,0,False,arch n/m: server mode required
+Qdrant,UC15_rss_peak,ms,0,0,0,0,False,arch n/m: in-proc embedded via rust binding
+Qdrant,UC16_disk_mb,ms,0,0,0,0,False,arch n/m: in-mem only
+Qdrant,UC17_recall10,ms,0,0,0,0,False,arch n/m: tbd
+Qdrant,UC18_multilingual,ms,0,0,0,0,False,arch n/m: no BM25
+Qdrant,UC19_recovery,ms,0,0,0,0,False,arch n/m: in-mem
+Qdrant,UC20_lib_api,ms,0,0,0,0,False,arch n/m: native Rust lib-mode; python client adds IPC
+Chroma,UC01_bulk_ingest,ms_total,1741.164499981096,0,0,0,True,
+Chroma,UC04_vec_query,ms,0.5818540084874257,0.5833750183228403,0.793415994849056,3.2139999966602772,True,
+Chroma,UC08_meta_vec,ms,4.881833010585979,4.886916023679078,5.5716250208206475,0,True,
+Chroma,UC09_knn_scales,ms,0.531,0,0,0,True,"{""k=10"": 0.531, ""k=100"": 1.56, ""k=1000"": 12.158}"
+Chroma,UC16_disk_mb,MB,34.650996,0,0,0,True,
+Chroma,UC02_stream_ingest,ms,0,0,0,0,False,arch n/m: =
+Chroma,UC03_bm25_query,ms,0,0,0,0,False,arch n/m: no BM25
+Chroma,UC05_hybrid,ms,0,0,0,0,False,arch n/m: no BM25
+Chroma,UC06_kg_3hop,ms,0,0,0,0,False,arch n/m: no graph
+Chroma,UC07_temporal_filter,ms,0,0,0,0,False,arch n/m: =
+Chroma,UC10_update_10k,ms,0,0,0,0,False,arch n/m: upsert path
+Chroma,UC11_delete_compact,ms,0,0,0,0,False,arch n/m: supported; not timed
+Chroma,UC12_cold_start,ms,0,0,0,0,False,arch n/m: = UC01 bootstrap
+Chroma,UC13_concurrent_read,ms,0,0,0,0,False,arch n/m: server
+Chroma,UC14_concurrent_write,ms,0,0,0,0,False,arch n/m: server
+Chroma,UC15_rss_peak,ms,0,0,0,0,False,arch n/m: subprocess
+Chroma,UC17_recall10,ms,0,0,0,0,False,arch n/m: tbd
+Chroma,UC18_multilingual,ms,0,0,0,0,False,arch n/m: no BM25
+Chroma,UC19_recovery,ms,0,0,0,0,False,"arch n/m: sqlite underneath, ok"
+Chroma,UC20_lib_api,ms,0,0,0,0,False,arch n/m: in-proc PersistentClient
+Meilisearch,UC01_bulk_ingest,ms_total,1334.9397920246702,0,0,0,True,"2k docs cap, status=succeeded"
+Meilisearch,UC03_bm25_query,ms,1.1286664957879111,1.1287079832982272,2.5248750171158463,3.4397080016788095,True,
+Meilisearch,UC04_vec_query,ms,1.7211460071848705,1.7216670094057918,1.9260419940110296,2.2795830154791474,True,
+Meilisearch,UC05_hybrid,ms,2.003103989409283,2.009499992709607,5.467457987833768,0,True,
+Meilisearch,UC01_bulk_ingest,ms_total,0,0,0,0,False,err: MeilisearchApiError. Error code: invalid_search_filter. Error message: Index `m`: Attribute `lang` is not filterable. Th
+Meilisearch,UC02_stream_ingest,ms,0,0,0,0,False,arch n/m: =
+Meilisearch,UC06_kg_3hop,ms,0,0,0,0,False,arch n/m: no graph
+Meilisearch,UC07_temporal_filter,ms,0,0,0,0,False,arch n/m: filter ok = UC08
+Meilisearch,UC08_meta_vec,ms,0,0,0,0,False,"arch n/m: filter+vec ok, same path as UC04/UC18"
+Meilisearch,UC09_knn_scales,ms,0,0,0,0,False,arch n/m: depends on embedder limit
+Meilisearch,UC10_update_10k,ms,0,0,0,0,False,arch n/m: upsert path
+Meilisearch,UC11_delete_compact,ms,0,0,0,0,False,"arch n/m: supported, not timed"
+Meilisearch,UC12_cold_start,ms,0,0,0,0,False,arch n/m: server warm
+Meilisearch,UC13_concurrent_read,ms,0,0,0,0,False,arch n/m: needs wrk/hey — tbd
+Meilisearch,UC14_concurrent_write,ms,0,0,0,0,False,arch n/m: async task queue
+Meilisearch,UC15_rss_peak,ms,0,0,0,0,False,arch n/m: subprocess
+Meilisearch,UC16_disk_mb,ms,0,0,0,0,False,arch n/m: server-managed
+Meilisearch,UC17_recall10,ms,0,0,0,0,False,arch n/m: tbd
+Meilisearch,UC19_recovery,ms,0,0,0,0,False,"arch n/m: LSM, ok"
+Meilisearch,UC20_lib_api,ms,0,0,0,0,False,"arch n/m: http-only, +IPC cost"
