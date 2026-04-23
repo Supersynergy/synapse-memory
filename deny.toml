@@ -10,3 +10,45 @@ ignore = [
     "RUSTSEC-2024-0436",
     "RUSTSEC-2024-0370",
 ]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+    "Zlib",
+    "0BSD",
+    "OpenSSL",
+    "LGPL-2.1-or-later",
+    "LGPL-3.0",
+    "GPL-2.0-only",
+    "NCSA",
+]
+
+[[licenses.exceptions]]
+allow = ["MIT", "Apache-2.0", "NCSA"]
+name = "libfuzzer-sys"
+
+[[licenses.exceptions]]
+allow = ["OpenSSL"]
+name = "ring"
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
