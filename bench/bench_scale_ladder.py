@@ -256,7 +256,48 @@ def run_chroma(N):
     return c
 
 
+def run_synapse(N):
+    """PR-G2 scale-100M: drive the Rust synapse_scale_bench example via subprocess.
+
+    Same sha256-derived 384d vectors (Rust side reimplemented to match this
+    Python harness byte-for-byte for apples-to-apples).
+    """
+    import subprocess
+    c = Cell("Synapse v2", N)
+    binary = "/Users/master/projects/synapse/target/release/examples/synapse_scale_bench"
+    if not os.path.exists(binary):
+        c.ok = False
+        c.note = "binary missing: cargo build --release --example synapse_scale_bench -p synapse-core"
+        return c
+    rss0 = rss_mb()
+    try:
+        cmd = [binary, "--n", str(N), "--q", str(Q), "--dim", str(DIM)]
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=TIMEOUT_INGEST + TIMEOUT_QUERY)
+        if p.returncode != 0:
+            c.ok = False
+            c.note = f"exit={p.returncode}: {p.stderr[:140]}"
+            return c
+        line = [ln for ln in p.stdout.strip().splitlines() if ln.startswith("{")][-1]
+        data = json.loads(line)
+        c.ingest_s = data["ingest_s"]
+        c.query_p50_ms = data["query_p50_ms"]
+        c.query_p95_ms = data["query_p95_ms"]
+        c.query_p99_ms = data["query_p99_ms"]
+        c.disk_mb = data["disk_mb"]
+        c.rss_delta_mb = rss_mb() - rss0
+        c.note = "in-proc Rust via subprocess; sha-derived vecs"
+    except subprocess.TimeoutExpired:
+        c.ok = False
+        c.note = f"timeout > {TIMEOUT_INGEST + TIMEOUT_QUERY}s"
+    except Exception as e:
+        c.ok = False
+        c.note = f"err: {str(e)[:140]}"
+    return c
+
+
 RUNNERS = {
+    "synapse": run_synapse,
     "sqlite_vec": run_sqlite_vec,
     "duckdb_vss": run_duckdb_vss,
     "lancedb": run_lancedb,
@@ -311,7 +352,7 @@ def main():
     for eng in engines:
         row = [eng]
         for N in SCALES:
-            cell = next((r for r in results if r.engine in (eng, {"sqlite_vec":"sqlite-vec","duckdb_vss":"DuckDB+VSS","lancedb":"LanceDB","qdrant":"Qdrant in-mem","chroma":"Chroma"}[eng]) and r.N == N), None)
+            cell = next((r for r in results if r.engine in (eng, {"synapse":"Synapse v2","sqlite_vec":"sqlite-vec","duckdb_vss":"DuckDB+VSS","lancedb":"LanceDB","qdrant":"Qdrant in-mem","chroma":"Chroma"}[eng]) and r.N == N), None)
             if cell is None or not cell.ok:
                 row.append(f"n/m ({cell.note[:25] if cell else 'missing'})")
             else:
@@ -323,7 +364,7 @@ def main():
     for eng in engines:
         row = [eng]
         for N in SCALES:
-            cell = next((r for r in results if r.engine in (eng, {"sqlite_vec":"sqlite-vec","duckdb_vss":"DuckDB+VSS","lancedb":"LanceDB","qdrant":"Qdrant in-mem","chroma":"Chroma"}[eng]) and r.N == N), None)
+            cell = next((r for r in results if r.engine in (eng, {"synapse":"Synapse v2","sqlite_vec":"sqlite-vec","duckdb_vss":"DuckDB+VSS","lancedb":"LanceDB","qdrant":"Qdrant in-mem","chroma":"Chroma"}[eng]) and r.N == N), None)
             if cell is None or not cell.ok:
                 row.append("n/m")
             else:
@@ -335,7 +376,7 @@ def main():
     for eng in engines:
         row = [eng]
         for N in SCALES:
-            cell = next((r for r in results if r.engine in (eng, {"sqlite_vec":"sqlite-vec","duckdb_vss":"DuckDB+VSS","lancedb":"LanceDB","qdrant":"Qdrant in-mem","chroma":"Chroma"}[eng]) and r.N == N), None)
+            cell = next((r for r in results if r.engine in (eng, {"synapse":"Synapse v2","sqlite_vec":"sqlite-vec","duckdb_vss":"DuckDB+VSS","lancedb":"LanceDB","qdrant":"Qdrant in-mem","chroma":"Chroma"}[eng]) and r.N == N), None)
             if cell is None or not cell.ok:
                 row.append("n/m")
             else:
