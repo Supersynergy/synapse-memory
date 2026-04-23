@@ -1,5 +1,61 @@
 # Changelog
 
+## v2.1-m4max-preview — 2026-04-24 · M4 Max turbo layer
+
+**SimSIMD-accelerated kernels, Matryoshka embedding truncation, unified
+`TextEmbedder` trait, and Candle-Metal scaffolding.** Every module
+feature-gated; pure-Rust default build unchanged. Apple-Silicon-first.
+
+### Shipped
+
+- **`turbo::simsimd_kernels`** — NEON-native `cos_f32` / `dot_i8` / `hamming_b8` / `dot_f32` + batched cos. Feature `simsimd`.
+- **`matryoshka`** — `truncate_row` / `truncate_rows` + L2 renormalize. Default-on (pure Rust).
+- **`embedder_trait`** — object-safe `TextEmbedder` trait + `EmbedderKind` factory + `SYNAPSE_EMBEDDER` env var. Feature `turbo`.
+- **`turbo::mrl_embedder`** — `MrlEmbedder` decorator wraps any backend with MRL truncation. Feature `turbo`.
+- **`turbo::candle_metal_embedder`** — Metal BGE-small scaffold (inference path tracked in PR-candle-metal).
+- **`turbo::ollama_embedder`** fix: `embed_batch` now uses `/api/embed` single-call path with legacy fallback.
+- **`turbo::ndarray_search::search_simsimd`** — feature-gated NEON brute-force NN that skips ndarray Array2 allocation.
+- **Cargo features** `simsimd`, `accelerate` (placeholder for Apple Accelerate linking).
+- **Docs** `SPEC_V2_M4_MAX_2026-04-24.md`, `M4_MAX_INTEGRATION.md`, `bench_2026-04-24/progression.md`.
+- **Bench** `examples/bench_progression.rs` + `benches/kernels_progression.rs` (criterion).
+
+### Measured progression (M4 Max, 100 000 × 384, best-of-three)
+
+| step | kernel | µs/query | QPS | speed-up |
+|---|---|---:|---:|---:|
+| S0 | scalar cos f32 | 13 210 | 76 | 1.00× |
+| S1 | rayon scalar cos f32 | 1 518 | 659 | 8.70× |
+| S2 | SimSIMD cos f32 | 763 | 1 310 | 17.30× |
+| S3 | SimSIMD dot i8 | 325 | 3 075 | **40.62×** |
+| S4 | SimSIMD hamming b8 | 248 | 4 034 | **53.29×** |
+| S5 | MRL-128 SimSIMD cos | 396 | 2 522 | 33.32× |
+
+vs Synapse v2.0 Turbo baseline:
+- int8 path: 1 284 µs → 325 µs = **3.95×**
+- binary path: 661 µs → 248 µs = **2.67×**
+
+### Test + verification
+
+- `cargo build --features "embed,turbo,ollama,simsimd"` ✅
+- `cargo build --features "ann-usearch,turbo,simsimd"` ✅
+- `cargo clippy --release` ✅ no issues
+- `cargo test --lib` ✅ **39 passed** (14 new)
+
+### Out of scope (next PRs)
+
+- Candle-Metal BGE-small real inference (scaffold in place).
+- CoreML ANE cross-encoder rerank.
+- USearch HNSW live-wiring into `Store::search_vec` (feature already builds).
+- Metal 4 topk compute shader.
+- `synapse-py` via maturin.
+
+### Rollback
+
+- git tag `backup-pre-m4max-bench-2026-04-24` points at the pre-preview commit.
+- tarball: `~/projects/data/synapse-backup-2026-04-24.tgz` (75 MB).
+
+---
+
 ## v1.0.0 — 2026-04-20 · World's-breakthrough release
 
 **Synapse 1.0 is the first open single-file format that fuses agent memory,
