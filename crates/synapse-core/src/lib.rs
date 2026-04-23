@@ -12,6 +12,9 @@ pub mod types;
 #[cfg(feature = "embed")]
 pub mod embed;
 
+#[cfg(feature = "turbo")]
+pub mod turbo;
+
 pub use db::Store;
 pub use error::{Error, Result};
 pub use types::{Doc, Hit, PutRequest, SearchMode};

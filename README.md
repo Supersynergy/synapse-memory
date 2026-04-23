@@ -292,6 +292,7 @@ Your agent has a 200 K-token context and zero memory between sessions. The usual
 
 - **Claude Code** — paste the MCP block above, restart, done
 - **Any MCP agent** — Cursor, Cline, Continue, Aider share the same config
+- **synapse-turbo** — [`tools/turbo`](tools/turbo) — Python daemon for sub-ms queries (3-tier cache: pre-computed + NumPy SIMD + ONNX). 1000x faster than CLI for agent hooks.
 - **Node.js** — [`sdk/node`](sdk/node)
 - **Python** — [`sdk/python/synapse_reader.py`](sdk/python/synapse_reader.py), stdlib + `zstandard` + `blake3`
 - **DuckDB analytics** — `ATTACH 'brain.db' AS s (TYPE sqlite, READ_ONLY);`

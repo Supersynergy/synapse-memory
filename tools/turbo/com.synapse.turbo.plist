@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.synapse.turbo</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/opt/python@3.12/bin/python3.12</string>
+        <string>-W</string>
+        <string>ignore</string>
+        <string>/Users/master/.claude/synapse-turbo.py</string>
+        <string>daemon</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/master/.synapse/turbo-daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/master/.synapse/turbo-daemon.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>OMP_NUM_THREADS</key>
+        <string>8</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>
