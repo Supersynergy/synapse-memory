@@ -22,7 +22,7 @@ jobs:
           ./target/release/synapsed -f /tmp/synapse_ci.db -s /tmp/synapse_ci.sock --lazy-embed &
           PID=$!
           sleep 0.5
-          python3 -m pip install msgpack
+          python3 -m pip install --break-system-packages msgpack
           python3 -c "
           import msgpack, socket, struct
           s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
