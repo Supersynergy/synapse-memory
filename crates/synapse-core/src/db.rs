@@ -1,10 +1,10 @@
 use crate::error::{Error, Result};
 use crate::types::{Doc, Hit, PutRequest, SearchMode, EMBED_DIM};
-use rusqlite::{params, Connection, OptionalExtension};
-use std::path::Path;
-use ed25519_dalek::SigningKey;
 #[cfg(feature = "encryption")]
 use base64::Engine as _;
+use ed25519_dalek::SigningKey;
+use rusqlite::{params, Connection, OptionalExtension};
+use std::path::Path;
 
 pub struct Store {
     pub conn: Connection,
@@ -37,8 +37,8 @@ impl Store {
     /// Requires feature `encryption`.
     #[cfg(feature = "encryption")]
     pub fn open_encrypted(path: impl AsRef<Path>, passphrase: &str) -> Result<Self> {
-        use argon2::{Argon2, PasswordHasher};
         use argon2::password_hash::SaltString;
+        use argon2::{Argon2, PasswordHasher};
 
         // Derive a 32-byte key from the passphrase using argon2id.
         // We use a fixed salt derived from the path so the key is deterministic
@@ -61,8 +61,14 @@ impl Store {
         let hash = argon2
             .hash_password(passphrase.as_bytes(), &salt)
             .map_err(|e| Error::Other(format!("argon2 hash: {e}")))?;
-        let raw_key = hash.hash.ok_or_else(|| Error::Other("argon2 missing hash output".into()))?;
-        let key_hex: String = raw_key.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
+        let raw_key = hash
+            .hash
+            .ok_or_else(|| Error::Other("argon2 missing hash output".into()))?;
+        let key_hex: String = raw_key
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
 
         unsafe {
             rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
@@ -134,7 +140,11 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 
     /// Insert doc. Dedup via BLAKE3(text). Returns doc id.
     /// If `signing_key` is provided, signs BLAKE3(text) and stores in `sig` column.
-    pub fn put_signed(&mut self, req: &PutRequest, signing_key: Option<&SigningKey>) -> Result<i64> {
+    pub fn put_signed(
+        &mut self,
+        req: &PutRequest,
+        signing_key: Option<&SigningKey>,
+    ) -> Result<i64> {
         let sig_bytes = signing_key.map(|sk| {
             let hash = blake3::hash(req.text.as_bytes());
             crate::sign::sign_bytes(sk, hash.as_bytes()).to_vec()
@@ -154,23 +164,38 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 
     /// Merge incoming yrs state into existing meta_crdt for a doc.
     pub fn merge_crdt(&mut self, id: i64, incoming: &[u8]) -> Result<()> {
-        let existing: Option<Vec<u8>> = self.conn.query_row(
-            "SELECT meta_crdt FROM docs WHERE id = ?1",
-            params![id],
-            |r| r.get(0),
-        ).optional()?.ok_or_else(|| Error::NotFound(format!("id={}", id)))?;
+        let existing: Option<Vec<u8>> = self
+            .conn
+            .query_row(
+                "SELECT meta_crdt FROM docs WHERE id = ?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| Error::NotFound(format!("id={}", id)))?;
         let merged = match existing {
             Some(cur) => crate::crdt::merge_meta(&cur, incoming)?,
             None => incoming.to_vec(),
         };
-        self.conn.execute("UPDATE docs SET meta_crdt = ?1 WHERE id = ?2", params![merged, id])?;
+        self.conn.execute(
+            "UPDATE docs SET meta_crdt = ?1 WHERE id = ?2",
+            params![merged, id],
+        )?;
         Ok(())
     }
 
-    fn put_inner(&mut self, req: &PutRequest, sig: Option<Vec<u8>>, meta_crdt: Option<Vec<u8>>) -> Result<i64> {
+    fn put_inner(
+        &mut self,
+        req: &PutRequest,
+        sig: Option<Vec<u8>>,
+        meta_crdt: Option<Vec<u8>>,
+    ) -> Result<i64> {
         if let Some(ref e) = req.embedding {
             if e.len() != EMBED_DIM {
-                return Err(Error::DimMismatch { expected: EMBED_DIM, got: e.len() });
+                return Err(Error::DimMismatch {
+                    expected: EMBED_DIM,
+                    got: e.len(),
+                });
             }
         }
         let hash = blake3::hash(req.text.as_bytes());
@@ -217,7 +242,10 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             for req in reqs {
                 if let Some(ref e) = req.embedding {
                     if e.len() != EMBED_DIM {
-                        return Err(Error::DimMismatch { expected: EMBED_DIM, got: e.len() });
+                        return Err(Error::DimMismatch {
+                            expected: EMBED_DIM,
+                            got: e.len(),
+                        });
                     }
                 }
                 let hash = blake3::hash(req.text.as_bytes());
@@ -231,7 +259,9 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 }
                 let ts = now_ms();
                 let meta_s = req.meta.as_ref().map(|m| m.to_string());
-                stmt_ins.execute(params![req.uri, req.title, req.text, meta_s, ts, hash_bytes])?;
+                stmt_ins.execute(params![
+                    req.uri, req.title, req.text, meta_s, ts, hash_bytes
+                ])?;
                 let id = tx.last_insert_rowid();
                 if let Some(ref emb) = req.embedding {
                     let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
@@ -245,19 +275,30 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     }
 
     pub fn get(&self, id: i64) -> Result<Doc> {
-        let doc = self.conn.query_row(
-            "SELECT id,uri,title,text,meta,ts FROM docs WHERE id = ?1",
-            params![id],
-            map_doc,
-        ).optional()?.ok_or_else(|| Error::NotFound(format!("id={}", id)))?;
+        let doc = self
+            .conn
+            .query_row(
+                "SELECT id,uri,title,text,meta,ts FROM docs WHERE id = ?1",
+                params![id],
+                map_doc,
+            )
+            .optional()?
+            .ok_or_else(|| Error::NotFound(format!("id={}", id)))?;
         Ok(doc)
     }
 
-    pub fn search(&self, q: &str, mode: SearchMode, query_emb: Option<&[f32]>, limit: usize) -> Result<Vec<Hit>> {
+    pub fn search(
+        &self,
+        q: &str,
+        mode: SearchMode,
+        query_emb: Option<&[f32]>,
+        limit: usize,
+    ) -> Result<Vec<Hit>> {
         match mode {
             SearchMode::Lex => self.search_lex(q, limit),
             SearchMode::Vec => {
-                let emb = query_emb.ok_or_else(|| Error::Other("vec search needs embedding".into()))?;
+                let emb =
+                    query_emb.ok_or_else(|| Error::Other("vec search needs embedding".into()))?;
                 self.search_vec(emb, limit)
             }
             SearchMode::Hybrid => {
@@ -287,7 +328,10 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 
     fn search_vec(&self, emb: &[f32], limit: usize) -> Result<Vec<Hit>> {
         if emb.len() != EMBED_DIM {
-            return Err(Error::DimMismatch { expected: EMBED_DIM, got: emb.len() });
+            return Err(Error::DimMismatch {
+                expected: EMBED_DIM,
+                got: emb.len(),
+            });
         }
         let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
         let sql = "SELECT d.id,d.uri,d.title,d.text,v.distance
@@ -315,13 +359,25 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let rrf_k = 60.0;
         for (i, h) in lex.into_iter().enumerate() {
             let s = 1.0 / (rrf_k + (i + 1) as f64);
-            scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+            scores
+                .entry(h.id)
+                .and_modify(|e| e.0 += s)
+                .or_insert((s, h));
         }
         for (i, h) in vec.into_iter().enumerate() {
             let s = 1.0 / (rrf_k + (i + 1) as f64);
-            scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+            scores
+                .entry(h.id)
+                .and_modify(|e| e.0 += s)
+                .or_insert((s, h));
         }
-        let mut out: Vec<_> = scores.into_values().map(|(s, mut h)| { h.score = s; h }).collect();
+        let mut out: Vec<_> = scores
+            .into_values()
+            .map(|(s, mut h)| {
+                h.score = s;
+                h
+            })
+            .collect();
         out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
         out.truncate(limit);
         Ok(out)
@@ -329,13 +385,19 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 
     /// Verify the Ed25519 signature on a doc. Returns Err if no sig or invalid.
     pub fn verify(&self, id: i64, vk: &ed25519_dalek::VerifyingKey) -> Result<()> {
-        let (text, sig_opt): (String, Option<Vec<u8>>) = self.conn.query_row(
-            "SELECT text, sig FROM docs WHERE id = ?1",
-            params![id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        ).optional()?.ok_or_else(|| Error::NotFound(format!("id={}", id)))?;
+        let (text, sig_opt): (String, Option<Vec<u8>>) = self
+            .conn
+            .query_row(
+                "SELECT text, sig FROM docs WHERE id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?
+            .ok_or_else(|| Error::NotFound(format!("id={}", id)))?;
         let sig_bytes = sig_opt.ok_or_else(|| Error::Other("doc has no signature".into()))?;
-        let arr: [u8; 64] = sig_bytes.try_into().map_err(|_| Error::Other("bad sig length".into()))?;
+        let arr: [u8; 64] = sig_bytes
+            .try_into()
+            .map_err(|_| Error::Other("bad sig length".into()))?;
         let hash = blake3::hash(text.as_bytes());
         crate::sign::verify_bytes(vk, hash.as_bytes(), &arr)
     }
@@ -345,20 +407,28 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let mut stmt = self.conn.prepare(
             "SELECT id, uri, title, text, meta, ts FROM docs ORDER BY ts DESC LIMIT ?1 OFFSET ?2",
         )?;
-        let docs = stmt.query_map(params![limit as i64, offset as i64], map_doc)?
+        let docs = stmt
+            .query_map(params![limit as i64, offset as i64], map_doc)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(docs)
     }
 
     pub fn stats(&self) -> Result<Stats> {
-        let docs: i64 = self.conn.query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))?;
-        let vecs: i64 = self.conn.query_row("SELECT COUNT(*) FROM docs_vec", [], |r| r.get(0))?;
+        let docs: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))?;
+        let vecs: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM docs_vec", [], |r| r.get(0))?;
         Ok(Stats { docs, vecs })
     }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct Stats { pub docs: i64, pub vecs: i64 }
+pub struct Stats {
+    pub docs: i64,
+    pub vecs: i64,
+}
 
 fn map_doc(r: &rusqlite::Row) -> rusqlite::Result<Doc> {
     let meta: Option<String> = r.get(4)?;
@@ -384,19 +454,23 @@ mod tests {
     use super::*;
 
     fn fake_emb(seed: u8) -> Vec<f32> {
-        (0..EMBED_DIM).map(|i| ((i as u8).wrapping_mul(seed) as f32) / 255.0).collect()
+        (0..EMBED_DIM)
+            .map(|i| ((i as u8).wrapping_mul(seed) as f32) / 255.0)
+            .collect()
     }
 
     #[test]
     fn open_migrate_put_lex() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mut s = Store::open(tmp.path()).unwrap();
-        let id = s.put(&PutRequest {
-            title: Some("t".into()),
-            text: "rust sqlite fts5 vector memory".into(),
-            embedding: Some(fake_emb(7)),
-            ..Default::default()
-        }).unwrap();
+        let id = s
+            .put(&PutRequest {
+                title: Some("t".into()),
+                text: "rust sqlite fts5 vector memory".into(),
+                embedding: Some(fake_emb(7)),
+                ..Default::default()
+            })
+            .unwrap();
         assert!(id > 0);
         let hits = s.search("sqlite", SearchMode::Lex, None, 10).unwrap();
         assert_eq!(hits.len(), 1);
@@ -407,7 +481,10 @@ mod tests {
     fn dedup_same_text() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mut s = Store::open(tmp.path()).unwrap();
-        let r = PutRequest { text: "same text".into(), ..Default::default() };
+        let r = PutRequest {
+            text: "same text".into(),
+            ..Default::default()
+        };
         let a = s.put(&r).unwrap();
         let b = s.put(&r).unwrap();
         assert_eq!(a, b);
@@ -420,8 +497,18 @@ mod tests {
         let mut s = Store::open(tmp.path()).unwrap();
         let e1 = fake_emb(1);
         let e2 = fake_emb(2);
-        s.put(&PutRequest { text: "a".into(), embedding: Some(e1.clone()), ..Default::default() }).unwrap();
-        s.put(&PutRequest { text: "b".into(), embedding: Some(e2.clone()), ..Default::default() }).unwrap();
+        s.put(&PutRequest {
+            text: "a".into(),
+            embedding: Some(e1.clone()),
+            ..Default::default()
+        })
+        .unwrap();
+        s.put(&PutRequest {
+            text: "b".into(),
+            embedding: Some(e2.clone()),
+            ..Default::default()
+        })
+        .unwrap();
         let hits = s.search("", SearchMode::Vec, Some(&e1), 10).unwrap();
         assert_eq!(hits[0].text, "a");
     }
@@ -430,9 +517,21 @@ mod tests {
     fn hybrid_search() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mut s = Store::open(tmp.path()).unwrap();
-        s.put(&PutRequest { text: "rust memory sqlite".into(), embedding: Some(fake_emb(5)), ..Default::default() }).unwrap();
-        s.put(&PutRequest { text: "python pandas".into(), embedding: Some(fake_emb(9)), ..Default::default() }).unwrap();
-        let hits = s.search("rust", SearchMode::Hybrid, Some(&fake_emb(5)), 10).unwrap();
+        s.put(&PutRequest {
+            text: "rust memory sqlite".into(),
+            embedding: Some(fake_emb(5)),
+            ..Default::default()
+        })
+        .unwrap();
+        s.put(&PutRequest {
+            text: "python pandas".into(),
+            embedding: Some(fake_emb(9)),
+            ..Default::default()
+        })
+        .unwrap();
+        let hits = s
+            .search("rust", SearchMode::Hybrid, Some(&fake_emb(5)), 10)
+            .unwrap();
         assert!(hits.iter().any(|h| h.text.contains("rust")));
     }
 }

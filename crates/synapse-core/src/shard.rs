@@ -2,9 +2,9 @@
 //! Split: k-means on embeddings → N shard SQLite files.
 //! Query: bloom prefilter → centroid-nearest shards → parallel fan-out → RRF merge.
 
+use crate::db::Store;
 use crate::error::{Error, Result};
 use crate::types::{Hit, SearchMode, EMBED_DIM};
-use crate::db::Store;
 use anyhow::Context;
 use base64::Engine as _;
 use fastbloom::BloomFilter;
@@ -87,7 +87,10 @@ pub struct ShardManager {
 impl ShardManager {
     pub fn open(manifest_path: PathBuf) -> Result<Self> {
         let manifest = ShardManifest::load(&manifest_path)?;
-        Ok(Self { manifest_path, shards: manifest.shards })
+        Ok(Self {
+            manifest_path,
+            shards: manifest.shards,
+        })
     }
 
     /// Query: bloom-prefilter tokens → top-2 centroid-nearest shards → fan-out → RRF merge.
@@ -107,9 +110,7 @@ impl ShardManager {
             let mut candidates: Vec<&ShardMeta> = self
                 .shards
                 .iter()
-                .filter(|s| {
-                    tokens.iter().any(|t| s.bloom_contains(t).unwrap_or(true))
-                })
+                .filter(|s| tokens.iter().any(|t| s.bloom_contains(t).unwrap_or(true)))
                 .collect();
             if candidates.is_empty() {
                 candidates = self.shards.iter().collect();
@@ -182,19 +183,18 @@ fn rrf_merge(lists: Vec<Vec<Hit>>, limit: usize) -> Vec<Hit> {
             h
         })
         .collect();
-    merged.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    merged.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     merged.truncate(limit);
     merged
 }
 
 /// Split a brain.db into N shard files via k-means on embeddings.
-pub fn split(
-    source_db: &Path,
-    out_dir: &Path,
-    n_shards: Option<usize>,
-) -> Result<ShardManifest> {
-    std::fs::create_dir_all(out_dir)
-        .map_err(|e| Error::Other(format!("create out_dir: {e}")))?;
+pub fn split(source_db: &Path, out_dir: &Path, n_shards: Option<usize>) -> Result<ShardManifest> {
+    std::fs::create_dir_all(out_dir).map_err(|e| Error::Other(format!("create out_dir: {e}")))?;
 
     let store = Store::open(source_db)?;
     let doc_rows = load_all_docs_with_embeddings(&store)?;
@@ -210,7 +210,10 @@ pub fn split(
 
     // Build ndarray matrix [n_docs x EMBED_DIM]
     let n = doc_rows.len();
-    let flat: Vec<f32> = doc_rows.iter().flat_map(|r| r.emb.iter().copied()).collect();
+    let flat: Vec<f32> = doc_rows
+        .iter()
+        .flat_map(|r| r.emb.iter().copied())
+        .collect();
     let matrix = Array2::from_shape_vec((n, EMBED_DIM), flat)
         .map_err(|e| Error::Other(format!("ndarray: {e}")))?;
 
@@ -249,8 +252,7 @@ pub fn split(
             arr
         };
         let centroid_bytes: Vec<u8> = centroid.iter().flat_map(|f| f.to_le_bytes()).collect();
-        let centroid_b64 =
-            base64::engine::general_purpose::STANDARD.encode(&centroid_bytes);
+        let centroid_b64 = base64::engine::general_purpose::STANDARD.encode(&centroid_bytes);
 
         // Build bloom filter from all tokens in shard docs
         let mut bloom =
@@ -295,7 +297,9 @@ pub fn split(
         );
     }
 
-    Ok(ShardManifest { shards: shard_metas })
+    Ok(ShardManifest {
+        shards: shard_metas,
+    })
 }
 
 struct DocRow {
@@ -327,7 +331,14 @@ fn load_all_docs_with_embeddings(store: &Store) -> Result<Vec<DocRow>> {
                 .chunks_exact(4)
                 .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
                 .collect();
-            rows_out.push(DocRow { id, uri, title, text, meta, emb });
+            rows_out.push(DocRow {
+                id,
+                uri,
+                title,
+                text,
+                meta,
+                emb,
+            });
         }
     }
     Ok(rows_out)
@@ -337,7 +348,11 @@ fn cosine_sim(a: &[f32; EMBED_DIM], b: &[f32; EMBED_DIM]) -> f32 {
     let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let na: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let nb: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if na == 0.0 || nb == 0.0 { 0.0 } else { dot / (na * nb) }
+    if na == 0.0 || nb == 0.0 {
+        0.0
+    } else {
+        dot / (na * nb)
+    }
 }
 
 /// Serialize: [u32 LE num_hashes][u64 LE bits...]

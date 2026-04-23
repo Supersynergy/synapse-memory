@@ -7,13 +7,21 @@ pub const LAMBDA: f64 = 0.05;
 
 /// Ensure heat columns exist on the docs table in a synapse-core Store connection.
 pub fn migrate_heat(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch(r#"
+    conn.execute_batch(
+        r#"
         ALTER TABLE docs ADD COLUMN IF NOT EXISTS access_count INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE docs ADD COLUMN IF NOT EXISTS last_accessed_ts INTEGER;
-    "#).ok(); // ignore if columns exist (SQLite error on duplicate)
-    // Fallback: try each separately
-    conn.execute("ALTER TABLE docs ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0", []).ok();
-    conn.execute("ALTER TABLE docs ADD COLUMN last_accessed_ts INTEGER", []).ok();
+    "#,
+    )
+    .ok(); // ignore if columns exist (SQLite error on duplicate)
+           // Fallback: try each separately
+    conn.execute(
+        "ALTER TABLE docs ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0",
+        [],
+    )
+    .ok();
+    conn.execute("ALTER TABLE docs ADD COLUMN last_accessed_ts INTEGER", [])
+        .ok();
     Ok(())
 }
 
@@ -37,17 +45,26 @@ pub fn rerank(hits: Vec<Hit>, conn: &rusqlite::Connection) -> Result<Vec<Hit>> {
         .as_secs() as f64;
     let mut out = Vec::with_capacity(hits.len());
     for mut h in hits {
-        let (access_count, last_ts): (i64, Option<i64>) = conn.query_row(
-            "SELECT COALESCE(access_count,0), last_accessed_ts FROM docs WHERE id=?1",
-            rusqlite::params![h.id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        ).unwrap_or((0, None));
-        let age_days = last_ts.map(|ts| (now_secs - ts as f64) / 86400.0).unwrap_or(0.0).max(0.0);
+        let (access_count, last_ts): (i64, Option<i64>) = conn
+            .query_row(
+                "SELECT COALESCE(access_count,0), last_accessed_ts FROM docs WHERE id=?1",
+                rusqlite::params![h.id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap_or((0, None));
+        let age_days = last_ts
+            .map(|ts| (now_secs - ts as f64) / 86400.0)
+            .unwrap_or(0.0)
+            .max(0.0);
         let heat = (1.0 + (1.0 + access_count as f64).ln()) * (-LAMBDA * age_days).exp();
         h.score *= heat;
         out.push(h);
     }
-    out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    out.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(out)
 }
 

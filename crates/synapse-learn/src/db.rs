@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::path::Path;
 
 pub struct LearnStore {
@@ -11,7 +11,8 @@ impl LearnStore {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.execute_batch(r#"
+        conn.execute_batch(
+            r#"
             CREATE TABLE IF NOT EXISTS learn_bandit (
                 shard_id TEXT PRIMARY KEY,
                 wins INTEGER NOT NULL DEFAULT 0,
@@ -34,7 +35,8 @@ impl LearnStore {
                 bucket INTEGER PRIMARY KEY,
                 correction REAL NOT NULL DEFAULT 1.0
             );
-        "#)?;
+        "#,
+        )?;
         Ok(Self { conn })
     }
 
@@ -72,7 +74,13 @@ impl LearnStore {
         let r = self.conn.query_row(
             "SELECT bucket, wins, losses FROM learn_rrf_alpha WHERE shape_hash=?1",
             params![shape_hash as i64],
-            |r| Ok((r.get::<_, usize>(0)?, r.get::<_, u32>(1)?, r.get::<_, u32>(2)?)),
+            |r| {
+                Ok((
+                    r.get::<_, usize>(0)?,
+                    r.get::<_, u32>(1)?,
+                    r.get::<_, u32>(2)?,
+                ))
+            },
         );
         match r {
             Ok(v) => Ok(v),
@@ -98,7 +106,13 @@ impl LearnStore {
         Ok(())
     }
 
-    pub fn log_feedback(&self, ts: i64, query: &str, emb: Option<&[u8]>, doc_id: i64) -> Result<()> {
+    pub fn log_feedback(
+        &self,
+        ts: i64,
+        query: &str,
+        emb: Option<&[u8]>,
+        doc_id: i64,
+    ) -> Result<()> {
         self.conn.execute(
             "INSERT INTO feedback(ts,query,query_emb,accepted_doc_id) VALUES(?1,?2,?3,?4)",
             params![ts, query, emb, doc_id],

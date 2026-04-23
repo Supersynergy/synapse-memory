@@ -18,18 +18,22 @@ struct Cli {
 
 #[derive(Debug, Deserialize)]
 struct JsonRpc {
-    #[serde(default)] jsonrpc: String,
+    #[serde(default)]
+    jsonrpc: String,
     id: Option<Value>,
     method: String,
-    #[serde(default)] params: Value,
+    #[serde(default)]
+    params: Value,
 }
 
 #[derive(Debug, Serialize)]
 struct JsonRpcResp {
     jsonrpc: &'static str,
     id: Value,
-    #[serde(skip_serializing_if = "Option::is_none")] result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")] error: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<Value>,
 }
 
 #[tokio::main]
@@ -39,17 +43,31 @@ async fn main() -> Result<()> {
     let mut reader = BufReader::new(stdin).lines();
     let mut stdout = tokio::io::stdout();
     while let Some(line) = reader.next_line().await? {
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let req: JsonRpc = match serde_json::from_str(&line) {
             Ok(r) => r,
-            Err(e) => { eprintln!("parse: {e}"); continue; }
+            Err(e) => {
+                eprintln!("parse: {e}");
+                continue;
+            }
         };
         let id = req.id.clone().unwrap_or(Value::Null);
         let resp = handle(&cli.sock, &req).await;
         let out = match resp {
-            Ok(v) => JsonRpcResp { jsonrpc: "2.0", id, result: Some(v), error: None },
-            Err(e) => JsonRpcResp { jsonrpc: "2.0", id, result: None,
-                error: Some(json!({"code": -32000, "message": e.to_string()})) },
+            Ok(v) => JsonRpcResp {
+                jsonrpc: "2.0",
+                id,
+                result: Some(v),
+                error: None,
+            },
+            Err(e) => JsonRpcResp {
+                jsonrpc: "2.0",
+                id,
+                result: None,
+                error: Some(json!({"code": -32000, "message": e.to_string()})),
+            },
         };
         let s = serde_json::to_string(&out)?;
         stdout.write_all(s.as_bytes()).await?;
@@ -85,7 +103,10 @@ async fn handle(sock: &PathBuf, req: &JsonRpc) -> Result<Value> {
             }, "required": ["id", "vk"]}}
         ]})),
         "tools/call" => {
-            let name = req.params.get("name").and_then(|v| v.as_str())
+            let name = req
+                .params
+                .get("name")
+                .and_then(|v| v.as_str())
                 .context("missing tool name")?;
             let args = req.params.get("arguments").cloned().unwrap_or(json!({}));
             let result = tool_call(sock, name, args).await?;
@@ -110,22 +131,30 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
             "embed_query": args.get("embed_query").and_then(|v| v.as_bool()).unwrap_or(false),
         }}),
         "merge" => {
-            let id = args.get("id").and_then(|v| v.as_i64()).context("merge requires id")?;
+            let id = args
+                .get("id")
+                .and_then(|v| v.as_i64())
+                .context("merge requires id")?;
             let state_bytes = json_array_to_bytes(args.get("state"))?;
             json!({"op": "Merge", "args": {"id": id, "state": state_bytes}})
-        },
+        }
         "timeline" => json!({"op": "Timeline", "args": {
             "limit": args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20),
             "offset": args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0),
         }}),
         "verify" => {
-            let id = args.get("id").and_then(|v| v.as_i64()).context("verify requires id")?;
+            let id = args
+                .get("id")
+                .and_then(|v| v.as_i64())
+                .context("verify requires id")?;
             let vk_bytes = json_array_to_bytes(args.get("vk"))?;
             json!({"op": "Verify", "args": {"id": id, "vk": vk_bytes}})
-        },
+        }
         _ => anyhow::bail!("unknown tool: {name}"),
     };
-    let mut stream = UnixStream::connect(sock).await.context("connect synapsed")?;
+    let mut stream = UnixStream::connect(sock)
+        .await
+        .context("connect synapsed")?;
     let body = rmp_serde::to_vec_named(&req)?;
     use tokio::io::AsyncReadExt;
     stream.write_all(&(body.len() as u32).to_le_bytes()).await?;
@@ -141,6 +170,10 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
 }
 
 fn json_array_to_bytes(v: Option<&Value>) -> Result<Vec<u8>> {
-    let arr = v.and_then(|v| v.as_array()).context("expected byte array")?;
-    arr.iter().map(|b| b.as_u64().map(|n| n as u8).context("byte value")).collect()
+    let arr = v
+        .and_then(|v| v.as_array())
+        .context("expected byte array")?;
+    arr.iter()
+        .map(|b| b.as_u64().map(|n| n as u8).context("byte value"))
+        .collect()
 }

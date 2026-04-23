@@ -14,16 +14,27 @@ use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use yrs::{updates::decoder::Decode, Doc, ReadTxn, StateVector, Transact, Update};
 use yrs::updates::encoder::Encode;
+use yrs::{updates::decoder::Decode, Doc, ReadTxn, StateVector, Transact, Update};
 
 // ── Wire messages ──────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Msg {
-    SyncStep1 { doc_id: String, sv: Vec<u8> },
-    SyncStep2 { doc_id: String, update: Vec<u8> },
-    Update { doc_id: String, update: Vec<u8>, sig: Vec<u8>, vk: Vec<u8> },
+    SyncStep1 {
+        doc_id: String,
+        sv: Vec<u8>,
+    },
+    SyncStep2 {
+        doc_id: String,
+        update: Vec<u8>,
+    },
+    Update {
+        doc_id: String,
+        update: Vec<u8>,
+        sig: Vec<u8>,
+        vk: Vec<u8>,
+    },
 }
 
 fn encode(msg: &Msg) -> Result<Vec<u8>> {
@@ -43,13 +54,15 @@ fn write_framed(w: &mut impl Write, data: &[u8]) -> Result<()> {
 
 fn read_framed(r: &mut impl Read) -> Result<Vec<u8>> {
     let mut len_buf = [0u8; 4];
-    r.read_exact(&mut len_buf).map_err(|e| Error::Other(e.to_string()))?;
+    r.read_exact(&mut len_buf)
+        .map_err(|e| Error::Other(e.to_string()))?;
     let len = u32::from_le_bytes(len_buf) as usize;
     if len > 64 * 1024 * 1024 {
         return Err(Error::Other("frame too large".into()));
     }
     let mut buf = vec![0u8; len];
-    r.read_exact(&mut buf).map_err(|e| Error::Other(e.to_string()))?;
+    r.read_exact(&mut buf)
+        .map_err(|e| Error::Other(e.to_string()))?;
     Ok(buf)
 }
 
@@ -93,9 +106,7 @@ struct DocStore {
 
 impl DocStore {
     fn get_or_create(&mut self, doc_id: &str) -> &Doc {
-        self.docs
-            .entry(doc_id.to_string())
-            .or_insert_with(Doc::new)
+        self.docs.entry(doc_id.to_string()).or_insert_with(Doc::new)
     }
 
     fn state_vector(&mut self, doc_id: &str) -> Vec<u8> {
@@ -104,14 +115,11 @@ impl DocStore {
         txn.state_vector().encode_v1()
     }
 
-
     fn apply_update(&mut self, doc_id: &str, update: &[u8]) -> Result<Vec<u8>> {
         let doc = self.docs.entry(doc_id.to_string()).or_insert_with(Doc::new);
         let mut txn = doc.transact_mut();
-        txn.apply_update(
-            Update::decode_v1(update).map_err(|e| Error::Other(e.to_string()))?,
-        )
-        .map_err(|e| Error::Other(e.to_string()))?;
+        txn.apply_update(Update::decode_v1(update).map_err(|e| Error::Other(e.to_string()))?)
+            .map_err(|e| Error::Other(e.to_string()))?;
         drop(txn);
         let txn = doc.transact();
         Ok(txn.encode_state_as_update_v1(&StateVector::default()))
@@ -147,7 +155,12 @@ impl Federation {
     }
 
     pub fn peers(&self) -> Vec<String> {
-        self.peers.lock().unwrap().iter().map(|a| a.to_string()).collect()
+        self.peers
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|a| a.to_string())
+            .collect()
     }
 
     /// Broadcast a local CRDT update to all peers (signed).
@@ -193,11 +206,18 @@ impl Federation {
         let mut stream = connect(addr)?;
         for doc_id in &doc_ids {
             let sv = self.store.lock().unwrap().state_vector(doc_id);
-            let step1 = encode(&Msg::SyncStep1 { doc_id: doc_id.clone(), sv })?;
+            let step1 = encode(&Msg::SyncStep1 {
+                doc_id: doc_id.clone(),
+                sv,
+            })?;
             write_framed(&mut stream, &step1)?;
             let reply = read_framed(&mut stream)?;
             let msg = decode(&reply)?;
-            if let Msg::SyncStep2 { doc_id: rid, update } = msg {
+            if let Msg::SyncStep2 {
+                doc_id: rid,
+                update,
+            } = msg
+            {
                 if rid == *doc_id && !update.is_empty() {
                     self.store.lock().unwrap().apply_update(&rid, &update)?;
                 }
@@ -215,16 +235,27 @@ impl Federation {
     /// Receive a signed Update message from a peer. Verifies signature.
     pub fn receive_update(&self, msg: Msg) -> Result<()> {
         match msg {
-            Msg::Update { doc_id, update, sig, vk } => {
-                let vk_arr: [u8; 32] = vk.try_into().map_err(|_| Error::Other("vk must be 32 bytes".into()))?;
-                let sig_arr: [u8; 64] = sig.try_into().map_err(|_| Error::Other("sig must be 64 bytes".into()))?;
-                let verifying_key = VerifyingKey::from_bytes(&vk_arr)
-                    .map_err(|e| Error::Other(e.to_string()))?;
+            Msg::Update {
+                doc_id,
+                update,
+                sig,
+                vk,
+            } => {
+                let vk_arr: [u8; 32] = vk
+                    .try_into()
+                    .map_err(|_| Error::Other("vk must be 32 bytes".into()))?;
+                let sig_arr: [u8; 64] = sig
+                    .try_into()
+                    .map_err(|_| Error::Other("sig must be 64 bytes".into()))?;
+                let verifying_key =
+                    VerifyingKey::from_bytes(&vk_arr).map_err(|e| Error::Other(e.to_string()))?;
                 sign::verify_bytes(&verifying_key, &update, &sig_arr)?;
                 self.store.lock().unwrap().apply_update(&doc_id, &update)?;
             }
             Msg::SyncStep1 { .. } | Msg::SyncStep2 { .. } => {
-                return Err(Error::Other("unexpected message type in receive_update".into()));
+                return Err(Error::Other(
+                    "unexpected message type in receive_update".into(),
+                ));
             }
         }
         Ok(())
@@ -318,11 +349,20 @@ fn handle_stream(
             let reply = encode(&Msg::SyncStep2 { doc_id, update })?;
             write_framed(stream, &reply)?;
         }
-        Msg::Update { doc_id, update, sig, vk } => {
-            let vk_arr: [u8; 32] = vk.try_into().map_err(|_| Error::Other("vk must be 32 bytes".into()))?;
-            let sig_arr: [u8; 64] = sig.try_into().map_err(|_| Error::Other("sig must be 64 bytes".into()))?;
-            let verifying_key = VerifyingKey::from_bytes(&vk_arr)
-                .map_err(|e| Error::Other(e.to_string()))?;
+        Msg::Update {
+            doc_id,
+            update,
+            sig,
+            vk,
+        } => {
+            let vk_arr: [u8; 32] = vk
+                .try_into()
+                .map_err(|_| Error::Other("vk must be 32 bytes".into()))?;
+            let sig_arr: [u8; 64] = sig
+                .try_into()
+                .map_err(|_| Error::Other("sig must be 64 bytes".into()))?;
+            let verifying_key =
+                VerifyingKey::from_bytes(&vk_arr).map_err(|e| Error::Other(e.to_string()))?;
             sign::verify_bytes(&verifying_key, &update, &sig_arr)?;
             store.lock().unwrap().apply_update(&doc_id, &update)?;
         }
@@ -352,7 +392,11 @@ mod tests {
         let fed = make_fed();
         let update = crdt::new_meta(&[("tags", "test")]).unwrap();
         // put into local store
-        fed.store.lock().unwrap().apply_update("doc1", &update).unwrap();
+        fed.store
+            .lock()
+            .unwrap()
+            .apply_update("doc1", &update)
+            .unwrap();
         // create signed Update msg manually
         let sig = sign::sign_bytes(&fed.signing_key, &update).to_vec();
         let vk = fed.signing_key.verifying_key().to_bytes().to_vec();
@@ -391,7 +435,12 @@ mod tests {
 
         // Put a doc on node-A
         let update = crdt::new_meta(&[("node", "A"), ("data", "hello")]).unwrap();
-        fed_a.store.lock().unwrap().apply_update("docX", &update).unwrap();
+        fed_a
+            .store
+            .lock()
+            .unwrap()
+            .apply_update("docX", &update)
+            .unwrap();
 
         // node-B starts listener
         let port = 17832;

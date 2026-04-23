@@ -7,10 +7,16 @@ pub const ALPHA_BUCKETS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
 
 /// Hash a query to u8 shape bucket: first-token-len + has-digit + has-quote.
 pub fn query_shape_hash(query: &str) -> u8 {
-    let first_len = query.split_whitespace().next().map(|t| t.len()).unwrap_or(0);
+    let first_len = query
+        .split_whitespace()
+        .next()
+        .map(|t| t.len())
+        .unwrap_or(0);
     let has_digit = query.chars().any(|c| c.is_ascii_digit()) as u8;
     let has_quote = query.contains('"') as u8;
-    ((first_len & 0x3F) as u8).wrapping_add(has_digit << 6).wrapping_add(has_quote << 7)
+    ((first_len & 0x3F) as u8)
+        .wrapping_add(has_digit << 6)
+        .wrapping_add(has_quote << 7)
 }
 
 pub fn pick_alpha(store: &crate::LearnStore, shape_hash: u8) -> Result<(usize, f64)> {
@@ -47,7 +53,12 @@ pub fn pick_alpha(store: &crate::LearnStore, shape_hash: u8) -> Result<(usize, f
     Ok((best_bucket, ALPHA_BUCKETS[best_bucket]))
 }
 
-pub fn reward_alpha(store: &crate::LearnStore, shape_hash: u8, bucket: usize, hit: bool) -> Result<()> {
+pub fn reward_alpha(
+    store: &crate::LearnStore,
+    shape_hash: u8,
+    bucket: usize,
+    hit: bool,
+) -> Result<()> {
     let key = (shape_hash as i64) * 16 + bucket as i64;
     if hit {
         store.conn.execute(
@@ -71,7 +82,13 @@ mod tests {
 
     #[test]
     fn shape_hash_deterministic() {
-        assert_eq!(query_shape_hash("hello world"), query_shape_hash("hello world"));
-        assert_ne!(query_shape_hash("hello 123"), query_shape_hash("hello world"));
+        assert_eq!(
+            query_shape_hash("hello world"),
+            query_shape_hash("hello world")
+        );
+        assert_ne!(
+            query_shape_hash("hello 123"),
+            query_shape_hash("hello world")
+        );
     }
 }

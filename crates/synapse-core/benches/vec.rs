@@ -10,7 +10,9 @@ fn bench_knn(c: &mut Criterion) {
     use synapse_core::synx::vec_index::HnswIndex;
 
     fn vector(i: usize, dim: usize) -> Vec<f32> {
-        (0..dim).map(|j| ((i * 13 + j * 7) % 997) as f32 / 997.0 - 0.5).collect()
+        (0..dim)
+            .map(|j| ((i * 13 + j * 7) % 997) as f32 / 997.0 - 0.5)
+            .collect()
     }
 
     let vectors: Vec<Vec<f32>> = (0..2000).map(|i| vector(i, 64)).collect();

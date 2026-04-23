@@ -18,7 +18,10 @@ contradicts summarises agent claude crm event lead scraping research brainpack s
 
     let ws: Vec<&str> = WORDS.split_whitespace().collect();
     let phrase = |i: usize| -> String {
-        (0..10).map(|j| ws[(i + j) % ws.len()]).collect::<Vec<_>>().join(" ")
+        (0..10)
+            .map(|j| ws[(i + j) % ws.len()])
+            .collect::<Vec<_>>()
+            .join(" ")
     };
 
     let fts = FtsIndex::new().unwrap();
@@ -41,12 +44,16 @@ contradicts summarises agent claude crm event lead scraping research brainpack s
     });
     c.bench_function("bm25 boolean OR 10k docs", |b| {
         b.iter(|| {
-            let _ = fts.search(black_box("rust OR tantivy OR vector"), 10).unwrap();
+            let _ = fts
+                .search(black_box("rust OR tantivy OR vector"), 10)
+                .unwrap();
         })
     });
     c.bench_function("bm25 phrase 10k docs", |b| {
         b.iter(|| {
-            let _ = fts.search(black_box("\"rust ships\""), 10).unwrap_or_default();
+            let _ = fts
+                .search(black_box("\"rust ships\""), 10)
+                .unwrap_or_default();
         })
     });
 }

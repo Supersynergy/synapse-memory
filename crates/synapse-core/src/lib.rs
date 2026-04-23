@@ -2,8 +2,8 @@
 
 pub mod crdt;
 pub mod db;
-pub mod federate;
 pub mod error;
+pub mod federate;
 pub mod shard;
 pub mod sign;
 pub mod snap;

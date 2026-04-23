@@ -21,9 +21,10 @@ pub fn update_calibration(store: &crate::LearnStore) -> Result<usize> {
     // Count accepted docs per score bucket from feedback
     // Since we don't store scores in feedback directly, we approximate:
     // correction = actual_accept_rate / expected_rate_per_bucket
-    let total: i64 = store.conn.query_row(
-        "SELECT COUNT(*) FROM feedback", [], |r| r.get(0)
-    ).unwrap_or(0);
+    let total: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM feedback", [], |r| r.get(0))
+        .unwrap_or(0);
     if total == 0 {
         return Ok(0);
     }

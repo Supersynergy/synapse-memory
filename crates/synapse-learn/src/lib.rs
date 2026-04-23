@@ -1,10 +1,10 @@
 pub mod bandit;
-pub mod rrf_tune;
+pub mod calibrate;
+pub mod consolidate;
+pub mod db;
+pub mod drift;
 pub mod feedback;
 pub mod heat;
-pub mod drift;
-pub mod consolidate;
-pub mod calibrate;
-pub mod db;
+pub mod rrf_tune;
 
 pub use db::LearnStore;

@@ -68,9 +68,8 @@ mod tests {
     fn bandit_converges() {
         let shards: Vec<ShardId> = (0..4).map(|i| format!("s{i}")).collect();
         // shard "s2" has much higher win rate — should be picked most
-        let mut priors: HashMap<ShardId, (u32, u32)> = shards.iter()
-            .map(|s| (s.clone(), (1u32, 1u32)))
-            .collect();
+        let mut priors: HashMap<ShardId, (u32, u32)> =
+            shards.iter().map(|s| (s.clone(), (1u32, 1u32))).collect();
         // pre-weight s2
         priors.insert("s2".into(), (80, 5));
         let bandit = ShardBandit::new(priors);

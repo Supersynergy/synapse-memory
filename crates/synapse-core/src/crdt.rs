@@ -25,10 +25,14 @@ pub fn merge_meta(a: &[u8], b: &[u8]) -> Result<Vec<u8>> {
     let doc = Doc::new();
     {
         let mut txn = doc.transact_mut();
-        txn.apply_update(Update::decode_v1(a).map_err(|e| crate::error::Error::Other(e.to_string()))?)
-            .map_err(|e| crate::error::Error::Other(e.to_string()))?;
-        txn.apply_update(Update::decode_v1(b).map_err(|e| crate::error::Error::Other(e.to_string()))?)
-            .map_err(|e| crate::error::Error::Other(e.to_string()))?;
+        txn.apply_update(
+            Update::decode_v1(a).map_err(|e| crate::error::Error::Other(e.to_string()))?,
+        )
+        .map_err(|e| crate::error::Error::Other(e.to_string()))?;
+        txn.apply_update(
+            Update::decode_v1(b).map_err(|e| crate::error::Error::Other(e.to_string()))?,
+        )
+        .map_err(|e| crate::error::Error::Other(e.to_string()))?;
     }
     let txn = doc.transact();
     Ok(txn.encode_state_as_update_v1(&StateVector::default()))
@@ -39,8 +43,10 @@ pub fn read_meta(state: &[u8]) -> Result<Vec<(String, String)>> {
     let doc = Doc::new();
     {
         let mut txn = doc.transact_mut();
-        txn.apply_update(Update::decode_v1(state).map_err(|e| crate::error::Error::Other(e.to_string()))?)
-            .map_err(|e| crate::error::Error::Other(e.to_string()))?;
+        txn.apply_update(
+            Update::decode_v1(state).map_err(|e| crate::error::Error::Other(e.to_string()))?,
+        )
+        .map_err(|e| crate::error::Error::Other(e.to_string()))?;
     }
     let txn = doc.transact();
     let map = txn.get_map("meta");

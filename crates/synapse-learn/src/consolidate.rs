@@ -41,14 +41,18 @@ pub fn run_consolidate(conn: &rusqlite::Connection) -> Result<MergeReport> {
     // Load all embeddings
     let mut stmt = conn.prepare(
         "SELECT d.id, d.uri, v.embedding FROM docs d
-         JOIN docs_vec v ON v.id = d.id"
+         JOIN docs_vec v ON v.id = d.id",
     )?;
-    let rows: Vec<(i64, Option<String>, Vec<u8>)> = stmt.query_map([], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get::<_, Vec<u8>>(2)?))
-    })?.filter_map(|r| r.ok()).collect();
+    let rows: Vec<(i64, Option<String>, Vec<u8>)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, Vec<u8>>(2)?)))?
+        .filter_map(|r| r.ok())
+        .collect();
 
     if rows.len() < 2 {
-        return Ok(MergeReport { pairs_found: 0, merged: 0 });
+        return Ok(MergeReport {
+            pairs_found: 0,
+            merged: 0,
+        });
     }
 
     let dim = rows[0].2.len() / 4;
@@ -56,8 +60,13 @@ pub fn run_consolidate(conn: &rusqlite::Connection) -> Result<MergeReport> {
 
     // Build hash buckets
     let mut buckets: std::collections::HashMap<u8, Vec<usize>> = std::collections::HashMap::new();
-    let embeddings: Vec<Vec<f32>> = rows.iter()
-        .map(|(_, _, b)| b.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+    let embeddings: Vec<Vec<f32>> = rows
+        .iter()
+        .map(|(_, _, b)| {
+            b.chunks_exact(4)
+                .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+                .collect()
+        })
         .collect();
 
     for (i, emb) in embeddings.iter().enumerate() {
@@ -92,7 +101,10 @@ pub fn run_consolidate(conn: &rusqlite::Connection) -> Result<MergeReport> {
         }
     }
 
-    Ok(MergeReport { pairs_found, merged })
+    Ok(MergeReport {
+        pairs_found,
+        merged,
+    })
 }
 
 #[cfg(test)]

@@ -16,14 +16,18 @@ pub fn keygen(secret_path: impl AsRef<Path>, public_path: impl AsRef<Path>) -> R
 /// Load a signing key from a 32-byte file.
 pub fn load_signing_key(path: impl AsRef<Path>) -> Result<SigningKey> {
     let bytes = std::fs::read(path)?;
-    let arr: [u8; 32] = bytes.try_into().map_err(|_| Error::Other("signing key must be 32 bytes".into()))?;
+    let arr: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| Error::Other("signing key must be 32 bytes".into()))?;
     Ok(SigningKey::from_bytes(&arr))
 }
 
 /// Load a verifying key from a 32-byte file.
 pub fn load_verifying_key(path: impl AsRef<Path>) -> Result<VerifyingKey> {
     let bytes = std::fs::read(path)?;
-    let arr: [u8; 32] = bytes.try_into().map_err(|_| Error::Other("verifying key must be 32 bytes".into()))?;
+    let arr: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| Error::Other("verifying key must be 32 bytes".into()))?;
     VerifyingKey::from_bytes(&arr).map_err(|e| Error::Other(e.to_string()))
 }
 
@@ -35,7 +39,8 @@ pub fn sign_bytes(key: &SigningKey, data: &[u8]) -> [u8; 64] {
 /// Verify signature over data. Returns Ok(()) or Err.
 pub fn verify_bytes(key: &VerifyingKey, data: &[u8], sig_bytes: &[u8; 64]) -> Result<()> {
     let sig = Signature::from_bytes(sig_bytes);
-    key.verify(data, &sig).map_err(|e| Error::Other(format!("signature invalid: {e}")))
+    key.verify(data, &sig)
+        .map_err(|e| Error::Other(format!("signature invalid: {e}")))
 }
 
 #[cfg(test)]

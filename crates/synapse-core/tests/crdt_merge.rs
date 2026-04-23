@@ -1,12 +1,18 @@
-use synapse_core::{snap, PutRequest, Store};
 use synapse_core::crdt::new_meta;
+use synapse_core::{snap, PutRequest, Store};
 
 fn put_with_crdt(store: &mut Store, uri: &str, text: &str, tags: &str) -> i64 {
     let crdt = new_meta(&[("tags", tags)]).unwrap();
-    store.put_with_crdt(
-        &PutRequest { uri: Some(uri.into()), text: text.into(), ..Default::default() },
-        Some(crdt),
-    ).unwrap()
+    store
+        .put_with_crdt(
+            &PutRequest {
+                uri: Some(uri.into()),
+                text: text.into(),
+                ..Default::default()
+            },
+            Some(crdt),
+        )
+        .unwrap()
 }
 
 #[test]
@@ -57,15 +63,21 @@ fn three_concurrent_writers_no_data_loss() {
     assert_eq!(stats.docs, 4, "expected 4 unique docs, got {}", stats.docs);
 
     // Check CRDT state on doc://1 — should have been merged
-    let crdt_bytes: Option<Vec<u8>> = merged.conn.query_row(
-        "SELECT meta_crdt FROM docs WHERE uri = 'doc://1'",
-        [],
-        |r| r.get(0),
-    ).unwrap();
+    let crdt_bytes: Option<Vec<u8>> = merged
+        .conn
+        .query_row(
+            "SELECT meta_crdt FROM docs WHERE uri = 'doc://1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
     let crdt_bytes = crdt_bytes.expect("doc://1 should have meta_crdt");
     let kvs = synapse_core::crdt::read_meta(&crdt_bytes).unwrap();
     // At minimum, the merged tags key must be present
-    assert!(kvs.iter().any(|(k, _)| k == "tags"), "merged crdt must have tags key");
+    assert!(
+        kvs.iter().any(|(k, _)| k == "tags"),
+        "merged crdt must have tags key"
+    );
 }
 
 #[test]
@@ -73,7 +85,11 @@ fn extension_agnostic_roundtrip() {
     let db = tempfile::NamedTempFile::new().unwrap();
     {
         let mut s = Store::open(db.path()).unwrap();
-        s.put(&PutRequest { text: "ext agnostic test".into(), ..Default::default() }).unwrap();
+        s.put(&PutRequest {
+            text: "ext agnostic test".into(),
+            ..Default::default()
+        })
+        .unwrap();
     }
 
     // Export as .syn
@@ -81,7 +97,10 @@ fn extension_agnostic_roundtrip() {
     snap::export(db.path(), pack_syn.path(), 3).unwrap();
 
     // Import using path with .brainpack extension (rename via symlink workaround: just pass the .syn path directly)
-    let restored = tempfile::Builder::new().suffix(".brainpack").tempfile().unwrap();
+    let restored = tempfile::Builder::new()
+        .suffix(".brainpack")
+        .tempfile()
+        .unwrap();
     snap::import(pack_syn.path(), restored.path()).unwrap();
 
     let s = Store::open(restored.path()).unwrap();

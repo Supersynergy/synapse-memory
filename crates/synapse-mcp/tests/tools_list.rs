@@ -30,9 +30,7 @@ fn tools_list_returns_five_tools() {
 
     let resp: serde_json::Value = serde_json::from_str(line.trim()).expect("parse JSON response");
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    let names: Vec<&str> = tools.iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
+    let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     assert_eq!(names.len(), 5, "expected 5 tools, got: {:?}", names);
     for expected in ["put", "search", "merge", "timeline", "verify"] {
         assert!(names.contains(&expected), "missing tool: {expected}");

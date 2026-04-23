@@ -54,7 +54,10 @@ impl State {
     async fn ensure_embedder(&self) -> Result<()> {
         let mut g = self.embedder.lock().await;
         if g.is_none() {
-            info!("loading embedder (BGE-small-en-v1.5) cache={}…", self.cache_path.display());
+            info!(
+                "loading embedder (BGE-small-en-v1.5) cache={}…",
+                self.cache_path.display()
+            );
             let t0 = std::time::Instant::now();
             *g = Some(Embedder::new_with_cache(Some(&self.cache_path)).context("embedder init")?);
             info!("embedder ready in {:?}", t0.elapsed());
@@ -66,10 +69,15 @@ impl State {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "synapsed=info".into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "synapsed=info".into()),
+        )
         .init();
     let cli = Cli::parse();
-    if let Some(p) = cli.file.parent() { std::fs::create_dir_all(p).ok(); }
+    if let Some(p) = cli.file.parent() {
+        std::fs::create_dir_all(p).ok();
+    }
 
     // Install Prometheus metrics recorder and spawn HTTP server
     let metrics_handle = metrics::MetricsHandle::install()?;
@@ -79,7 +87,10 @@ async fn main() -> Result<()> {
     let store = Store::open(&cli.file).context("open store")?;
     let cache_path = cli.emb_cache.clone().unwrap_or_else(|| {
         let mut p = cli.file.clone();
-        let name = p.file_name().map(|n| format!(".{}.emb-cache", n.to_string_lossy())).unwrap_or_else(|| ".emb-cache".into());
+        let name = p
+            .file_name()
+            .map(|n| format!(".{}.emb-cache", n.to_string_lossy()))
+            .unwrap_or_else(|| ".emb-cache".into());
         p.set_file_name(name);
         p
     });
@@ -90,7 +101,10 @@ async fn main() -> Result<()> {
         Some(Embedder::new_with_cache(Some(&cache_path)).context("embedder init")?)
     };
     let snap_dir = cli.snap_dir.clone().unwrap_or_else(|| {
-        cli.file.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("."))
+        cli.file
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
     });
     std::fs::create_dir_all(&snap_dir).ok();
     let state = Arc::new(State {
@@ -103,13 +117,21 @@ async fn main() -> Result<()> {
     });
 
     let _ = std::fs::remove_file(&cli.sock);
-    let listener = UnixListener::bind(&cli.sock).with_context(|| format!("bind {}", cli.sock.display()))?;
-    info!("listening on {} (db={})", cli.sock.display(), cli.file.display());
+    let listener =
+        UnixListener::bind(&cli.sock).with_context(|| format!("bind {}", cli.sock.display()))?;
+    info!(
+        "listening on {} (db={})",
+        cli.sock.display(),
+        cli.file.display()
+    );
 
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(p) => p,
-            Err(e) => { error!("accept: {e}"); continue; }
+            Err(e) => {
+                error!("accept: {e}");
+                continue;
+            }
         };
         let s = state.clone();
         tokio::spawn(async move {
@@ -123,7 +145,9 @@ async fn main() -> Result<()> {
 async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
     loop {
         let mut lenbuf = [0u8; 4];
-        if stream.read_exact(&mut lenbuf).await.is_err() { return Ok(()); }
+        if stream.read_exact(&mut lenbuf).await.is_err() {
+            return Ok(());
+        }
         let len = u32::from_le_bytes(lenbuf) as usize;
         if len == 0 || len > 256 * 1024 * 1024 {
             return Err(anyhow::anyhow!("bad frame len {len}"));
@@ -133,7 +157,9 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
         let req: Request = rmp_serde::from_slice(&buf).context("decode request")?;
         let resp = dispatch(&state, req).await;
         let encoded = rmp_serde::to_vec_named(&resp)?;
-        stream.write_all(&(encoded.len() as u32).to_le_bytes()).await?;
+        stream
+            .write_all(&(encoded.len() as u32).to_le_bytes())
+            .await?;
         stream.write_all(&encoded).await?;
         stream.flush().await?;
     }
@@ -150,7 +176,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Ok(id) => Response::Id(id),
                 Err(e) => Response::Err(e.to_string()),
             }
-        },
+        }
         Request::PutBatch(batch) => {
             let t0 = Instant::now();
             let result = put_batch(state, batch).await;
@@ -159,8 +185,13 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Ok(ids) => Response::Ids(ids),
                 Err(e) => Response::Err(e.to_string()),
             }
-        },
-        Request::Search { mode, q, limit, embed_query } => {
+        }
+        Request::Search {
+            mode,
+            q,
+            limit,
+            embed_query,
+        } => {
             let mode_str = match mode {
                 SearchMode::Lex => "lex",
                 SearchMode::Vec => "vec",
@@ -173,12 +204,15 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Ok(hits) => Response::Hits(hits),
                 Err(e) => Response::Err(e.to_string()),
             }
-        },
+        }
         Request::Stats => match state.store.lock().await.stats() {
             Ok(s) => {
                 metrics::set_doc_count(s.docs);
-                Response::Stats { docs: s.docs, vecs: s.vecs }
-            },
+                Response::Stats {
+                    docs: s.docs,
+                    vecs: s.vecs,
+                }
+            }
             Err(e) => Response::Err(e.to_string()),
         },
         Request::Snap { out, level } => {
@@ -190,17 +224,18 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Ok(()) => Response::Ok,
                 Err(e) => Response::Err(e.to_string()),
             }
-        },
+        }
         Request::Shutdown => {
             info!("shutdown requested");
             std::process::exit(0);
         }
-        Request::Merge { id, state: crdt_state } => {
-            match state.store.lock().await.merge_crdt(id, &crdt_state) {
-                Ok(()) => Response::Ok,
-                Err(e) => Response::Err(e.to_string()),
-            }
-        }
+        Request::Merge {
+            id,
+            state: crdt_state,
+        } => match state.store.lock().await.merge_crdt(id, &crdt_state) {
+            Ok(()) => Response::Ok,
+            Err(e) => Response::Err(e.to_string()),
+        },
         Request::Timeline { limit, offset } => {
             match state.store.lock().await.timeline(limit, offset) {
                 Ok(docs) => Response::Docs(docs),
@@ -213,11 +248,13 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(_) => Response::Err("vk must be 32 bytes".into()),
                 Ok(arr) => match ed25519_dalek::VerifyingKey::from_bytes(&arr) {
                     Err(e) => Response::Err(e.to_string()),
-                    Ok(verifying_key) => match state.store.lock().await.verify(id, &verifying_key) {
-                        Ok(()) => Response::Ok,
-                        Err(e) => Response::Err(e.to_string()),
+                    Ok(verifying_key) => {
+                        match state.store.lock().await.verify(id, &verifying_key) {
+                            Ok(()) => Response::Ok,
+                            Err(e) => Response::Err(e.to_string()),
+                        }
                     }
-                }
+                },
             }
         }
     }
@@ -227,13 +264,19 @@ fn sanitize_snap_path(base: &std::path::Path, out: &str) -> Result<PathBuf> {
     let p = PathBuf::from(out);
     let absolute = if p.is_absolute() { p } else { base.join(p) };
     // Canonicalize what we can; canonicalize won't work if file doesn't exist yet, so canonicalize parent.
-    let parent = absolute.parent().ok_or_else(|| anyhow::anyhow!("no parent"))?;
-    let canon_parent = parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf());
+    let parent = absolute
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("no parent"))?;
+    let canon_parent = parent
+        .canonicalize()
+        .unwrap_or_else(|_| parent.to_path_buf());
     let canon_base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf());
     if !canon_parent.starts_with(&canon_base) {
         anyhow::bail!("snap path outside --snap-dir ({})", canon_base.display());
     }
-    let fname = absolute.file_name().ok_or_else(|| anyhow::anyhow!("no filename"))?;
+    let fname = absolute
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("no filename"))?;
     Ok(canon_parent.join(fname))
 }
 
@@ -246,7 +289,9 @@ async fn put_one(state: &State, p: PutReq) -> Result<i64> {
         let g = state.embedder.lock().await;
         let e = g.as_ref().expect("embedder present");
         Some(e.embed_one(&p.text)?)
-    } else { None };
+    } else {
+        None
+    };
     let mut req: PutRequest = p.into();
     req.embedding = embedding;
     let mut store = state.store.lock().await;
@@ -266,24 +311,42 @@ async fn put_batch(state: &State, batch: Vec<PutReq>) -> Result<Vec<i64>> {
         let g = state.embedder.lock().await;
         let e = g.as_ref().expect("embedder present");
         Some(e.embed_batch(&texts)?)
-    } else { None };
-    let reqs: Vec<PutRequest> = batch.into_iter().enumerate().map(|(i, p)| {
-        let emb = if p.embed { embeddings.as_ref().map(|v| v[i].clone()) } else { None };
-        let mut r: PutRequest = p.into();
-        r.embedding = emb;
-        r
-    }).collect();
+    } else {
+        None
+    };
+    let reqs: Vec<PutRequest> = batch
+        .into_iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let emb = if p.embed {
+                embeddings.as_ref().map(|v| v[i].clone())
+            } else {
+                None
+            };
+            let mut r: PutRequest = p.into();
+            r.embedding = emb;
+            r
+        })
+        .collect();
     let mut store = state.store.lock().await;
     Ok(store.put_batch(&reqs)?)
 }
 
-async fn search(state: &State, mode: SearchMode, q: &str, limit: usize, embed_query: bool) -> Result<Vec<synapse_core::Hit>> {
+async fn search(
+    state: &State,
+    mode: SearchMode,
+    q: &str,
+    limit: usize,
+    embed_query: bool,
+) -> Result<Vec<synapse_core::Hit>> {
     let emb = if embed_query {
         state.ensure_embedder().await?;
         let g = state.embedder.lock().await;
         let e = g.as_ref().expect("embedder present");
         Some(e.embed_one(q)?)
-    } else { None };
+    } else {
+        None
+    };
     let store = state.store.lock().await;
     Ok(store.search(q, mode, emb.as_deref(), limit)?)
 }

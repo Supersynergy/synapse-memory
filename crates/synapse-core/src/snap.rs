@@ -2,7 +2,7 @@
 
 use crate::error::{Error, Result};
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
 const MAGIC: &[u8; 4] = b"BPK1";
@@ -39,13 +39,19 @@ pub fn export_signed(
 }
 
 /// Verify and import a signed .brainpack. Returns the embedded public key.
-pub fn import_signed(pack: impl AsRef<Path>, out: impl AsRef<Path>, expected_vk: Option<&VerifyingKey>) -> Result<VerifyingKey> {
+pub fn import_signed(
+    pack: impl AsRef<Path>,
+    out: impl AsRef<Path>,
+    expected_vk: Option<&VerifyingKey>,
+) -> Result<VerifyingKey> {
     let raw = std::fs::read(pack)?;
     if &raw[0..4] != MAGIC {
         return Err(Error::Other("bad magic".into()));
     }
     if raw[4] != VERSION_SIGNED {
-        return Err(Error::Other("not a signed brainpack (version mismatch)".into()));
+        return Err(Error::Other(
+            "not a signed brainpack (version mismatch)".into(),
+        ));
     }
     let _level = u32::from_le_bytes(raw[5..9].try_into().unwrap());
     // raw_len at [9..17] is 0 for signed packs
@@ -55,8 +61,8 @@ pub fn import_signed(pack: impl AsRef<Path>, out: impl AsRef<Path>, expected_vk:
         return Err(Error::Other("signed brainpack too short".into()));
     }
     let body = &raw[49..raw.len() - 96];
-    let pubkey_bytes: [u8; 32] = raw[raw.len()-96..raw.len()-64].try_into().unwrap();
-    let sig_bytes: [u8; 64] = raw[raw.len()-64..].try_into().unwrap();
+    let pubkey_bytes: [u8; 32] = raw[raw.len() - 96..raw.len() - 64].try_into().unwrap();
+    let sig_bytes: [u8; 64] = raw[raw.len() - 64..].try_into().unwrap();
     let vk = VerifyingKey::from_bytes(&pubkey_bytes)
         .map_err(|e| Error::Other(format!("bad pubkey in pack: {e}")))?;
     // verify body hash
@@ -69,7 +75,9 @@ pub fn import_signed(pack: impl AsRef<Path>, out: impl AsRef<Path>, expected_vk:
     // optionally verify against expected key
     if let Some(exp) = expected_vk {
         if exp.as_bytes() != &pubkey_bytes {
-            return Err(Error::Other("public key in pack does not match expected".into()));
+            return Err(Error::Other(
+                "public key in pack does not match expected".into(),
+            ));
         }
     }
     let data = zstd::decode_all(body)?;
@@ -139,12 +147,31 @@ pub fn merge_packs(
     let conn_b = Connection::open(db_b.path())?;
     let mut conn_out = Connection::open(db_out.path())?;
 
-    let mut stmt = conn_b.prepare(
-        "SELECT uri, title, text, meta, ts, blake3, sig, meta_crdt FROM docs"
-    )?;
-    let rows: Vec<(Option<String>, Option<String>, String, Option<String>, i64, Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> = stmt.query_map([], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?))
-    })?.collect::<rusqlite::Result<_>>()?;
+    let mut stmt =
+        conn_b.prepare("SELECT uri, title, text, meta, ts, blake3, sig, meta_crdt FROM docs")?;
+    let rows: Vec<(
+        Option<String>,
+        Option<String>,
+        String,
+        Option<String>,
+        i64,
+        Vec<u8>,
+        Option<Vec<u8>>,
+        Option<Vec<u8>>,
+    )> = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+                r.get(7)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
 
     let tx = conn_out.transaction()?;
     for (uri, title, text, meta, ts, blake3, sig, crdt_b) in rows {
@@ -153,13 +180,15 @@ pub fn merge_packs(
                 "SELECT id, meta_crdt FROM docs WHERE uri = ?1",
                 params![u],
                 |r| Ok((r.get(0)?, r.get(1)?)),
-            ).optional()?
+            )
+            .optional()?
         } else {
             tx.query_row(
                 "SELECT id, meta_crdt FROM docs WHERE blake3 = ?1",
                 params![blake3],
                 |r| Ok((r.get(0)?, r.get(1)?)),
-            ).optional()?
+            )
+            .optional()?
         };
 
         if let Some((id, crdt_a)) = existing_id {
@@ -168,7 +197,10 @@ pub fn merge_packs(
                     Some(ref a_state) => crate::crdt::merge_meta(a_state, b_state)?,
                     None => b_state.clone(),
                 };
-                tx.execute("UPDATE docs SET meta_crdt = ?1 WHERE id = ?2", params![merged, id])?;
+                tx.execute(
+                    "UPDATE docs SET meta_crdt = ?1 WHERE id = ?2",
+                    params![merged, id],
+                )?;
             }
         } else {
             tx.execute(
@@ -236,9 +268,11 @@ pub fn encrypt_pack(pack: impl AsRef<Path>, out: impl AsRef<Path>, passphrase: &
     use age::secrecy::SecretString;
     use std::io::Write as _;
     let data = std::fs::read(pack)?;
-    let encryptor = age::Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string().into()));
+    let encryptor =
+        age::Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string().into()));
     let mut output = vec![];
-    let mut writer = encryptor.wrap_output(&mut output)
+    let mut writer = encryptor
+        .wrap_output(&mut output)
         .map_err(|e| Error::Other(e.to_string()))?;
     writer.write_all(&data)?;
     writer.finish().map_err(|e| Error::Other(e.to_string()))?;
@@ -247,7 +281,11 @@ pub fn encrypt_pack(pack: impl AsRef<Path>, out: impl AsRef<Path>, passphrase: &
 }
 
 /// Decrypt an age-encrypted .brainpack file.
-pub fn decrypt_pack(enc_pack: impl AsRef<Path>, out: impl AsRef<Path>, passphrase: &str) -> Result<()> {
+pub fn decrypt_pack(
+    enc_pack: impl AsRef<Path>,
+    out: impl AsRef<Path>,
+    passphrase: &str,
+) -> Result<()> {
     use age::secrecy::SecretString;
     use std::io::Read as _;
     let data = std::fs::read(enc_pack)?;
@@ -256,7 +294,10 @@ pub fn decrypt_pack(enc_pack: impl AsRef<Path>, out: impl AsRef<Path>, passphras
         _ => return Err(Error::Other("expected passphrase-encrypted pack".into())),
     };
     let mut reader = decryptor
-        .decrypt(&age::secrecy::SecretString::new(passphrase.to_string().into()), None)
+        .decrypt(
+            &age::secrecy::SecretString::new(passphrase.to_string().into()),
+            None,
+        )
         .map_err(|e| Error::Other(e.to_string()))?;
     let mut plaintext = vec![];
     reader.read_to_end(&mut plaintext)?;
@@ -274,7 +315,11 @@ mod tests {
         let db = tempfile::NamedTempFile::new().unwrap();
         {
             let mut s = Store::open(db.path()).unwrap();
-            s.put(&PutRequest { text: "round trip test".into(), ..Default::default() }).unwrap();
+            s.put(&PutRequest {
+                text: "round trip test".into(),
+                ..Default::default()
+            })
+            .unwrap();
         }
         let pack = tempfile::NamedTempFile::new().unwrap();
         export(db.path(), pack.path(), 3).unwrap();
@@ -292,7 +337,11 @@ mod tests {
         let db = tempfile::NamedTempFile::new().unwrap();
         {
             let mut s = Store::open(db.path()).unwrap();
-            s.put(&PutRequest { text: "signed pack test".into(), ..Default::default() }).unwrap();
+            s.put(&PutRequest {
+                text: "signed pack test".into(),
+                ..Default::default()
+            })
+            .unwrap();
         }
         let pack = tempfile::NamedTempFile::new().unwrap();
         export_signed(db.path(), pack.path(), 3, &sk).unwrap();
@@ -308,7 +357,11 @@ mod tests {
         let db = tempfile::NamedTempFile::new().unwrap();
         {
             let mut s = Store::open(db.path()).unwrap();
-            s.put(&PutRequest { text: "encrypted pack".into(), ..Default::default() }).unwrap();
+            s.put(&PutRequest {
+                text: "encrypted pack".into(),
+                ..Default::default()
+            })
+            .unwrap();
         }
         let pack = tempfile::NamedTempFile::new().unwrap();
         export(db.path(), pack.path(), 3).unwrap();
