@@ -29,5 +29,10 @@ pub enum AnnError {
     Other(String),
 }
 
-// TODO(PR-A1): pub mod usearch;
+#[cfg(feature = "ann-usearch")]
+pub mod usearch_backend;
+
+#[cfg(feature = "ann-usearch")]
+pub use usearch_backend::UsearchIndex;
+
 // TODO(PR-A2): pub mod ivfpq;
