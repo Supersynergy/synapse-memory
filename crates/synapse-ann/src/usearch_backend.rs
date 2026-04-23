@@ -48,13 +48,17 @@ impl UsearchIndex {
     }
 
     fn default_opts(dim: usize) -> IndexOptions {
+        // Tuned for 95%+ recall@10 vs brute-force at <= 1M scale with 384d
+        // cosine. Measured via tests/ann_recall_parity.rs: expansion_search=64
+        // gave 0.79 recall (fail), 256 gives ≥0.95. Build time rises ~1.5x
+        // but still << 1s/100k at 10k vectors.
         IndexOptions {
             dimensions: dim,
             metric: MetricKind::Cos,
             quantization: ScalarKind::F32,
             connectivity: 16, // HNSW M; usearch default
-            expansion_add: 128,
-            expansion_search: 64,
+            expansion_add: 256,
+            expansion_search: 256,
             multi: false,
         }
     }

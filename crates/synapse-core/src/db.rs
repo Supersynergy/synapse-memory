@@ -8,6 +8,11 @@ use std::path::Path;
 
 pub struct Store {
     pub conn: Connection,
+    /// PR-A1-wire: optional usearch ANN fast-path. `None` = brute-force
+    /// sqlite-vec path (current behavior). Populated by `Store::open` when
+    /// feature `ann-usearch` is enabled.
+    #[cfg(feature = "ann-usearch")]
+    pub(crate) ann: Option<crate::ann::Ann>,
 }
 
 impl Store {
@@ -17,7 +22,8 @@ impl Store {
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
         }
-        let conn = Connection::open(path)?;
+        let db_path = path.as_ref().to_path_buf();
+        let conn = Connection::open(&db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
@@ -26,8 +32,37 @@ impl Store {
         // BM25 scoring tables and vec0 working-set resident (negative value
         // means kibibytes, -65536 = 64 MB). Per research_chroma_m4max §Mode B.
         conn.pragma_update(None, "cache_size", -65536_i64)?;
-        let s = Self { conn };
-        s.migrate()?;
+        #[cfg(feature = "ann-usearch")]
+        let s = {
+            let mut store = Self {
+                conn,
+                ann: None,
+            };
+            store.migrate()?;
+            // Try to load sidecar; if missing/corrupt, rebuild from docs_vec.
+            let sidecar = crate::ann::Ann::sidecar_for(&db_path);
+            let row_count: i64 = store
+                .conn
+                .query_row("SELECT COUNT(*) FROM docs_vec", [], |r| r.get(0))
+                .unwrap_or(0);
+            let ann = crate::ann::Ann::open_or_empty(
+                sidecar.clone(),
+                crate::types::EMBED_DIM,
+                (row_count as usize).max(1024),
+            )?;
+            if ann.len() < row_count as usize {
+                // Sidecar was missing/corrupt or outdated. Rebuild from SQL.
+                store.rebuild_ann_from_docs_vec(&ann)?;
+            }
+            store.ann = Some(ann);
+            store
+        };
+        #[cfg(not(feature = "ann-usearch"))]
+        let s = {
+            let mut store = Self { conn };
+            store.migrate()?;
+            store
+        };
         Ok(s)
     }
 
@@ -86,6 +121,10 @@ impl Store {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "mmap_size", 268_435_456_i64)?;
+        // Encrypted DB + ANN sidecar is a later PR; for now, no ANN here.
+        #[cfg(feature = "ann-usearch")]
+        let s = Self { conn, ann: None };
+        #[cfg(not(feature = "ann-usearch"))]
         let s = Self { conn };
         s.migrate()?;
         Ok(s)
@@ -231,6 +270,15 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             )?;
         }
         tx.commit()?;
+        // PR-A1-wire: mirror into ANN index after SQL commit. If the ANN
+        // insert fails we log but DO NOT fail the put — the sidecar is
+        // rebuildable from docs_vec on next open.
+        #[cfg(feature = "ann-usearch")]
+        if let (Some(ref ann), Some(emb)) = (self.ann.as_ref(), req.embedding.as_ref()) {
+            if let Err(e) = ann.insert(id, emb) {
+                tracing::warn!("ann insert failed for id {id}: {e}; sidecar will rebuild on next open");
+            }
+        }
         Ok(id)
     }
 
@@ -275,7 +323,85 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             }
         }
         tx.commit()?;
+        // PR-A1-wire: mirror new rows into ANN index. Iterate in lockstep:
+        // `ids[i]` is either the freshly-inserted rowid for `reqs[i]` OR a
+        // de-duplicated existing id (blake3 hash match). We only want the
+        // newly-inserted ones here, but since dedup returns the same id, it
+        // is safe to attempt insert — the ANN layer treats duplicate inserts
+        // as no-ops with usearch's multi=false.
+        #[cfg(feature = "ann-usearch")]
+        if let Some(ref ann) = self.ann {
+            for (id, req) in ids.iter().zip(reqs.iter()) {
+                if let Some(ref emb) = req.embedding {
+                    if let Err(e) = ann.insert(*id, emb) {
+                        tracing::warn!(
+                            "ann batch insert id {id} failed: {e}; sidecar will rebuild on next open"
+                        );
+                    }
+                }
+            }
+        }
         Ok(ids)
+    }
+
+    /// PR-A1-wire: delete a doc by id, removing it from `docs`, `docs_vec`,
+    /// `docs_fts`, and (when enabled) the ANN sidecar. Idempotent — returns
+    /// `Ok(false)` if the id did not exist.
+    pub fn delete(&mut self, id: i64) -> Result<bool> {
+        let tx = self.conn.transaction()?;
+        let changed: usize = tx.execute("DELETE FROM docs_vec WHERE id = ?1", params![id])?;
+        let _ = tx.execute("DELETE FROM docs_fts WHERE rowid = ?1", params![id]);
+        let doc_changed = tx.execute("DELETE FROM docs WHERE id = ?1", params![id])?;
+        tx.commit()?;
+        #[cfg(feature = "ann-usearch")]
+        if let Some(ref ann) = self.ann {
+            let _ = ann.remove(id);
+        }
+        Ok(changed > 0 || doc_changed > 0)
+    }
+
+    /// PR-A1-wire: explicit flush of the ANN sidecar to disk. Also called
+    /// from `Drop`, but callers may invoke it after heavy write bursts to
+    /// bound crash-window exposure.
+    #[cfg(feature = "ann-usearch")]
+    pub fn flush_ann(&self) -> Result<()> {
+        if let Some(ref ann) = self.ann {
+            ann.save()?;
+        }
+        Ok(())
+    }
+
+    /// PR-A1-wire internal: rebuild the ANN index from `docs_vec` rows.
+    /// Called from `Store::open` when the sidecar is missing, corrupt, or
+    /// out-of-sync (len < row count).
+    #[cfg(feature = "ann-usearch")]
+    fn rebuild_ann_from_docs_vec(&self, ann: &crate::ann::Ann) -> Result<()> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, embedding FROM docs_vec ORDER BY id")?;
+        let rows = stmt.query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let bytes: Vec<u8> = r.get(1)?;
+            Ok((id, bytes))
+        })?;
+        let mut buf: Vec<(i64, Vec<f32>)> = Vec::new();
+        for row in rows {
+            let (id, bytes) = row?;
+            if bytes.len() != EMBED_DIM * 4 {
+                return Err(Error::Other(format!(
+                    "docs_vec row {id} has {} bytes (expected {})",
+                    bytes.len(),
+                    EMBED_DIM * 4
+                )));
+            }
+            let mut v = Vec::with_capacity(EMBED_DIM);
+            for c in bytes.chunks_exact(4) {
+                v.push(f32::from_le_bytes([c[0], c[1], c[2], c[3]]));
+            }
+            buf.push((id, v));
+        }
+        ann.rebuild_from_rows(buf)?;
+        Ok(())
     }
 
     pub fn get(&self, id: i64) -> Result<Doc> {
@@ -337,6 +463,25 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 got: emb.len(),
             });
         }
+
+        // PR-A1-wire: usearch ANN fast-path. On any ANN error we fall back
+        // to the brute-force sqlite-vec path below, so correctness is
+        // preserved even if the sidecar is stale/broken.
+        #[cfg(feature = "ann-usearch")]
+        if let Some(ref ann) = self.ann {
+            if ann.len() > 0 {
+                match ann.search(emb, limit) {
+                    Ok(hits) if !hits.is_empty() => {
+                        return self.hydrate_hits_from_ann(&hits);
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::warn!("ann search fell back to sqlite-vec: {e}");
+                    }
+                }
+            }
+        }
+
         let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
         let sql = "SELECT d.id,d.uri,d.title,d.text,v.distance
                    FROM docs_vec v JOIN docs d ON d.id = v.id
@@ -353,6 +498,55 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// PR-A1-wire helper: given `(id, distance)` from the ANN, fetch full
+    /// `Hit` records (uri/title/text) from SQL. One round-trip, preserved order.
+    #[cfg(feature = "ann-usearch")]
+    fn hydrate_hits_from_ann(&self, ann_hits: &[(i64, f32)]) -> Result<Vec<Hit>> {
+        if ann_hits.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = (0..ann_hits.len())
+            .map(|i| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let ids: Vec<i64> = ann_hits.iter().map(|(i, _)| *i).collect();
+        let params_iter: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
+        let mut by_id: std::collections::HashMap<
+            i64,
+            (Option<String>, Option<String>, String),
+        > = Default::default();
+        let rows = stmt.query_map(params_iter.as_slice(), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })?;
+        for row in rows {
+            let (id, uri, title, text) = row?;
+            by_id.insert(id, (uri, title, text));
+        }
+        let mut out = Vec::with_capacity(ann_hits.len());
+        for (id, dist) in ann_hits {
+            if let Some((uri, title, text)) = by_id.remove(id) {
+                out.push(Hit {
+                    id: *id,
+                    uri,
+                    title,
+                    text,
+                    score: 1.0 / (1.0 + *dist as f64),
+                });
+            }
+        }
+        Ok(out)
     }
 
     fn search_hybrid(&self, q: &str, emb: &[f32], limit: usize) -> Result<Vec<Hit>> {
@@ -425,6 +619,20 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             .conn
             .query_row("SELECT COUNT(*) FROM docs_vec", [], |r| r.get(0))?;
         Ok(Stats { docs, vecs })
+    }
+}
+
+/// PR-A1-wire: best-effort sidecar flush on drop. Any error is logged but
+/// cannot be returned — Drop has no result. Callers who require a confirmed
+/// flush should call `flush_ann()` explicitly.
+#[cfg(feature = "ann-usearch")]
+impl Drop for Store {
+    fn drop(&mut self) {
+        if let Some(ref ann) = self.ann {
+            if let Err(e) = ann.save() {
+                tracing::warn!("ann drop-save failed: {e}; sidecar may be stale, but docs_vec is authoritative");
+            }
+        }
     }
 }
 

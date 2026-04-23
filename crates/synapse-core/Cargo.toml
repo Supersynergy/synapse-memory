@@ -42,6 +42,8 @@ argon2 = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 # Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
 tikv-jemallocator = { version = "0.6", optional = true }
+# PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
+synapse-ann = { path = "../synapse-ann", optional = true }
 
 [features]
 default = []
@@ -51,6 +53,9 @@ turbo = []
 ollama = ["turbo", "dep:reqwest"]
 # Schritt 1 optim #2: opt-in jemalloc for the scale-bench example only.
 bench-jemalloc = ["dep:tikv-jemallocator"]
+# PR-A1-wire: enable usearch-backed Store::search_vec fast-path with
+# sidecar persistence. Default OFF per SPEC §3 (pure-Rust default build).
+ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot"]
 
 [dev-dependencies]
 tempfile = "3"
