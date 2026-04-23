@@ -1,0 +1,18 @@
+[package]
+name = "synapse-ann"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Pluggable ANN index backends for Synapse: usearch (PR-A1) + native IVF-PQ (PR-A2). scale-100M branch."
+
+[dependencies]
+thiserror.workspace = true
+
+[features]
+default = []
+# PR-A1: usearch-rs backend. Adds C++ toolchain dep when enabled.
+ann-usearch = []
+# PR-A2: pure-Rust IVF-PQ on faer. No C++ deps.
+ann-ivfpq = []

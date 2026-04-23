@@ -1,0 +1,11 @@
+[package]
+name = "synapse-seg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "LSM segment store for Synapse vectors with tombstones + background compaction. scale-100M PR-B1/B2."
+
+[dependencies]
+thiserror.workspace = true

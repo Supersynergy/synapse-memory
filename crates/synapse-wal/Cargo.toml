@@ -1,0 +1,11 @@
+[package]
+name = "synapse-wal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Write-ahead log + crc32c + crash-replay for Synapse segments. scale-100M PR-E1/E2."
+
+[dependencies]
+thiserror.workspace = true

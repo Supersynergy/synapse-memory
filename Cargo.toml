@@ -1,6 +1,18 @@
 [workspace]
 resolver = "2"
-members = ["crates/synapse-core", "crates/synapse-cli", "crates/synapsed", "crates/synapse-mcp", "crates/synapse-learn"]
+members = [
+    "crates/synapse-core",
+    "crates/synapse-cli",
+    "crates/synapsed",
+    "crates/synapse-mcp",
+    "crates/synapse-learn",
+    "crates/synapse-mysql",
+    # scale-100M scaffolding (PR-0, empty stubs, TODO markers)
+    "crates/synapse-ann",
+    "crates/synapse-quant",
+    "crates/synapse-wal",
+    "crates/synapse-seg",
+]
 
 [workspace.package]
 version = "0.1.0"
