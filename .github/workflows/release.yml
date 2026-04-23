@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dry-run:
+    name: Release Dry Run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-release --locked
+      - run: cargo release --workspace --dry-run
+
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    needs: dry-run
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: synapse-linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: synapse-linux-arm64
+            use_cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: synapse-macos-x86_64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: synapse-macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --locked
+      - name: Build with cross
+        if: matrix.use_cross
+        run: cross build --release --target ${{ matrix.target }} --bin synapsed
+      - name: Build native
+        if: "!matrix.use_cross"
+        run: cargo build --release --target ${{ matrix.target }} --bin synapsed
+      - name: Package
+        run: |
+          BIN=synapsed
+          TARGET=${{ matrix.target }}
+          cp target/$TARGET/release/$BIN ${{ matrix.artifact }}
+          tar czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          NOTES=$(awk "/^## $TAG/{flag=1; next} /^## v/{flag=0} flag" CHANGELOG.md)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.notes }}
+          files: artifacts/*.tar.gz

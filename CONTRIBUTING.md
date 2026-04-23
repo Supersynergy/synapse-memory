@@ -20,11 +20,11 @@ cargo test -p synapse-core --features full
 
 ## Local check before sending a PR
 
+Run `just check-all` before opening a PR — this runs the full fmt/clippy/test/audit/deny suite locally. Before tagging a release, run `scripts/pre_release.sh` which additionally checks semver compatibility, bloat, and the e2e smoke bench. Install the pre-push git hook via `bash scripts/setup_hooks.sh` to catch issues before they reach CI.
+
 ```bash
-cargo fmt --all
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace
-cargo deny check        # supply-chain policy
+just check-all          # fmt + clippy + nextest + audit + deny
+scripts/pre_release.sh  # before tagging only
 ```
 
 ## Areas that want help

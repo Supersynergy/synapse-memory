@@ -7,6 +7,9 @@
 One file on disk. Drop it in your project. Your AI picks up where you left off — last week, last month, last laptop.
 
 [![Release](https://img.shields.io/github/v/tag/Supersynergy/synapse?label=release&color=blueviolet)](https://github.com/Supersynergy/synapse/releases)
+[![CI](https://github.com/Supersynergy/synapse/actions/workflows/quality.yml/badge.svg)](https://github.com/Supersynergy/synapse/actions/workflows/quality.yml)
+[![Coverage](https://codecov.io/gh/Supersynergy/synapse/branch/main/graph/badge.svg)](https://codecov.io/gh/Supersynergy/synapse)
+[![MSRV](https://img.shields.io/badge/MSRV-1.95.0-orange)](rust-toolchain.toml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/Supersynergy/synapse?style=flat&color=ffcc00)](https://github.com/Supersynergy/synapse/stargazers)
 [![CRDT](https://img.shields.io/badge/CRDT-yrs-8a2be2)](crates/synapse-core/src/crdt.rs)
@@ -86,6 +89,56 @@ Drop Synapse into any AI stack with one import:
 | **langfuse** | `pip install synapse-langfuse` | `SynapseRetriever` with per-search span tracing |
 | **promptfoo** | `pip install synapse-promptfoo` | eval provider + RAG benchmark YAML template |
 | **browser-use** | `pip install synapse-browser-use` | `on_page_visit` hook — browse history in memory |
+
+---
+
+## 📡 NEW: Telepathy — cross-session memory for Claude Code
+
+**Every parallel Claude Code session shares one live brain.**
+
+Session A sees what Session B just edited. Session C knows the prompt D got two seconds ago. Kill a session, open a new one, pick up mid-thought. Nobody else ships this.
+
+```bash
+bash integrations/claude-code/telepathy/install.sh
+```
+
+A 22 MB daemon tails `~/.claude/projects/**/*.jsonl`, pushes compact events to Synapse, and a `SessionStart` + `UserPromptSubmit` hook re-injects recent cross-session activity.
+
+| Metric | Value |
+|---|---|
+| End-to-end (jsonl → visible in other session) | ~3 s |
+| `syn put` / `syn search` / hook | 50 / 22 / 47 ms |
+| Daemon CPU idle | ~0 % |
+| Full scan 8 676 jsonls | 58 ms |
+
+→ Full docs: [`integrations/claude-code/telepathy/`](integrations/claude-code/telepathy/README.md)
+
+---
+
+## Top 20 real-world use cases
+
+Drop-in memory that actually changes what you can build:
+
+1. **Multi-session Claude swarm** — N Claude Code windows, one shared brain, live cross-session telepathy (new).
+2. **Persistent pair-programmer** — agent remembers every architectural decision across weeks, no CLAUDE.md bloat.
+3. **Cursor / Cline / Continue / Aider memory** — same brain, any IDE, switch freely mid-task.
+4. **Offline-first team KB** — CRDT merge = multiple devs, multiple laptops, no server, conflicts auto-resolve.
+5. **Tamper-evident decision log** — Ed25519 signatures on every entry, audit trail for compliance.
+6. **mem0 drop-in replacement** — `pip install synapse-mem0`, zero code change, 10× faster, self-hosted.
+7. **RAG without a vector DB** — single file replaces Pinecone/Chroma/Weaviate for up to 100 M entries.
+8. **Agent hand-off** — orchestrator writes plan, workers read it, writers publish results, all through one brain.
+9. **Long-running research agent** — 8-hour browser-use session accumulates findings, next session consumes them.
+10. **PR-review memory** — reviewer agent keeps patterns across PRs; learns your codebase's conventions.
+11. **Customer-support agent** — every ticket's context persists, support bot answers with full history.
+12. **Self-improving prompts** — self-learning bandit reranks memories by what actually helped → better retrieval each session.
+13. **Incident post-mortem corpus** — every outage + fix becomes searchable context for the next one.
+14. **Spec-driven development** — living specs in Synapse; agents query them before editing code.
+15. **Cross-repo refactor** — one session scans repo A, logs patterns, another session applies them in repo B.
+16. **Sales / CRM knowledge graph** — lead notes, calls, decisions — agent writes a follow-up email with full context.
+17. **Research-paper digest** — batch-ingest PDFs, agents cite sources across conversations.
+18. **Laptop migration** — copy one `.syn` file, new machine has your AI's entire history.
+19. **Air-gapped / EU-compliant deployment** — no cloud, no telemetry, no vendor lock-in, GDPR by default.
+20. **LLM-provider portability** — swap Claude → GPT → local Llama, memory stays identical.
 
 ## Real-competitor bench (agent memory, 1 k docs, 200 q, 384-d)
 

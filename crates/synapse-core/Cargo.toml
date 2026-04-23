@@ -3,6 +3,12 @@ name = "synapse-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Single-file AI agent memory: SQLite+FTS5+sqlite-vec+fastembed, Ed25519-signed, CRDT-merge, hybrid BM25+vec RRF. Sub-ms library-mode."
+keywords = ["memory", "vector", "embedding", "agent", "rag"]
+categories = ["database", "data-structures"]
+readme = "../../README.md"
 
 [dependencies]
 anyhow.workspace = true

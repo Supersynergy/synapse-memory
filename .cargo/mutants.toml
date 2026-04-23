@@ -1,0 +1,8 @@
+[mutants]
+src_globs = [
+    "crates/synapse-core/src/db.rs",
+    "crates/synapse-core/src/crdt.rs",
+    "crates/synapse-core/src/sign.rs",
+]
+timeout = 120
+jobs = 4

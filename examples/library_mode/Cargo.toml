@@ -1,0 +1,10 @@
+[package]
+name = "syn-libmode-bench"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+synapse-core = { path = "../../crates/synapse-core", features = ["embed"] }
+anyhow = "1"
