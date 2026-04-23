@@ -13,6 +13,8 @@ usearch = { version = "2.25", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false }
+tempfile = "3"
+proptest = "1"
 
 [features]
 default = []
