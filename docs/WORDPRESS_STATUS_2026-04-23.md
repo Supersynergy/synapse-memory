@@ -47,7 +47,7 @@ WP is therefore **bootable but unusable for real workloads**. Reads of static pa
 - ✅ Multi-table DELETE → no-op
 - ✅ `SET ...` → mostly no-op or `PRAGMA foreign_keys`
 - ✅ `SHOW TABLES`, `SHOW DATABASES`, `SHOW VARIABLES LIKE`, `SHOW CREATE TABLE`, `SHOW COLUMNS` (partial, missing `Field` field shape per error #5)
-- ❌ **`INSERT ... ON DUPLICATE KEY UPDATE`** — NOT rewritten to SQLite `INSERT ... ON CONFLICT(...) DO UPDATE` → cause of error #1, the most frequent error in the WP log.
+- ✅ **`INSERT ... ON DUPLICATE KEY UPDATE`** — rewritten to `INSERT ... ON CONFLICT(col) DO UPDATE SET` for known WP tables; `INSERT OR REPLACE` fallback for unknown tables. Branch `wp-fix-on-duplicate`, commit `6f598e4`.
 - ❌ **MySQL-specific functions** (`SQL_CALC_FOUND_ROWS`, `FOUND_ROWS()`, `IF()`, `IFNULL()` semantics differ from SQLite) — passed through unchanged.
 - ❌ **DATETIME/TIMESTAMP** type coercion — SQLite has no native datetime; WP queries that compare/order on date columns will return string-sorted results.
 - ❌ **`SHOW INDEX FROM`** — not in the rewriter.
@@ -81,7 +81,7 @@ There are **zero tests in synapse-mysql**. The 273-LoC rewriter is unverified ex
 
 ## Concrete next-step backlog (prioritized)
 
-1. **Add `INSERT ... ON DUPLICATE KEY UPDATE → INSERT ... ON CONFLICT DO UPDATE` rewrite** — single highest-impact fix, kills error #1 which dominates the log. ~30 LoC + 5 tests.
+1. ~~**Add `INSERT ... ON DUPLICATE KEY UPDATE → INSERT ... ON CONFLICT DO UPDATE` rewrite**~~ ✅ **FIXED** — `crates/synapse-mysql/src/rewrite.rs`, commit `6f598e4`, branch `wp-fix-on-duplicate`. 7 unit tests green. Known WP tables use hardcoded conflict column; plugin tables fall back to `INSERT OR REPLACE`. `UNIQUE constraint failed: wp_options.option_name` errors: 0 in post-restart log.
 2. **Fix `SHOW COLUMNS` output shape** to expose `Field`, `Type`, `Null`, `Key`, `Default`, `Extra` columns expected by WP — kills error #5 cascade. ~40 LoC + 3 tests.
 3. **Strip MySQL engine options** from `CREATE TABLE` (`ENGINE=`, `CHARSET=`, `COLLATE=`, `AUTO_INCREMENT=`) — needed for clean migration. ~50 LoC + 5 tests.
 4. **Bump msql-srv packet buffer** to handle WP serialized blobs > 64 KB — kills error #2. Likely a configuration knob in the patched `msql-srv` (see `crates/msql-srv-patched/`).
