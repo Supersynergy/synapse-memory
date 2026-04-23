@@ -5,9 +5,11 @@
 # Enable incremental only in dev; release is lto=thin which ignores incremental.
 incremental = true
 
-# Use the host-optimal codegen for local bench runs. CI uses default for portable artefacts.
-# Uncomment when running `cargo bench` locally for max perf:
-# rustflags = ["-C", "target-cpu=native"]
+# scale-100M optim #1 (SPEC §6.1): target-cpu=native unlocks NEON/AVX
+# autovectorization on the build host. +5-20% across hot paths per Chroma
+# research (docs/research_chroma_m4max_2026-04-23.md #5).
+# For portable CI artefacts: `CARGO_BUILD_RUSTFLAGS="" cargo build --release`.
+rustflags = ["-C", "target-cpu=native"]
 
 [target.'cfg(target_os = "linux")']
 # mold is 2–5x faster than ld/lld for Rust workspaces. Install: `cargo install --git https://github.com/rui314/mold`.
