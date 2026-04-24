@@ -29,6 +29,8 @@ pub struct InMemoryI8Index {
     codes: Vec<i8>,
     scales: Vec<f32>,
     dim: usize,
+    /// Prebuilt id → row lookup; populated lazily on first `rescore()` call.
+    id_to_row: std::sync::OnceLock<std::collections::HashMap<i64, usize>>,
 }
 
 impl InMemoryI8Index {
@@ -39,7 +41,13 @@ impl InMemoryI8Index {
     #[must_use]
     pub fn build(rows: Vec<(i64, Vec<f32>)>) -> Self {
         if rows.is_empty() {
-            return Self { ids: Vec::new(), codes: Vec::new(), scales: Vec::new(), dim: 0 };
+            return Self {
+                ids: Vec::new(),
+                codes: Vec::new(),
+                scales: Vec::new(),
+                dim: 0,
+                id_to_row: std::sync::OnceLock::new(),
+            };
         }
         let dim = rows[0].1.len();
         assert!(rows.iter().all(|(_, v)| v.len() == dim), "ragged rows");
@@ -58,7 +66,7 @@ impl InMemoryI8Index {
                 codes[i * dim + j] = (v * inv * 127.0).round().clamp(-127.0, 127.0) as i8;
             }
         }
-        Self { ids, codes, scales, dim }
+        Self { ids, codes, scales, dim, id_to_row: std::sync::OnceLock::new() }
     }
 
     /// Number of indexed rows.
@@ -88,12 +96,14 @@ impl InMemoryI8Index {
             .map(|v| (*v * q_inv * 127.0).round().clamp(-127.0, 127.0) as i8)
             .collect();
 
-        // id → row index lookup
-        let mut id_to_row: std::collections::HashMap<i64, usize> =
-            std::collections::HashMap::with_capacity(self.ids.len());
-        for (i, id) in self.ids.iter().enumerate() {
-            id_to_row.insert(*id, i);
-        }
+        // id → row index lookup — built once on first call, reused after.
+        let id_to_row = self.id_to_row.get_or_init(|| {
+            let mut m = std::collections::HashMap::with_capacity(self.ids.len());
+            for (i, id) in self.ids.iter().enumerate() {
+                m.insert(*id, i);
+            }
+            m
+        });
         let rows: Vec<usize> = candidate_ids
             .iter()
             .filter_map(|id| id_to_row.get(id).copied())
