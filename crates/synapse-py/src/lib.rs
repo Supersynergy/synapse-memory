@@ -17,8 +17,49 @@ use std::sync::Mutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use synapse_core::turbo::adaptive_router::{AdaptiveRouter, QueryHints, Strategy};
+use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
 use synapse_core::types::{PutRequest, SearchMode};
 use synapse_core::Store;
+
+/// Dense int8-quantized brute-force index, SIMSIMD-accelerated.
+///
+/// Typical usage:
+///
+/// ```python
+/// import synapse
+/// rows = [(doc_id, [0.1]*384), ...]
+/// idx = synapse.I8Index.build(rows)
+/// hits = idx.search([0.05]*384, k=10)   # [(id, score), ...]
+/// ```
+#[pyclass(name = "I8Index")]
+pub struct PyI8Index {
+    inner: InMemoryI8Index,
+}
+
+#[pymethods]
+impl PyI8Index {
+    /// Build from `(id, vec_f32)` pairs. Empty input yields an empty index.
+    #[staticmethod]
+    fn build(rows: Vec<(i64, Vec<f32>)>) -> PyResult<Self> {
+        if rows.iter().any(|(_, v)| v.is_empty()) {
+            return Err(PyValueError::new_err("empty vector in rows"));
+        }
+        let dim = rows.first().map(|r| r.1.len()).unwrap_or(0);
+        if rows.iter().any(|(_, v)| v.len() != dim) {
+            return Err(PyValueError::new_err("ragged rows"));
+        }
+        Ok(Self { inner: InMemoryI8Index::build(rows) })
+    }
+
+    #[pyo3(signature = (query, k=10))]
+    fn search(&self, query: Vec<f32>, k: usize) -> PyResult<Vec<(i64, f32)>> {
+        Ok(self.inner.search(&query, k))
+    }
+
+    fn len(&self) -> usize { self.inner.len() }
+    fn is_empty(&self) -> bool { self.inner.is_empty() }
+    fn dim(&self) -> usize { self.inner.dim() }
+}
 
 /// Python-facing wrapper around the SIMSIMD / MRL adaptive strategy picker.
 #[pyclass(name = "AdaptiveRouter")]
@@ -227,6 +268,7 @@ fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(truncate_row, m)?)?;
     m.add_class::<PyBrain>()?;
     m.add_class::<PyAdaptiveRouter>()?;
+    m.add_class::<PyI8Index>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
