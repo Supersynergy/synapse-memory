@@ -8,10 +8,10 @@ PyO3 bindings for [`synapse-core`](../synapse-core).
 pipx install maturin
 cd crates/synapse-py
 maturin develop --release --features simsimd
-python -c "import synapse; print(synapse.__version__); print(synapse.truncate_row([1,2,3,4], 2))"
+pytest tests/ -v
 ```
 
-## What's exposed (v0.1 preview)
+## What's exposed
 
 | Python API | Rust backend | feature |
 |---|---|---|
@@ -19,9 +19,23 @@ python -c "import synapse; print(synapse.__version__); print(synapse.truncate_ro
 | `synapse.dot_i8(a, b)` | `simsimd_kernels::dot_i8` | `simsimd` |
 | `synapse.hamming_b8(q, db)` | `simsimd_kernels::hamming_b8` | `simsimd` |
 | `synapse.truncate_row(v, k)` | `matryoshka::truncate_row` | — |
+| `synapse.I8Index.build(rows).search(q, k)` | `turbo::inmem_i8_index` | `simsimd` |
+| `synapse.HammingIndex.build(rows).search(q, k)` | `turbo::inmem_hamming_index` | `simsimd` |
+| `synapse.rerank(ham, i8, q, k, candidates)` | two-stage pipeline | `simsimd` |
+| `synapse.AdaptiveRouter()` | Thompson-bandit strategy picker | `turbo` |
+| `synapse.Brain(path)` | `synapse-core Store` wrapper | — |
 
-Future (tracked in `docs/SPEC_V2_M4_MAX_2026-04-24.md` §4 Step I):
+## Framework adapters
 
-- `synapse.Brain(path)` — Store wrapper with `put`, `search_hybrid`.
-- `synapse.Embedder(kind)` — MLX / Ollama / fastembed backends.
-- LangChain + LlamaIndex + Mem0 adapter sub-packages.
+See `examples/`:
+
+| File | Integrates with |
+|------|-----------------|
+| `langchain_adapter.py` | LangChain `VectorStore` + `Embeddings` |
+| `mem0_adapter.py` | Mem0 `VectorStoreBase` |
+| `llamaindex_adapter.py` | LlamaIndex `BasePydanticVectorStore` |
+
+## Benchmarks
+
+See [`docs/bench_2026-04-24/progression.md`](../../docs/bench_2026-04-24/progression.md)
+for the 8-step SIMSIMD progression (53×–71× vs scalar on M4 Max).
