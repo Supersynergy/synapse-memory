@@ -1,0 +1,14 @@
+[package]
+name = "synapse-lib-demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Library-mode demo: direct Rust API vs IPC (PIONEER P1)"
+
+[[bin]]
+name = "synapse-lib-demo"
+path = "src/main.rs"
+
+[dependencies]
+synapse-core = { path = "../synapse-core" }

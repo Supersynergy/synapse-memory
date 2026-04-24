@@ -15,6 +15,7 @@ members = [
     "crates/synapse-quant",
     "crates/synapse-wal",
     "crates/synapse-seg",
+    "crates/synapse-lib-demo",
 ]
 
 [workspace.package]

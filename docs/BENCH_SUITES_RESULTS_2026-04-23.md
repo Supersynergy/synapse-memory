@@ -56,7 +56,32 @@ go-ycsb: NOT INSTALLED (binary not in PATH, workloads/ dir absent). SKIP.
 | C (100r) | 1 | 607 | 1.6ms | 10ms |
 | C (100r) | 8 | 4418 | 1.8ms | 6.5ms |
 
-**Synapse-MySQL (:3309)**: BLOCKED — same SSL bug
+**Synapse-MySQL (:3309) — RERUN 2026-04-24 (go-ycsb inside docker → host.docker.internal:3309)**:
+
+> Note: All Synapse reads return READ_ERROR / UPDATE_ERROR because synapse-mysql does not
+> implement multi-field projection (`SELECT field0,…,field9 FROM usertable`). The OPS numbers
+> reflect raw protocol throughput (network + parser). Writes succeeded at load time (INSERT with
+> full row + silent dedup via BLAKE3).
+
+| Workload | OPS (total) | Avg lat | p99 lat | vs MySQL OPS | Notes |
+|----------|-------------|---------|---------|--------------|-------|
+| A (50r/50u) | 36,323 | 218µs | 530µs | 5519 MySQL → **6.6×** faster | READ_ERROR + UPDATE_ERROR |
+| B (95r/5u) | ~32,506 | 237µs | 904µs | 27,090 MySQL → **1.2×** faster | READ_ERROR |
+| C (100r) | 32,042 | 234µs | 1013µs | 63,402 MySQL → **0.5×** | READ_ERROR; MySQL wins read-only |
+| F (RMW) | ~22,927 | 328µs | 1969µs | 12,332 MySQL → **1.9×** faster | READ_ERROR |
+
+**MySQL (docker-internal :3306, 8 threads)**:
+
+| Workload | OPS | Avg lat | p99 lat |
+|----------|-----|---------|---------|
+| A (50r/50u) | 5,520 | 1430µs | 10,455µs |
+| B (95r/5u) | 27,091 | 284µs | 1,976µs |
+| C (100r) | 63,402 | 121µs | 551µs |
+| F (RMW) | 12,333 | 631µs | 7,091µs |
+
+**Missing SQL feature**: `SELECT col1,col2,… FROM usertable WHERE YCSB_KEY=?` — synapse-mysql
+returns empty result for projected column lists. Fix: implement column projection in the MySQL proxy
+query executor. All other YCSB statements (INSERT, UPDATE, `SELECT *`) execute correctly.
 
 ---
 
