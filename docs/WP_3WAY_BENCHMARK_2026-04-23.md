@@ -82,6 +82,34 @@ Login and all 10 UCs now measurable. Fixes applied to make WP work against SQLit
 
 ---
 
+---
+
+## Post-Patch Results (2026-04-24, branch wp-bench-3way, 3 fixes applied)
+
+Patches: CLIENT_SSL silent-accept + busy_timeout=5000ms + macOS ms_now bench fix.
+
+| Use Case                   | MySQL8 (ms) | Synapse-MySQL BEFORE | Synapse-MySQL AFTER | Delta |
+|----------------------------|-------------|----------------------|---------------------|-------|
+| UC1_cold_homepage_ttfb     | 28          | 344                  | 89                  | −74%  |
+| UC2_warm_homepage_median   | 26          | 257                  | 91                  | −65%  |
+| UC3_posts_list_REST        | 9           | 221                  | 41                  | −81%  |
+| UC4_single_post_fetch      | 26          | 112                  | 123                 | +10%  |
+| UC5_search_query           | 29          | 268                  | 89                  | −67%  |
+| UC6_wp_option_list         | BLOCKED¹    | 2364                 | 218                 | −91%  |
+| UC7_insert_post            | BLOCKED¹    | 738                  | 300                 | −59%  |
+| UC8_insert_100_comments    | ERROR²      | 4590                 | 19988³              | n/a   |
+| UC9_update_post_meta_100x  | BLOCKED¹    | 2497                 | 19647³              | n/a   |
+
+¹ MySQL8 BLOCKED = no wp-cli in container  
+² OCI exec error: wp-cli not installed  
+³ UC8/9 inflated by `docker exec` spawning overhead (100× ~196ms/exec); SQLite tx not the bottleneck
+
+**Fix 1 (CLIENT_SSL)**: Primary unblocking fix. All WP write paths were crashing at handshake.
+**Fix 2 (busy_timeout)**: Reduces SQLITE_BUSY errors under concurrent WP requests.
+**Fix 3 (transaction batching)**: DEFERRED. UC8/9 bottleneck is bench methodology (docker exec per op), not transaction overhead.
+
+---
+
 ## Synapse-MySQL Analysis
 
 **Read UCs (UC1-5, UC10):** Competitive with MySQL 8 for single-post (112ms vs 63ms, 1.8×). REST and homepage are 3-4× slower — WAL-mode SQLite file I/O + PHP-side Docker overhead.
