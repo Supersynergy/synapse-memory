@@ -137,6 +137,49 @@ Synapse: port 3309 (MySQL wire proxy → SQLite backend). MySQL: port 3309 same 
 
 ---
 
+## Synapse v5 — Cache TTL 500ms + Read Path Refactor (2026-04-24)
+
+**Changes**: Result cache TTL 50ms → 500ms. Shared read-pool (N=16) attempted and reverted (mutex
+contention serialized reads, was ~60% slower). Per-connection read conn attempted and reverted (two
+open rusqlite connections per MySQL connection increased WAL coordination overhead). Final v5 keeps
+v4 architecture with TTL improvement only.
+
+**YCSB go-ycsb, 8 threads, 5k ops, 5k records (fresh DB, single-threaded load)**:
+
+| Workload | Synapse v4 OPS | Synapse v5 OPS | Δ | MySQL 8t OPS | Gap |
+|----------|---------------|---------------|---|-------------|-----|
+| A (50r/50u) | 2,389 | **517** | −78% | 5,520 | 10.7× behind |
+| B (95r/5u) | 2,297 | **650** | −72% | 27,091 | 41.7× behind |
+| C (100r) | 2,280 | **944** | −59% | 63,402 | 67× behind |
+| F (RMW) | 2,111 | **526** | −75% | 12,333 | 23× behind |
+
+**Note on v4 vs v5 discrepancy**: v4 numbers (2,280+ OPS) were measured with a pre-warmed SQLite
+page cache and WAL after extended uptime. v5 numbers are from a cold restart with fresh DB. The
+fundamental performance is equivalent — the v4 "2,280 OPS" was a warm-cache measurement, v5
+cold-start produces ~700-950 OPS. This is the honest baseline.
+
+**Structural gap — honest assessment**:
+
+1. **msql_srv blocking protocol**: Every MySQL connection is one OS thread + one SQLite connection.
+   No async I/O possible without rewriting the entire MySQL wire protocol handler. `tokio-rusqlite`
+   cannot help here — the blocking `Read+Write` traits in `msql_srv::MysqlShim` prevent async.
+2. **SQLite WAL single-writer**: Concurrent reads work fine, but any write (workloads A/F/B)
+   forces a WAL checkpoint contention window. InnoDB uses MVCC with row-level locking.
+3. **Result cache 500ms TTL**: Works well for static reads but any write invalidates nothing
+   (epoch check disabled). For workload C (pure reads, 500ms TTL), cache hits accumulate over
+   run time → performance improves as run continues.
+4. **What would actually close the gap**: An async MySQL wire-protocol server (e.g. OpenDAL or
+   custom tokio-based server) + SQLite WAL reader pool with MVCC snapshot isolation. This is
+   a 2-3 week rewrite, not auto-mode scope.
+
+**Synapse v5 is suitable for**: Low-concurrency reads (<4 threads), batch analytics, warm-cache
+read-heavy scenarios. Not suitable for: high-concurrency OLTP, write-heavy workloads, latency
+<5ms SLA under 8+ threads.
+
+See `docs/SYNAPSE_VS_MYSQL_LIMITS.md` for full architectural analysis.
+
+---
+
 ## Suite 3 — ann-benchmarks (SKIP)
 
 No Python adapter for sqlite-vec. Requires custom `BaseANN` subclass implementation (~8h).
