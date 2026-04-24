@@ -32,6 +32,26 @@ pub fn truncate_row(src: &[f32], k: usize) -> Vec<f32> {
     out
 }
 
+/// Binary-Matryoshka: truncate to first `k` dims + sign-binarize + pack.
+///
+/// Output bytes per row = `ceil(k / 8)`. At k=128 that's 16 bytes — 24× smaller
+/// than 384-d fp32. Trades ~10 points recall for storage; recoverable via
+/// int8-rescore downstream.
+#[must_use]
+pub fn truncate_to_binary(src: &[f32], k: usize) -> Vec<u8> {
+    if k == 0 || k > src.len() {
+        return Vec::new();
+    }
+    let bpr = k.div_ceil(8);
+    let mut out = vec![0_u8; bpr];
+    for (i, &v) in src.iter().take(k).enumerate() {
+        if v > 0.0 {
+            out[i / 8] |= 1 << (i % 8);
+        }
+    }
+    out
+}
+
 /// Bulk variant: re-compress a whole corpus. Allocates one contiguous vec of
 /// length `n * k` to stay cache-friendly for downstream matvec.
 #[must_use]
@@ -65,6 +85,26 @@ mod tests {
     fn truncate_out_of_range_returns_empty() {
         assert!(truncate_row(&[1.0, 2.0], 0).is_empty());
         assert!(truncate_row(&[1.0, 2.0], 5).is_empty());
+    }
+
+    #[test]
+    fn binary_matryoshka_packs_bits() {
+        let v = vec![1.0_f32, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 9.0];
+        let out = truncate_to_binary(&v, 8);
+        assert_eq!(out, vec![0b0101_0101]);
+    }
+
+    #[test]
+    fn binary_matryoshka_respects_k() {
+        let v: Vec<f32> = (0..16).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        assert_eq!(truncate_to_binary(&v, 8).len(), 1);
+        assert_eq!(truncate_to_binary(&v, 16).len(), 2);
+    }
+
+    #[test]
+    fn binary_matryoshka_out_of_range_empty() {
+        assert!(truncate_to_binary(&[], 0).is_empty());
+        assert!(truncate_to_binary(&[1.0, 2.0], 5).is_empty());
     }
 
     #[test]
