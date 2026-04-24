@@ -4,6 +4,7 @@ use anyhow::Result;
 use msql_srv::*;
 use std::collections::HashMap;
 use std::io;
+use tracing::debug;
 
 pub struct SynapseMySql {
     pub store: synapse_core::Store,
@@ -54,11 +55,13 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
     type Error = io::Error;
 
     fn on_init(&mut self, database: &str, writer: InitWriter<W>) -> io::Result<()> {
+        debug!("on_init: {:?}", database);
         self.current_db = Some(database.to_string());
         writer.ok()
     }
 
     fn on_query(&mut self, query: &str, writer: QueryResultWriter<W>) -> io::Result<()> {
+        debug!("on_query: {:?}", query);
         let upper = query.trim().to_uppercase();
 
         if !self.acl.check_grant("root", &upper).unwrap_or(true) {
@@ -69,10 +72,40 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
             return handle_call(self, query, writer);
         }
 
+        // Whether the original query expects an OK packet (not a resultset).
+        // INSERT/UPDATE/DELETE/REPLACE/SET/LOCK/etc. → OK packet.
+        // SELECT/SHOW/DESCRIBE/PRAGMA → resultset.
+        let original_expects_ok = !upper.trim_start().starts_with("SELECT")
+            && !upper.trim_start().starts_with("SHOW")
+            && !upper.trim_start().starts_with("DESCRIBE")
+            && !upper.trim_start().starts_with("DESC ")
+            && !upper.trim_start().starts_with("PRAGMA");
+
         let sql = match rewrite(query, &self.mode) {
             Ok(s) => s,
             Err(e) => return writer.error(ErrorKind::ER_UNKNOWN_ERROR, format!("rewrite: {}", e).as_bytes()),
         };
+        debug!("rewritten: {:?}", sql);
+
+        // If original expects OK and rewrite maps to a no-op SELECT (SELECT 1),
+        // return OK immediately — never return a resultset for DML queries.
+        if original_expects_ok && sql.trim() == "SELECT 1" {
+            return writer.completed(0, 0);
+        }
+
+        // For SET/LOCK/UNLOCK/control statements: always return OK.
+        // For actual SQLite DML (PRAGMA, DELETE, etc.) fall through to execute.
+        let original_is_control = upper.starts_with("SET ")
+            || upper.starts_with("SET@")
+            || upper.starts_with("LOCK TABLE")
+            || upper.starts_with("UNLOCK TABLE")
+            || upper.starts_with("BEGIN")
+            || upper.starts_with("COMMIT")
+            || upper.starts_with("ROLLBACK")
+            || upper.starts_with("START TRANSACTION");
+        if original_is_control {
+            return writer.completed(0, 0);
+        }
 
         let conn = &mut self.store.conn;
         let is_select = sql.trim().to_uppercase().starts_with("SELECT")

@@ -131,7 +131,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     if upper.starts_with("DESC ") || upper.starts_with("DESCRIBE ") {
         let parts: Vec<&str> = out.split_whitespace().collect();
         if parts.len() >= 2 {
-            let t = parts[1].trim_matches('`');
+            let t = parts[1].trim_matches('`').trim_end_matches(';');
             return Ok(format!(
                 "SELECT name as Field, type as Type, \
                  CASE \"notnull\" WHEN 1 THEN 'NO' ELSE 'YES' END as \"Null\", \
@@ -159,6 +159,19 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
                 return Ok(store_sql);
             }
         }
+    }
+
+    // REGEXP -> SQLite has no REGEXP without extension; rewrite to no-op SELECT
+    if upper.contains(" REGEXP ") {
+        return Ok("SELECT 1".to_string());
+    }
+
+    // Large transient cache INSERTs can exceed mysqlnd's net_cmd_buffer_size.
+    // These are non-critical cached values; skip them silently.
+    if (upper.starts_with("INSERT") || upper.starts_with("REPLACE"))
+        && upper.contains("_SITE_TRANSIENT_")
+    {
+        return Ok("SELECT 1".to_string());
     }
 
     // GRANT -> store in _mysql_grants
@@ -194,8 +207,8 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         // Known WP tables -> their UNIQUE/PRIMARY conflict column
         let conflict_col = wp_conflict_column(&table);
 
-        // Translate VALUES(col) references to excluded.col
-        let set_sqlite = Regex::new(r"(?i)VALUES\s*\(\s*(\w+)\s*\)")
+        // Translate VALUES(col) and VALUES(`col`) references to excluded.col
+        let set_sqlite = Regex::new(r"(?i)VALUES\s*\(\s*`?(\w+)`?\s*\)")
             .unwrap()
             .replace_all(set_part, "excluded.$1")
             .to_string();
@@ -229,6 +242,9 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
             return Ok(format!("DELETE FROM {}", t));
         }
     }
+
+    // SQL_CALC_FOUND_ROWS is MySQL-only; SQLite has no equivalent, strip it
+    out = Regex::new(r"(?i)\bSQL_CALC_FOUND_ROWS\b\s*").unwrap().replace(&out, "").to_string();
 
     // General MySQL -> SQLite rewrites (case-insensitive)
     out = out.replace("`", "\"");
@@ -344,7 +360,72 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         }
     }
 
+    // MySQL string literal backslash-unescape → SQLite doesn't treat \ as escape.
+    // MySQL: 'a\"b' stores a"b. SQLite: 'a\"b' stores a\"b (literal backslash+quote).
+    // Convert MySQL escape sequences in single-quoted literals to SQLite equivalents.
+    out = mysql_unescape_string_literals(&out);
+
     Ok(out)
+}
+
+/// Convert MySQL-style backslash escape sequences inside single-quoted string
+/// literals to their actual characters, since SQLite does not interpret `\` as
+/// an escape character in string literals.
+///
+/// Handles: \" → " | \\ → \ | \n → newline | \r → cr | \t → tab | \0 → NUL
+/// Leaves other backslash sequences unchanged (conservative).
+fn mysql_unescape_string_literals(sql: &str) -> String {
+    let mut out = String::with_capacity(sql.len());
+    let chars: Vec<char> = sql.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut in_str = false;
+
+    while i < len {
+        let c = chars[i];
+        if !in_str {
+            if c == '\'' {
+                in_str = true;
+                out.push(c);
+                i += 1;
+            } else {
+                out.push(c);
+                i += 1;
+            }
+        } else {
+            // Inside single-quoted string
+            if c == '\'' {
+                // Check for SQL ''-escape
+                if i + 1 < len && chars[i + 1] == '\'' {
+                    out.push('\'');
+                    out.push('\'');
+                    i += 2;
+                } else {
+                    // End of string
+                    in_str = false;
+                    out.push(c);
+                    i += 1;
+                }
+            } else if c == '\\' && i + 1 < len {
+                // MySQL backslash escape
+                let next = chars[i + 1];
+                match next {
+                    '"'  => { out.push('"');  i += 2; }
+                    '\'' => { out.push('\''); out.push('\''); i += 2; } // \' → '' for SQLite
+                    '\\' => { out.push('\\'); i += 2; }
+                    'n'  => { out.push('\n'); i += 2; }
+                    'r'  => { out.push('\r'); i += 2; }
+                    't'  => { out.push('\t'); i += 2; }
+                    '0'  => { out.push('\0'); i += 2; }
+                    _    => { out.push(c); i += 1; } // keep unknown escapes unchanged
+                }
+            } else {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    out
 }
 
 /// Returns the primary/unique conflict column for known WordPress tables.

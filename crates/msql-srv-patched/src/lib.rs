@@ -422,25 +422,8 @@ impl<B: MysqlShim<RW>, RW: Read + Write> MysqlIntermediary<B, RW> {
             let cmd = commands::parse(&packet).unwrap().1;
             match cmd {
                 Command::Query(q) => {
-                    if q.starts_with(b"SELECT @@") || q.starts_with(b"select @@") {
-                        let w = QueryResultWriter::new(&mut self.rw, false);
-                        let var = &q[b"SELECT @@".len()..];
-                        match var {
-                            b"max_allowed_packet" => {
-                                let cols = &[Column {
-                                    table: String::new(),
-                                    column: "@@max_allowed_packet".to_owned(),
-                                    coltype: myc::constants::ColumnType::MYSQL_TYPE_LONG,
-                                    colflags: myc::constants::ColumnFlags::UNSIGNED_FLAG,
-                                }];
-                                let mut w = w.start(cols)?;
-                                w.write_row(iter::once(67108864u32))?;
-                                w.finish()?;
-                            }
-                            _ => {
-                                w.completed(0, 0)?;
-                            }
-                        }
+                    if false {
+                        // placeholder to keep else-if chain intact
                     } else if q.starts_with(b"USE ") || q.starts_with(b"use ") {
                         let w = InitWriter {
                             writer: &mut self.rw,
