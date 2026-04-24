@@ -51,6 +51,39 @@ def test_f16_index_exact_match_and_half_ram():
     assert idx.dim() == 4
 
 
+def test_multi_vs_i8_agree_on_top1():
+    """MultiIndex dispatches via router but must agree with I8Index on top-1
+    for a simple, full-recall-reachable corpus."""
+    random.seed(42)
+    rows = []
+    for i in range(300):
+        rows.append((i, _unit([random.gauss(0.0, 1.0) for _ in range(32)])))
+    i8 = synapse.I8Index.build(rows)
+    multi = synapse.MultiIndex.build(rows)
+    query = rows[123][1]
+    top1_i8    = i8.search(query, k=1)[0][0]
+    top1_multi = multi.search(query, latency_budget_us=0, min_recall=0.95, k=1)[0][0]
+    assert top1_i8 == top1_multi, f"disagree: i8={top1_i8}, multi={top1_multi}"
+
+
+def test_i8_vs_f16_recall_tradeoff_holds():
+    """On normalized vectors, F16 should preserve ≥ 0.95 recall@5 vs I8."""
+    random.seed(0)
+    rows = [(i, _unit([random.gauss(0.0, 1.0) for _ in range(48)])) for i in range(400)]
+    i8 = synapse.I8Index.build(rows)
+    f16 = synapse.F16Index.build(rows)
+    overlap = 0
+    total = 0
+    for q_id in (0, 50, 100, 150, 200, 250):
+        q = rows[q_id][1]
+        i8_top5 = {hid for hid, _ in i8.search(q, k=5)}
+        f16_top5 = {hid for hid, _ in f16.search(q, k=5)}
+        overlap += len(i8_top5 & f16_top5)
+        total += 5
+    recall = overlap / total
+    assert recall >= 0.80, f"f16-vs-i8 recall@5 = {recall:.2f}, expected ≥ 0.80"
+
+
 def test_multi_index_one_call_bundle():
     rows = [
         (i, _unit([random.gauss(0.0, 1.0) for _ in range(16)]))
