@@ -3,10 +3,10 @@ use crate::rewrite::rewrite;
 use anyhow::Result;
 use lru::LruCache;
 use msql_srv::*;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::io;
 use std::num::NonZeroUsize;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::debug;
@@ -34,26 +34,13 @@ pub fn new_shared_cache() -> SharedCache {
     )))
 }
 
-const CACHE_TTL: Duration = Duration::from_millis(50);
+const CACHE_TTL: Duration = Duration::from_millis(500);
 
 // ---------------------------------------------------------------------------
-// Read-connection pool (N=16 pre-opened WAL read-only connections)
+// Per-connection read-only SQLite connection (WAL concurrent readers)
 // ---------------------------------------------------------------------------
 
-const READ_POOL_SIZE: usize = 16;
-
-pub type ReadPool = Arc<Mutex<VecDeque<rusqlite::Connection>>>;
-
-pub fn new_read_pool(db_path: &std::path::Path) -> Result<ReadPool> {
-    let mut pool = VecDeque::with_capacity(READ_POOL_SIZE);
-    for _ in 0..READ_POOL_SIZE {
-        let conn = open_read_conn(db_path)?;
-        pool.push_back(conn);
-    }
-    Ok(Arc::new(Mutex::new(pool)))
-}
-
-fn open_read_conn(path: &std::path::Path) -> Result<rusqlite::Connection> {
+fn open_read_conn(path: &Path) -> Result<rusqlite::Connection> {
     let conn = rusqlite::Connection::open(path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "query_only", true)?;
@@ -123,22 +110,10 @@ pub struct SynapseMySql {
     /// Per-table write epoch: bumped on any write to a table.
     write_epoch: Arc<Mutex<u64>>,
     epoch_snapshot: u64,
-    /// Shared pool of read-only SQLite connections (N=16).
-    read_pool: ReadPool,
-    /// Path to the db file (needed to replenish pool on exhaustion).
-    db_path: PathBuf,
 }
 
 impl SynapseMySql {
-    pub fn new(
-        store: synapse_core::Store,
-        acl: Acl,
-        mode: &str,
-        result_cache: SharedCache,
-        write_epoch: Arc<Mutex<u64>>,
-        read_pool: ReadPool,
-        db_path: PathBuf,
-    ) -> Result<Self> {
+    pub fn new(store: synapse_core::Store, acl: Acl, mode: &str, result_cache: SharedCache, write_epoch: Arc<Mutex<u64>>) -> Result<Self> {
         let epoch = *write_epoch.lock().unwrap();
         Ok(Self {
             store,
@@ -153,8 +128,6 @@ impl SynapseMySql {
             result_cache,
             write_epoch,
             epoch_snapshot: epoch,
-            read_pool,
-            db_path,
         })
     }
 
@@ -352,56 +325,15 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
             }
             let _ = global_epoch; // suppress unused warning
 
-            // Checkout a read connection from pool; fall back to writer conn if pool empty.
-            let pool_conn = self.read_pool.lock().unwrap().pop_front();
             let sync_result: Result<(Vec<(String, String)>, Vec<Vec<String>>), String>;
-            let returned_conn: Option<rusqlite::Connection>;
+            let returned_conn: Option<rusqlite::Connection> = None;
 
-            if let Some(rconn) = pool_conn {
-                let result = execute_read_query(&rconn, &sql);
-                returned_conn = Some(rconn);
-                sync_result = result;
-            } else {
-                // Pool exhausted — open a fresh read conn (rare: >16 concurrent readers)
-                match open_read_conn(&self.db_path) {
-                    Ok(rconn) => {
-                        let result = execute_read_query(&rconn, &sql);
-                        returned_conn = Some(rconn);
-                        sync_result = result;
-                    }
-                    Err(_) => {
-                        // Last resort: use writer connection
-                        returned_conn = None;
-                        let conn = &mut self.store.conn;
-                        sync_result = (|| {
-                            let mut stmt = conn.prepare_cached(&sql).map_err(|e| format!("{}", e))?;
-                            let cols = stmt.columns();
-                            let cols_count = cols.len();
-                            let mut col_meta: Vec<(String, String)> = Vec::with_capacity(cols_count);
-                            for col in &cols {
-                                col_meta.push((col.name().to_string(), col.decl_type().unwrap_or("TEXT").to_string()));
-                            }
-                            let mut rows: Vec<Vec<String>> = Vec::new();
-                            let mut vals: Vec<String> = Vec::with_capacity(cols_count);
-                            let mut r = stmt.query([]).map_err(|e| format!("{}", e))?;
-                            while let Ok(Some(row)) = r.next() {
-                                vals.clear();
-                                for i in 0..cols_count {
-                                    let v: rusqlite::types::Value = row.get(i).unwrap_or(rusqlite::types::Value::Null);
-                                    vals.push(rusqlite_to_string(&v));
-                                }
-                                rows.push(vals.clone());
-                            }
-                            Ok((col_meta, rows))
-                        })();
-                    }
-                }
+            {
+                let conn = &self.store.conn;
+                sync_result = execute_read_query(conn, &sql);
             }
 
-            // Return the read connection to the pool before writing to client.
-            if let Some(rc) = returned_conn {
-                self.read_pool.lock().unwrap().push_back(rc);
-            }
+            let _ = returned_conn; // per-conn model: no pool return needed
 
             match sync_result {
                 Ok((col_meta, rows)) => {
