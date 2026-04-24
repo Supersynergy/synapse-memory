@@ -30,3 +30,6 @@ pub mod adaptive_router;
 
 /// In-memory int8-quantized brute-force index (SimSIMD-accelerated).
 pub mod inmem_i8_index;
+
+/// In-memory 1-bit Hamming brute-force index (SimSIMD-accelerated).
+pub mod inmem_hamming_index;

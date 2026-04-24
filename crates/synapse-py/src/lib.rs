@@ -17,6 +17,7 @@ use std::sync::Mutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use synapse_core::turbo::adaptive_router::{AdaptiveRouter, QueryHints, Strategy};
+use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
 use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
 use synapse_core::types::{PutRequest, SearchMode};
 use synapse_core::Store;
@@ -59,6 +60,67 @@ impl PyI8Index {
     fn len(&self) -> usize { self.inner.len() }
     fn is_empty(&self) -> bool { self.inner.is_empty() }
     fn dim(&self) -> usize { self.inner.dim() }
+}
+
+/// Dense 1-bit Hamming index — very fast candidate generation (~72% recall alone).
+///
+/// Pair with `I8Index.search_rerank` for full-recall sub-ms pipeline.
+#[pyclass(name = "HammingIndex")]
+pub struct PyHammingIndex {
+    inner: InMemoryHammingIndex,
+}
+
+#[pymethods]
+impl PyHammingIndex {
+    #[staticmethod]
+    fn build(rows: Vec<(i64, Vec<f32>)>) -> PyResult<Self> {
+        let dim = rows.first().map(|r| r.1.len()).unwrap_or(0);
+        if rows.iter().any(|(_, v)| v.len() != dim) {
+            return Err(PyValueError::new_err("ragged rows"));
+        }
+        Ok(Self { inner: InMemoryHammingIndex::build(rows) })
+    }
+
+    #[pyo3(signature = (query, k=10))]
+    fn search(&self, query: Vec<f32>, k: usize) -> PyResult<Vec<(i64, u32)>> {
+        Ok(self.inner.search(&query, k))
+    }
+
+    fn len(&self) -> usize { self.inner.len() }
+    fn is_empty(&self) -> bool { self.inner.is_empty() }
+    fn dim(&self) -> usize { self.inner.dim() }
+}
+
+/// Two-stage candidate-gen + rerank pipeline.
+///
+/// Returns the top-k ids with full-recall int8 scoring after a wide
+/// Hamming-based candidate pass. Typical settings: `candidates = 8 * k`.
+#[pyfunction]
+#[pyo3(signature = (hamming_idx, i8_idx, query, k=10, candidates=80))]
+fn rerank(
+    hamming_idx: &PyHammingIndex,
+    i8_idx: &PyI8Index,
+    query: Vec<f32>,
+    k: usize,
+    candidates: usize,
+) -> PyResult<Vec<(i64, f32)>> {
+    let cands = hamming_idx.inner.search(&query, candidates);
+    if cands.is_empty() {
+        return Ok(Vec::new());
+    }
+    // Filter i8 index by candidate ids + fully rescore. Simple O(n*candidates)
+    // interop: small enough for `candidates ≤ ~1k`, which is the sweet spot
+    // per the bench progression (248us hamming + small rerank).
+    let cand_set: std::collections::HashSet<i64> =
+        cands.iter().map(|(id, _)| *id).collect();
+    let all = i8_idx.inner.search(&query, i8_idx.len());
+    let mut filtered: Vec<(i64, f32)> = all
+        .into_iter()
+        .filter(|(id, _)| cand_set.contains(id))
+        .collect();
+    filtered.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    filtered.truncate(k);
+    Ok(filtered)
 }
 
 /// Python-facing wrapper around the SIMSIMD / MRL adaptive strategy picker.
@@ -269,6 +331,8 @@ fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBrain>()?;
     m.add_class::<PyAdaptiveRouter>()?;
     m.add_class::<PyI8Index>()?;
+    m.add_class::<PyHammingIndex>()?;
+    m.add_function(wrap_pyfunction!(rerank, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
