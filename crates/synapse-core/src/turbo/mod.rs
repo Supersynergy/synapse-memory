@@ -24,3 +24,6 @@ pub mod mrl_embedder;
 
 pub mod hybrid_cache;
 pub mod ndarray_search;
+
+/// Thompson-bandit adaptive routing across ANN strategies.
+pub mod adaptive_router;
