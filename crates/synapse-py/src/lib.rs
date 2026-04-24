@@ -108,19 +108,10 @@ fn rerank(
     if cands.is_empty() {
         return Ok(Vec::new());
     }
-    // Filter i8 index by candidate ids + fully rescore. Simple O(n*candidates)
-    // interop: small enough for `candidates ≤ ~1k`, which is the sweet spot
-    // per the bench progression (248us hamming + small rerank).
-    let cand_set: std::collections::HashSet<i64> =
-        cands.iter().map(|(id, _)| *id).collect();
-    let all = i8_idx.inner.search(&query, i8_idx.len());
-    let mut filtered: Vec<(i64, f32)> = all
-        .into_iter()
-        .filter(|(id, _)| cand_set.contains(id))
-        .collect();
-    filtered.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    filtered.truncate(k);
-    Ok(filtered)
+    let ids: Vec<i64> = cands.into_iter().map(|(id, _)| id).collect();
+    let mut rescored = i8_idx.inner.rescore(&query, &ids);
+    rescored.truncate(k);
+    Ok(rescored)
 }
 
 /// Python-facing wrapper around the SIMSIMD / MRL adaptive strategy picker.

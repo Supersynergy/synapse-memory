@@ -71,6 +71,46 @@ impl InMemoryI8Index {
     #[must_use]
     pub const fn dim(&self) -> usize { self.dim }
 
+    /// Rescore only a subset of ids — ideal as a rerank stage after a
+    /// cheaper candidate-gen pass (Hamming, MRL, HNSW). Returns ids in
+    /// score-descending order.
+    ///
+    /// Unknown ids are silently skipped. O(candidates × dim).
+    pub fn rescore(&self, query: &[f32], candidate_ids: &[i64]) -> Vec<(i64, f32)> {
+        if query.len() != self.dim || candidate_ids.is_empty() {
+            return Vec::new();
+        }
+        let q_abs = query.iter().fold(0_f32, |a, &v| a.max(v.abs())).max(1e-8);
+        let q_inv = 1.0 / q_abs;
+        let q_scale = q_abs / 127.0;
+        let q_codes: Vec<i8> = query
+            .iter()
+            .map(|v| (*v * q_inv * 127.0).round().clamp(-127.0, 127.0) as i8)
+            .collect();
+
+        // id → row index lookup
+        let mut id_to_row: std::collections::HashMap<i64, usize> =
+            std::collections::HashMap::with_capacity(self.ids.len());
+        for (i, id) in self.ids.iter().enumerate() {
+            id_to_row.insert(*id, i);
+        }
+        let rows: Vec<usize> = candidate_ids
+            .iter()
+            .filter_map(|id| id_to_row.get(id).copied())
+            .collect();
+
+        let mut out: Vec<(i64, f32)> = rows
+            .par_iter()
+            .map(|&i| {
+                let row = &self.codes[i * self.dim..(i + 1) * self.dim];
+                let s = self.scales[i];
+                (self.ids[i], dot_i8(&q_codes, row) * s * q_scale)
+            })
+            .collect();
+        out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        out
+    }
+
     /// Search — returns `(id, cosine-like score)` pairs, sorted best-first.
     ///
     /// When the `simsimd` feature is enabled, uses NEON dot_i8 per row; else

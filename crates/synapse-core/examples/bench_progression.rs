@@ -128,6 +128,25 @@ fn main() {
         })));
     }
 
+    // S7 — Hamming candidate-gen → int8 rescore end-to-end pipeline
+    #[cfg(feature = "simsimd")]
+    {
+        use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
+        use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
+        let rows_pairs: Vec<(i64, Vec<f32>)> =
+            db.chunks(DIM).enumerate().map(|(i, r)| (i as i64, r.to_vec())).collect();
+        let hidx = InMemoryHammingIndex::build(rows_pairs.clone());
+        let iidx = InMemoryI8Index::build(rows_pairs);
+        let cands_n: usize = 80;
+        rows.push(("S7 Hamming→i8 rescore k10", time_fn(|| {
+            let cands = hidx.search(&q, cands_n);
+            let ids: Vec<i64> = cands.into_iter().map(|(id, _)| id).collect();
+            let mut rescored = iidx.rescore(&q, &ids);
+            rescored.truncate(10);
+            let _ = rescored;
+        })));
+    }
+
     let base = rows.first().map(|r| r.1).unwrap_or(1.0);
     let max = rows.iter().map(|r| r.1).fold(0_f64, f64::max);
 
