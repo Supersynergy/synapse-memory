@@ -6,3 +6,6 @@ Cargo.lock
 *.db-shm
 *.brainpack
 .fastembed_cache/
+
+# Private strategy docs — never commit
+docs/strategy/
