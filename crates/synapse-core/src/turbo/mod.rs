@@ -27,3 +27,6 @@ pub mod ndarray_search;
 
 /// Thompson-bandit adaptive routing across ANN strategies.
 pub mod adaptive_router;
+
+/// In-memory int8-quantized brute-force index (SimSIMD-accelerated).
+pub mod inmem_i8_index;

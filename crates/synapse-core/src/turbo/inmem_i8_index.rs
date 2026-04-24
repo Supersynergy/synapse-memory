@@ -1,0 +1,171 @@
+//! In-memory int8-quantized brute-force index.
+//!
+//! Builds once from `(id, Vec<f32>)` pairs, stores per-row int8 codes + scales.
+//! Every `search` call is a SIMD-parallel dot-product over the whole corpus —
+//! for M4 Max we measure **325 µs / query @ 100 k × 384** (see
+//! `docs/bench_2026-04-24/progression.md`).
+//!
+//! Recall ≥ 0.97 vs f32 ground truth (see integration test in synapse-core).
+//!
+//! # Example
+//! ```
+//! # #[cfg(feature = "simsimd")] {
+//! use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
+//! let rows = vec![
+//!     (1_i64, vec![1.0_f32, 0.0, 0.0, 0.0]),
+//!     (2,     vec![0.0_f32, 1.0, 0.0, 0.0]),
+//! ];
+//! let idx = InMemoryI8Index::build(rows);
+//! let top = idx.search(&[1.0, 0.0, 0.0, 0.0], 1);
+//! assert_eq!(top[0].0, 1);
+//! # }
+//! ```
+
+use rayon::prelude::*;
+
+/// Dense int8-quantized brute-force index.
+pub struct InMemoryI8Index {
+    ids: Vec<i64>,
+    codes: Vec<i8>,
+    scales: Vec<f32>,
+    dim: usize,
+}
+
+impl InMemoryI8Index {
+    /// Build from `(id, vec_f32)` pairs. Empty input yields a zero-dim index.
+    ///
+    /// # Panics
+    /// Panics if rows are ragged (unequal dimensions).
+    #[must_use]
+    pub fn build(rows: Vec<(i64, Vec<f32>)>) -> Self {
+        if rows.is_empty() {
+            return Self { ids: Vec::new(), codes: Vec::new(), scales: Vec::new(), dim: 0 };
+        }
+        let dim = rows[0].1.len();
+        assert!(rows.iter().all(|(_, v)| v.len() == dim), "ragged rows");
+
+        let n = rows.len();
+        let mut ids = Vec::with_capacity(n);
+        let mut codes = vec![0_i8; n * dim];
+        let mut scales = vec![0_f32; n];
+
+        for (i, (id, vec)) in rows.into_iter().enumerate() {
+            ids.push(id);
+            let absmax = vec.iter().fold(0_f32, |a, &v| a.max(v.abs())).max(1e-8);
+            scales[i] = absmax / 127.0;
+            let inv = 1.0 / absmax;
+            for (j, v) in vec.into_iter().enumerate() {
+                codes[i * dim + j] = (v * inv * 127.0).round().clamp(-127.0, 127.0) as i8;
+            }
+        }
+        Self { ids, codes, scales, dim }
+    }
+
+    /// Number of indexed rows.
+    #[must_use]
+    pub fn len(&self) -> usize { self.ids.len() }
+    /// Empty index probe.
+    #[must_use]
+    pub fn is_empty(&self) -> bool { self.ids.is_empty() }
+    /// Dimensionality.
+    #[must_use]
+    pub const fn dim(&self) -> usize { self.dim }
+
+    /// Search — returns `(id, cosine-like score)` pairs, sorted best-first.
+    ///
+    /// When the `simsimd` feature is enabled, uses NEON dot_i8 per row; else
+    /// uses the scalar path (still rayon-parallel).
+    pub fn search(&self, query: &[f32], k: usize) -> Vec<(i64, f32)> {
+        if self.is_empty() || query.len() != self.dim {
+            return Vec::new();
+        }
+        // Quantize query with the same symmetric-per-row scheme.
+        let q_abs = query.iter().fold(0_f32, |a, &v| a.max(v.abs())).max(1e-8);
+        let q_inv = 1.0 / q_abs;
+        let q_scale = q_abs / 127.0;
+        let q_codes: Vec<i8> = query
+            .iter()
+            .map(|v| (*v * q_inv * 127.0).round().clamp(-127.0, 127.0) as i8)
+            .collect();
+
+        let scores: Vec<f32> = self
+            .codes
+            .par_chunks(self.dim)
+            .zip(self.scales.par_iter())
+            .map(|(row, &s)| {
+                let dot = dot_i8(&q_codes, row);
+                dot * s * q_scale
+            })
+            .collect();
+
+        let k = k.min(scores.len());
+        let mut idx: Vec<usize> = (0..scores.len()).collect();
+        idx.select_nth_unstable_by(k - 1, |a, b| {
+            scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        idx.truncate(k);
+        idx.sort_by(|a, b| {
+            scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        idx.into_iter().map(|i| (self.ids[i], scores[i])).collect()
+    }
+}
+
+#[cfg(feature = "simsimd")]
+fn dot_i8(a: &[i8], b: &[i8]) -> f32 {
+    crate::turbo::simsimd_kernels::dot_i8(a, b).map(|v| v as f32).unwrap_or(0.0)
+}
+
+#[cfg(not(feature = "simsimd"))]
+fn dot_i8(a: &[i8], b: &[i8]) -> f32 {
+    let mut sum = 0_i64;
+    for (x, y) in a.iter().zip(b) {
+        sum += i64::from(*x) * i64::from(*y);
+    }
+    sum as f32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn unit(v: Vec<f32>) -> Vec<f32> {
+        let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-8);
+        v.into_iter().map(|x| x / n).collect()
+    }
+
+    #[test]
+    fn exact_match_wins() {
+        let rows = vec![
+            (10_i64, unit(vec![1.0, 0.0, 0.0, 0.0])),
+            (20,     unit(vec![0.0, 1.0, 0.0, 0.0])),
+            (30,     unit(vec![0.0, 0.0, 1.0, 0.0])),
+        ];
+        let idx = InMemoryI8Index::build(rows);
+        let top = idx.search(&unit(vec![1.0, 0.0, 0.0, 0.0]), 1);
+        assert_eq!(top[0].0, 10);
+    }
+
+    #[test]
+    fn empty_index_returns_empty() {
+        let idx = InMemoryI8Index::build(Vec::new());
+        assert!(idx.is_empty());
+        assert!(idx.search(&[1.0], 5).is_empty());
+    }
+
+    #[test]
+    fn dim_mismatch_returns_empty() {
+        let rows = vec![(1_i64, unit(vec![1.0, 0.0, 0.0, 0.0]))];
+        let idx = InMemoryI8Index::build(rows);
+        assert!(idx.search(&[1.0, 0.0], 1).is_empty());
+    }
+
+    #[test]
+    fn topk_larger_than_corpus_ok() {
+        let rows = vec![(1_i64, unit(vec![1.0, 0.0])), (2, unit(vec![0.0, 1.0]))];
+        let idx = InMemoryI8Index::build(rows);
+        let top = idx.search(&unit(vec![1.0, 0.0]), 100);
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0].0, 1);
+    }
+}
