@@ -79,6 +79,62 @@ There are **zero tests in synapse-mysql**. The 273-LoC rewriter is unverified ex
 | "Production-ready" | **No** — `cargo test -p synapse-mysql` has 0 tests, single-function regex rewriter, no `INSERT ON DUPLICATE KEY UPDATE` translation |
 | "Better than upstream sqlite-database-integration plugin" | **No** — that plugin has a full lexer + parser + translator (3 000+ LoC of PHP per file in `wordpress-test/sqlite-database-integration-2.2.23/wp-includes/database/`), Synapse-MySQL has a 273-LoC regex rewriter |
 
+---
+
+## SMOKE TEST 2026-04-23 (session: m4max-preview branch)
+
+### Environment
+- Container `:8084` → synapse-mysql proxy on host port `13306` → SQLite `wordpress-test/synapse-db/wordpress.db`
+- Binary PID: `5905`, built commit `915f515` (this session)
+- Root cause discovered during test: **old binary (23:31) had the ON DUPLICATE KEY regex bug**; regex `.*?` + `$` failed silently on large PHP-serialised payloads. Fixed with string-split approach.
+
+### Per-Step Results
+
+| Step | Result | Notes |
+|---|---|---|
+| **1. WP Homepage** | ⚠️ PARTIAL | HTTP 200, renders, but 14 DB errors in page (see below) |
+| **2. Admin Login** | ❌ FAIL | Blocked by `mysqlnd` wire-protocol bug — see root cause |
+| **3. Post create** | ❌ SKIP | Login required |
+| **4. Plugin install** | ❌ SKIP | Login required |
+| **5. Theme switch** | ❌ SKIP | Login required |
+| **6. Settings save** | ❌ SKIP | Login required |
+| **7. Media upload** | ❌ SKIP | Login required |
+
+### Fixes Applied This Session
+
+| Fix | Status | Commit |
+|---|---|---|
+| ON DUPLICATE KEY regex fail on long payloads | ✅ FIXED | `915f515` — switched to `str::find()` |
+| SHOW COLUMNS MySQL shape (`Field/Type/Null/Key/Default/Extra`) | ✅ FIXED | `915f515` — mapped via `pragma_table_info` aliases |
+| `@@SESSION.sql_mode` / `@@GLOBAL.*` passthrough | ✅ FIXED | `915f515` — regex replaces with literal values |
+| `msql-srv-patched` missing `packet.rs` | ✅ FIXED | `915f515` — copied from upstream crates.io source |
+
+### Remaining Blockers (Post-Fix)
+
+**Blocker 1 — mysqlnd intercepts `SELECT @@SESSION.sql_mode`**
+WordPress `wpdb::set_sql_mode()` calls `SELECT @@SESSION.sql_mode`. PHP `mysqlnd` extension intercepts this query **client-side** — it never reaches `on_query()` in synapse-mysql. `mysqlnd` returns `true` (no resultset) because the initial handshake from `msql-srv` does not include the `sql_mode` system variable in the server capabilities. WordPress then calls `mysqli_fetch_array(true)` → `TypeError`.
+- **Root cause**: `msql-srv` handshake omits `sql_mode` in OK packet / server greeting
+- **Fix needed**: Set `sql_mode = ''` in the MySQL handshake OK packet in `msql-srv-patched/src/lib.rs` or `writers.rs`
+
+**Blocker 2 — Packet buffer overflow on large theme payloads**
+`INSERT INTO wp_options ... VALUES ('_site_transient_wp_theme_files_patterns-...', '<98-pattern JSON>', ...)` → `Packet buffer wasn't big enough`. WordPress 2025 theme ships 98 block patterns, serialised data > 64 KB. `msql-srv` command buffer is too small.
+- **Fix needed**: Increase `net_cmd_buffer_size` to 16 MB in `msql-srv-patched/src/packet.rs`; or truncate transient on write and mark non-critical.
+
+**Blocker 3 — Commands out of sync (11 hits)** — cascading from Blocker 2 desync.
+
+### Honest Verdict (Updated)
+
+| Claim | Status |
+|---|---|
+| WordPress renders static homepage | ✅ Yes (HTTP 200) |
+| ON DUPLICATE KEY writes work | ✅ Fixed this session |
+| SHOW COLUMNS correct shape | ✅ Fixed this session |
+| Admin login functional | ❌ No — mysqlnd handshake bug |
+| Post/plugin/settings/media | ❌ No — login blocked |
+| Production-grade MySQL replacement | ❌ **Alpha / not usable** |
+
+**Classification: ALPHA.** Two wire-protocol bugs remain (mysqlnd handshake + packet buffer). Both are in `msql-srv-patched/src/`, not in `rewrite.rs`. ETA to fix: 2–4h with msql-srv handshake expertise.
+
 ## Concrete next-step backlog (prioritized)
 
 1. ~~**Add `INSERT ... ON DUPLICATE KEY UPDATE → INSERT ... ON CONFLICT DO UPDATE` rewrite**~~ ✅ **FIXED** — `crates/synapse-mysql/src/rewrite.rs`, commit `6f598e4`, branch `wp-fix-on-duplicate`. 7 unit tests green. Known WP tables use hardcoded conflict column; plugin tables fall back to `INSERT OR REPLACE`. `UNIQUE constraint failed: wp_options.option_name` errors: 0 in post-restart log.
