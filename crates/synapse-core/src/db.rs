@@ -26,6 +26,7 @@ impl Store {
         let conn = Connection::open(&db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "busy_timeout", 5000_i64)?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "mmap_size", 268_435_456_i64)?;
         // Schritt 1 optim #3 (SPEC §6 item 4): 64 MB page cache keeps FTS5
