@@ -128,6 +128,18 @@ fn main() {
         })));
     }
 
+    // S8 — f16 storage brute-force (50% RAM)
+    #[cfg(feature = "simsimd")]
+    {
+        use synapse_core::turbo::inmem_f16_index::InMemoryF16Index;
+        let rows_pairs: Vec<(i64, Vec<f32>)> =
+            db.chunks(DIM).enumerate().map(|(i, r)| (i as i64, r.to_vec())).collect();
+        let idx = InMemoryF16Index::build(rows_pairs);
+        rows.push(("S8 f16 storage cos", time_fn(|| {
+            let _ = idx.search(&q, 10);
+        })));
+    }
+
     // S7 — Hamming candidate-gen → int8 rescore end-to-end pipeline
     #[cfg(feature = "simsimd")]
     {

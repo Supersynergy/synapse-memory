@@ -18,6 +18,9 @@ pub mod simsimd_kernels;
 /// f16 (half-precision) storage + conversion helpers — 50% RAM savings.
 pub mod f16_kernels;
 
+/// In-memory f16-storage brute-force index (50% RAM savings, recall ≥ 0.99).
+pub mod inmem_f16_index;
+
 /// Candle-Metal BGE-small embedder (scaffolding; see SPEC_V2 §4 E).
 pub mod candle_metal_embedder;
 
