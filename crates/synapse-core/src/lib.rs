@@ -1,5 +1,6 @@
 //! synapse-core: single-file memory store on SQLite+FTS5+sqlite-vec.
 
+pub mod brainpack;
 pub mod crdt;
 pub mod db;
 pub mod error;
