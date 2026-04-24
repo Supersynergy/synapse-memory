@@ -38,6 +38,19 @@ def test_hamming_b8_self_is_zero():
     assert synapse.hamming_b8(q, [q]) == [0.0]
 
 
+def test_f16_index_exact_match_and_half_ram():
+    rows = [
+        (1, _unit([1.0, 0.0, 0.0, 0.0])),
+        (2, _unit([0.0, 1.0, 0.0, 0.0])),
+    ]
+    idx = synapse.F16Index.build(rows)
+    hits = idx.search(_unit([1.0, 0.0, 0.0, 0.0]), k=1)
+    assert hits[0][0] == 1
+    # 2 rows × 4 dim × 2 bytes = 16
+    assert idx.packed_bytes() == 16
+    assert idx.dim() == 4
+
+
 def test_i8_index_exact_match():
     rows = [
         (1, _unit([1.0, 0.0, 0.0, 0.0])),

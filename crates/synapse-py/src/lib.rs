@@ -17,6 +17,7 @@ use std::sync::Mutex;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use synapse_core::turbo::adaptive_router::{AdaptiveRouter, QueryHints, Strategy};
+use synapse_core::turbo::inmem_f16_index::InMemoryF16Index;
 use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
 use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
 use synapse_core::types::{PutRequest, SearchMode};
@@ -60,6 +61,33 @@ impl PyI8Index {
     fn len(&self) -> usize { self.inner.len() }
     fn is_empty(&self) -> bool { self.inner.is_empty() }
     fn dim(&self) -> usize { self.inner.dim() }
+}
+
+/// Dense f16-storage cosine index — 50 % RAM savings vs fp32, recall ≥ 0.99.
+#[pyclass(name = "F16Index")]
+pub struct PyF16Index {
+    inner: InMemoryF16Index,
+}
+
+#[pymethods]
+impl PyF16Index {
+    #[staticmethod]
+    fn build(rows: Vec<(i64, Vec<f32>)>) -> PyResult<Self> {
+        let dim = rows.first().map(|r| r.1.len()).unwrap_or(0);
+        if rows.iter().any(|(_, v)| v.len() != dim) {
+            return Err(PyValueError::new_err("ragged rows"));
+        }
+        Ok(Self { inner: InMemoryF16Index::build(rows) })
+    }
+    #[pyo3(signature = (query, k=10))]
+    fn search(&self, query: Vec<f32>, k: usize) -> PyResult<Vec<(i64, f32)>> {
+        Ok(self.inner.search(&query, k))
+    }
+    fn len(&self) -> usize { self.inner.len() }
+    fn is_empty(&self) -> bool { self.inner.is_empty() }
+    fn dim(&self) -> usize { self.inner.dim() }
+    /// Raw bytes stored in the index — for RAM footprint dashboards.
+    fn packed_bytes(&self) -> usize { self.inner.packed_bytes() }
 }
 
 /// Dense 1-bit Hamming index — very fast candidate generation (~72% recall alone).
@@ -322,6 +350,7 @@ fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBrain>()?;
     m.add_class::<PyAdaptiveRouter>()?;
     m.add_class::<PyI8Index>()?;
+    m.add_class::<PyF16Index>()?;
     m.add_class::<PyHammingIndex>()?;
     m.add_function(wrap_pyfunction!(rerank, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
