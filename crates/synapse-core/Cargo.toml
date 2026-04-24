@@ -42,6 +42,8 @@ argon2 = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 # M4 Max integration: NEON-native SIMD distances (f32/f16/i8/b8).
 simsimd = { version = "6.5", optional = true }
+# f16 storage/conversion helpers in turbo::f16_kernels (50% RAM savings).
+half = "2.4"
 # Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
 tikv-jemallocator = { version = "0.6", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
