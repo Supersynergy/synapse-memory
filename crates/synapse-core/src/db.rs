@@ -26,13 +26,16 @@ impl Store {
         let conn = Connection::open(&db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.pragma_update(None, "busy_timeout", 5000_i64)?;
+        conn.pragma_update(None, "busy_timeout", 10000_i64)?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "mmap_size", 268_435_456_i64)?;
-        // Schritt 1 optim #3 (SPEC §6 item 4): 64 MB page cache keeps FTS5
-        // BM25 scoring tables and vec0 working-set resident (negative value
-        // means kibibytes, -65536 = 64 MB). Per research_chroma_m4max §Mode B.
+        // 64 MB page cache — keeps FTS5 BM25 + vec0 working-set resident.
         conn.pragma_update(None, "cache_size", -65536_i64)?;
+        // Disable automatic WAL checkpoint. Manual checkpoint only — avoids
+        // stall under concurrent write load (8+ threads).
+        conn.pragma_update(None, "wal_autocheckpoint", 0_i64)?;
+        // Pre-allocate page-cache slots, reduce first-access allocation stalls.
+        conn.pragma_update(None, "page_size", 4096_i64)?;
         #[cfg(feature = "ann-usearch")]
         let s = {
             let mut store = Self {

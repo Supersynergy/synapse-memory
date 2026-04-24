@@ -23,3 +23,5 @@ mysql_common = "0.32"
 chrono = "0.4"
 regex = "1"
 sha1 = "0.10"
+blake3.workspace = true
+lru = "0.12"

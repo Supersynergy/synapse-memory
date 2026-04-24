@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::net::{SocketAddr, TcpListener};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use tracing::{error, info, warn};
 
@@ -12,7 +13,7 @@ mod rewrite;
 mod server;
 
 use acl::Acl;
-use server::SynapseMySql;
+use server::{new_shared_cache, SynapseMySql};
 
 #[derive(Parser)]
 #[command(name = "synapse-mysql", version, about = "SynapseDB MySQL compatibility server")]
@@ -55,6 +56,10 @@ fn main() -> Result<()> {
     }
     drop(store);
 
+    // Shared result cache and write epoch across all connection threads.
+    let shared_cache = new_shared_cache();
+    let write_epoch: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));
+
     let listener = TcpListener::bind(&cli.bind)
         .with_context(|| format!("bind {}", cli.bind))?;
     info!("synapse-mysql listening on {} (mode={})", cli.bind, cli.mode);
@@ -74,6 +79,8 @@ fn main() -> Result<()> {
         let file = cli.file.clone();
         let mode = cli.mode.clone();
         let root_password = cli.root_password.clone();
+        let cache = shared_cache.clone();
+        let epoch = write_epoch.clone();
         thread::spawn(move || {
             info!("connection from {}", addr);
             let store = match synapse_core::Store::open(&file) {
@@ -86,7 +93,7 @@ fn main() -> Result<()> {
             let acl = Acl::new(&store);
             let _ = acl.init_tables();
             let _ = acl.ensure_root(&root_password);
-            let shim = match SynapseMySql::new(store, acl, &mode) {
+            let shim = match SynapseMySql::new(store, acl, &mode, cache, epoch) {
                 Ok(s) => s,
                 Err(e) => {
                     warn!("shim init for {}: {}", addr, e);

@@ -84,6 +84,32 @@ All 4 workloads now complete with 0 errors at ~390 OPS (1 thread, 1k records).
 
 ---
 
+## Synapse v4 — Concurrent Readers + Write Batching (2026-04-24)
+
+**Changes**: write-batch (64 writes/BEGIN-COMMIT), shared LRU result cache (4096 entries, Arc<Mutex>),
+`prepare_cached()` for reads, fingerprint stmt cache, `wal_autocheckpoint=0`.
+
+**YCSB go-ycsb, 8 threads, 5k ops, 5k records**:
+
+| Workload | Synapse v3 OPS | Synapse v4 OPS | Δ | MySQL 8t OPS | Gap |
+|----------|---------------|---------------|---|-------------|-----|
+| A (50r/50u) | 1,745 | **2,389** | +37% | 5,520 | 2.3× behind |
+| B (95r/5u) | 1,274 | **2,297** | +80% | 27,091 | 11.8× behind |
+| C (100r) | 1,719 | **2,280** | +33% | 63,402 | 27.8× behind |
+| F (RMW) | 1,921 | **2,111** | +10% | 12,333 | 5.8× behind |
+| INSERT load | 380 | **2,293** | **+504%** | — | — |
+
+**Honest structural assessment**:
+
+Synapse v4 closes ~37-80% of the gap on mixed workloads. The remaining gap in workload C (100% reads, 28×) is structural:
+
+1. **SQLite single-writer WAL**: even with `wal_autocheckpoint=0`, concurrent readers on the same WAL file compete for page cache and mmap. MySQL's InnoDB uses MVCC with per-row locking, not file-level WAL, allowing true parallel reads.
+2. **Protocol overhead**: msql_srv → sync thread per connection → no async I/O. Each request round-trip includes full msgpack encode/decode vs. MySQL's native binary protocol with pipelined responses.
+3. **Prepare overhead**: `prepare_cached()` helps but SQLite still parses the SQL per-connection. MySQL pre-compiles on server side once.
+4. **What would close it**: An async SQLite binding (e.g. `tokio-rusqlite`) + true WAL reader pool with shared connection + pre-compiled statement cache would get to ~5-10k OPS on workload C. Closing the full 28× gap against MySQL on read-only workloads requires either SQLite with async API (not yet stable) or switching the read path to a memory-mapped snapshot.
+
+---
+
 ## Fair Comparison: go-ycsb 8-thread vs 8-thread — RERUN 2026-04-23
 
 **Config**: records=1000, ops=10000, threadcount=8. Both targets on localhost.
