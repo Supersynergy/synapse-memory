@@ -168,14 +168,23 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
         let id = self.stmt_id_seq;
         self.stmt_id_seq += 1;
         self.stmts.insert(id, query.to_string());
-        let dummy: Vec<Column> = vec![];
-        writer.reply(id, &dummy, &dummy)
+        // Count `?` placeholders so the client sends the right number of params.
+        let param_count = query.chars().filter(|&c| c == '?').count();
+        let params: Vec<Column> = (0..param_count)
+            .map(|i| Column {
+                table: String::new(),
+                column: format!("p{}", i),
+                coltype: msql_srv::ColumnType::MYSQL_TYPE_VAR_STRING,
+                colflags: msql_srv::ColumnFlags::empty(),
+            })
+            .collect();
+        writer.reply(id, &params, &[])
     }
 
     fn on_execute(
         &mut self,
         id: u32,
-        _params: msql_srv::ParamParser,
+        params: msql_srv::ParamParser,
         writer: QueryResultWriter<W>,
     ) -> io::Result<()> {
         let query = match self.stmts.get(&id) {
@@ -184,7 +193,43 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
                 return writer.error(ErrorKind::ER_UNKNOWN_STMT_HANDLER, b"unknown stmt");
             }
         };
-        self.on_query(&query, writer)
+        // Bind parameters: replace each `?` placeholder with the actual value.
+        let param_values: Vec<String> = params
+            .into_iter()
+            .map(|p| match p.value.into_inner() {
+                msql_srv::ValueInner::NULL => "NULL".to_string(),
+                msql_srv::ValueInner::Bytes(b) => {
+                    let s = String::from_utf8_lossy(b);
+                    format!("'{}'", s.replace('\'', "''"))
+                }
+                msql_srv::ValueInner::Int(i) => i.to_string(),
+                msql_srv::ValueInner::UInt(u) => u.to_string(),
+                msql_srv::ValueInner::Double(f) => f.to_string(),
+                msql_srv::ValueInner::Date(_)
+                | msql_srv::ValueInner::Time(_)
+                | msql_srv::ValueInner::Datetime(_) => "NULL".to_string(),
+            })
+            .collect();
+
+        let bound = if param_values.is_empty() {
+            query.clone()
+        } else {
+            let mut result = String::with_capacity(query.len());
+            let mut param_iter = param_values.iter();
+            for ch in query.chars() {
+                if ch == '?' {
+                    match param_iter.next() {
+                        Some(v) => result.push_str(v),
+                        None => result.push('?'),
+                    }
+                } else {
+                    result.push(ch);
+                }
+            }
+            result
+        };
+
+        self.on_query(&bound, writer)
     }
 
     fn on_close(&mut self, id: u32) {

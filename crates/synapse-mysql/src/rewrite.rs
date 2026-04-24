@@ -47,6 +47,23 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         });
     }
 
+    // CREATE DATABASE / DROP DATABASE -> no-op (SQLite is single-file, no DB concept)
+    if upper.starts_with("CREATE DATABASE") || upper.starts_with("CREATE SCHEMA")
+        || upper.starts_with("DROP DATABASE") || upper.starts_with("DROP SCHEMA")
+    {
+        return Ok("SELECT 1".to_string());
+    }
+
+    // USE <db> -> no-op
+    if upper.starts_with("USE ") {
+        return Ok("SELECT 1".to_string());
+    }
+
+    // ANALYZE TABLE -> no-op (SQLite uses ANALYZE without TABLE keyword)
+    if upper.starts_with("ANALYZE TABLE") || upper.starts_with("ANALYZE ") {
+        return Ok("SELECT 1".to_string());
+    }
+
     // SHOW TABLES
     if upper.starts_with("SHOW TABLES") {
         return Ok("SELECT name as Tables_in_database FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_mysql_%'".to_string());
@@ -245,6 +262,12 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
 
     // SQL_CALC_FOUND_ROWS is MySQL-only; SQLite has no equivalent, strip it
     out = Regex::new(r"(?i)\bSQL_CALC_FOUND_ROWS\b\s*").unwrap().replace(&out, "").to_string();
+
+    // FORCE INDEX(...) / USE INDEX(...) / IGNORE INDEX(...) -> strip (SQLite has no index hints)
+    out = Regex::new(r"(?i)\b(?:FORCE|USE|IGNORE)\s+INDEX\s*\([^)]*\)\s*").unwrap().replace_all(&out, "").to_string();
+
+    // TiDB clustered_index hint -> strip (/*T![clustered_index] CLUSTERED */)
+    out = Regex::new(r"(?i)/\*T!\[clustered_index\][^*]*\*/\s*").unwrap().replace_all(&out, "").to_string();
 
     // General MySQL -> SQLite rewrites (case-insensitive)
     out = out.replace("`", "\"");
