@@ -1,0 +1,8 @@
+# HammerDB — SKIP
+# Date: 2026-04-23
+# Status: SKIP
+# Reason: Not installable via brew (no bottle, no cask).
+#         Requires macOS DMG download + Tcl 8.6 + MySQL C client.
+#         Estimated effort: 4h+ (Tcl dep wrangling on M4 Max arm64).
+#         Additionally, Synapse-MySQL SSL capability bug would block anyway.
+# Would test: TPC-C (TPROC-C) 1 warehouse, 10 min run

@@ -1,0 +1,27 @@
+# sysbench 1.0.20 — MySQL 8.0.46 (wp3_db_c, port 13308)
+# tables=4, table-size=10000, time=30s
+# Date: 2026-04-23
+# Note: Synapse-MySQL (:3309) BLOCKED — mariadb connector rejects connection
+#       because synapse advertises CLIENT_SSL (cap_lo=0x7d6b, bit 0x0800 set)
+#       but does not implement TLS handshake. Real MySQL:8.0 cap_lo=0x170e (no SSL bit).
+#       Error: "TLS/SSL error: SSL is required, but the server does not support it"
+
+=== oltp_read_only ===
+threads=1:  TPS=23.77  QPS=380.38   avg_lat=42.05ms  max_lat=1904ms
+threads=8:  TPS=108.51 QPS=1736.19  avg_lat=70.50ms  max_lat=6803ms
+
+=== oltp_read_write ===
+threads=1:  TPS=7.20   QPS=143.94   avg_lat=138.93ms max_lat=4404ms
+threads=8:  TPS=47.03  QPS=940.66   avg_lat=169.87ms max_lat=2541ms
+
+=== oltp_point_select ===
+threads=1:  TPS=242.16 QPS=242.16   avg_lat=4.13ms   max_lat=N/A
+threads=8:  TPS=2860.31 QPS=2860.31 avg_lat=2.80ms   max_lat=N/A
+
+=== Synapse-MySQL proxy (:3309) ===
+STATUS: BLOCKED
+Root cause: synapse-mysql advertises CLIENT_SSL capability flag (0x0800) in
+            handshake but does not implement TLS. mariadb connector (sysbench
+            dep) treats SSL capability as mandatory and fails with error 2026.
+Fix required: Remove CLIENT_SSL bit from capability flags in synapse-mysql
+              handshake OR implement actual TLS (--tls-cert/--tls-key flags).

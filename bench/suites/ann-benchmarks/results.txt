@@ -1,0 +1,10 @@
+# ann-benchmarks — SKIP
+# Date: 2026-04-23
+# Status: SKIP
+# Reason: ann-benchmarks requires Python bindings for each engine.
+#         Synapse exposes vectors via SQLite (sqlite-vec), not a Python adapter.
+#         ann-benchmarks has no sqlite-vec connector; would need custom adapter (~8h).
+#         Alternative: VectorDBBench, but same adapter issue.
+# What would be measured: recall@10 + QPS at various nprobe values
+# Path forward: implement ann_benchmarks.module.BaseANN subclass using
+#               synapse CLI or socket, then add to benchmarks/algos/synapse.yaml

@@ -1,0 +1,26 @@
+# go-ycsb v1.0.3 (built from source, mysql tag only)
+# Target: MySQL 8.0.46 (wp3_db_c, port 13308), db=test
+# records=10000, operations=10000
+# Date: 2026-04-23
+# Note: Synapse-MySQL proxy (:3309) NOT tested — same SSL capability bug as sysbench
+#       (mariadb go driver would also reject). Blocked at connection level.
+
+=== Workload A (50% read / 50% update) ===
+threads=1:  TOTAL OPS=214.5/s  READ avg=2261µs p99=18.8ms  UPDATE avg=7128µs p99=72ms
+threads=8:  TOTAL OPS=647.2/s  READ avg=3766µs p99=30.7ms  UPDATE avg=20588µs p99=214ms
+
+=== Workload B (95% read / 5% update) ===
+threads=1:  TOTAL OPS=392.8/s  avg=2537µs  p99=25.3ms
+threads=8:  TOTAL OPS=3228.8/s avg=2426µs  p99=12.2ms
+
+=== Workload C (100% read) ===
+threads=1:  TOTAL OPS=606.7/s  avg=1641µs  p99=10.3ms
+threads=8:  TOTAL OPS=4418.4/s avg=1786µs  p99=6.5ms
+
+=== Workload F (50% read / 50% RMW) ===
+threads=1:  TOTAL OPS=214.5/s  (same run as A — RMW not separately measured)
+threads=8:  TOTAL OPS=647.2/s  (combined with A run above)
+
+=== Synapse-MySQL proxy (:3309) ===
+STATUS: BLOCKED (same SSL bug as sysbench — go mysql driver sees SSL capability
+        advertised in handshake, attempts TLS, server drops connection)

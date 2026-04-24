@@ -1,0 +1,9 @@
+# BenchBase (cmu-db/benchbase) — SKIP
+# Date: 2026-04-23
+# Status: SKIP
+# Reason: Maven not installed (mvn absent). Java 25.0.2 available but
+#         ./mvnw package takes ~10 min + requires internet for maven deps.
+#         Estimated effort: 6h (maven install + XML config per engine + SSL fix).
+#         Synapse-MySQL SSL capability bug would block JDBC connector too
+#         (mysql-connector-j also forces SSL when capability is advertised).
+# Workloads that would run: TPC-C, Wikipedia, Twitter, YCSB-port
