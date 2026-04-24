@@ -39,13 +39,19 @@ curl_total() {
 }
 
 # wp-cli exec time in ms
+ms_now() {
+  # portable: works on macOS (no %N) and Linux
+  python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null \
+    || echo $(($(date +%s) * 1000))
+}
+
 wp_time() {
   local container=$1; shift
   local t0 t1
-  t0=$(date +%s%3N)
+  t0=$(ms_now)
   docker exec "$container" wp --allow-root "$@" >/dev/null 2>&1
   local rc=$?
-  t1=$(date +%s%3N)
+  t1=$(ms_now)
   if [[ $rc -ne 0 ]]; then echo "BLOCKED"; return; fi
   echo $((t1 - t0))
 }
@@ -193,7 +199,7 @@ run_uc_for_backend() {
         --posts_per_page=1 2>/dev/null | head -1)
       [[ -z "$pid" ]] && { echo "BLOCKED(no post)"; return; }
       local t0 t1
-      t0=$(date +%s%3N)
+      t0=$(ms_now)
       for n in $(seq 1 100); do
         docker exec "$container" wp --allow-root comment create \
           --comment_post_ID="$pid" \
@@ -202,7 +208,7 @@ run_uc_for_backend() {
           --comment_approved=1 \
           --quiet 2>/dev/null || { echo "BLOCKED"; return; }
       done
-      t1=$(date +%s%3N)
+      t1=$(ms_now)
       echo $((t1 - t0))
       ;;
 
@@ -213,13 +219,13 @@ run_uc_for_backend() {
         --posts_per_page=1 2>/dev/null | head -1)
       [[ -z "$pid" ]] && { echo "BLOCKED(no post)"; return; }
       local t0 t1
-      t0=$(date +%s%3N)
+      t0=$(ms_now)
       for n in $(seq 1 100); do
         docker exec "$container" wp --allow-root post meta update \
           "$pid" "bench_key_${n}" "val_${n}" --quiet 2>/dev/null \
           || { echo "BLOCKED"; return; }
       done
-      t1=$(date +%s%3N)
+      t1=$(ms_now)
       echo $((t1 - t0))
       ;;
 
