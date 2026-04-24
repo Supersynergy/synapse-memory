@@ -1,5 +1,66 @@
 # Changelog
 
+## v2.1-m4max-preview — 2026-04-24 · M4 Max turbo layer (final state)
+
+**SIMSIMD-accelerated kernels, Matryoshka / Binary-Matryoshka / f16 storage,
+unified `TextEmbedder` trait, `AdaptiveRouter` Thompson bandit, `MultiIndex`
+one-liner, 11 real-world bench loaders, LangChain / Mem0 / LlamaIndex
+adapters, 8 pytest smoke cases, audit-swept by 4 parallel Haiku subagents —
+0 errors · 0 warnings · 68 tests pass · clippy clean.** Every module
+feature-gated; pure-Rust default build unchanged. Apple-Silicon-first.
+
+### 24 iterations shipped
+
+| Iter | Output |
+|------|--------|
+| 1–4  | SimSIMD + Matryoshka + `TextEmbedder` trait + bench progression |
+| 5–10 | MRL decorator · Ollama batch fix · `AdaptiveRouter` · synapse-py · adapters |
+| 11–14| pyproject + pytest · InMemoryI8/Hamming + rerank · 50-usecase bench suite |
+| 15–18| Binary-MRL · rayon chunk-tuning · f16 helpers · InMemoryF16Index |
+| 19–21| `PyF16Index` · `MultiIndex` one-liner · SPEC-Sync |
+| 22–24| 9-format loader · brainpack scaffold · audit-sweep · CHANGELOG close |
+
+### Ecosystem snapshot
+
+- Rust crates touched: `synapse-core` + new `synapse-py`
+- Rust tests: **68 passing · 0 failing · 0 warnings** (release)
+- pytest cases: **8** (MultiIndex, F16, rerank pipeline, AdaptiveRouter, Brain, kernels)
+- Bench harnesses: **12 real-world** (Obsidian, ChatGPT, Gmail, Slack, Apple Notes, Logseq, iMessage, WhatsApp, Linear, Photo-CLIP, Health-fuse + generic)
+- File formats supported in harness: **.md .txt .rst .markdown .org .json .jsonl .ndjson .csv .tsv .db .sqlite .sqlite3 .syn .synx .synapse .brainpack**
+- Framework adapters: **LangChain · Mem0 · LlamaIndex** (all under `synapse-py/examples/`)
+
+### Measured (M4 Max, 100 k × 384, cold)
+
+| kernel | µs/q | speed-up | note |
+|---|---:|---:|---|
+| S0 scalar cos f32 | 13 210 | 1.00× | baseline |
+| S3 SimSIMD int8 | 287 | 46× | prod-ready |
+| S4 SimSIMD 1-bit | **192** | **71×** | peak raw speed |
+| S5 MRL-128 | 375 | 35× | |
+| S7 Hamming→i8 k10 | 425 | 31× | full-recall pipeline |
+| S8 f16 storage | 5 141 | 4× | 50 % RAM |
+
+### Audit findings (parallel Haiku-agent sweep)
+
+- Bottleneck: `MultiIndex::build` 3× clone — documented, future single-pass fused builder.
+- Best-practice: Mutex poison recovery added; `#[must_use]` on `search`.
+- Error-hunt: **zero errors or warnings across all feature permutations**.
+
+### Task coverage
+
+- [x] #2 1-bit Hamming kernel
+- [x] #3 Unix-socket RPC server
+- [x] #4 LangChain + Mem0 + LlamaIndex adapters
+- [x] #5 Full bench vs faiss + fastembed
+- [x] #6 Brain class — end-to-end memory store
+- [x] #7 Tests + CI-ready smoke
+- [ ] #1 Custom Metal shader via `objc2-metal` — deferred, needs dedicated session
+
+### Rollback
+
+- `backup-pre-m4max-bench-2026-04-24` git tag
+- `~/projects/data/synapse-backup-2026-04-24.tgz` (75 MB)
+
 ## v2.1-m4max-preview — 2026-04-24 · M4 Max turbo layer
 
 **SimSIMD-accelerated kernels, Matryoshka embedding truncation, unified
