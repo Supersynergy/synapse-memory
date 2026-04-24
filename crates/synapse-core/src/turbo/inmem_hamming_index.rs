@@ -11,6 +11,10 @@
 
 use rayon::prelude::*;
 
+/// Same tuning rationale as `inmem_i8_index::SEARCH_MIN_LEN` — min rows per
+/// rayon thread, picked against M4 Max bench progression.
+const HAMMING_MIN_LEN: usize = 512;
+
 /// 1-bit Hamming-distance brute-force index.
 pub struct InMemoryHammingIndex {
     ids: Vec<i64>,
@@ -71,6 +75,7 @@ impl InMemoryHammingIndex {
         let dists: Vec<u32> = self
             .bits
             .par_chunks(self.bpr)
+            .with_min_len(HAMMING_MIN_LEN)
             .map(|row| hamming_u32(&q_bits, row))
             .collect();
         let k = k.min(dists.len());

@@ -23,6 +23,11 @@
 
 use rayon::prelude::*;
 
+/// Minimum rows per rayon thread — avoids dispatch overhead for small corpora
+/// and oversubscription for huge ones. Tuned on M4 Max (12 P + 4 E cores)
+/// where 100 k rows × 384 dim lands best with ~256 rows/chunk.
+const SEARCH_MIN_LEN: usize = 256;
+
 /// Dense int8-quantized brute-force index.
 pub struct InMemoryI8Index {
     ids: Vec<i64>,
@@ -111,6 +116,7 @@ impl InMemoryI8Index {
 
         let mut out: Vec<(i64, f32)> = rows
             .par_iter()
+            .with_min_len(SEARCH_MIN_LEN)
             .map(|&i| {
                 let row = &self.codes[i * self.dim..(i + 1) * self.dim];
                 let s = self.scales[i];
@@ -141,7 +147,8 @@ impl InMemoryI8Index {
         let scores: Vec<f32> = self
             .codes
             .par_chunks(self.dim)
-            .zip(self.scales.par_iter())
+            .with_min_len(SEARCH_MIN_LEN)
+            .zip(self.scales.par_iter().with_min_len(SEARCH_MIN_LEN))
             .map(|(row, &s)| {
                 let dot = dot_i8(&q_codes, row);
                 dot * s * q_scale
