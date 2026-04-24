@@ -128,15 +128,17 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
                         colflags: ColumnFlags::empty(),
                     });
                 }
+                // Pre-allocate rows buffer; reuse a single row Vec to reduce allocations.
                 let mut rows: Vec<Vec<String>> = Vec::new();
+                let mut vals: Vec<String> = Vec::with_capacity(cols_count);
                 let mut r = stmt.query([]).map_err(|e| format!("{}", e))?;
                 while let Ok(Some(row)) = r.next() {
-                    let mut vals = Vec::with_capacity(cols_count);
+                    vals.clear();
                     for i in 0..cols_count {
                         let v: rusqlite::types::Value = row.get(i).unwrap_or(rusqlite::types::Value::Null);
                         vals.push(rusqlite_to_string(&v));
                     }
-                    rows.push(vals);
+                    rows.push(vals.clone());
                 }
                 Ok((col_defs, rows))
             })();
@@ -144,7 +146,7 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
             match sync_result {
                 Ok((col_defs, rows)) => {
                     let mut rw = writer.start(&col_defs)?;
-                    for row in rows {
+                    for row in &rows {
                         rw.write_row(row.iter().map(|s| s.as_str()))?;
                     }
                     rw.finish()

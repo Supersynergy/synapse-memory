@@ -10,5 +10,8 @@ description = "Library-mode demo: direct Rust API vs IPC (PIONEER P1)"
 name = "synapse-lib-demo"
 path = "src/main.rs"
 
+[features]
+ann-usearch = ["synapse-core/ann-usearch"]
+
 [dependencies]
 synapse-core = { path = "../synapse-core" }

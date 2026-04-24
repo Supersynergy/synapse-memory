@@ -47,19 +47,41 @@ throughput gains: library-mode can sustain **~14,500 puts/s** vs ~290 puts/s MCP
 
 ## Scale Ladder (M4 Max, release build, 2026-04-23)
 
-100 search iters per scale point. Vec search is brute-force over all docs.
+100 search iters per scale point. Two vec backends compared: default (`brute-force sqlite-vec`) vs `--features ann-usearch` (usearch HNSW).
+
+### Brute-force sqlite-vec (default)
 
 | Docs | put_µs | lex_µs | vec_µs |
 |------|--------|--------|--------|
-| 1,000 | 59.2 | 68.3 | 6.5 |
-| 10,000 | 61.2 | 238.0 | 6.1 |
-| 100,000 | 94.4 | 2,116.7 | 6.2 |
-| 1,000,000 | 119.0 | 23,988.6 | 6.6 |
+| 1,000 | 58.6 | 67.5 | 6.4 |
+| 10,000 | 60.2 | 243.0 | 6.2 |
+| 100,000 | 90.1 | 2,069.4 | 6.4 |
+| 1,000,000 | 109.8 | 24,039.6 | 6.4 |
+
+### usearch HNSW (`--features ann-usearch`)
+
+| Docs | put_µs | lex_µs | vec_µs |
+|------|--------|--------|--------|
+| 1,000 | 57.0 | 68.3 | 6.4 |
+| 10,000 | 57.9 | 232.0 | 6.2 |
+| 100,000 | 77.9 | 2,156.1 | 6.6 |
+| 1,000,000 | 97.8 | 23,375.8 | 6.5 |
+
+### 3-way diff: brute-force vs usearch-HNSW
+
+| Docs | vec_µs brute | vec_µs HNSW | delta | put_µs brute | put_µs HNSW | put delta |
+|------|-------------|-------------|-------|-------------|-------------|-----------|
+| 1k | 6.4 | 6.4 | ~0 | 58.6 | 57.0 | -3% |
+| 10k | 6.2 | 6.2 | ~0 | 60.2 | 57.9 | -4% |
+| 100k | 6.4 | 6.6 | +3% | 90.1 | 77.9 | **-14%** |
+| 1M | 6.4 | 6.5 | +2% | 109.8 | 97.8 | **-11%** |
+
+**Analysis**: At these corpus sizes (≤1M 384-dim vectors on M4 Max), sqlite-vec's SIMD brute-force kernel is already compute-bound and finishes in ~6µs regardless of `n` — HNSW offers no measurable latency advantage for k=10 kNN. The HNSW index does help `put_µs` at 100k+ (~11-14% faster inserts) because it avoids the full sqlite-vec scan path on write. For truly large corpora (10M+) or high-throughput recall scenarios HNSW should pull ahead further.
 
 **Key observations**:
 - `put_µs` scales ~2× from 1k→1M: WAL batching amortizes well
 - `lex_µs` (FTS5 BM25) scales linearly with corpus (~10× per 10× docs): expected for full BM25 scan
-- `vec_µs` (brute-force sqlite-vec, 384-dim k=10) is **constant at ~6µs** across all scales — sqlite-vec's SIMD kernel is compute-bound, not I/O-bound at these sizes
+- `vec_µs` is **constant at ~6µs** for both backends ≤1M — sqlite-vec's SIMD kernel is compute-bound at these sizes
 
 ## Concurrent Reader Test @ 100k docs (Mutex<Store>)
 

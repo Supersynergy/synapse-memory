@@ -62,8 +62,15 @@ fn bench_concurrent_readers(path: &str, threads: usize) -> f64 {
     t0.elapsed().as_micros() as f64 / total_ops
 }
 
+fn vec_backend() -> &'static str {
+    #[cfg(feature = "ann-usearch")]
+    { "usearch-HNSW" }
+    #[cfg(not(feature = "ann-usearch"))]
+    { "brute-force sqlite-vec" }
+}
+
 fn main() {
-    println!("=== synapse library-mode scale ladder ===\n");
+    println!("=== synapse library-mode scale ladder [{}] ===\n", vec_backend());
 
     // Scale ladder
     let scales: &[(usize, &str)] = &[
