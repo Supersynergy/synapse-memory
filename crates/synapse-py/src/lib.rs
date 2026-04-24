@@ -93,6 +93,55 @@ impl PyBrain {
             .map_err(|e| PyRuntimeError::new_err(format!("search: {e}")))?;
         Ok(hits.into_iter().map(|h| (h.id, h.text, h.score)).collect())
     }
+
+    /// Vector search — client supplies the query embedding.
+    ///
+    /// Use this when embeddings are computed client-side (e.g. via a Python
+    /// `sentence-transformers` or OpenAI call) to avoid a round-trip.
+    #[pyo3(signature = (embedding, limit=10))]
+    fn search_vec(&self, embedding: Vec<f32>, limit: usize) -> PyResult<Vec<(i64, String, f64)>> {
+        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let hits = g
+            .search("", SearchMode::Vec, Some(&embedding), limit)
+            .map_err(|e| PyRuntimeError::new_err(format!("search_vec: {e}")))?;
+        Ok(hits.into_iter().map(|h| (h.id, h.text, h.score)).collect())
+    }
+
+    /// Hybrid BM25 + vector search with RRF fusion.
+    #[pyo3(signature = (q, embedding, limit=10))]
+    fn search_hybrid(
+        &self,
+        q: &str,
+        embedding: Vec<f32>,
+        limit: usize,
+    ) -> PyResult<Vec<(i64, String, f64)>> {
+        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let hits = g
+            .search(q, SearchMode::Hybrid, Some(&embedding), limit)
+            .map_err(|e| PyRuntimeError::new_err(format!("search_hybrid: {e}")))?;
+        Ok(hits.into_iter().map(|h| (h.id, h.text, h.score)).collect())
+    }
+
+    /// Insert a doc with a pre-computed embedding (client-side embedder).
+    #[pyo3(signature = (text, embedding, uri=None, title=None))]
+    fn put_with_embedding(
+        &self,
+        text: String,
+        embedding: Vec<f32>,
+        uri: Option<String>,
+        title: Option<String>,
+    ) -> PyResult<i64> {
+        let req = PutRequest {
+            uri,
+            title,
+            text,
+            meta: None,
+            embedding: Some(embedding),
+        };
+        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        g.put(&req)
+            .map_err(|e| PyRuntimeError::new_err(format!("put_with_embedding: {e}")))
+    }
 }
 
 /// Module entry point. Exposed to Python as `synapse`.
