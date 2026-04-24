@@ -123,27 +123,39 @@ def _load_sqlite(p: Path) -> list[str]:
     return out
 
 def _load_synapse(p: Path) -> list[str]:
-    """`.synx / .brainpack / .syn / .synapse` — delegate to synapse-core.
+    """`.synx / .brainpack / .syn / .synapse` — native Synapse formats.
 
-    Current Python bindings don't yet expose the snap/brainpack readers, so
-    this just extracts any embedded plain-text payload by scanning for
-    printable UTF-8 runs. Good enough for bench-framing; a native reader
-    ships in a later iter.
+    Preferred path: `synapse.brainpack_unpack` (Rust backend) for `.brainpack`
+    archives; then extract text via utf-8 scan on the resulting `.synx` body
+    until the synx-native text reader is wired (tracked for synapse-py v0.3).
     """
-    try:
-        raw = p.read_bytes()
-    except Exception:
-        return []
-    # strip zstd frame if present; fall back to raw scan
-    if raw[:4] == b"\x28\xb5\x2f\xfd":
-        try:
-            import zstandard as zstd
-            raw = zstd.ZstdDecompressor().decompress(raw)
-        except Exception:
-            pass
-    # extract UTF-8 runs of length ≥ 8
     import re
-    return [m for m in re.findall(rb"[\x20-\x7e]{8,}", raw)] if False else [
+    import tempfile
+    raw: bytes | None = None
+    s = p.suffix.lower()
+    if s == ".brainpack" and _SYNAPSE_AVAILABLE:
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".synx", delete=False) as tmp:
+                tmp_path = tmp.name
+            synapse.brainpack_unpack(str(p), tmp_path)  # type: ignore[union-attr]
+            raw = Path(tmp_path).read_bytes()
+            Path(tmp_path).unlink(missing_ok=True)
+        except Exception:
+            raw = None
+    if raw is None:
+        try:
+            raw = p.read_bytes()
+        except Exception:
+            return []
+        # zstd frame? strip it.
+        if raw[:4] == b"\x28\xb5\x2f\xfd":
+            try:
+                import zstandard as zstd  # type: ignore[import-untyped]
+                raw = zstd.ZstdDecompressor().decompress(raw)
+            except Exception:
+                pass
+    # UTF-8 runs ≥ 8 chars
+    return [
         s for s in (m.decode("utf-8", errors="ignore") for m in re.findall(rb"[\x20-\x7e]{8,}", raw))
         if s.strip()
     ]
