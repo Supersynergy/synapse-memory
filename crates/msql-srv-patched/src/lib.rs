@@ -267,19 +267,25 @@ impl<B: MysqlShim<RW>, RW: Read + Write> MysqlIntermediary<B, RW> {
 
         self.rw.write_all(&[10])?; // protocol 10
 
-        // 5.1.10 because that's what Ruby's ActiveRecord requires
-        self.rw.write_all(&b"5.0.6-alpha-msql-proxy\0"[..])?;
+        // Announce 8.0.x so mysqlnd / WP (PHP 8.3) enable modern code paths.
+        // NOTE: wp-handshake-fix branch 2026-04-23. Prior value "5.0.6-alpha-msql-proxy"
+        // triggered mysqlnd legacy fallback which cascaded into "Commands out of sync"
+        // on large payloads. See docs/WORDPRESS_STATUS_2026-04-23.md.
+        self.rw.write_all(&b"8.0.35-synapse\0"[..])?;
 
         self.rw.write_all(&[0x08, 0x00, 0x00, 0x00])?; // TODO: connection ID
-        self.rw.write_all(&b";X,po_k}\0"[..])?; // auth seed
-        let capabilities = &mut [0x00, 0x42]; // 4.1 proto
+        self.rw.write_all(&b";X,po_k}\0"[..])?; // auth seed (8 bytes + null)
+        // capabilities lower-16: CLIENT_LONG_PASSWORD|CLIENT_PROTOCOL_41|CLIENT_TRANSACTIONS
+        //                       |CLIENT_SECURE_CONNECTION = 0x0001|0x0200|0x2000|0x8000 = 0xA201
+        let capabilities = &mut [0x01, 0xa2]; // LE: 0xa201
         #[cfg(feature = "tls")]
         if tls_conf.is_some() {
             capabilities[1] |= 0x08; // SSL support flag
         }
         self.rw.write_all(capabilities)?;
         self.rw.write_all(&[0x21])?; // UTF8_GENERAL_CI
-        self.rw.write_all(&[0x00, 0x00])?; // status flags
+        // SERVER_STATUS_AUTOCOMMIT = 0x0002
+        self.rw.write_all(&[0x02, 0x00])?; // status flags
         self.rw.write_all(&[0x00, 0x00])?; // extended capabilities
         self.rw.write_all(&[0x00])?; // no plugins
         self.rw.write_all(&[0x00; 6][..])?; // filler
