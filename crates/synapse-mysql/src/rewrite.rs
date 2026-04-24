@@ -22,6 +22,31 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         return Ok("SELECT 1".to_string());
     }
 
+    // SELECT @@SESSION.* / @@GLOBAL.* MySQL system variables
+    // Replace each @@var with a literal value; keeps SELECT structure intact.
+    if upper.contains("@@") {
+        let re = Regex::new(r"@@(?:SESSION\.|GLOBAL\.)?(\w+)").unwrap();
+        let rewritten = re.replace_all(&out, |caps: &regex::Captures| {
+            let var = caps.get(1).unwrap().as_str().to_lowercase();
+            match var.as_str() {
+                "max_allowed_packet" => "67108864".to_string(),
+                "sql_mode" => "''".to_string(),
+                "character_set_client" | "character_set_connection"
+                | "character_set_results" | "collation_connection" => "'utf8mb4'".to_string(),
+                "time_zone" => "'+00:00'".to_string(),
+                "tx_isolation" | "transaction_isolation" => "'READ-COMMITTED'".to_string(),
+                _ => "''".to_string(),
+            }
+        });
+        // Ensure result is a SELECT with named columns for proper resultset
+        let r = rewritten.trim().to_string();
+        return Ok(if r.to_uppercase().starts_with("SELECT") {
+            r
+        } else {
+            format!("SELECT {} as val", r)
+        });
+    }
+
     // SHOW TABLES
     if upper.starts_with("SHOW TABLES") {
         return Ok("SELECT name as Tables_in_database FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_mysql_%'".to_string());
@@ -56,11 +81,24 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     }
 
     // SHOW FULL COLUMNS FROM / SHOW COLUMNS FROM
+    // Map pragma_table_info columns to MySQL SHOW COLUMNS shape:
+    //   Field, Type, Null, Key, Default, Extra
     if upper.starts_with("SHOW FULL COLUMNS FROM ") || upper.starts_with("SHOW COLUMNS FROM ") {
         let words: Vec<&str> = out.split_whitespace().collect();
         if let Some(t) = words.last() {
             let t = t.trim_matches('`').trim_matches('\'');
-            return Ok(format!("PRAGMA table_info('{}')", t));
+            return Ok(format!(
+                "SELECT name as Field, type as Type, \
+                 CASE \"notnull\" WHEN 1 THEN 'NO' ELSE 'YES' END as \"Null\", \
+                 CASE \"pk\" WHEN 1 THEN 'PRI' ELSE '' END as \"Key\", \
+                 dflt_value as \"Default\", \
+                 '' as Extra, \
+                 '' as Collation, \
+                 '' as Privileges, \
+                 '' as Comment \
+                 FROM pragma_table_info('{}')",
+                t
+            ));
         }
     }
 
@@ -89,12 +127,20 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         );
     }
 
-    // DESC / DESCRIBE
+    // DESC / DESCRIBE -> MySQL column shape
     if upper.starts_with("DESC ") || upper.starts_with("DESCRIBE ") {
         let parts: Vec<&str> = out.split_whitespace().collect();
         if parts.len() >= 2 {
             let t = parts[1].trim_matches('`');
-            return Ok(format!("PRAGMA table_info('{}')", t));
+            return Ok(format!(
+                "SELECT name as Field, type as Type, \
+                 CASE \"notnull\" WHEN 1 THEN 'NO' ELSE 'YES' END as \"Null\", \
+                 CASE \"pk\" WHEN 1 THEN 'PRI' ELSE '' END as \"Key\", \
+                 dflt_value as \"Default\", \
+                 '' as Extra \
+                 FROM pragma_table_info('{}')",
+                t
+            ));
         }
     }
 
