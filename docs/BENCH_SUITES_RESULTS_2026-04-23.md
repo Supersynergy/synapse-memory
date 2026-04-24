@@ -27,7 +27,17 @@
 | oltp_point_select | 1 | 242 | 242 | 4.1ms | — |
 | oltp_point_select | 8 | 2860 | 2860 | 2.8ms | — |
 
-**Synapse-MySQL (:3309)**: BLOCKED — SSL capability mismatch (see bug below)
+**Synapse-MySQL (:13308) — RERUN 2026-04-23 (CLIENT_SSL fix)**:
+
+| Workload | Threads | TPS/QPS | Avg lat |
+|----------|---------|---------|---------|
+| oltp_point_select | 1 | 4,817 | 0.21ms |
+| oltp_point_select | 8 | 16,258 | 0.49ms |
+
+SSL capability fix: RESOLVED. sysbench now connects to Synapse proxy on port 13308.
+Note: needed `CREATE USER 'wpuser'@'%'` + `GRANT ALL ON wordpress_c.*` — user was localhost-only.
+Comparison vs. direct MySQL (:13306): port 13306 not reachable from host (container-internal only).
+go-ycsb: NOT INSTALLED (binary not in PATH, workloads/ dir absent). SKIP.
 
 ---
 
