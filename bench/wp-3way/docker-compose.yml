@@ -1,0 +1,126 @@
+services:
+
+  # ── Backend A: MySQL 8.0 ──────────────────────────────────────────────────
+  db-a:
+    image: mysql:8.0
+    container_name: wp3_db_a
+    environment:
+      MYSQL_ROOT_PASSWORD: wpbench
+      MYSQL_DATABASE: wordpress_a
+      MYSQL_USER: wp
+      MYSQL_PASSWORD: wp
+    ports:
+      - "13306:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pwpbench"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  wp-a:
+    image: wordpress:php8.2-apache
+    container_name: wp3_wp_a
+    depends_on:
+      db-a:
+        condition: service_healthy
+    ports:
+      - "18081:80"
+    environment:
+      WORDPRESS_DB_HOST: db-a:3306
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: wp
+      WORDPRESS_DB_NAME: wordpress_a
+    volumes:
+      - wp_a_data:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/wp-login.php"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ── Backend B: Percona 8.0 ────────────────────────────────────────────────
+  db-b:
+    image: percona/percona-server:8.0
+    container_name: wp3_db_b
+    environment:
+      MYSQL_ROOT_PASSWORD: wpbench
+      MYSQL_DATABASE: wordpress_b
+      MYSQL_USER: wp
+      MYSQL_PASSWORD: wp
+    ports:
+      - "13307:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pwpbench"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  wp-b:
+    image: wordpress:php8.2-apache
+    container_name: wp3_wp_b
+    depends_on:
+      db-b:
+        condition: service_healthy
+    ports:
+      - "18082:80"
+    environment:
+      WORDPRESS_DB_HOST: db-b:3306
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: wp
+      WORDPRESS_DB_NAME: wordpress_b
+    volumes:
+      - wp_b_data:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/wp-login.php"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # ── Backend C: MySQL 8.0 upstream for Synapse-MySQL proxy ─────────────────
+  db-c:
+    image: mysql:8.0
+    container_name: wp3_db_c
+    environment:
+      MYSQL_ROOT_PASSWORD: wpbench
+      MYSQL_DATABASE: wordpress_c
+      MYSQL_USER: wp
+      MYSQL_PASSWORD: wp
+    ports:
+      - "13308:3306"
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-pwpbench"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  wp-c:
+    image: wordpress:php8.2-apache
+    container_name: wp3_wp_c
+    depends_on:
+      db-c:
+        condition: service_healthy
+    ports:
+      - "18083:80"
+    environment:
+      # Points to synapse-mysql proxy on host (host.docker.internal:3309)
+      WORDPRESS_DB_HOST: host.docker.internal:3309
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: wp
+      WORDPRESS_DB_NAME: wordpress_c
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - wp_c_data:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/wp-login.php"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  wp_a_data:
+  wp_b_data:
+  wp_c_data:

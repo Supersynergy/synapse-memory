@@ -1,0 +1,31 @@
+uc,backend,value_ms,notes
+UC1_cold_homepage_ttfb,MySQL8,76,HTTP 200 median 5 runs
+UC1_cold_homepage_ttfb,Percona8,62,HTTP 200 median 5 runs
+UC1_cold_homepage_ttfb,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash (mysqlnd compat)
+UC2_warm_homepage,MySQL8,73,HTTP 200 median 5 runs
+UC2_warm_homepage,Percona8,79,HTTP 200 median 5 runs
+UC2_warm_homepage,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC3_REST_posts_list,MySQL8,90,wp-json/wp/v2/posts?per_page=50
+UC3_REST_posts_list,Percona8,48,wp-json/wp/v2/posts?per_page=50
+UC3_REST_posts_list,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC4_single_post,MySQL8,63,GET /?p=1
+UC4_single_post,Percona8,70,GET /?p=1
+UC4_single_post,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC5_search,MySQL8,75,GET /?s=lorem
+UC5_search,Percona8,486,GET /?s=lorem (LIKE-based fulltext expensive on Percona 8.0)
+UC5_search,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC6_wp_options_bulk,MySQL8,0,SELECT 200 options rows sub-ms
+UC6_wp_options_bulk,Percona8,1,SELECT 200 options rows sub-ms
+UC6_wp_options_bulk,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC7_insert_post,MySQL8,9,INSERT wp_posts median 5 runs
+UC7_insert_post,Percona8,1,INSERT wp_posts median 5 runs
+UC7_insert_post,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC8_insert_100_comments,MySQL8,88,100x INSERT wp_comments total
+UC8_insert_100_comments,Percona8,183,100x INSERT wp_comments total (OOM pressure)
+UC8_insert_100_comments,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC9_update_post_meta_100x,MySQL8,79,100x INSERT ON DUPLICATE KEY wp_postmeta total
+UC9_update_post_meta_100x,Percona8,111,100x INSERT ON DUPLICATE KEY wp_postmeta total
+UC9_update_post_meta_100x,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
+UC10_concurrent_reads_ab,MySQL8,105,ab -c8 -n200 p50 latency ms
+UC10_concurrent_reads_ab,Percona8,INVALID,Percona DB OOM-crashed during ab run; 500 errors measured
+UC10_concurrent_reads_ab,Synapse-MySQL,BLOCKED,SET sql_mode handshake crash
