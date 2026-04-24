@@ -334,14 +334,12 @@ impl<B: MysqlShim<RW>, RW: Read + Write> MysqlIntermediary<B, RW> {
 
             self.rw.set_seq(seq + 1);
 
+            // If the client advertises CLIENT_SSL but we have no TLS support compiled in,
+            // silently continue in plaintext rather than dropping the connection.
+            // mysqlnd (PHP 8.x) sets this flag unconditionally even when ssl_mode=DISABLED.
+            // The client will proceed plaintext once it sees we don't send an SSL packet back.
             #[cfg(not(feature = "tls"))]
-            if handshake.capabilities.contains(CapabilityFlags::CLIENT_SSL) {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "client requested SSL despite us not advertising support for it",
-                )
-                .into());
-            }
+            let _ = handshake.capabilities.contains(CapabilityFlags::CLIENT_SSL);
 
             #[cfg(feature = "tls")]
             if handshake.capabilities.contains(CapabilityFlags::CLIENT_SSL) {
