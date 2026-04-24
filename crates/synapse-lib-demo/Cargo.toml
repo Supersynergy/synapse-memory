@@ -10,6 +10,10 @@ description = "Library-mode demo: direct Rust API vs IPC (PIONEER P1)"
 name = "synapse-lib-demo"
 path = "src/main.rs"
 
+[[bin]]
+name = "msmarco-recall"
+path = "src/msmarco_recall.rs"
+
 [features]
 ann-usearch = ["synapse-core/ann-usearch"]
 
