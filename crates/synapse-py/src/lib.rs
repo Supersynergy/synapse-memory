@@ -18,6 +18,7 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use synapse_core::turbo::adaptive_router::{AdaptiveRouter, QueryHints, Strategy};
 use synapse_core::turbo::inmem_f16_index::InMemoryF16Index;
+use synapse_core::turbo::multi_index::{MultiIndex, SearchHints};
 use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
 use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
 use synapse_core::types::{PutRequest, SearchMode};
@@ -61,6 +62,43 @@ impl PyI8Index {
     fn len(&self) -> usize { self.inner.len() }
     fn is_empty(&self) -> bool { self.inner.is_empty() }
     fn dim(&self) -> usize { self.inner.dim() }
+}
+
+/// One-call bundle: I8 + F16 + Hamming behind the AdaptiveRouter.
+///
+/// ```python
+/// idx = synapse.MultiIndex.build(rows)
+/// hits = idx.search(query, latency_budget_us=500, min_recall=0.95, k=10)
+/// ```
+#[pyclass(name = "MultiIndex")]
+pub struct PyMultiIndex {
+    inner: MultiIndex,
+}
+
+#[pymethods]
+impl PyMultiIndex {
+    #[staticmethod]
+    fn build(rows: Vec<(i64, Vec<f32>)>) -> PyResult<Self> {
+        let dim = rows.first().map(|r| r.1.len()).unwrap_or(0);
+        if rows.iter().any(|(_, v)| v.len() != dim) {
+            return Err(PyValueError::new_err("ragged rows"));
+        }
+        Ok(Self { inner: MultiIndex::build(rows) })
+    }
+
+    #[pyo3(signature = (query, latency_budget_us=0, min_recall=0.0, k=10))]
+    fn search(
+        &self,
+        query: Vec<f32>,
+        latency_budget_us: u64,
+        min_recall: f64,
+        k: usize,
+    ) -> PyResult<Vec<(i64, f32)>> {
+        Ok(self.inner.search(&query, SearchHints { latency_budget_us, min_recall, k }))
+    }
+
+    fn len(&self) -> usize { self.inner.len() }
+    fn is_empty(&self) -> bool { self.inner.is_empty() }
 }
 
 /// Dense f16-storage cosine index — 50 % RAM savings vs fp32, recall ≥ 0.99.
@@ -351,6 +389,7 @@ fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyAdaptiveRouter>()?;
     m.add_class::<PyI8Index>()?;
     m.add_class::<PyF16Index>()?;
+    m.add_class::<PyMultiIndex>()?;
     m.add_class::<PyHammingIndex>()?;
     m.add_function(wrap_pyfunction!(rerank, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;

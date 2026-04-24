@@ -21,6 +21,9 @@ pub mod f16_kernels;
 /// In-memory f16-storage brute-force index (50% RAM savings, recall ≥ 0.99).
 pub mod inmem_f16_index;
 
+/// One-call bundle — I8 + F16 + Hamming behind the AdaptiveRouter.
+pub mod multi_index;
+
 /// Candle-Metal BGE-small embedder (scaffolding; see SPEC_V2 §4 E).
 pub mod candle_metal_embedder;
 
