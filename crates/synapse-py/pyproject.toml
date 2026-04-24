@@ -1,0 +1,33 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "synapse"
+requires-python = ">=3.9"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Database",
+]
+description = "Single-file AI agent memory with SIMSIMD-accelerated hybrid search — Python bindings."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Maxim Supersynergy", email = "true@supersynergy.de" }]
+keywords = ["memory", "vector", "embedding", "agent", "rag", "simsimd", "matryoshka"]
+
+[project.urls]
+Repository = "https://github.com/Supersynergy/synapse"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "numpy>=1.26"]
+
+[tool.maturin]
+# Use ABI3 wheel targeting Python 3.9+ so a single wheel covers modern pythons.
+features = ["pyo3/abi3-py39", "pyo3/extension-module"]
+module-name = "synapse"
+# Our Cargo.toml keeps crate-type = rlib — maturin adds cdylib automatically.
