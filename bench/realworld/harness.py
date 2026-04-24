@@ -24,10 +24,10 @@ from typing import Callable, Iterable, List, Sequence, Tuple
 
 try:
     import synapse  # noqa: F401
+    _SYNAPSE_AVAILABLE = True
 except ImportError:  # pragma: no cover
-    print("synapse not installed. Run: maturin develop --release --features simsimd",
-          file=sys.stderr)
-    sys.exit(1)
+    synapse = None  # type: ignore[assignment]
+    _SYNAPSE_AVAILABLE = False
 
 
 # ---------------- Embedders -----------------------------------------------
@@ -45,21 +45,148 @@ class HashEmbedder:
 
 # ---------------- Harness core --------------------------------------------
 
-def load_corpus(src: Path, max_docs: int | None = None) -> List[Tuple[str, str]]:
-    """Return list of (doc_id, text) from a directory of text files."""
-    out: List[Tuple[str, str]] = []
-    for p in sorted(src.rglob("*")):
-        if not p.is_file(): continue
-        if p.suffix.lower() not in {".md", ".txt", ".rst"}: continue
+TEXT_SUFFIXES = {".md", ".txt", ".rst", ".markdown", ".org"}
+JSON_SUFFIXES = {".json"}
+JSONL_SUFFIXES = {".jsonl", ".ndjson"}
+CSV_SUFFIXES = {".csv", ".tsv"}
+SQLITE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
+SYNAPSE_SUFFIXES = {".syn", ".synx", ".synapse", ".brainpack"}
+
+def _load_text(p: Path) -> list[str]:
+    return [p.read_text(encoding="utf-8", errors="ignore")]
+
+def _load_json(p: Path) -> list[str]:
+    import json as _j
+    try:
+        data = _j.loads(p.read_text(encoding="utf-8", errors="ignore"))
+    except Exception:
+        return []
+    if isinstance(data, list):
+        return [
+            str(d.get("text") or d.get("content") or d.get("body") or _j.dumps(d))
+            for d in data if isinstance(d, dict)
+        ]
+    if isinstance(data, dict):
+        return [str(data.get("text") or data.get("content") or _j.dumps(data))]
+    return [str(data)]
+
+def _load_jsonl(p: Path) -> list[str]:
+    import json as _j
+    out = []
+    for line in p.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line: continue
         try:
-            out.append((str(p.relative_to(src)), p.read_text(encoding="utf-8", errors="ignore")))
+            d = _j.loads(line)
+        except Exception:
+            out.append(line); continue
+        if isinstance(d, dict):
+            out.append(str(d.get("text") or d.get("content") or d.get("body") or line))
+        else:
+            out.append(str(d))
+    return out
+
+def _load_csv(p: Path) -> list[str]:
+    import csv
+    out = []
+    delim = "\t" if p.suffix.lower() == ".tsv" else ","
+    with p.open(encoding="utf-8", errors="ignore") as f:
+        for row in csv.reader(f, delimiter=delim):
+            if row:
+                out.append(" ".join(c.strip() for c in row if c))
+    return out
+
+def _load_sqlite(p: Path) -> list[str]:
+    """Probe common text columns — synapse-native `.db` exports 'docs.text'."""
+    import sqlite3
+    try:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return []
+    out = []
+    try:
+        # Synapse-native Store: docs.text
+        for candidate in [
+            "SELECT text FROM docs WHERE text IS NOT NULL LIMIT ?",
+            "SELECT content FROM documents LIMIT ?",
+            "SELECT body FROM notes LIMIT ?",
+        ]:
+            try:
+                cur = con.execute(candidate, (100_000,))
+                out = [str(r[0]) for r in cur if r[0]]
+                if out:
+                    break
+            except sqlite3.Error:
+                continue
+    finally:
+        con.close()
+    return out
+
+def _load_synapse(p: Path) -> list[str]:
+    """`.synx / .brainpack / .syn / .synapse` — delegate to synapse-core.
+
+    Current Python bindings don't yet expose the snap/brainpack readers, so
+    this just extracts any embedded plain-text payload by scanning for
+    printable UTF-8 runs. Good enough for bench-framing; a native reader
+    ships in a later iter.
+    """
+    try:
+        raw = p.read_bytes()
+    except Exception:
+        return []
+    # strip zstd frame if present; fall back to raw scan
+    if raw[:4] == b"\x28\xb5\x2f\xfd":
+        try:
+            import zstandard as zstd
+            raw = zstd.ZstdDecompressor().decompress(raw)
+        except Exception:
+            pass
+    # extract UTF-8 runs of length ≥ 8
+    import re
+    return [m for m in re.findall(rb"[\x20-\x7e]{8,}", raw)] if False else [
+        s for s in (m.decode("utf-8", errors="ignore") for m in re.findall(rb"[\x20-\x7e]{8,}", raw))
+        if s.strip()
+    ]
+
+def _ext_loader(p: Path):
+    s = p.suffix.lower()
+    if s in TEXT_SUFFIXES:    return _load_text
+    if s in JSON_SUFFIXES:    return _load_json
+    if s in JSONL_SUFFIXES:   return _load_jsonl
+    if s in CSV_SUFFIXES:     return _load_csv
+    if s in SQLITE_SUFFIXES:  return _load_sqlite
+    if s in SYNAPSE_SUFFIXES: return _load_synapse
+    return None
+
+
+def load_corpus(src: Path, max_docs: int | None = None) -> List[Tuple[str, str]]:
+    """Return list of (doc_id, text) from a file OR a dir of files.
+
+    Supported extensions: .md/.txt/.rst/.markdown/.org (plain text),
+    .json/.jsonl/.ndjson, .csv/.tsv, .db/.sqlite, .synx/.brainpack/.syn/.synapse.
+
+    When `src` is a single file, that one file is loaded (possibly returning
+    many docs).  When it's a dir, we walk recursively.
+    """
+    out: List[Tuple[str, str]] = []
+    paths: list[Path] = [src] if src.is_file() else [p for p in sorted(src.rglob("*")) if p.is_file()]
+    for p in paths:
+        loader = _ext_loader(p)
+        if loader is None: continue
+        try:
+            for i, text in enumerate(loader(p)):
+                if not text: continue
+                key = str(p.relative_to(src)) if src.is_dir() else p.name
+                out.append((f"{key}#{i}", text))
+                if max_docs and len(out) >= max_docs: return out
         except Exception:
             continue
-        if max_docs and len(out) >= max_docs: break
     return out
 
 
 def build_indices(rows: List[Tuple[int, List[float]]]):
+    if not _SYNAPSE_AVAILABLE:
+        raise RuntimeError("synapse not installed; run: maturin develop --release --features simsimd")
     ham = synapse.HammingIndex.build(rows)
     i8 = synapse.I8Index.build(rows)
     return ham, i8
