@@ -15,6 +15,9 @@ pub mod ollama_embedder;
 #[cfg(feature = "simsimd")]
 pub mod simsimd_kernels;
 
+/// f16 (half-precision) storage + conversion helpers — 50% RAM savings.
+pub mod f16_kernels;
+
 /// Candle-Metal BGE-small embedder (scaffolding; see SPEC_V2 §4 E).
 pub mod candle_metal_embedder;
 
