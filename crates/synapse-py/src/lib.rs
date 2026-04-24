@@ -276,18 +276,6 @@ fn hamming_b8(q: Vec<u8>, db: Vec<Vec<u8>>) -> PyResult<Vec<f64>> {
         .collect())
 }
 
-/// Unpack a `.brainpack` archive to a raw `.synx` file.
-///
-/// Returns the byte-length of the extracted payload. Synapse-native format
-/// readers are under `synapse_core::synx::SynxReader` — Python-side reading
-/// is exposed via [`synapse.Brain(path)`] for the `.db` variant; the `.synx`
-/// reader is tracked for v0.3 of the Python bindings.
-#[pyfunction]
-fn brainpack_unpack(pack_path: &str, out_path: &str) -> PyResult<u64> {
-    synapse_core::brainpack::BrainPack::unpack(pack_path, out_path)
-        .map_err(|e| PyRuntimeError::new_err(format!("unpack: {e}")))
-}
-
 /// Matryoshka truncation + L2 renormalize to the first `k` dims.
 #[pyfunction]
 fn truncate_row(v: Vec<f32>, k: usize) -> PyResult<Vec<f32>> {
@@ -397,7 +385,6 @@ fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_function(wrap_pyfunction!(hamming_b8, m)?)?;
     }
     m.add_function(wrap_pyfunction!(truncate_row, m)?)?;
-    m.add_function(wrap_pyfunction!(brainpack_unpack, m)?)?;
     m.add_class::<PyBrain>()?;
     m.add_class::<PyAdaptiveRouter>()?;
     m.add_class::<PyI8Index>()?;
