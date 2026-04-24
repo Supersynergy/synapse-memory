@@ -52,5 +52,13 @@ See `examples/`:
 
 ## Benchmarks
 
-See [`docs/bench_2026-04-24/progression.md`](../../docs/bench_2026-04-24/progression.md)
-for the 8-step SIMSIMD progression (53×–71× vs scalar on M4 Max).
+- [`docs/bench_2026-04-24/vs_competitors.md`](../../docs/bench_2026-04-24/vs_competitors.md) — **head-to-head** vs scalar / ndarray-gemv on identical corpus (100 k × 384, M4 Max). Best: **Hamming → int8 rescore 308 µs · 3 250 QPS · 5× scalar with full recall**.
+- [`docs/bench_2026-04-24/progression.md`](../../docs/bench_2026-04-24/progression.md) — 8-step SIMSIMD kernel progression (S0 → S8, **71× vs scalar** peak at S4 1-bit Hamming).
+- [`docs/bench_realworld/README.md`](../../docs/bench_realworld/README.md) — 50-usecase real-world catalog (Obsidian, ChatGPT history, Gmail, Slack, Apple Notes, Logseq, iMessage, WhatsApp, Linear, photo-CLIP, health-fuse + generic).
+- [`bench/realworld/aggregator.py`](../../bench/realworld/aggregator.py) — one-call launcher → `bench_results.{json,html}` dashboard.
+
+### External harness (faiss / fastembed) — tracked for v0.3
+
+Python cross-lang comparisons live in `bench/external/`. Currently a stub;
+a full 3-way harness (faiss-cpu · fastembed · synapse) on identical BGE
+embeddings ships with v0.3.
