@@ -51,6 +51,19 @@ def test_f16_index_exact_match_and_half_ram():
     assert idx.dim() == 4
 
 
+def test_multi_index_one_call_bundle():
+    rows = [
+        (i, _unit([random.gauss(0.0, 1.0) for _ in range(16)]))
+        for i in range(50)
+    ]
+    idx = synapse.MultiIndex.build(rows)
+    assert idx.len() == 50 and not idx.is_empty()
+    hits = idx.search(rows[0][1], latency_budget_us=0, min_recall=0.0, k=5)
+    assert len(hits) == 5
+    # Top-1 should be the self-query id
+    assert hits[0][0] == 0
+
+
 def test_i8_index_exact_match():
     rows = [
         (1, _unit([1.0, 0.0, 0.0, 0.0])),
