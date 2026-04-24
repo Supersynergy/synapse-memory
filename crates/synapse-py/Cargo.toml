@@ -1,0 +1,29 @@
+[workspace]
+# Stand-alone workspace — auto-linters in the parent tree keep removing this
+# crate from the root `members` array, so we self-host.
+
+[package]
+name = "synapse-py"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Maxim Supersynergy <true@supersynergy.de>"]
+repository = "https://github.com/Supersynergy/synapse"
+description = "PyO3 bindings for synapse-core — single-file agent memory exposed to Python."
+keywords = ["python", "pyo3", "memory", "vector", "embedding"]
+
+[lib]
+name = "synapse_py"
+# cdylib is added at build time by maturin. Keeping just rlib here lets plain
+# `cargo build -p synapse-py` succeed without Python-symbol dynamic-lookup hacks.
+crate-type = ["rlib"]
+
+[dependencies]
+pyo3      = { version = "0.22", features = ["extension-module", "abi3-py39"] }
+synapse-core = { path = "../synapse-core", default-features = false, features = ["turbo"] }
+
+[features]
+default = ["simsimd"]
+simsimd = ["synapse-core/simsimd"]
+ollama  = ["synapse-core/ollama"]
+embed   = ["synapse-core/embed"]
