@@ -44,6 +44,13 @@ pub struct MultiIndex {
 
 impl MultiIndex {
     /// Build all three backends from the same `(id, Vec<f32>)` corpus.
+    ///
+    /// # Note on memory
+    /// The current impl clones the input twice so the three backend
+    /// constructors stay independent — build-time peak is `3 × N × D × 4`
+    /// bytes, dropping to `N × D × (1 + 2 + bpr/8)` after. For a 100 k × 384
+    /// corpus that's a short ~460 MB peak, falling to ~100 MB steady. A
+    /// fused-single-pass builder is tracked as a future optimization.
     #[must_use]
     pub fn build(rows: Vec<(i64, Vec<f32>)>) -> Self {
         let n = rows.len();
@@ -64,15 +71,18 @@ impl MultiIndex {
     /// Ask the router and dispatch. Falls back to [`Strategy::SimSimdI8`]
     /// when the chosen strategy isn't in-memory (e.g. RayonF32, ScalarF32
     /// aren't backed by this bundle yet — int8 is the safe all-round default).
+    #[must_use = "search returns ranked hits; discarding silently is a bug"]
     pub fn search(&self, query: &[f32], hints: SearchHints) -> Vec<(i64, f32)> {
         let k = if hints.k == 0 { 10 } else { hints.k };
-        let chosen = {
-            let g = self.router.lock().expect("router lock");
-            g.choose(&QueryHints {
+        let chosen = match self.router.lock() {
+            Ok(g) => g.choose(&QueryHints {
                 corpus_size: self.n,
                 latency_budget_us: hints.latency_budget_us,
                 min_recall: hints.min_recall,
-            })
+            }),
+            // Poisoned router → fall back to the default-safe strategy rather
+            // than propagating — search must remain available on lock recovery.
+            Err(_) => Strategy::SimSimdI8,
         };
         match chosen {
             Strategy::SimSimdHamming => {
@@ -87,7 +97,8 @@ impl MultiIndex {
         }
     }
 
-    /// Feed back observed latency + recall so the router improves.
+    /// Feed back observed latency + recall so the router improves. Silent on
+    /// poisoned lock (diagnostics belong in the caller, not here).
     pub fn observe(&self, strat: Strategy, us: f64, recall: f64) {
         if let Ok(mut g) = self.router.lock() {
             g.observe(strat, us, recall);
