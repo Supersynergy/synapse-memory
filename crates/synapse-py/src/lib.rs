@@ -16,8 +16,79 @@ use std::sync::Mutex;
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use synapse_core::turbo::adaptive_router::{AdaptiveRouter, QueryHints, Strategy};
 use synapse_core::types::{PutRequest, SearchMode};
 use synapse_core::Store;
+
+/// Python-facing wrapper around the SIMSIMD / MRL adaptive strategy picker.
+#[pyclass(name = "AdaptiveRouter")]
+pub struct PyAdaptiveRouter {
+    inner: Mutex<AdaptiveRouter>,
+}
+
+#[pymethods]
+impl PyAdaptiveRouter {
+    #[new]
+    fn new() -> Self {
+        Self { inner: Mutex::new(AdaptiveRouter::new()) }
+    }
+
+    /// Pick a strategy for the given query hints. Returns a short string
+    /// identifier: `"scalar"`, `"rayon"`, `"simsimd_f32"`, `"simsimd_i8"`,
+    /// `"simsimd_hamming"`, `"mrl_simsimd"`.
+    #[pyo3(signature = (corpus_size, latency_budget_us=0, min_recall=0.0))]
+    fn choose(&self, corpus_size: usize, latency_budget_us: u64, min_recall: f64) -> PyResult<&'static str> {
+        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        Ok(strategy_name(g.choose(&QueryHints { corpus_size, latency_budget_us, min_recall })))
+    }
+
+    /// Feed back observed wall-time (µs) + recall@10 (0..1).
+    fn observe(&self, strategy: &str, us: f64, recall: f64) -> PyResult<()> {
+        let s = strategy_from_name(strategy)
+            .ok_or_else(|| PyValueError::new_err(format!("unknown strategy: {strategy}")))?;
+        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        g.observe(s, us, recall);
+        Ok(())
+    }
+
+    /// Number of observations recorded so far.
+    fn decisions(&self) -> PyResult<u64> {
+        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        Ok(g.decisions())
+    }
+
+    /// Current `(strategy, posterior_recall, ewma_us)` tuples.
+    fn posterior(&self) -> PyResult<Vec<(&'static str, f64, f64)>> {
+        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        Ok(g.posterior_means()
+            .into_iter()
+            .map(|(s, r, u)| (strategy_name(s), r, u))
+            .collect())
+    }
+}
+
+const fn strategy_name(s: Strategy) -> &'static str {
+    match s {
+        Strategy::ScalarF32      => "scalar",
+        Strategy::RayonF32       => "rayon",
+        Strategy::SimSimdF32     => "simsimd_f32",
+        Strategy::SimSimdI8      => "simsimd_i8",
+        Strategy::SimSimdHamming => "simsimd_hamming",
+        Strategy::MrlSimSimd     => "mrl_simsimd",
+    }
+}
+
+fn strategy_from_name(s: &str) -> Option<Strategy> {
+    Some(match s {
+        "scalar"          => Strategy::ScalarF32,
+        "rayon"           => Strategy::RayonF32,
+        "simsimd_f32"     => Strategy::SimSimdF32,
+        "simsimd_i8"      => Strategy::SimSimdI8,
+        "simsimd_hamming" => Strategy::SimSimdHamming,
+        "mrl_simsimd"     => Strategy::MrlSimSimd,
+        _ => return None,
+    })
+}
 
 /// Cosine similarity between two equal-length f32 lists. Requires `simsimd` feature.
 #[cfg(feature = "simsimd")]
@@ -155,6 +226,7 @@ fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     m.add_function(wrap_pyfunction!(truncate_row, m)?)?;
     m.add_class::<PyBrain>()?;
+    m.add_class::<PyAdaptiveRouter>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
