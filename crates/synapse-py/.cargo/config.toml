@@ -1,0 +1,8 @@
+# PyO3 extension-module expects libpython symbols to resolve at import time
+# (inside the Python interpreter). When running `cargo test` outside maturin we
+# need to tell the linker to treat those symbols as dynamic lookups.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
