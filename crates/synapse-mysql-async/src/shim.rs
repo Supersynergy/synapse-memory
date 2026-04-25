@@ -37,9 +37,73 @@ const AUTOLOAD_PATTERNS: &[&str] = &[
     "select * from wp_options where autoload",
 ];
 
+/// Count `?` placeholders in SQL, ignoring those inside single/double-quoted
+/// string literals or after `--` line comments. Good enough for session-init
+/// and WordPress queries (no doc-strings, no q-quotes).
+fn count_placeholders(sql: &str) -> usize {
+    let bytes = sql.as_bytes();
+    let mut n = 0usize;
+    let mut i = 0usize;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_back = false;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if !in_double && !in_back && b == b'\'' {
+            // toggle, accounting for escaped quote ''
+            if in_single && i + 1 < bytes.len() && bytes[i + 1] == b'\'' {
+                i += 2;
+                continue;
+            }
+            in_single = !in_single;
+        } else if !in_single && !in_back && b == b'"' {
+            in_double = !in_double;
+        } else if !in_single && !in_double && b == b'`' {
+            in_back = !in_back;
+        } else if b == b'\\' && (in_single || in_double) {
+            i += 2;
+            continue;
+        } else if !in_single && !in_double && !in_back && b == b'?' {
+            n += 1;
+        } else if !in_single && !in_double && !in_back
+            && b == b'-' && i + 1 < bytes.len() && bytes[i + 1] == b'-'
+        {
+            // line comment
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        i += 1;
+    }
+    n
+}
+
 fn is_autoload_query(sql: &str) -> bool {
     let lo = sql.to_ascii_lowercase();
     AUTOLOAD_PATTERNS.iter().any(|p| lo.contains(p))
+}
+
+/// Fast byte-level scan: if the SQL contains any MySQL-ism that the rewrite
+/// layer cares about (backticks, MySQL-only funcs, CALC_FOUND_ROWS, NOW(),
+/// ON DUPLICATE KEY, etc.) trigger the full rewriter. Otherwise pass through.
+fn needs_rewrite(sql: &str) -> bool {
+    if sql.as_bytes().iter().any(|&b| b == b'`') {
+        return true;
+    }
+    let upper = sql.to_ascii_uppercase();
+    const TOKENS: &[&str] = &[
+        "SQL_CALC_FOUND_ROWS",
+        "FOUND_ROWS()",
+        "NOW(",
+        "UNIX_TIMESTAMP",
+        "GROUP_CONCAT",
+        "STR_TO_DATE",
+        "DATE_FORMAT",
+        "ON DUPLICATE KEY",
+        "REGEXP",
+    ];
+    TOKENS.iter().any(|t| upper.contains(t))
 }
 
 fn is_wp_options_write(sql: &str) -> bool {
@@ -83,7 +147,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::AsyncWrite;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 const RESULT_CACHE_CAP: usize = 4096;
 const CACHE_TTL: Duration = Duration::from_millis(500);
@@ -281,6 +345,9 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         results: QueryResultWriter<'a, W>,
     ) -> io::Result<()> {
         let t0 = Instant::now();
+        // Hot path: keep at debug! to avoid string-format + tracing dispatch on every query.
+        // At 1k+ OPS the info! cost dominates total query budget.
+        debug!("on_query: {}", sql);
         // Phase 1 MVP: handle MySQL-specific session-init queries inline so
         // pymysql/JDBC drivers can complete handshake without errors.
         let trimmed = sql.trim_end_matches(';').trim();
@@ -401,6 +468,14 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             let writer = results.start(&[]).await?;
             return writer.finish().await;
         }
+        // mysql 9.x CLI sends `select $$` as a delimiter probe; real MySQL
+        // returns a syntax error. We mirror that to keep CLI happy.
+        if upper == "SELECT $$" || upper.starts_with("SELECT $$ ") {
+            return results.error(
+                ErrorKind::ER_PARSE_ERROR,
+                b"You have an error in your SQL syntax near '$$'",
+            ).await;
+        }
         if upper.starts_with("SELECT @@") || upper.starts_with("SELECT VERSION()") {
             // metadata query — return single dummy row
             let cols = vec![Column {
@@ -415,7 +490,13 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             return writer.finish().await;
         }
         // Phase 1 MVP: skip rewrite for everything else, pass through to SQLite.
-        let rewritten = synapse_mysql::rewrite::rewrite(sql, &self.state.mode).unwrap_or_else(|_| sql.to_string());
+        // Fast-path: plain SELECT/INSERT/UPDATE/DELETE without MySQL-isms can skip rewrite entirely.
+        // Detection is byte-level, no regex, no allocation.
+        let rewritten = if needs_rewrite(sql) {
+            synapse_mysql::rewrite::rewrite(sql, &self.state.mode).unwrap_or_else(|_| sql.to_string())
+        } else {
+            sql.to_string()
+        };
         let _mode = &self.state.mode;
 
         // FOUND_ROWS() sentinel → return cached last_found_rows value
@@ -589,14 +670,28 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
 
     async fn on_prepare<'a>(
         &'a mut self,
-        _query: &'a str,
-        info: StatementMetaWriter<'a, W>,
+        query: &'a str,
+        info_writer: StatementMetaWriter<'a, W>,
     ) -> io::Result<()> {
         // Phase 1 MVP: minimal prepare reply with stmt_id, no params, no result fields.
         let id = self.next_stmt_id;
         self.next_stmt_id += 1;
-        self.prepared.insert(id, _query.to_string());
-        info.reply(id, &[], &[]).await
+        debug!("on_prepare id={}: {}", id, query);
+        self.prepared.insert(id, query.to_string());
+        // Count `?` placeholders so opensrv emits matching number of param defs.
+        // Without this, the client sends N params but we declared 0 → client mismatch.
+        // We also want 0-param fallback so `mysql` CLI's session-init queries
+        // (which contain no `?`) pass through cleanly.
+        let n_params = count_placeholders(query);
+        let param_def = Column {
+            table: String::new(),
+            column: "?".to_string(),
+            coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
+            colflags: ColumnFlags::empty(),
+            collen: 0,
+        };
+        let params: Vec<Column> = (0..n_params).map(|_| param_def.clone()).collect();
+        info_writer.reply(id, &params, &[]).await
     }
 
     async fn on_execute<'a>(
@@ -610,6 +705,7 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             .get(&stmt_id)
             .cloned()
             .unwrap_or_else(|| "SELECT 1".to_string());
+        debug!("on_execute id={}: {}", stmt_id, sql);
 
         // Collect bound parameter values from the binary protocol.
         let mut values: Vec<rusqlite::types::Value> = vec![];
@@ -699,8 +795,17 @@ fn execute_select(
         })
         .collect();
 
+    // SQLite treats `?`/`?N`/`:name`/`@name`/`$name` as bind placeholders.
+    // The MySQL `mysql` CLI session-init sends queries like `select $$` which
+    // SQLite parses as a single `$` placeholder. Without a real bind value
+    // SQLite returns "Wrong number of parameters". For text-protocol passthrough
+    // we have no bound params to give, so bind NULL for each declared placeholder
+    // and let the query run. Behaviour matches a no-op session-init probe.
+    let n_params = stmt.parameter_count();
     let mut rows: Vec<Vec<String>> = Vec::new();
-    let mut q = stmt.query([])?;
+    let nulls: Vec<rusqlite::types::Value> =
+        (0..n_params).map(|_| rusqlite::types::Value::Null).collect();
+    let mut q = stmt.query(rusqlite::params_from_iter(nulls.iter()))?;
     while let Some(row) = q.next()? {
         let mut r = Vec::with_capacity(col_count);
         for i in 0..col_count {
