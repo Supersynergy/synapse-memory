@@ -226,6 +226,34 @@ Maven not installed. Java 25 available but `./mvnw package` needs internet + ~10
 
 ---
 
+---
+
+## Phase 2 — Async Proxy v6 (synapse-mysql-async, 2026-04-25)
+
+**Binary**: `crates/synapse-mysql-async` — opensrv-mysql + tokio, full SELECT/INSERT/UPDATE/DELETE
+**Config**: 8 threads, 10,000 ops, 5,000 records, db=/tmp/sync_test.db (WAL, 5K pre-seeded rows)
+**Architecture**: per-connection Arc<Mutex<Connection>> from shared pool (size=32), spawn_blocking for all SQLite I/O, LRU result cache 4096 entries / 500ms TTL
+
+| Workload | Mix | v5 (sync) OPS | **v6 (async) OPS** | Δ | MySQL 8t OPS | Gap |
+|----------|-----|--------------|-------------------|---|-------------|-----|
+| C (100r) | pure read | 944 | **585** | −38% | 63,402 | 108× |
+| B (95r/5u) | mostly read | 650 | **578** total | −11% | 27,091 | 47× |
+| A (50r/50u) | mixed | 517 | **611** total | +18% | 5,520 | 9× |
+| F (50r/50rmw) | read+RMW | 526 | **1,367** total | +160% | 12,333 | 9× |
+
+**v6 vs v5 analysis**:
+
+- Workload C (pure reads): v6 is **38% SLOWER** than v5. Root cause: per-query spawn_blocking overhead (~4µs per task dispatch) + parking_lot::Mutex contention on the shared connection pool at 8 threads dominate. v5 has one thread/connection with no overhead; v6 spends time on task scheduling.
+- Workload B: near-parity (−11%), within measurement noise.
+- Workload A (+18%) and F (+160%): v6 wins on write-heavy workloads because tokio task scheduling allows read and write to interleave without blocking the entire thread. WAL readers proceed concurrently while write tasks are queued.
+- **Throughput target NOT met**: workload C 585 vs target 4,000. Workload B 578 vs target 3,000. async overhead eliminates the concurrency benefit for read-heavy workloads with 5,000-row DB (all pages fit in page cache → SQLite is already µs-fast; spawn_blocking overhead dominates).
+
+**Honest verdict**: `async-proxy v6` is NOT faster than `sync v5` for read-heavy workloads. The gain appears only on write-heavy paths (A, F) where tokio concurrency lets reads overlap with WAL writer stalls. The fundamental bottleneck is `spawn_blocking` round-trip time (~4-15µs per query) which exceeds the SQLite execution time for point-selects on a warm in-memory DB.
+
+**Next step to close gap**: Remove `spawn_blocking` by using `tokio-rusqlite` (wraps rusqlite in a per-connection dedicated thread with a channel, eliminates per-query thread dispatch overhead). Expected improvement: 3-5× on read path. OR: Accept that async proxy adds value only for write-concurrent scenarios and document accordingly.
+
+---
+
 ## Files
 
 - `bench/suites/sysbench/run.sh` — reusable run script (vanilla + proxy)

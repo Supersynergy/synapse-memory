@@ -10,8 +10,8 @@ use crate::rewrite::rewrite;
 use async_trait::async_trait;
 use lru::LruCache;
 use opensrv_mysql::{
-    AsyncMysqlShim, Column, ColumnFlags, ColumnType, ErrorKind, OkResponse, ParamParser,
-    QueryResultWriter, StatementMetaWriter,
+    AsyncMysqlShim, Column, ColumnFlags, ColumnType, ErrorKind, InitWriter, OkResponse,
+    ParamParser, QueryResultWriter, StatementMetaWriter,
 };
 use rusqlite::types::Value as RValue;
 use std::collections::HashMap;
@@ -470,6 +470,15 @@ impl<W: AsyncWrite + Send + Unpin> AsyncMysqlShim<W> for AsyncHandler {
         };
 
         self.dispatch_query(&bound, results).await
+    }
+
+    async fn on_init<'a>(
+        &'a mut self,
+        db: &'a str,
+        writer: InitWriter<'a, W>,
+    ) -> io::Result<()> {
+        debug!("on_init: {db}");
+        writer.ok().await
     }
 
     async fn on_close(&mut self, id: u32) {
