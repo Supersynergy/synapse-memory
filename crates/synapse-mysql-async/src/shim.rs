@@ -147,6 +147,8 @@ pub struct SynapseMysqlAsync {
     prepared: HashMap<u32, String>,
     /// Last _found_rows value from SQL_CALC_FOUND_ROWS queries, per connection.
     last_found_rows: u64,
+    /// Last insert rowid for SELECT LAST_INSERT_ID(), per connection.
+    last_insert_id: u64,
     /// Tracks whether a MySQL transaction is in progress (mapped to SQLite SAVEPOINT).
     in_tx: bool,
 }
@@ -160,6 +162,7 @@ impl SynapseMysqlAsync {
             next_stmt_id: 1,
             prepared: HashMap::new(),
             last_found_rows: 0,
+            last_insert_id: 0,
             in_tx: false,
         }
     }
@@ -236,6 +239,14 @@ fn open_conn(file: &Path) -> io::Result<Connection> {
     )
     .map_err(io_other)?;
     Ok(conn)
+}
+
+fn extract_table_name_from_show_columns(upper_sql: &str) -> String {
+    // Handles: SHOW [FULL] COLUMNS FROM `table` or table
+    let s = upper_sql
+        .replace("SHOW FULL COLUMNS FROM", "")
+        .replace("SHOW COLUMNS FROM", "");
+    s.trim().trim_matches('`').trim_matches('\'').trim_matches('"').to_string()
 }
 
 fn io_other<E: std::fmt::Display>(e: E) -> io::Error {
@@ -316,6 +327,75 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             self.in_tx = false;
             return results.completed(opensrv_mysql::OkResponse::default()).await;
         }
+        if upper.contains("SELECT DATABASE()") {
+            let cols = vec![Column {
+                table: String::new(),
+                column: "DATABASE()".to_string(),
+                coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
+                colflags: ColumnFlags::empty(),
+                collen: 0,
+            }];
+            let mut writer = results.start(&cols).await?;
+            let db_name = self.current_db.clone().unwrap_or_else(|| "wordpress".to_string());
+            writer.write_row(&[db_name.as_str()]).await?;
+            return writer.finish().await;
+        }
+        if upper.starts_with("SHOW FULL COLUMNS FROM") || upper.starts_with("SHOW COLUMNS FROM") {
+            let table = extract_table_name_from_show_columns(&upper);
+            let conn = self.get_conn().await?;
+            let table_clone = table.clone();
+            let rows = tokio::task::spawn_blocking(move || -> io::Result<Vec<Vec<String>>> {
+                let c = conn.lock();
+                let pragma_sql = format!("PRAGMA table_info(\"{}\")", table_clone);
+                let mut stmt = c.prepare(&pragma_sql).map_err(io_other)?;
+                let col_count = stmt.column_count();
+                let mut rows = Vec::new();
+                let mut q = stmt.query([]).map_err(io_other)?;
+                while let Some(row) = q.next().map_err(io_other)? {
+                    // PRAGMA table_info cols: cid, name, type, notnull, dflt_value, pk
+                    let name: String = row.get(1).unwrap_or_default();
+                    let col_type: String = row.get(2).unwrap_or_else(|_| "text".to_string());
+                    let notnull: i64 = row.get(3).unwrap_or(0);
+                    let dflt: String = row.get(4).unwrap_or_default();
+                    let pk: i64 = row.get(5).unwrap_or(0);
+                    let null_str = if notnull == 0 { "YES" } else { "NO" };
+                    let key_str = if pk == 1 { "PRI" } else { "" };
+                    let extra_str = if pk == 1 { "auto_increment" } else { "" };
+                    // Field, Type, Collation, Null, Key, Default, Extra, Privileges, Comment
+                    rows.push(vec![
+                        name,
+                        col_type.to_lowercase(),
+                        String::new(),
+                        null_str.to_string(),
+                        key_str.to_string(),
+                        dflt,
+                        extra_str.to_string(),
+                        "select,insert,update,references".to_string(),
+                        String::new(),
+                    ]);
+                }
+                Ok(rows)
+            })
+            .await
+            .map_err(io_other)??;
+
+            let cols = vec![
+                Column { table: String::new(), column: "Field".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Type".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Collation".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Null".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Key".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Default".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Extra".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Privileges".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+                Column { table: String::new(), column: "Comment".to_string(), coltype: ColumnType::MYSQL_TYPE_VAR_STRING, colflags: ColumnFlags::empty(), collen: 0 },
+            ];
+            let mut writer = results.start(&cols).await?;
+            for row in &rows {
+                writer.write_row(row).await?;
+            }
+            return writer.finish().await;
+        }
         if upper.starts_with("SHOW ") {
             // minimal SHOW response — empty result set
             let writer = results.start(&[]).await?;
@@ -353,6 +433,21 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             return writer.finish().await;
         }
 
+        // LAST_INSERT_ID() sentinel
+        if upper.contains("LAST_INSERT_ID()") {
+            let last_id = self.last_insert_id;
+            let cols = vec![Column {
+                table: String::new(),
+                column: "LAST_INSERT_ID()".to_string(),
+                coltype: ColumnType::MYSQL_TYPE_LONGLONG,
+                colflags: ColumnFlags::empty(),
+                collen: 0,
+            }];
+            let mut writer = results.start(&cols).await?;
+            writer.write_row(&[last_id.to_string()]).await?;
+            return writer.finish().await;
+        }
+
         // ── DML writes (INSERT / UPDATE / DELETE / REPLACE) ──────────────────────
         if is_dml_write(&rewritten) {
             let sql_owned = rewritten.clone();
@@ -368,6 +463,7 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
                 .await
                 .map_err(io_other)??;
             { *self.state.write_epoch.lock() += 1; }
+            self.last_insert_id = last_insert_id;
             if is_wp_options_write(&rewritten) {
                 self.state.autoload_cache.lock().clear();
                 debug!("wp_options write — autoload cache invalidated");
@@ -556,6 +652,7 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
                 .await
                 .map_err(io_other)??;
             { *self.state.write_epoch.lock() += 1; }
+            self.last_insert_id = last_insert_id;
             if is_wp_options_write(&rewritten) {
                 self.state.autoload_cache.lock().clear();
             }

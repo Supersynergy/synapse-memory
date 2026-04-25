@@ -1082,3 +1082,21 @@ Access web UI at http://localhost:6333/dashboard
 2026-04-25T17:20:02.014481Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 59 "-" "Python-urllib/3.12" 0.000053
 2026-04-25T17:20:03.524941Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections/auto_memory HTTP/1.1" 404 92 "-" "Python-urllib/3.12" 0.000322
 2026-04-25T17:20:03.533802Z  INFO storage::content_manager::toc::collection_meta_ops: Creating collection auto_memory
+2026-04-25T17:20:04.169236Z  INFO actix_web::middleware::logger: 127.0.0.1 "PUT /collections/auto_memory HTTP/1.1" 200 48 "-" "Python-urllib/3.12" 0.635498
+2026-04-25T17:20:04.471592Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections/auto_memory_queue HTTP/1.1" 404 95 "-" "Python-urllib/3.12" 0.000062
+2026-04-25T17:20:04.640791Z  INFO storage::content_manager::toc::collection_meta_ops: Creating collection auto_memory_queue
+2026-04-25T17:20:05.266920Z  INFO actix_web::middleware::logger: 127.0.0.1 "PUT /collections/auto_memory_queue HTTP/1.1" 200 48 "-" "Python-urllib/3.12" 0.626287
+2026-04-25T17:20:05.348404Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections/auto_memory_reflections HTTP/1.1" 404 101 "-" "Python-urllib/3.12" 0.000062
+2026-04-25T17:20:05.497204Z  INFO storage::content_manager::toc::collection_meta_ops: Creating collection auto_memory_reflections
+2026-04-25T17:20:06.115058Z  INFO actix_web::middleware::logger: 127.0.0.1 "PUT /collections/auto_memory_reflections HTTP/1.1" 200 48 "-" "Python-urllib/3.12" 0.617948
+2026-04-25T17:20:06.189780Z  INFO actix_web::middleware::logger: 127.0.0.1 "POST /collections/auto_memory_queue/points/scroll HTTP/1.1" 200 81 "-" "Python-urllib/3.12" 0.001514
+2026-04-25T17:20:23.133554Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000062
+2026-04-25T17:20:23.144897Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 144 "-" "Python-urllib/3.12" 0.000132
+2026-04-25T17:20:54.903265Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 143 "-" "Python-urllib/3.12" 0.000041
+2026-04-25T17:20:55.744700Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000036
+2026-04-25T17:21:19.635218Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000043
+2026-04-25T17:21:19.692581Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000052
+2026-04-25T17:21:58.279124Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000056
+2026-04-25T17:21:58.465559Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000054
+2026-04-25T17:22:29.252841Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000057
+2026-04-25T17:22:30.103209Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000055
