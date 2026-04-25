@@ -106,7 +106,7 @@ struct DocStore {
 
 impl DocStore {
     fn get_or_create(&mut self, doc_id: &str) -> &Doc {
-        self.docs.entry(doc_id.to_string()).or_insert_with(Doc::new)
+        self.docs.entry(doc_id.to_string()).or_default()
     }
 
     fn state_vector(&mut self, doc_id: &str) -> Vec<u8> {
@@ -116,7 +116,7 @@ impl DocStore {
     }
 
     fn apply_update(&mut self, doc_id: &str, update: &[u8]) -> Result<Vec<u8>> {
-        let doc = self.docs.entry(doc_id.to_string()).or_insert_with(Doc::new);
+        let doc = self.docs.entry(doc_id.to_string()).or_default();
         let mut txn = doc.transact_mut();
         txn.apply_update(Update::decode_v1(update).map_err(|e| Error::Other(e.to_string()))?)
             .map_err(|e| Error::Other(e.to_string()))?;
@@ -339,7 +339,7 @@ impl ReadWrite for UnixStream {}
 fn handle_stream(
     stream: &mut (impl Read + Write),
     store: &Arc<Mutex<DocStore>>,
-    sk: &SigningKey,
+    _sk: &SigningKey,
 ) -> Result<()> {
     let buf = read_framed(stream)?;
     let msg = decode(&buf)?;

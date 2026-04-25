@@ -18,7 +18,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 
-use shim::{new_shared_state_with_pool, SharedState, SynapseMysqlAsync};
+use shim::{new_shared_state_with_pool, SynapseMysqlAsync};
 
 #[derive(Parser)]
 #[command(

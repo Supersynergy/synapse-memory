@@ -99,7 +99,6 @@ extern crate mysql_common as myc;
 use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
-use std::iter;
 use std::net;
 
 use myc::constants::CapabilityFlags;

@@ -313,7 +313,7 @@ fn main() -> Result<()> {
                 limit,
             } => {
                 let manager = shard::ShardManager::open(manifest)?;
-                let mut e = Embedder::new_with_cache::<std::path::PathBuf>(None)?;
+                let e = Embedder::new_with_cache::<std::path::PathBuf>(None)?;
                 let q_vec = e.embed_one(&query)?;
                 let q_arr: [f32; synapse_core::types::EMBED_DIM] = q_vec
                     .try_into()

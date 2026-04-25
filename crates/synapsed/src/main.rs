@@ -422,7 +422,7 @@ async fn search(
     let hits = store.search(q, mode, emb.as_deref(), limit)?;
     let latency_us = t0.elapsed().as_micros() as u64;
     let hit_count = hits.len();
-    let top_score = hits.first().map(|h| h.score as f64).unwrap_or(0.0);
+    let top_score = hits.first().map(|h| h.score).unwrap_or(0.0);
     if let Err(e) = store.log_query(q, mode, latency_us, hit_count, top_score) {
         warn!("query_log insert failed (non-fatal): {e}");
     }

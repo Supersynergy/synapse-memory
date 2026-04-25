@@ -182,8 +182,8 @@ fn get_first_mac() -> String {
             let text = String::from_utf8_lossy(&out.stdout);
             for line in text.lines() {
                 let line = line.trim();
-                if line.starts_with("ether ") {
-                    return line[6..].trim().to_string();
+                if let Some(rest) = line.strip_prefix("ether ") {
+                    return rest.trim().to_string();
                 }
             }
         }

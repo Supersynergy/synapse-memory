@@ -1,5 +1,4 @@
 /// RRF (Reciprocal Rank Fusion) — IP kernel, migrated from synapse-core Phase 10 Day 5.
-
 pub fn rrf_fuse(ranks_a: &[f64], ranks_b: &[f64], k: f64) -> Vec<f64> {
     let len = ranks_a.len().max(ranks_b.len());
     let mut out = vec![0.0_f64; len];

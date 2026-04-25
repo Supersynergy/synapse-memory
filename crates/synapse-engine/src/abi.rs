@@ -1,6 +1,4 @@
 /// C-ABI surface — Day 1 stubs + Phase 10 Day 5 RRF kernel + Day 7 obfstr hardening.
-
-
 #[no_mangle]
 pub extern "C" fn synapse_engine_init(db_path: *const u8, db_path_len: usize) -> i32 {
     let _ = (db_path, db_path_len);
@@ -42,6 +40,12 @@ pub extern "C" fn synapse_engine_version_obf() -> *const u8 {
 ///
 /// Writes fused scores into `out_ptr[0..n]` where n = min(a_len.max(b_len), out_cap).
 /// Returns the number of elements written, or -1 on invalid input.
+///
+/// # Safety
+///
+/// `a_ptr` must point to `a_len` valid `f64` values (or be null when `a_len == 0`).
+/// `b_ptr` must point to `b_len` valid `f64` values (or be null when `b_len == 0`).
+/// `out_ptr` must point to a writable buffer of at least `out_cap` `f64` values.
 #[no_mangle]
 pub unsafe extern "C" fn synapse_engine_rrf_fuse(
     a_ptr: *const f64,

@@ -39,6 +39,7 @@ pub fn merge_meta(a: &[u8], b: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Decode meta state to key-value pairs.
+#[allow(clippy::type_complexity)]
 pub fn read_meta(state: &[u8]) -> Result<Vec<(String, String)>> {
     let doc = Doc::new();
     {

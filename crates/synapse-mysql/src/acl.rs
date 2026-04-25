@@ -39,7 +39,7 @@ pub fn mysql_native_password(password: &[u8]) -> Vec<u8> {
     let hash1 = hasher.finalize();
 
     let mut hasher2 = Sha1::new();
-    hasher2.update(&hash1);
+    hasher2.update(hash1);
     let hash2 = hasher2.finalize();
 
     let mut xor = Vec::with_capacity(20);

@@ -43,6 +43,7 @@ pub struct Store {
 
 impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        #[allow(clippy::missing_transmute_annotations)]
         unsafe {
             rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
                 sqlite_vec::sqlite3_vec_init as *const (),
@@ -90,7 +91,7 @@ impl Store {
         };
         #[cfg(not(feature = "ann-usearch"))]
         let s = {
-            let mut store = Self { conn };
+            let store = Self { conn };
             store.migrate()?;
             store
         };

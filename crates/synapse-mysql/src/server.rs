@@ -171,7 +171,7 @@ impl SynapseMySql {
         if self.write_batch.pending.len() >= WRITE_BATCH_SIZE {
             match self.flush_write_batch() {
                 Ok(affected) => writer(affected),
-                Err(e) => Err(io::Error::new(io::ErrorKind::Other, e)),
+                Err(e) => Err(io::Error::other(e)),
             }
         } else {
             writer(1) // optimistic — will be committed later
@@ -179,6 +179,7 @@ impl SynapseMySql {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn execute_read_query(
     conn: &rusqlite::Connection,
     sql: &str,
@@ -325,6 +326,7 @@ impl<W: io::Read + io::Write> MysqlShim<W> for SynapseMySql {
             }
             let _ = global_epoch; // suppress unused warning
 
+            #[allow(clippy::type_complexity)]
             let sync_result: Result<(Vec<(String, String)>, Vec<Vec<String>>), String>;
             let returned_conn: Option<rusqlite::Connection> = None;
 

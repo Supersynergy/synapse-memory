@@ -1,6 +1,8 @@
 //! synapse-mysql — MySQL wire-protocol compatibility layer for SynapseDB.
 //! Runs on port 3306 (default) and proxies/translates MySQL queries to SQLite.
 
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::net::{SocketAddr, TcpListener};
@@ -60,7 +62,7 @@ fn main() -> Result<()> {
     let shared_cache = new_shared_cache();
     let write_epoch: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));
 
-    let listener = TcpListener::bind(&cli.bind)
+    let listener = TcpListener::bind(cli.bind)
         .with_context(|| format!("bind {}", cli.bind))?;
     info!("synapse-mysql listening on {} (mode={})", cli.bind, cli.mode);
 

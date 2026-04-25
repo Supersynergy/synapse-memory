@@ -88,10 +88,12 @@ if [ ! -f "$DIR/dataset.parquet" ]; then
 fi
 
 # Select engines
-ALL_ENGINES="sqlite-vec,duckdb,lancedb,chromadb,synapse"
+ALL_ENGINES="sqlite-vec,duckdb,lancedb,chromadb,synapse,milvus"
 if [ $QDRANT_PID -ne 0 ]; then
   ALL_ENGINES="$ALL_ENGINES,qdrant"
 fi
+# pgvector: always attempt — adapter self-skips if PG unavailable
+ALL_ENGINES="$ALL_ENGINES,pgvector"
 
 # Allow skipping engines whose results already exist
 SKIP_ENGINES="${SKIP_ENGINES:-}"

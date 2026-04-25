@@ -4,7 +4,9 @@ Comprehensive benchmark: Synapse + 5 competitors
 Phases: A=bulk insert, B=update, C=60s mixed 80/20, D=8-thread concurrent select
 Metrics: ops/sec, p50/p95/p99 latency, peak RSS MB, CPU%
 """
-import argparse, os, sys, time, json, random, threading, struct, gc, tempfile, shutil
+import argparse, os, sys, time, json, random, threading, struct, gc, tempfile, shutil, subprocess
+import concurrent.futures
+from pathlib import Path
 import numpy as np
 import pyarrow.parquet as pq
 import psutil
@@ -66,6 +68,8 @@ class Adapter:
     def bulk_insert(self, docs): pass  # docs: list of dicts
     def update(self, ids, new_vecs, new_texts): pass
     def hybrid_select(self, query_vec, text_filter, k=10): pass
+    def vec_only_select(self, query_vec, k=10):
+        return self.hybrid_select(query_vec, random.choice(CATEGORIES), k)
     def teardown(self): pass
     def disk_bytes(self): return 0
 
@@ -129,6 +133,11 @@ class SqliteVecAdapter(Adapter):
             ORDER BY v.distance
         """, (query_vec, k, text_filter)).fetchall()
         return rows
+
+    def vec_only_select(self, query_vec, k=10):
+        return self.conn.execute(
+            "SELECT id, distance FROM vss WHERE vec MATCH ? AND k=?",
+            (query_vec, k)).fetchall()
 
     def disk_bytes(self):
         return os.path.getsize(self.db_path) if os.path.exists(self.db_path) else 0
@@ -315,6 +324,10 @@ class LanceDBAdapter(Adapter):
             rows = (self._tbl.search(arr, vector_column_name="vec").limit(k).to_list())
         return rows
 
+    def vec_only_select(self, query_vec, k=10):
+        arr = np.frombuffer(query_vec, dtype=np.float32).tolist()
+        return self._tbl.search(arr, vector_column_name="vec").limit(k).to_list()
+
     def disk_bytes(self):
         total = 0
         for root, dirs, files in os.walk(self.db_path):
@@ -420,6 +433,14 @@ class QdrantAdapter(Adapter):
         if r.status_code not in (200, 201):
             raise RuntimeError(f"Qdrant update failed: {r.text[:200]}")
 
+    def vec_only_select(self, query_vec, k=10):
+        import requests
+        arr = np.frombuffer(query_vec, dtype=np.float32).tolist()
+        r = requests.post(f"{self.base}/collections/{self.collection}/points/search",
+                          json={"vector": arr, "limit": k, "with_payload": False},
+                          timeout=10)
+        return r.json().get("result", [])
+
     def hybrid_select(self, query_vec, text_filter, k=10):
         import requests
         self._ensure_server()
@@ -486,6 +507,11 @@ class ChromaAdapter(Adapter):
             query_embeddings=[arr], n_results=k,
             where={"category": {"$eq": text_filter}},
         )
+        return r["ids"][0] if r["ids"] else []
+
+    def vec_only_select(self, query_vec, k=10):
+        arr = np.frombuffer(query_vec, dtype=np.float32).tolist()
+        r = self.col.query(query_embeddings=[arr], n_results=k)
         return r["ids"][0] if r["ids"] else []
 
     def disk_bytes(self):
@@ -592,6 +618,18 @@ class SynapseAdapter(Adapter):
             """, (query_vec, k, text_filter)).fetchall()
             return rows
 
+    def vec_only_select(self, query_vec, k=10):
+        if self._use_daemon:
+            import requests
+            arr = np.frombuffer(query_vec, dtype=np.float32).tolist()
+            r = requests.post("http://localhost:9477/query",
+                              json={"vec": arr, "k": k}, timeout=5)
+            return r.json().get("results", [])
+        else:
+            return self.conn.execute(
+                "SELECT id, distance FROM vss WHERE vec MATCH ? AND k=?",
+                (query_vec, k)).fetchall()
+
     def disk_bytes(self):
         if not self._use_daemon and hasattr(self, "db_path"):
             return os.path.getsize(self.db_path) if os.path.exists(self.db_path) else 0
@@ -600,6 +638,191 @@ class SynapseAdapter(Adapter):
     def teardown(self):
         if not self._use_daemon and hasattr(self, "conn"):
             self.conn.close()
+
+
+# ─── Milvus-Lite adapter ──────────────────────────────────────────────────────
+
+def _check_milvus():
+    try:
+        from pymilvus import MilvusClient, DataType  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+class MilvusLiteAdapter(Adapter):
+    name = "milvus"
+
+    def setup(self, tmpdir):
+        if not _check_milvus():
+            raise RuntimeError("pymilvus not installed — run: pip install pymilvus")
+        from pymilvus import MilvusClient, DataType
+        self.path = "/tmp/milvus_bench.db"
+        Path(self.path).unlink(missing_ok=True)
+        self.client = MilvusClient(self.path)
+        schema = self.client.create_schema(auto_id=False, enable_dynamic_field=True)
+        schema.add_field("id", DataType.INT64, is_primary=True)
+        schema.add_field("vector", DataType.FLOAT_VECTOR, dim=384)
+        schema.add_field("category", DataType.VARCHAR, max_length=64)
+        index = self.client.prepare_index_params()
+        index.add_index("vector", metric_type="COSINE", index_type="AUTOINDEX")
+        self.client.create_collection("docs", schema=schema, index_params=index)
+        self._id_map = {}
+        self._id_rev = {}
+
+    def _to_int(self, str_id):
+        if str_id not in self._id_map:
+            n = len(self._id_map)
+            self._id_map[str_id] = n
+            self._id_rev[n] = str_id
+        return self._id_map[str_id]
+
+    def _from_int(self, int_id):
+        return self._id_rev.get(int_id, str(int_id))
+
+    def bulk_insert(self, docs):
+        data = [{
+            "id": self._to_int(d["id"]),
+            "vector": list(np.frombuffer(d["vec"], dtype=np.float32)),
+            "category": d["category"],
+            "text": d["text"][:200],
+        } for d in docs]
+        self.client.insert("docs", data)
+
+    def update(self, ids, new_vecs, new_texts):
+        data = [{"id": self._to_int(i), "vector": list(np.frombuffer(v, dtype=np.float32)),
+                 "category": "", "text": t[:200]}
+                for i, v, t in zip(ids, new_vecs, new_texts)]
+        self.client.upsert("docs", data)
+
+    def vec_only_select(self, query_vec, k=10):
+        arr = list(np.frombuffer(query_vec, dtype=np.float32))
+        res = self.client.search("docs", data=[arr], limit=k, output_fields=["id"])
+        return [self._from_int(int(h["id"])) for h in res[0]]
+
+    def hybrid_select(self, query_vec, text_filter, k=10):
+        arr = list(np.frombuffer(query_vec, dtype=np.float32))
+        try:
+            res = self.client.search("docs", data=[arr], limit=k,
+                                     filter=f'category == "{text_filter}"',
+                                     output_fields=["id"])
+            return [self._from_int(int(h["id"])) for h in res[0]]
+        except Exception:
+            return self.vec_only_select(query_vec, k)
+
+    def teardown(self):
+        try:
+            self.client.close()
+        except Exception:
+            pass
+        Path(self.path).unlink(missing_ok=True)
+
+
+# ─── pgvector adapter ─────────────────────────────────────────────────────────
+
+def _check_pgvector():
+    """Returns (available: bool, reason: str)."""
+    try:
+        result = subprocess.run(["pg_isready"], capture_output=True, text=True, timeout=5)
+        if result.returncode != 0:
+            return False, f"pg_isready failed: {(result.stdout + result.stderr).strip()}"
+    except FileNotFoundError:
+        return False, "pg_isready not found — PostgreSQL not installed"
+    except Exception as e:
+        return False, f"pg_isready error: {e}"
+
+    try:
+        import psycopg  # noqa: F401
+        return True, "ok"
+    except ImportError:
+        return False, "psycopg not installed — run: pip install 'psycopg[binary]'"
+
+
+class PgVectorAdapter(Adapter):
+    name = "pgvector"
+
+    def setup(self, tmpdir):
+        ok, reason = _check_pgvector()
+        if not ok:
+            raise RuntimeError(f"pgvector SKIPPED: {reason}")
+        import psycopg
+        dsn = f"dbname=postgres user={os.environ.get('USER', 'postgres')}"
+        self.conn = psycopg.connect(dsn, autocommit=True)
+        with self.conn.cursor() as c:
+            c.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            c.execute("DROP TABLE IF EXISTS bench_docs")
+            c.execute("""
+                CREATE TABLE bench_docs (
+                    id BIGINT PRIMARY KEY,
+                    embedding vector(384),
+                    category TEXT,
+                    title TEXT
+                )
+            """)
+        self._id_map = {}
+        self._id_rev = {}
+        self._index_built = False
+
+    def _to_int(self, str_id):
+        if str_id not in self._id_map:
+            n = len(self._id_map)
+            self._id_map[str_id] = n
+            self._id_rev[n] = str_id
+        return self._id_map[str_id]
+
+    def _from_int(self, int_id):
+        return self._id_rev.get(int_id, str(int_id))
+
+    def bulk_insert(self, docs):
+        rows = [(self._to_int(d["id"]),
+                 list(np.frombuffer(d["vec"], dtype=np.float32)),
+                 d["category"], d["text"][:200]) for d in docs]
+        with self.conn.cursor() as c:
+            c.executemany(
+                "INSERT INTO bench_docs(id, embedding, category, title) VALUES (%s, %s::vector, %s, %s)",
+                rows)
+        if not self._index_built:
+            try:
+                with self.conn.cursor() as c:
+                    c.execute("CREATE INDEX IF NOT EXISTS bench_docs_hnsw ON bench_docs USING hnsw (embedding vector_cosine_ops)")
+                self._index_built = True
+            except Exception as e:
+                print(f"  [pgvector] HNSW index skipped: {e}", flush=True)
+                self._index_built = True
+
+    def update(self, ids, new_vecs, new_texts):
+        rows = [(list(np.frombuffer(v, dtype=np.float32)), t[:200], self._to_int(i))
+                for i, v, t in zip(ids, new_vecs, new_texts)]
+        with self.conn.cursor() as c:
+            c.executemany(
+                "UPDATE bench_docs SET embedding=%s::vector, title=%s WHERE id=%s",
+                rows)
+
+    def vec_only_select(self, query_vec, k=10):
+        arr = list(np.frombuffer(query_vec, dtype=np.float32))
+        with self.conn.cursor() as c:
+            c.execute("SELECT id FROM bench_docs ORDER BY embedding <=> %s::vector LIMIT %s",
+                      (arr, k))
+            return [self._from_int(row[0]) for row in c.fetchall()]
+
+    def hybrid_select(self, query_vec, text_filter, k=10):
+        arr = list(np.frombuffer(query_vec, dtype=np.float32))
+        with self.conn.cursor() as c:
+            c.execute(
+                "SELECT id FROM bench_docs WHERE category=%s ORDER BY embedding <=> %s::vector LIMIT %s",
+                (text_filter, arr, k))
+            return [self._from_int(row[0]) for row in c.fetchall()]
+
+    def teardown(self):
+        try:
+            with self.conn.cursor() as c:
+                c.execute("DROP TABLE IF EXISTS bench_docs")
+        except Exception:
+            pass
+        try:
+            self.conn.close()
+        except Exception:
+            pass
 
 
 # ─── Benchmark runner ─────────────────────────────────────────────────────────
@@ -758,6 +981,8 @@ ADAPTERS = {
     "qdrant": QdrantAdapter,
     "chromadb": ChromaAdapter,
     "synapse": SynapseAdapter,
+    "milvus": MilvusLiteAdapter,
+    "pgvector": PgVectorAdapter,
 }
 
 
@@ -914,6 +1139,327 @@ def run_phase_concurrency(adapter, docs, thread_counts=(1, 4, 8, 16), duration_s
     return results
 
 
+def run_phase_f(adapter, queries, duration_s=5):
+    """Concurrency saturation sweep: ops/sec + p99 vs thread count [1,4,8,16,32,64]."""
+    thread_counts = [1, 4, 8, 16, 32, 64]
+    threads_list, ops_list, p99_list = [], [], []
+    prev_ops = None
+    saturation_threads = thread_counts[-1]
+
+    for n_threads in thread_counts:
+        latencies = []
+        lock = threading.Lock()
+        stop_event = threading.Event()
+
+        def _worker():
+            local_rng = np.random.default_rng(random.randint(0, 999999))
+            while not stop_event.is_set():
+                q = local_rng.standard_normal(384).astype(np.float32)
+                q /= np.linalg.norm(q)
+                t0 = time.perf_counter()
+                try:
+                    adapter.vec_only_select(q.tobytes(), k=10)
+                except Exception:
+                    pass
+                lat = time.perf_counter() - t0
+                with lock:
+                    latencies.append(lat)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=n_threads) as ex:
+            futs = [ex.submit(_worker) for _ in range(n_threads)]
+            time.sleep(duration_s)
+            stop_event.set()
+            for fut in futs:
+                try:
+                    fut.result(timeout=5)
+                except Exception:
+                    pass
+
+        total = len(latencies)
+        ops = total / duration_s if duration_s > 0 else 0
+        pct = percentiles(latencies)
+        threads_list.append(n_threads)
+        ops_list.append(ops)
+        p99_list.append(pct[99])
+
+        if prev_ops is not None and prev_ops > 0:
+            gain_pct = (ops - prev_ops) / prev_ops * 100
+            if gain_pct < 10.0 and saturation_threads == thread_counts[-1]:
+                saturation_threads = n_threads
+        prev_ops = ops
+        print(f"    threads={n_threads:>2d}  ops/s={ops:.0f}  p99={pct[99]:.1f}ms")
+
+    return {"phase_f_saturation": {
+        "threads": threads_list,
+        "ops_per_s": [round(o, 1) for o in ops_list],
+        "p99_ms": [round(p, 2) for p in p99_list],
+        "saturation_threads": saturation_threads,
+    }}
+
+
+def run_phase_i(adapter, queries):
+    """Cache hitrate: 1 cold call + 1000 repeat calls on identical vec."""
+    rng = np.random.default_rng(42)
+    q = rng.standard_normal(384).astype(np.float32)
+    q /= np.linalg.norm(q)
+    qvec = q.tobytes()
+
+    t0 = time.perf_counter()
+    try:
+        adapter.vec_only_select(qvec, k=10)
+    except Exception:
+        pass
+    first_ms = (time.perf_counter() - t0) * 1000
+
+    repeat_times = []
+    for _ in range(1000):
+        t0 = time.perf_counter()
+        try:
+            adapter.vec_only_select(qvec, k=10)
+        except Exception:
+            pass
+        repeat_times.append((time.perf_counter() - t0) * 1000)
+
+    mean_rep = float(np.mean(repeat_times))
+    sorted_rep = sorted(repeat_times)
+    p50 = sorted_rep[499]
+    p99 = sorted_rep[989]
+    speedup = first_ms / mean_rep if mean_rep > 0 else 0.0
+
+    return {"phase_i_cache": {
+        "first_query_ms": round(first_ms, 3),
+        "mean_repeat_ms": round(mean_rep, 4),
+        "p50_repeat_ms": round(p50, 4),
+        "p99_repeat_ms": round(p99, 4),
+        "speedup_ratio": round(speedup, 2),
+    }}
+
+
+
+def run_phase_g_parquet(adapter, parquet_path, n_docs=10000):
+    """Phase G: Parquet pre-embed bulk load — skip embedding compute, measure raw ingest."""
+    import pyarrow.parquet as pq_mod
+    proc = psutil.Process(os.getpid())
+    rss_before = proc.memory_info().rss / 1e6
+    try:
+        tbl = pq_mod.read_table(parquet_path)
+        if n_docs and n_docs < len(tbl):
+            tbl = tbl.slice(0, n_docs)
+        n = len(tbl)
+    except Exception as e:
+        return {"error": f"parquet read failed: {e}"}
+
+    name = getattr(adapter, "name", "")
+    t0 = time.perf_counter()
+    try:
+        if name == "duckdb":
+            try:
+                adapter.conn.execute("DELETE FROM docs")
+            except Exception:
+                pass
+            adapter.conn.execute(f"""
+                INSERT INTO docs (id, text, category, score, timestamp, source, lang, vec)
+                SELECT id, text, category, score, timestamp, source, lang, vec
+                FROM read_parquet('{parquet_path}') LIMIT {n}
+            """)
+        elif name == "lancedb":
+            if adapter._tbl is None:
+                adapter._tbl = adapter.db.create_table("docs_g", data=tbl, mode="overwrite")
+            else:
+                adapter._tbl.add(tbl)
+        elif name in ("sqlite-vec", "synapse"):
+            conn = getattr(adapter, "conn", None)
+            if conn is None:
+                return {"error": "no conn (daemon mode)", "wall_seconds": 0}
+            batch_size = 10000
+            ids = tbl["id"].to_pylist()
+            texts = tbl["text"].to_pylist()
+            cats = tbl["category"].to_pylist()
+            scores = tbl["score"].to_pylist()
+            tss = tbl["timestamp"].to_pylist()
+            sources = tbl["source"].to_pylist()
+            langs = tbl["lang"].to_pylist()
+            vecs_col = tbl["vec"]
+            for start in range(0, n, batch_size):
+                end = min(start + batch_size, n)
+                rows = [(ids[i], texts[i], cats[i], scores[i], tss[i], sources[i], langs[i])
+                        for i in range(start, end)]
+                conn.executemany("INSERT OR REPLACE INTO docs VALUES (?,?,?,?,?,?,?)", rows)
+                vec_rows = []
+                for i in range(start, end):
+                    raw = vecs_col[i]
+                    if hasattr(raw, "as_py"):
+                        raw = raw.as_py()
+                    vec_bytes = np.array(raw, dtype=np.float32).tobytes() if isinstance(raw, (list, tuple)) else bytes(raw)
+                    conn.execute("DELETE FROM vss WHERE id=?", (ids[i],))
+                    vec_rows.append((ids[i], vec_bytes))
+                conn.executemany("INSERT INTO vss VALUES (?,?)", vec_rows)
+                conn.commit()
+        elif name == "qdrant":
+            import requests
+            batch_size = 1000
+            ids = tbl["id"].to_pylist()
+            vecs_col = tbl["vec"]
+            cats = tbl["category"].to_pylist()
+            texts = tbl["text"].to_pylist()
+            for start in range(0, n, batch_size):
+                end = min(start + batch_size, n)
+                points = []
+                for i in range(start, end):
+                    raw = vecs_col[i]
+                    if hasattr(raw, "as_py"):
+                        raw = raw.as_py()
+                    if not isinstance(raw, list):
+                        raw = list(np.frombuffer(bytes(raw), dtype=np.float32))
+                    points.append({"id": adapter._str_to_int(ids[i]), "vector": raw,
+                                   "payload": {"category": cats[i], "text": str(texts[i])[:200]}})
+                r = requests.put(f"{adapter.base}/collections/{adapter.collection}/points",
+                                 json={"points": points}, timeout=60)
+                if r.status_code not in (200, 201):
+                    return {"error": f"qdrant upsert failed: {r.text[:200]}"}
+        elif name == "chromadb":
+            batch_size = 1000
+            ids = tbl["id"].to_pylist()
+            vecs_col = tbl["vec"]
+            docs_col = tbl["text"].to_pylist()
+            cats = tbl["category"].to_pylist()
+            for start in range(0, n, batch_size):
+                end = min(start + batch_size, n)
+                embs = []
+                for i in range(start, end):
+                    raw = vecs_col[i]
+                    if hasattr(raw, "as_py"):
+                        raw = raw.as_py()
+                    if not isinstance(raw, list):
+                        raw = list(np.frombuffer(bytes(raw), dtype=np.float32))
+                    embs.append(raw)
+                adapter.col.upsert(ids=ids[start:end], embeddings=embs,
+                    documents=[str(d)[:500] for d in docs_col[start:end]],
+                    metadatas=[{"category": cats[i]} for i in range(start, end)])
+        else:
+            return {"error": f"no parquet path for engine {name}"}
+    except Exception as e:
+        elapsed = time.perf_counter() - t0
+        return {"error": str(e), "wall_seconds": elapsed}
+
+    elapsed = time.perf_counter() - t0
+    rss_after = proc.memory_info().rss / 1e6
+    docs_per_s = n / elapsed if elapsed > 0 else 0
+    return {"docs_per_s": docs_per_s, "rss_peak_mb": rss_after,
+            "rss_delta_mb": rss_after - rss_before,
+            "disk_mb": adapter.disk_bytes() / 1e6, "wall_seconds": elapsed, "n_docs": n}
+
+
+def run_phase_h_group_commit(adapter, rows, batch_sizes=(1, 10, 100, 1000, 10000)):
+    """Phase H: Group-commit batch sweep — 5000 inserts at each batch size."""
+    N_TOTAL = 5000
+    sample = (rows * (N_TOTAL // len(rows) + 1))[:N_TOTAL] if len(rows) < N_TOTAL else rows[:N_TOTAL]
+    name = getattr(adapter, "name", "")
+    results_by_size = {}
+
+    for bsz in batch_sizes:
+        n_commits = N_TOTAL // bsz
+        run_docs = [dict(d, id=f"h_{bsz}_{d['id']}") for d in sample]
+        t0 = time.perf_counter()
+        try:
+            if name in ("sqlite-vec", "synapse"):
+                conn = getattr(adapter, "conn", None)
+                if conn is None:
+                    results_by_size[bsz] = {"error": "no conn (daemon)"}
+                    continue
+                for start in range(0, N_TOTAL, bsz):
+                    chunk = run_docs[start:start+bsz]
+                    conn.execute("BEGIN")
+                    conn.executemany("INSERT OR REPLACE INTO docs VALUES (?,?,?,?,?,?,?)",
+                        [(d["id"], d["text"], d["category"], d["score"],
+                          d["timestamp"], d["source"], d["lang"]) for d in chunk])
+                    for d in chunk:
+                        raw = d["vec"]
+                        vec_bytes = raw if isinstance(raw, (bytes, bytearray)) \
+                            else np.array(raw, dtype=np.float32).tobytes()
+                        conn.execute("DELETE FROM vss WHERE id=?", (d["id"],))
+                        conn.execute("INSERT INTO vss VALUES (?,?)", (d["id"], vec_bytes))
+                    conn.execute("COMMIT")
+            elif name == "duckdb":
+                conn = adapter.conn
+                for start in range(0, N_TOTAL, bsz):
+                    chunk = run_docs[start:start+bsz]
+                    conn.execute("BEGIN")
+                    conn.executemany("INSERT OR IGNORE INTO docs VALUES (?,?,?,?,?,?,?,?)",
+                        [(d["id"], d["text"], d["category"], d["score"],
+                          d["timestamp"], d["source"], d["lang"],
+                          np.frombuffer(d["vec"], dtype=np.float32).tolist()
+                          if isinstance(d["vec"], (bytes, bytearray)) else d["vec"])
+                         for d in chunk])
+                    conn.execute("COMMIT")
+            elif name == "lancedb":
+                import pyarrow as pa
+                _schema = pa.schema([
+                    pa.field("id", pa.string()), pa.field("text", pa.string()),
+                    pa.field("category", pa.string()), pa.field("score", pa.float64()),
+                    pa.field("timestamp", pa.int64()), pa.field("source", pa.string()),
+                    pa.field("lang", pa.string()), pa.field("vec", pa.list_(pa.float32(), 384)),
+                ])
+                for start in range(0, N_TOTAL, bsz):
+                    chunk = run_docs[start:start+bsz]
+                    lrows = [{"id": d["id"], "text": d["text"], "category": d["category"],
+                               "score": float(d["score"]), "timestamp": int(d["timestamp"]),
+                               "source": d["source"], "lang": d["lang"],
+                               "vec": np.frombuffer(d["vec"], dtype=np.float32).tolist()
+                                      if isinstance(d["vec"], (bytes, bytearray)) else list(d["vec"])}
+                              for d in chunk]
+                    if adapter._tbl is None:
+                        adapter._tbl = adapter.db.create_table(
+                            "docs", data=lrows, schema=_schema, mode="overwrite")
+                    else:
+                        adapter._tbl.add(lrows)
+            elif name == "qdrant":
+                import requests
+                for start in range(0, N_TOTAL, bsz):
+                    chunk = run_docs[start:start+bsz]
+                    points = [{"id": adapter._str_to_int(d["id"]),
+                               "vector": np.frombuffer(d["vec"], dtype=np.float32).tolist()
+                                         if isinstance(d["vec"], (bytes, bytearray)) else list(d["vec"]),
+                               "payload": {"category": d["category"]}} for d in chunk]
+                    requests.put(f"{adapter.base}/collections/{adapter.collection}/points",
+                                 json={"points": points, "wait": True}, timeout=60)
+            elif name == "chromadb":
+                for start in range(0, N_TOTAL, bsz):
+                    chunk = run_docs[start:start+bsz]
+                    embs = [np.frombuffer(d["vec"], dtype=np.float32).tolist()
+                            if isinstance(d["vec"], (bytes, bytearray)) else list(d["vec"])
+                            for d in chunk]
+                    adapter.col.add(ids=[d["id"] for d in chunk], embeddings=embs,
+                        documents=[str(d["text"])[:500] for d in chunk],
+                        metadatas=[{"category": d["category"]} for d in chunk])
+            else:
+                results_by_size[bsz] = {"error": f"unsupported engine {name}"}
+                continue
+        except Exception as e:
+            elapsed = time.perf_counter() - t0
+            results_by_size[bsz] = {"error": str(e), "wall_seconds": elapsed}
+            print(f"    [H] batch={bsz} ERROR: {e}")
+            continue
+
+        elapsed = time.perf_counter() - t0
+        ops_per_s = N_TOTAL / elapsed if elapsed > 0 else 0
+        results_by_size[bsz] = {"ops_per_s": ops_per_s, "commit_count": n_commits,
+                                 "wall_seconds": elapsed}
+        print(f"    [H] batch={bsz:>6d}  ops/s={ops_per_s:.0f}  commits={n_commits}")
+
+    best_bsz = max((b for b, v in results_by_size.items() if "ops_per_s" in v),
+                   key=lambda b: results_by_size[b]["ops_per_s"], default=None)
+    bsl = sorted(results_by_size.keys())
+    return {
+        "batch_sizes": bsl,
+        "ops_per_s": [results_by_size[b].get("ops_per_s", 0) for b in bsl],
+        "commit_counts": [results_by_size[b].get("commit_count", 0) for b in bsl],
+        "best_batch": best_bsz,
+        "best_ops_per_s": results_by_size[best_bsz]["ops_per_s"] if best_bsz else 0,
+        "details": {str(k): v for k, v in results_by_size.items()},
+    }
+
+
 def run_phase_batch_update(adapter, docs, batch_sizes=(1, 100, 1000)):
     """Batch-size sweep for updates."""
     rng = np.random.default_rng(55)
@@ -943,6 +1489,19 @@ def run_phase_batch_update(adapter, docs, batch_sizes=(1, 100, 1000)):
     return results
 
 
+def _phase_set(phases, fast):
+    if phases == "base":
+        return set("ABCD")
+    if phases == "all":
+        # H = group-commit sweep (fast); soak is gone, replaced by H
+        return set("ABCDEFGHI")
+    if phases == "fast":
+        return set("ABCDEGH")  # skip F (saturation) and I (cache) in fast shorthand
+    letters = {p.strip().upper() for p in phases.split(",")}
+    letters.add("A")
+    return letters
+
+
 def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="base", fast=False):
     tmpdir = tempfile.mkdtemp(prefix=f"bench_{adapter_cls.name}_")
     results = {"engine": adapter_cls.name, "n_docs": len(docs), "profile": "fast" if fast else "full"}
@@ -951,6 +1510,7 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
     _warmup = 0 if fast else warmup
     _n_update = fp.get("n_update", min(1000, len(docs))) if fast else min(1000, len(docs))
     _dur = fp.get("phase_c_duration", 5 if dry_run else 10) if fast else (5 if dry_run else 10)
+    _phase_letters = _phase_set(phases, fast)
 
     import signal
 
@@ -994,41 +1554,12 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
         print(f"      {phase_a['ops_sec']:.0f} ops/s  RSS={phase_a['rss_mb']:.0f}MB  disk={phase_a['disk_mb']:.1f}MB  cpu={phase_a['cpu_pct_mean']:.0f}%")
         print(f"[engine={adapter_cls.name} phase=A scale={len(docs)}] done ops_per_sec={phase_a['ops_sec']:.0f}")
 
-        print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] starting")
-        print(f"  [B] update {_n_update} docs...")
-        phase_b = run_phase_b(adapter, docs, n_update=_n_update)
-        # Sync docs snapshot so Phase E brute-force GT matches engine's current state
-        _updated_vecs = phase_b.pop("_updated_vecs", {})
-        if _updated_vecs:
-            _docs_by_id = {d["id"]: d for d in docs}
-            for _uid, _uvec in _updated_vecs.items():
-                if _uid in _docs_by_id:
-                    _docs_by_id[_uid]["vec"] = _uvec
-        results["phase_b"] = phase_b
-        print(f"      {phase_b['ops_sec']:.0f} ops/s  RSS={phase_b['rss_mb']:.0f}MB  cpu={phase_b['cpu_pct_mean']:.0f}%")
-        print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] done ops_per_sec={phase_b['ops_sec']:.0f}")
-
-        print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] starting")
-        print(f"  [C] mixed 80/20 for {_dur}s...")
-        phase_c = run_phase_c(adapter, docs, duration_s=_dur)
-        results["phase_c"] = phase_c
-        print(f"      {phase_c['ops_sec']:.1f} ops/s  p50={phase_c['p50_ms']:.1f}ms  p95={phase_c['p95_ms']:.1f}ms  p99={phase_c['p99_ms']:.1f}ms")
-        print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] done ops_per_sec={phase_c['ops_sec']:.1f}")
-
-        print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] starting")
-        print(f"  [D] 8-thread concurrent select for {_dur}s...")
-        phase_d = run_phase_d(adapter, docs, n_threads=8, duration_s=_dur)
-        results["phase_d"] = phase_d
-        print(f"      {phase_d['ops_sec']:.1f} ops/s  p99={phase_d['p99_ms']:.1f}ms")
-        print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] done ops_per_sec={phase_d['ops_sec']:.1f}")
-
-        # Cancel alarm before optional phases (brute-force recall can be slow)
+        # Cancel alarm immediately after A
         if engine_timeout > 0:
             signal.alarm(0)
             engine_timeout = 0
 
-        if phases == "all" or fast:
-            # E: recall@10
+        if "E" in _phase_letters:
             n_recall = fp.get("phase_e_queries", 50) if fast else 50
             print(f"[engine={adapter_cls.name} phase=E scale={len(docs)}] starting")
             print(f"  [E] recall@10 ({n_recall} queries vs brute-force)...")
@@ -1037,34 +1568,83 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
             print(f"      recall@10={phase_e['recall_at_10']:.3f}")
             print(f"[engine={adapter_cls.name} phase=E scale={len(docs)}] done recall={phase_e['recall_at_10']:.3f}")
 
-        if phases == "all":
-            # F: concurrency sweep
-            f_threads = fp.get("phase_f_threads", (8,)) if fast else (1, 4, 8, 16)
+        if "I" in _phase_letters:
+            print(f"[engine={adapter_cls.name} phase=I scale={len(docs)}] starting")
+            print(f"  [I] cache hitrate (1001 identical vec_only_select calls)...")
+            phase_i = run_phase_i(adapter, docs)
+            results.update(phase_i)
+            ci = phase_i["phase_i_cache"]
+            print(f"      first={ci['first_query_ms']:.2f}ms  mean_repeat={ci['mean_repeat_ms']:.4f}ms  speedup={ci['speedup_ratio']:.1f}x")
+            print(f"[engine={adapter_cls.name} phase=I scale={len(docs)}] done speedup={ci['speedup_ratio']:.1f}x")
+
+        if "B" in _phase_letters:
+            print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] starting")
+            print(f"  [B] update {_n_update} docs...")
+            phase_b = run_phase_b(adapter, docs, n_update=_n_update)
+            _updated_vecs = phase_b.pop("_updated_vecs", {})
+            if _updated_vecs:
+                _docs_by_id = {d["id"]: d for d in docs}
+                for _uid, _uvec in _updated_vecs.items():
+                    if _uid in _docs_by_id:
+                        _docs_by_id[_uid]["vec"] = _uvec
+            results["phase_b"] = phase_b
+            print(f"      {phase_b['ops_sec']:.0f} ops/s  RSS={phase_b['rss_mb']:.0f}MB  cpu={phase_b['cpu_pct_mean']:.0f}%")
+            print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] done ops_per_sec={phase_b['ops_sec']:.0f}")
+
+        if "C" in _phase_letters:
+            print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] starting")
+            print(f"  [C] mixed 80/20 for {_dur}s...")
+            phase_c = run_phase_c(adapter, docs, duration_s=_dur)
+            results["phase_c"] = phase_c
+            print(f"      {phase_c['ops_sec']:.1f} ops/s  p50={phase_c['p50_ms']:.1f}ms  p95={phase_c['p95_ms']:.1f}ms  p99={phase_c['p99_ms']:.1f}ms")
+            print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] done ops_per_sec={phase_c['ops_sec']:.1f}")
+
+        if "D" in _phase_letters:
+            print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] starting")
+            print(f"  [D] 8-thread concurrent select for {_dur}s...")
+            phase_d = run_phase_d(adapter, docs, n_threads=8, duration_s=_dur)
+            results["phase_d"] = phase_d
+            print(f"      {phase_d['ops_sec']:.1f} ops/s  p99={phase_d['p99_ms']:.1f}ms")
+            print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] done ops_per_sec={phase_d['ops_sec']:.1f}")
+
+        if "F" in _phase_letters:
+            f_dur = 3 if fast else 5
             print(f"[engine={adapter_cls.name} phase=F scale={len(docs)}] starting")
-            print(f"  [F] concurrency sweep {f_threads} threads...")
-            phase_f = run_phase_concurrency(adapter, docs, thread_counts=f_threads, duration_s=_dur)
-            results["phase_f"] = phase_f
-            print(f"[engine={adapter_cls.name} phase=F scale={len(docs)}] done")
+            print(f"  [F] concurrency saturation sweep (6 thread counts x {f_dur}s)...")
+            phase_f_result = run_phase_f(adapter, docs, duration_s=f_dur)
+            results.update(phase_f_result)
+            sat = phase_f_result["phase_f_saturation"]["saturation_threads"]
+            print(f"      saturation_threads={sat}")
+            print(f"[engine={adapter_cls.name} phase=F scale={len(docs)}] done saturation_threads={sat}")
 
-            # G: batch update sweep
-            g_batches = fp.get("phase_g_batches", (100,)) if fast else (1, 100, 1000)
-            print(f"[engine={adapter_cls.name} phase=G scale={len(docs)}] starting")
-            print(f"  [G] batch update sizes {g_batches}...")
-            phase_g = run_phase_batch_update(adapter, docs, batch_sizes=g_batches)
-            results["phase_g"] = phase_g
-            print(f"[engine={adapter_cls.name} phase=G scale={len(docs)}] done")
+        if "G" in _phase_letters:
+            g_n = fp.get("phase_g_n_docs", 10_000) if fast else 100_000
+            print(f"[engine={adapter_cls.name} phase=G scale={g_n}] starting")
+            print(f"  [G] parquet pre-embed bulk load ({g_n} docs, no embedding compute)...")
+            try:
+                phase_g = run_phase_g_parquet(adapter, DATASET, n_docs=g_n)
+                results["phase_g_parquet"] = phase_g
+                if "error" not in phase_g:
+                    print(f"      {phase_g['docs_per_s']:.0f} docs/s  rss_delta={phase_g['rss_delta_mb']:.0f}MB  disk={phase_g['disk_mb']:.1f}MB  wall={phase_g['wall_seconds']:.1f}s")
+                else:
+                    print(f"      [G] error: {phase_g['error']}")
+            except Exception as _ge:
+                results["phase_g_parquet"] = {"error": str(_ge)}
+                print(f"      [G] skipped: {_ge}")
+            print(f"[engine={adapter_cls.name} phase=G] done")
 
-            # H: soak — skip in fast mode and dry-run
-            skip_soak = fast or dry_run
-            if not skip_soak:
-                print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] starting")
-                print(f"  [H] soak test 180s mixed 80/20...")
-                phase_h = run_phase_soak(adapter, docs, duration_s=180)
-                results["phase_h"] = phase_h
-                drift = phase_h.get("ops_drift_pct", 0)
-                rss_growth = phase_h.get("rss_growth_mb", 0)
-                print(f"      ops_drift={drift:.1f}%  rss_growth={rss_growth:.0f}MB")
-                print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] done drift={drift:.1f}%")
+        if "H" in _phase_letters:
+            print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] starting")
+            print(f"  [H] group-commit batch sweep [1,10,100,1000,10000]...")
+            try:
+                phase_h = run_phase_h_group_commit(adapter, docs)
+                results["phase_h_group_commit"] = phase_h
+                if phase_h.get("best_batch"):
+                    print(f"      best_batch={phase_h['best_batch']}  best_ops/s={phase_h['best_ops_per_s']:.0f}")
+            except Exception as _he:
+                results["phase_h_group_commit"] = {"error": str(_he)}
+                print(f"      [H] skipped: {_he}")
+            print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] done")
 
         if engine_timeout > 0:
             signal.alarm(0)  # cancel alarm
@@ -1097,6 +1677,8 @@ ADAPTERS = {
     "qdrant": QdrantAdapter,
     "chromadb": ChromaAdapter,
     "synapse": SynapseAdapter,
+    "milvus": MilvusLiteAdapter,
+    "pgvector": PgVectorAdapter,
 }
 
 
@@ -1107,7 +1689,8 @@ FAST_PROFILE = {
     "phase_d_duration": 5,
     "phase_e_queries": 50,
     "phase_f_threads": (8,),       # skip 1/4/16
-    "phase_g_batches": (100,),     # skip 1/1000
+    "phase_g_batches": (100,),     # skip 1/1000 (legacy batch-update, unused)
+    "phase_g_n_docs": 10_000,      # parquet bulk load size in fast mode
     "skip_soak": True,
     "warmup": 0,                   # no warmup run
     "hnsw_ef_construction": 64,
@@ -1121,8 +1704,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Use 1k docs for validation")
     parser.add_argument("--n-docs", type=int, default=100000)
-    parser.add_argument("--phases", default="base", choices=["base", "all"],
-                        help="'base' = A/B/C/D only (compat). 'all' = +E/F/G/H (recall/concurrency/batch/soak)")
+    parser.add_argument("--phases", default="base",
+                        help="'base'=A/B/C/D, 'all'=+E/F/G/H/I, or comma-sep letters e.g. F,I")
     parser.add_argument("--profile", default="full", choices=["full", "fast"],
                         help="'fast' = 10k docs, reduced phases, ≤5 min total")
     args = parser.parse_args()

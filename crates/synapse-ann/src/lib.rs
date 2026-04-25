@@ -2,6 +2,7 @@
 //!
 //! PR-A1 shipped: `UsearchIndex` behind `ann-usearch`, with insert/remove/search
 //! + save/load/view for sidecar persistence. PR-A2 IVF-PQ still TODO.
+//!
 //! See `docs/SCALE_100M_PLAN_2026-04-23.md`, SPEC §6.
 
 #![allow(dead_code)]
@@ -18,6 +19,7 @@ pub trait AnnIndex: Send + Sync {
     fn remove(&mut self, id: u64) -> Result<usize, AnnError>;
 
     /// kNN search returning (id, distance) ascending by distance.
+    #[allow(clippy::type_complexity)]
     fn search(&self, query: &[f32], k: usize) -> Result<Vec<(u64, f32)>, AnnError>;
 
     /// Current number of inserted vectors.

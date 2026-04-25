@@ -205,7 +205,7 @@ pub fn split(source_db: &Path, out_dir: &Path, n_shards: Option<usize>) -> Resul
 
     let k = n_shards.unwrap_or_else(|| {
         let n = doc_rows.len();
-        (n / 5000).max(2).min(DEFAULT_CENTROIDS)
+        (n / 5000).clamp(2, DEFAULT_CENTROIDS)
     });
 
     // Build ndarray matrix [n_docs x EMBED_DIM]
@@ -302,6 +302,7 @@ pub fn split(source_db: &Path, out_dir: &Path, n_shards: Option<usize>) -> Resul
     })
 }
 
+#[allow(dead_code)]
 struct DocRow {
     id: i64,
     uri: Option<String>,
