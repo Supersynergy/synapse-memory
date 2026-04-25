@@ -18,7 +18,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 
-use shim::{new_shared_state, SharedState, SynapseMysqlAsync};
+use shim::{new_shared_state_with_pool, SharedState, SynapseMysqlAsync};
 
 #[derive(Parser)]
 #[command(
@@ -45,6 +45,9 @@ struct Cli {
     /// Path to TLS private key (PEM). Enables TLS when combined with --tls-cert.
     #[arg(long)]
     tls_key: Option<PathBuf>,
+    /// Maximum number of reusable SQLite connections in the shared pool.
+    #[arg(long, default_value_t = 32)]
+    pool_size: usize,
 }
 
 fn load_tls_config(cert: &PathBuf, key: &PathBuf) -> Result<Arc<tokio_rustls::rustls::ServerConfig>> {
@@ -104,7 +107,7 @@ async fn main() -> Result<()> {
             _ => anyhow::bail!("--tls-cert and --tls-key must be provided together"),
         };
 
-    let state = new_shared_state(cli.file.clone(), cli.mode.clone());
+    let state = new_shared_state_with_pool(cli.file.clone(), cli.mode.clone(), cli.pool_size);
 
     let listener = TcpListener::bind(&cli.bind)
         .await

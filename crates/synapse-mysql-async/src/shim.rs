@@ -19,9 +19,16 @@ use opensrv_mysql::{
 };
 use parking_lot::Mutex;
 use rusqlite::Connection;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::num::NonZeroUsize;
+
+// ── Connection pool ───────────────────────────────────────────────────────────
+pub const DEFAULT_POOL_SIZE: usize = 32;
+
+/// Shared pool of reusable, pre-opened SQLite connections.
+/// Each entry is an Arc<Mutex<Connection>> so it can be passed into spawn_blocking.
+pub type ConnPool = Arc<Mutex<VecDeque<Arc<Mutex<Connection>>>>>;
 
 // ── wp_options autoload cache ─────────────────────────────────────────────────
 const AUTOLOAD_PATTERNS: &[&str] = &[
@@ -107,9 +114,16 @@ pub struct SharedState {
     /// WP autoload options — served from memory after first hit, invalidated
     /// on any INSERT/UPDATE/DELETE/REPLACE touching wp_options.
     pub autoload_cache: AutoloadCache,
+    /// Shared pool of reusable SQLite connections.
+    pub conn_pool: ConnPool,
+    pub pool_max: usize,
 }
 
 pub fn new_shared_state(file: PathBuf, mode: String) -> Arc<SharedState> {
+    new_shared_state_with_pool(file, mode, DEFAULT_POOL_SIZE)
+}
+
+pub fn new_shared_state_with_pool(file: PathBuf, mode: String, pool_size: usize) -> Arc<SharedState> {
     Arc::new(SharedState {
         file,
         mode,
@@ -119,12 +133,14 @@ pub fn new_shared_state(file: PathBuf, mode: String) -> Arc<SharedState> {
         write_epoch: Arc::new(Mutex::new(0)),
         postmeta_index_created: Arc::new(AtomicBool::new(false)),
         autoload_cache: Arc::new(Mutex::new(HashMap::new())),
+        conn_pool: Arc::new(Mutex::new(VecDeque::new())),
+        pool_max: pool_size,
     })
 }
 
 pub struct SynapseMysqlAsync {
     state: Arc<SharedState>,
-    /// Per-connection sqlite handle, lazily opened on first query in a blocking task.
+    /// Checked-out connection from the shared pool (returned to pool on shim drop).
     conn: Option<Arc<Mutex<Connection>>>,
     current_db: Option<String>,
     next_stmt_id: u32,
@@ -148,18 +164,37 @@ impl SynapseMysqlAsync {
         }
     }
 
-    /// Lazy-open per-connection rusqlite handle (read-mostly, WAL).
+    /// Returns a connection from the shared pool, or opens a new one.
+    /// The connection is held for the lifetime of this shim and returned to the pool on drop.
     async fn get_conn(&mut self) -> io::Result<Arc<Mutex<Connection>>> {
         if let Some(c) = &self.conn {
             return Ok(c.clone());
         }
-        let file = self.state.file.clone();
-        let conn = tokio::task::spawn_blocking(move || open_conn(&file))
-            .await
-            .map_err(io_other)??;
-        let arc = Arc::new(Mutex::new(conn));
+        // Try to get one from the pool first.
+        let pooled = self.state.conn_pool.lock().pop_front();
+        let arc = if let Some(c) = pooled {
+            c
+        } else {
+            let file = self.state.file.clone();
+            let conn = tokio::task::spawn_blocking(move || open_conn(&file))
+                .await
+                .map_err(io_other)??;
+            Arc::new(Mutex::new(conn))
+        };
         self.conn = Some(arc.clone());
         Ok(arc)
+    }
+}
+
+impl Drop for SynapseMysqlAsync {
+    fn drop(&mut self) {
+        if let Some(c) = self.conn.take() {
+            let mut guard = self.state.conn_pool.lock();
+            if guard.len() < self.state.pool_max {
+                guard.push_back(c);
+            }
+            // if pool is full, the Arc is dropped and the connection closes
+        }
     }
 }
 

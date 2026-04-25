@@ -339,17 +339,22 @@ class QdrantAdapter(Adapter):
                     return True
             except Exception:
                 pass
-            if attempt == 0:
-                # Try to start qdrant
+            if attempt < 2:
+                # Try to start qdrant — use QDRANT__STORAGE__STORAGE_PATH env var
                 qdrant_bin = "/Users/master/.local/bin/qdrant"
                 log_path = os.path.join(DIR, "qdrant.log")
+                storage_dir = os.path.join(DIR, "_qdrant_storage")
+                os.makedirs(storage_dir, exist_ok=True)
+                env = os.environ.copy()
+                env["QDRANT__STORAGE__STORAGE_PATH"] = storage_dir
                 try:
                     subprocess.Popen(
                         [qdrant_bin],
                         stdout=open(log_path, "a"),
                         stderr=subprocess.STDOUT,
+                        env=env,
                     )
-                    _time.sleep(3)
+                    _time.sleep(4)
                 except Exception:
                     pass
         return False
