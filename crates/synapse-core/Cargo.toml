@@ -52,6 +52,8 @@ synapse-ann = { path = "../synapse-ann", optional = true }
 synapse-engine = { path = "../synapse-engine" }
 async-trait = "0.1"
 tokio = { workspace = true }
+# embed-mlx feature: msgpack codec for the Python sidecar IPC.
+rmpv = { version = "1", optional = true }
 
 [dependencies.libsql]
 version = "0.9"
@@ -74,8 +76,9 @@ bench-jemalloc = ["dep:tikv-jemallocator"]
 # PR-A1-wire: enable usearch-backed Store::search_vec fast-path with
 # sidecar persistence. Default OFF per SPEC §3 (pure-Rust default build).
 ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot"]
-# Phase 5 MLX Metal embedder scaffold (Apple Silicon only). Real mlx-rs dep added Day 57.
-embed-mlx = []
+# Phase 5 MLX Metal embedder (Apple Silicon only). IPC sidecar to mlx-embeddings.
+# Implies `turbo` (needed for embedder_trait module).
+embed-mlx = ["turbo", "dep:rmpv"]
 
 [dev-dependencies]
 tempfile = "3"
@@ -93,6 +96,11 @@ path = "examples/synapse_scale_bench.rs"
 name = "bench_progression"
 path = "examples/bench_progression.rs"
 required-features = ["turbo", "simsimd"]
+
+[[example]]
+name = "bench_embed_mlx"
+path = "examples/bench_embed_mlx.rs"
+required-features = ["embed-mlx", "embed"]
 
 [lib]
 doctest = false
