@@ -175,11 +175,27 @@ pub fn pick_embedder() -> Box<dyn crate::embedder_trait::TextEmbedder> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "embed-mlx"))]
     {
         use crate::embed_mlx::MlxMetalEmbedder;
-        if let Ok(mlx) = MlxMetalEmbedder::new() {
-            return Box::new(mlx);
+        match MlxMetalEmbedder::new() {
+            Ok(mlx) => {
+                tracing::info!(
+                    backend = "mlx-metal",
+                    model = "bge-small-en-v1.5-bf16",
+                    "pick_embedder: MLX Metal selected (Apple Silicon)"
+                );
+                return Box::new(mlx);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "pick_embedder: MLX sidecar init failed, falling back to fastembed CPU"
+                );
+            }
         }
-        // MLX scaffold not ready yet — fall through to fastembed.
     }
-    // Default: fastembed ONNX CPU (always available when `embed` feature is on).
+    tracing::info!(
+        backend = "fastembed-onnx-cpu",
+        model = "bge-small-en-v1.5",
+        "pick_embedder: fastembed ONNX CPU selected"
+    );
     Box::new(Embedder::new().expect("fastembed pool init failed"))
 }

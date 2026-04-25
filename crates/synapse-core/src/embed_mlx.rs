@@ -90,11 +90,25 @@ impl Sidecar {
     }
 
     fn read_msg(&mut self) -> Result<rmpv::Value> {
+        // CRIT-2: bound msgpack frame size — untrusted u32 length prefix
+        // could otherwise force a 4 GiB allocation (DoS via crafted sidecar
+        // response or compromised script). 256 MiB is far above any
+        // legitimate batch (BGE-small @ batch=1024 ≈ 1.5 MiB).
+        const MAX_FRAME: usize = 256 * 1024 * 1024;
+
         let mut hdr = [0u8; 4];
         self.stdout
             .read_exact(&mut hdr)
             .map_err(|e| Error::Other(format!("mlx read hdr: {e}")))?;
         let n = u32::from_be_bytes(hdr) as usize;
+        if n == 0 {
+            return Err(Error::Other("mlx empty frame (n=0)".into()));
+        }
+        if n > MAX_FRAME {
+            return Err(Error::Other(format!(
+                "oversized embed frame: {n} bytes (max {MAX_FRAME})"
+            )));
+        }
         let mut buf = vec![0u8; n];
         self.stdout
             .read_exact(&mut buf)
