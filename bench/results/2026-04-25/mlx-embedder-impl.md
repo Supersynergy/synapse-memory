@@ -49,36 +49,52 @@ The plan-doc cited "p50 80ms" as fastembed baseline; on this M4 Max with the
 already-warm session pool we measure 5.15 ms — so the *absolute* number is
 better than the plan stated, while the *ratio* is in-line.
 
-## Correctness (Parity vs canonical BGE)
+## Correctness (Parity vs canonical BGE) — **RESOLVED 2026-04-25**
 
-10 paraphrase pairs, cosine vs `sentence-transformers BAAI/bge-small-en-v1.5`
-fp32 baseline:
+50 sentences, cosine vs fastembed CPU canonical (BAAI/bge-small-en-v1.5):
 
-| variant           | min    | mean   | max    |
-|-------------------|-------:|-------:|-------:|
-| MLX 4-bit         | 0.8976 | 0.9033 | —      |
-| **MLX bf16 (used)** | **0.9058** | **0.9116** | **0.9170** |
+| variant                       | n  | mean    | min     | p05     | max     | verdict |
+|-------------------------------|---:|--------:|--------:|--------:|--------:|:-------:|
+| **self-converted bf16 (CLS pool)**  | 50 | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **PASS** |
+| upstream bf16 (CLS pool)            | 50 | 1.0000  | 1.0000  | 1.0000  | 1.0000  | PASS    |
+| any bf16 (mean pool — old code)     | 50 | 0.9446  | 0.9320  | 0.9368  | 0.9571  | FAIL    |
 
-⚠️ **Below the 99% DoD bar.** Investigation showed this is **not** a pooling
-or normalization issue (the sidecar applies attention-masked mean-pool +
-L2-normalize matching BGE canonical) — the gap originates in the
-`mlx-community/bge-small-en-v1.5-bf16` HF weight conversion itself.
+DoD targets: mean >=0.99, worst-case >=0.985 — **both met (1.0000)**.
 
-**Mitigation (follow-up, not in this PR):**
-1. Re-convert directly from `BAAI/bge-small-en-v1.5` fp32 with `mlx_lm.convert
-   --dtype bfloat16` and host on `huggingface.co/supersynergy/bge-small-mlx`.
-2. Validate parity ≥0.99 cosine vs fp32 ST.
-3. Switch `SYNAPSE_MLX_MODEL` default to the new repo.
+### Root cause of previous 0.91-0.94 drift
 
-Until then, `embed-mlx` stays opt-in and is **not** wired into
-`pick_embedder()` defaults — keeps the don't-ship-a-regression guarantee.
+NOT weight conversion. The sidecar was applying **mean pooling**, but BGE's
+own `1_Pooling/config.json` declares `pooling_mode_cls_token=true`. Switching
+the sidecar to CLS pooling (first-token vector) closed the gap fully. Self-
+converted weights are byte-equivalent in output to upstream — the upstream
+conversion was never broken; the consumer was.
+
+### Self-conversion artifacts (kept as offline-ready fallback)
+
+- Source: `BAAI/bge-small-en-v1.5` fp32 .safetensors (HF snapshot)
+- Pipeline: `safetensors numpy -> mx.array -> .astype(mx.bfloat16) -> mx.save_safetensors`
+- Output: `models/bge-small-mlx-bf16/`, 63.7 MB, 199 tensors
+  (drops `embeddings.position_ids`), `config.json` patched with
+  `model_type=bert`, `architectures=[BertModel]`, `torch_dtype=bfloat16`.
+- Script: `scripts/convert-bge-fp32-to-bf16.py`.
+- Bench: `scripts/bench-mlx-parity.py` (CI-ready guard).
+
+### Status update
+
+`embed-mlx` is **default-promote eligible**. Follow-up Rust wiring:
+flip `pick_embedder()` to prefer MLX when `embed-mlx` feature is built.
+Expected Vec/Hybrid impact: 80 ms -> <10 ms (matches batch=32 0.22 ms/doc).
 
 ## Files Changed
 
 - `crates/synapse-core/Cargo.toml` — `embed-mlx = ["turbo", "dep:rmpv"]` + bench example
 - `crates/synapse-core/src/embed_mlx.rs` — IPC client (Sidecar struct, msgpack rmpv)
 - `crates/synapse-core/examples/bench_embed_mlx.rs` — bench harness
-- `scripts/synapse-mlx-embed.py` — sidecar (mean-pool + L2-norm, env-configurable model)
+- `scripts/synapse-mlx-embed.py` — sidecar (CLS-pool + L2-norm, env-configurable model;
+  default model path now resolves to local `models/bge-small-mlx-bf16/`)
+- `scripts/convert-bge-fp32-to-bf16.py` — self-conversion of BAAI fp32 -> MLX bf16
+- `scripts/bench-mlx-parity.py` — 50-sentence parity guard (fastembed vs MLX)
+- `models/bge-small-mlx-bf16/` — self-converted bf16 weights, 63.7 MB, 199 tensors
 
 ## Configuration
 
@@ -86,7 +102,8 @@ Until then, `embed-mlx` stays opt-in and is **not** wired into
 |-----------------------|------------------------------------------------------|
 | `SYNAPSE_MLX_PYTHON`  | `python3`                                            |
 | `SYNAPSE_MLX_SCRIPT`  | `<crate>/../../scripts/synapse-mlx-embed.py`         |
-| `SYNAPSE_MLX_MODEL`   | `mlx-community/bge-small-en-v1.5-bf16`               |
+| `SYNAPSE_MLX_MODEL`   | local `models/bge-small-mlx-bf16/` if present, else `mlx-community/bge-small-en-v1.5-bf16` |
+| `SYNAPSE_MLX_MODEL_PATH` | (optional explicit override, takes precedence) |
 
 ## Validation Run
 
@@ -102,5 +119,5 @@ SYNAPSE_MLX_PYTHON=~/.venvs/agents/bin/python \
 - ✅ `--features embed-mlx` builds clean
 - ✅ Live Rust→Python→MLX→Metal roundtrip verified
 - ✅ 4.6× faster on the batch path (ingest bottleneck)
-- ⚠️ Parity gap from upstream bf16 weights; **not promoted to default**
-- 🔜 Follow-up: own bf16 conversion → flip default once cosine ≥0.99
+- ✅ Parity 1.0000 vs fastembed canonical (CLS pool fix + self-conv weights)
+- 🟢 **Default-promote eligible** — flip `pick_embedder()` in next PR

@@ -14,9 +14,10 @@ one model load amortized across many embed calls.
 
 Model: mlx-community/bge-small-en-v1.5-bf16 (default) or env SYNAPSE_MLX_MODEL.
 
-Mean-pool + L2 normalize is applied here to match sentence-transformers /
-fastembed BGE behavior. (The mlx-embeddings library defaults to CLS pooling
-which produces different vectors from the canonical BGE recipe.)
+CLS-pool + L2 normalize is applied here to match BGE's canonical recipe
+(see 1_Pooling/config.json in BAAI/bge-small-en-v1.5: pooling_mode_cls_token=true).
+A previous version of this sidecar used mean-pool which produced ~0.94 cosine
+vs fastembed; CLS pooling restores parity to >=0.999.
 """
 from __future__ import annotations
 
@@ -30,7 +31,12 @@ import numpy as np
 import mlx.core as mx
 from mlx_embeddings.utils import load  # type: ignore
 
-MODEL_ID = os.environ.get("SYNAPSE_MLX_MODEL", "mlx-community/bge-small-en-v1.5-bf16")
+_DEFAULT_LOCAL = "/Users/master/projects/synapse/models/bge-small-mlx-bf16"
+MODEL_ID = (
+    os.environ.get("SYNAPSE_MLX_MODEL_PATH")
+    or os.environ.get("SYNAPSE_MLX_MODEL")
+    or (_DEFAULT_LOCAL if os.path.isdir(_DEFAULT_LOCAL) else "mlx-community/bge-small-en-v1.5-bf16")
+)
 
 
 def _read_msg(fh) -> dict | None:
@@ -51,13 +57,10 @@ def _write_msg(fh, obj: dict) -> None:
     fh.flush()
 
 
-def _mean_pool_normalize(last_hidden, attention_mask):
-    """Mean-pool with attention mask, then L2 normalize. Matches BGE canonical."""
-    # last_hidden: [B, T, D]   attention_mask: [B, T]
-    mask = attention_mask[..., None].astype(last_hidden.dtype)
-    summed = (last_hidden * mask).sum(axis=1)
-    counts = mx.maximum(mask.sum(axis=1), mx.array(1e-9, dtype=last_hidden.dtype))
-    pooled = summed / counts
+def _cls_pool_normalize(last_hidden, attention_mask):  # noqa: ARG001
+    """CLS-pool (first token) + L2 normalize. Matches BGE 1_Pooling/config.json."""
+    # last_hidden: [B, T, D]
+    pooled = last_hidden[:, 0, :]
     norms = mx.maximum(mx.linalg.norm(pooled, axis=1, keepdims=True), mx.array(1e-12))
     return pooled / norms
 
@@ -97,7 +100,7 @@ def main() -> int:
             lhs = getattr(out, "last_hidden_state", None)
             if lhs is None:
                 lhs = out[0] if isinstance(out, (tuple, list)) else out
-            pooled = _mean_pool_normalize(lhs, mask)
+            pooled = _cls_pool_normalize(lhs, mask)
             mx.eval(pooled)
             arr = np.array(pooled.tolist(), dtype=np.float32)
             vecs = [arr[i].tolist() for i in range(arr.shape[0])]

@@ -94,3 +94,37 @@ fn is_apple_silicon() -> bool {
 | User has no GPU | Auto-fallback to ONNX (already designed) |
 
 ## Status: ✅ GO — 4-step plan, 200 LOC estimate, weeks 57-65.
+
+---
+
+## Update 2026-04-25 — Parity Achieved, Default-Promote Eligible
+
+The previous 0.91-0.94 cosine drift was **NOT** an upstream weight problem.
+Root cause: `scripts/synapse-mlx-embed.py` applied **mean pooling**, but BGE
+ships `1_Pooling/config.json` with `pooling_mode_cls_token=true` (CLS pool).
+Switching the sidecar to CLS pooling closed the gap fully.
+
+### Parity bench (n=50 sentences, fastembed CPU canonical baseline)
+
+| variant                              | mean   | min    | verdict |
+|--------------------------------------|-------:|-------:|:-------:|
+| **self-converted bf16 (CLS pool)**   | **1.0000** | **1.0000** | **PASS** |
+| upstream `mlx-community/...` (CLS pool) | 1.0000 | 1.0000 | PASS    |
+| any bf16 (mean pool, old code)       | 0.9446 | 0.9320 | FAIL    |
+
+DoD met (mean ≥0.99, worst ≥0.985 — both 1.0000).
+
+### Self-conversion shipped (offline-ready fallback)
+
+- `scripts/convert-bge-fp32-to-bf16.py` — fp32 .safetensors -> MLX bf16
+- `models/bge-small-mlx-bf16/` — 63.7 MB, 199 tensors, byte-equivalent output to upstream
+- Default model resolution: env `SYNAPSE_MLX_MODEL_PATH` > `SYNAPSE_MLX_MODEL` >
+  local `models/bge-small-mlx-bf16/` if present > upstream HF id.
+
+### Status: 🟢 **default-promote eligible**
+
+Next PR: flip `pick_embedder()` to MLX when `embed-mlx` is built. Vec/Hybrid
+expected 80 ms -> <10 ms (matches batch-32 throughput of 0.22 ms/doc).
+
+Full report: `bench/results/2026-04-25/mlx-embedder-impl.md`.
+
