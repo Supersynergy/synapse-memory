@@ -48,9 +48,17 @@ half = "2.4"
 tikv-jemallocator = { version = "0.6", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
 synapse-ann = { path = "../synapse-ann", optional = true }
+async-trait = "0.1"
+tokio = { workspace = true }
+
+[dependencies.libsql]
+version = "0.6"
+optional = true
 
 [features]
-default = []
+default = ["backend-rusqlite"]
+backend-rusqlite = []
+backend-libsql = ["dep:libsql"]
 embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
 encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 turbo = []

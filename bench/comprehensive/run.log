@@ -4,3 +4,32 @@
 [run] Phases: base
 [run] Starting benchmark at Sat Apr 25 13:37:31 CEST 2026
 [run] --- sqlite-vec ---
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === sqlite-vec ===
+[engine=sqlite-vec phase=A scale=100000] starting
+  [A] bulk_insert 100000 docs...
+      38545 ops/s  RSS=1302MB  disk=306.2MB  cpu=91%
+[engine=sqlite-vec phase=A scale=100000] done ops_per_sec=38545
+[engine=sqlite-vec phase=B scale=100000] starting
+  [B] update 1000 docs...
+      3824 ops/s  RSS=1306MB  cpu=53%
+[engine=sqlite-vec phase=B scale=100000] done ops_per_sec=3824
+[engine=sqlite-vec phase=C scale=100000] starting
+  [C] mixed 80/20 for 10s...
+      42.5 ops/s  p50=29.6ms  p95=34.1ms  p99=36.3ms
+[engine=sqlite-vec phase=C scale=100000] done ops_per_sec=42.5
+[engine=sqlite-vec phase=D scale=100000] starting
+  [D] 8-thread concurrent select for 10s...
+      55857.7 ops/s  p99=0.0ms
+[engine=sqlite-vec phase=D scale=100000] done ops_per_sec=55857.7
+  -> /Users/master/projects/synapse/bench/comprehensive/results/sqlite-vec_full.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_full.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+sqlite-vec            38545         3824         42.5     34.1     1302    306.2
+[run] --- duckdb ---

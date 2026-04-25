@@ -44,6 +44,15 @@ fn reciprocal_ranks_simd(ranks: &[f64], k: f64) -> Vec<f64> {
     reciprocal_ranks_scalar(ranks, k)
 }
 
+/// Convert distances to scores via 1/(1+d), SIMD-batched where possible.
+///
+/// The scalar `.map()` form auto-vectorizes to NEON on aarch64 with --release.
+/// SimSIMD has no reciprocal-add f32 kernel, so we rely on LLVM autovectorization.
+#[inline]
+pub fn distance_to_score(distances: &[f32]) -> Vec<f32> {
+    distances.iter().map(|d| 1.0_f32 / (1.0_f32 + d)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,6 +75,16 @@ mod tests {
         let (sa, sb) = rrf_fuse_simd(&a, &b, 60.0);
         assert_eq!(sa.len(), 3);
         assert_eq!(sb.len(), 2);
+    }
+
+    #[test]
+    fn distance_to_score_basic() {
+        let d = vec![0.0_f32, 1.0, 3.0, 7.0];
+        let s = distance_to_score(&d);
+        assert!((s[0] - 1.0).abs() < 1e-6);
+        assert!((s[1] - 0.5).abs() < 1e-6);
+        assert!((s[2] - 0.25).abs() < 1e-6);
+        assert!((s[3] - 0.125).abs() < 1e-6);
     }
 
     #[test]

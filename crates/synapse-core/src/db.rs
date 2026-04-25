@@ -1,3 +1,5 @@
+#[cfg(feature = "turbo")]
+use crate::turbo::rrf_simd::distance_to_score;
 use crate::error::{Error, Result};
 use crate::types::{Doc, Hit, PutRequest, SearchMode, EMBED_DIM};
 #[cfg(feature = "encryption")]
@@ -176,6 +178,17 @@ CREATE VIRTUAL TABLE IF NOT EXISTS docs_vec USING vec0(
     embedding FLOAT[{dim}]
 );
 
+CREATE TABLE IF NOT EXISTS query_logs (
+    ts INTEGER NOT NULL,
+    query_hash BLOB NOT NULL,
+    query_len INTEGER,
+    mode TEXT,
+    latency_us INTEGER,
+    hit_count INTEGER,
+    result_score_top1 REAL
+);
+CREATE INDEX IF NOT EXISTS idx_query_logs_ts ON query_logs(ts);
+
 INSERT OR IGNORE INTO meta(k,v) VALUES
   ('schema_version','1'),
   ('embed_dim','{dim}'),
@@ -183,6 +196,39 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 "#,
             dim = EMBED_DIM
         ))?;
+        Ok(())
+    }
+
+    pub fn log_query(
+        &self,
+        q: &str,
+        mode: crate::types::SearchMode,
+        latency_us: u64,
+        hit_count: usize,
+        top_score: f64,
+    ) -> Result<()> {
+        let hash = blake3::hash(q.as_bytes());
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let mode_str = match mode {
+            crate::types::SearchMode::Lex => "lex",
+            crate::types::SearchMode::Vec => "vec",
+            crate::types::SearchMode::Hybrid => "hybrid",
+        };
+        self.conn.execute(
+            "INSERT INTO query_logs(ts, query_hash, query_len, mode, latency_us, hit_count, result_score_top1) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                ts,
+                hash.as_bytes().as_slice(),
+                q.len() as i64,
+                mode_str,
+                latency_us as i64,
+                hit_count as i64,
+                top_score,
+            ],
+        )?;
         Ok(())
     }
 
@@ -539,15 +585,20 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             let (id, uri, title, text) = row?;
             by_id.insert(id, (uri, title, text));
         }
+        let dists: Vec<f32> = ann_hits.iter().map(|(_, d)| *d).collect();
+        #[cfg(feature = "turbo")]
+        let scores: Vec<f32> = distance_to_score(&dists);
+        #[cfg(not(feature = "turbo"))]
+        let scores: Vec<f32> = dists.iter().map(|d| 1.0_f32 / (1.0_f32 + d)).collect();
         let mut out = Vec::with_capacity(ann_hits.len());
-        for (id, dist) in ann_hits {
+        for ((id, _), score) in ann_hits.iter().zip(scores.iter()) {
             if let Some((uri, title, text)) = by_id.remove(id) {
                 out.push(Hit {
                     id: *id,
                     uri,
                     title,
                     text,
-                    score: 1.0 / (1.0 + *dist as f64),
+                    score: *score as f64,
                 });
             }
         }
