@@ -83,6 +83,10 @@ struct CachedResult {
 
 type SharedCache = Arc<Mutex<LruCache<u64, CachedResult>>>;
 
+/// Dedicated autoload cache — keyed by normalized SQL.
+/// Cleared on any wp_options write; never evicted by LRU.
+type AutoloadCache = Arc<Mutex<HashMap<String, CachedResult>>>;
+
 pub struct SharedState {
     pub file: PathBuf,
     pub mode: String,
@@ -92,6 +96,9 @@ pub struct SharedState {
     /// created in this daemon lifetime. Set once on first postmeta IN-list query.
     /// Only applied when the database contains wp_ prefix tables.
     pub postmeta_index_created: Arc<AtomicBool>,
+    /// WP autoload options — served from memory after first hit, invalidated
+    /// on any INSERT/UPDATE/DELETE/REPLACE touching wp_options.
+    pub autoload_cache: AutoloadCache,
 }
 
 pub fn new_shared_state(file: PathBuf, mode: String) -> Arc<SharedState> {
@@ -103,6 +110,7 @@ pub fn new_shared_state(file: PathBuf, mode: String) -> Arc<SharedState> {
         ))),
         write_epoch: Arc::new(Mutex::new(0)),
         postmeta_index_created: Arc::new(AtomicBool::new(false)),
+        autoload_cache: Arc::new(Mutex::new(HashMap::new())),
     })
 }
 
