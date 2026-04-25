@@ -236,6 +236,25 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         // Phase 1 MVP: skip rewrite for everything else, pass through to SQLite.
         let rewritten = synapse_mysql::rewrite::rewrite(sql, &self.state.mode).unwrap_or_else(|_| sql.to_string());
         let _mode = &self.state.mode;
+
+        // ── wp_options autoload dedicated cache ───────────────────────────────
+        // Any write to wp_options invalidates the autoload cache immediately.
+        if is_wp_options_write(&rewritten) {
+            self.state.autoload_cache.lock().clear();
+            debug!("wp_options write — autoload cache invalidated");
+        }
+        // Autoload reads: serve from dedicated in-memory cache (target <0.1ms).
+        if is_autoload_query(&rewritten) {
+            let norm = rewritten.to_ascii_lowercase();
+            let hit: Option<CachedResult> = self.state.autoload_cache.lock().get(&norm).cloned();
+            if let Some(cached) = hit {
+                debug!("autoload cache hit ({}µs)", t0.elapsed().as_micros());
+                return write_cached(results, &cached).await;
+            }
+            // Cache miss — fall through to SQLite, then populate autoload cache below.
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         let key = blake3_u64(&rewritten);
         let current_epoch = { *self.state.write_epoch.lock() };
 
@@ -299,6 +318,12 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         };
         {
             self.state.cache.lock().put(key, cached.clone());
+        }
+        // Populate autoload cache on first SQLite hit.
+        if is_autoload_query(&rewritten) {
+            let norm = rewritten.to_ascii_lowercase();
+            self.state.autoload_cache.lock().insert(norm, cached.clone());
+            debug!("autoload cache populated ({} rows)", cached.rows.len());
         }
 
         debug!("query {} → {} rows ({}µs)",
