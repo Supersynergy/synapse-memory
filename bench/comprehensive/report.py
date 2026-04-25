@@ -174,7 +174,9 @@ def main():
             if not e:
                 lines.append(f"| {r['engine']} | — | — |")
                 continue
-            lines.append(f"| {r['engine']} | {e.get('recall_at_10', 0):.3f} | {e.get('n_queries', 0)} |")
+            recall = e.get('recall_at_10')
+            recall_str = f"{recall:.3f}" if recall is not None else "ERR"
+            lines.append(f"| {r['engine']} | {recall_str} | {e.get('n_queries', 0)} |")
         lines += [""]
 
         lines += [

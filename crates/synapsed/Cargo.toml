@@ -27,4 +27,4 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 
 [features]
-licensed = ["dep:synapse-license", "dep:hex", "dep:dirs"]
+licensed = ["dep:synapse-license", "dep:hex", "dep:dirs", "synapse-core/encryption"]

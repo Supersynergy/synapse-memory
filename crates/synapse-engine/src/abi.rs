@@ -1,4 +1,5 @@
-/// C-ABI surface — Day 1 stubs + Phase 10 Day 5 RRF kernel.
+/// C-ABI surface — Day 1 stubs + Phase 10 Day 5 RRF kernel + Day 7 obfstr hardening.
+
 
 #[no_mangle]
 pub extern "C" fn synapse_engine_init(db_path: *const u8, db_path_len: usize) -> i32 {
@@ -25,7 +26,16 @@ pub extern "C" fn synapse_engine_score(
 
 #[no_mangle]
 pub extern "C" fn synapse_engine_version() -> *const u8 {
-    b"synapse-engine-v0.1.0\0".as_ptr()
+    static VERSION_STR: &str = "synapse-engine-v0.1.0\0";
+    VERSION_STR.as_ptr()
+}
+
+/// Returns obfuscated version string at runtime (heap-allocated, not a literal).
+#[no_mangle]
+pub extern "C" fn synapse_engine_version_obf() -> *const u8 {
+    let s = obfstr::obfstr!("synapse-engine-v0.1.0").to_owned();
+    let b = s.into_bytes().into_boxed_slice();
+    Box::into_raw(b) as *const u8
 }
 
 /// RRF fusion over two rank lists.

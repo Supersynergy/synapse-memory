@@ -9,3 +9,4 @@ name = "synapse_engine"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+obfstr = "0.4"

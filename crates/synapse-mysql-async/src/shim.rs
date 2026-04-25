@@ -562,8 +562,7 @@ fn execute_select(
     let col_defs: Vec<(String, String)> = (0..col_count)
         .map(|i| {
             let name = stmt.column_name(i).unwrap_or("?").to_string();
-            // column_decltype not in rusqlite 0.33 default; use column_name only
-            let decl = "TEXT".to_string();
+            let decl = stmt.column_decl_type(i).unwrap_or("TEXT").to_string();
             (name, decl)
         })
         .collect();
@@ -597,7 +596,8 @@ fn execute_select_with_params(
     let col_defs: Vec<(String, String)> = (0..col_count)
         .map(|i| {
             let name = stmt.column_name(i).unwrap_or("?").to_string();
-            (name, "TEXT".to_string())
+            let decl = stmt.column_decl_type(i).unwrap_or("TEXT").to_string();
+            (name, decl)
         })
         .collect();
 

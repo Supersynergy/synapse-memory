@@ -49,6 +49,7 @@ half = "2.4"
 tikv-jemallocator = { version = "0.6", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
 synapse-ann = { path = "../synapse-ann", optional = true }
+synapse-engine = { path = "../synapse-engine" }
 async-trait = "0.1"
 tokio = { workspace = true }
 
