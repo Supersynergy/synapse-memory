@@ -1,0 +1,309 @@
+[run] Starting Qdrant...
+[run] Qdrant PID=61009 ready
+[run] Engines: sqlite-vec,duckdb,lancedb,chromadb,synapse,qdrant
+[run] Phases: base
+[run] Profile: fast
+[run] Starting benchmark at Sat Apr 25 14:09:44 CEST 2026
+[run] --- sqlite-vec ---
+[bench] Loading dataset (10000 docs)...
+[bench] Loaded 10000 docs
+
+[bench] === sqlite-vec ===
+[engine=sqlite-vec phase=A scale=10000] starting
+  [A] bulk_insert 10000 docs...
+      35638 ops/s  RSS=917MB  disk=31.4MB  cpu=59%
+[engine=sqlite-vec phase=A scale=10000] done ops_per_sec=35638
+[engine=sqlite-vec phase=B scale=10000] starting
+  [B] update 500 docs...
+      10626 ops/s  RSS=921MB  cpu=19%
+[engine=sqlite-vec phase=B scale=10000] done ops_per_sec=10626
+[engine=sqlite-vec phase=C scale=10000] starting
+  [C] mixed 80/20 for 5s...
+      278.4 ops/s  p50=4.4ms  p95=5.4ms  p99=8.3ms
+[engine=sqlite-vec phase=C scale=10000] done ops_per_sec=278.4
+[engine=sqlite-vec phase=D scale=10000] starting
+  [D] 8-thread concurrent select for 5s...
+      55942.6 ops/s  p99=0.0ms
+[engine=sqlite-vec phase=D scale=10000] done ops_per_sec=55942.6
+[engine=sqlite-vec phase=E scale=10000] starting
+  [E] recall@10 (50 queries vs brute-force)...
+      recall@10=0.112
+[engine=sqlite-vec phase=E scale=10000] done recall=0.112
+  -> /Users/master/projects/synapse/bench/comprehensive/results/sqlite-vec_fast.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_fast.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+sqlite-vec            35638        10626        278.4      5.4      917     31.4
+[run] --- duckdb ---
+[bench] Loading dataset (10000 docs)...
+[bench] Loaded 10000 docs
+
+[bench] === duckdb ===
+[engine=duckdb phase=A scale=10000] starting
+  [A] bulk_insert 10000 docs...
+  [duckdb] inserted 1000 rows total
+  [duckdb] inserted 2000 rows total
+  [duckdb] inserted 3000 rows total
+  [duckdb] inserted 4000 rows total
+  [duckdb] inserted 5000 rows total
+  [duckdb] inserted 6000 rows total
+  [duckdb] inserted 7000 rows total
+  [duckdb] inserted 8000 rows total
+  [duckdb] inserted 9000 rows total
+  [duckdb] inserted 10000 rows total
+  [duckdb] Building HNSW index...
+  [duckdb] HNSW index skipped: Query interrupted
+      111 ops/s  RSS=2024MB  disk=9.4MB  cpu=241%
+[engine=duckdb phase=A scale=10000] done ops_per_sec=111
+[engine=duckdb phase=B scale=10000] starting
+  [B] update 500 docs...
+      293 ops/s  RSS=2016MB  cpu=143%
+[engine=duckdb phase=B scale=10000] done ops_per_sec=293
+[engine=duckdb phase=C scale=10000] starting
+  [C] mixed 80/20 for 5s...
+      158.6 ops/s  p50=6.2ms  p95=10.5ms  p99=14.6ms
+[engine=duckdb phase=C scale=10000] done ops_per_sec=158.6
+[engine=duckdb phase=D scale=10000] starting
+  [D] 8-thread concurrent select for 5s...
+      1655.2 ops/s  p99=19.8ms
+[engine=duckdb phase=D scale=10000] done ops_per_sec=1655.2
+[engine=duckdb phase=E scale=10000] starting
+  [E] recall@10 (50 queries vs brute-force)...
+      recall@10=0.000
+[engine=duckdb phase=E scale=10000] done recall=0.000
+  -> /Users/master/projects/synapse/bench/comprehensive/results/duckdb_fast.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_fast.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+duckdb                  111          293        158.6     10.5     2024      9.4
+[run] --- lancedb ---
+[2026-04-25T12:11:40Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_lancedb_ayz01iws/lance/docs.lance, it will be created
+[bench] Loading dataset (10000 docs)...
+[bench] Loaded 10000 docs
+
+[bench] === lancedb ===
+[engine=lancedb phase=A scale=10000] starting
+  [A] bulk_insert 10000 docs...
+      64759 ops/s  RSS=1029MB  disk=43.1MB  cpu=76%
+[engine=lancedb phase=A scale=10000] done ops_per_sec=64759
+[engine=lancedb phase=B scale=10000] starting
+  [B] update 500 docs...
+  [TIMEOUT] lancedb: engine timeout
+  -> /Users/master/projects/synapse/bench/comprehensive/results/lancedb_fast.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_fast.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+lancedb               64759            0          0.0      0.0     1029     43.1
+[run] --- chromadb ---
+[bench] Loading dataset (10000 docs)...
+[bench] Loaded 10000 docs
+
+[bench] === chromadb ===
+[engine=chromadb phase=A scale=10000] starting
+  [A] bulk_insert 10000 docs...
+      1457 ops/s  RSS=1095MB  disk=53.4MB  cpu=266%
+[engine=chromadb phase=A scale=10000] done ops_per_sec=1457
+[engine=chromadb phase=B scale=10000] starting
+  [B] update 500 docs...
+      387 ops/s  RSS=1095MB  cpu=552%
+[engine=chromadb phase=B scale=10000] done ops_per_sec=387
+[engine=chromadb phase=C scale=10000] starting
+  [C] mixed 80/20 for 5s...
+      64.6 ops/s  p50=9.7ms  p95=23.9ms  p99=26.1ms
+[engine=chromadb phase=C scale=10000] done ops_per_sec=64.6
+[engine=chromadb phase=D scale=10000] starting
+  [D] 8-thread concurrent select for 5s...
+      224.8 ops/s  p99=86.7ms
+[engine=chromadb phase=D scale=10000] done ops_per_sec=224.8
+[engine=chromadb phase=E scale=10000] starting
+  [E] recall@10 (50 queries vs brute-force)...
+      recall@10=0.920
+[engine=chromadb phase=E scale=10000] done recall=0.920
+  -> /Users/master/projects/synapse/bench/comprehensive/results/chromadb_fast.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_fast.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+chromadb               1457          387         64.6     23.9     1095     53.4
+[run] --- synapse ---
+[bench] Loading dataset (10000 docs)...
+[bench] Loaded 10000 docs
+
+[bench] === synapse ===
+[synapse] Daemon unavailable, falling back to direct sqlite-vec
+[engine=synapse phase=A scale=10000] starting
+  [A] bulk_insert 10000 docs...
+      47050 ops/s  RSS=948MB  disk=31.4MB  cpu=50%
+[engine=synapse phase=A scale=10000] done ops_per_sec=47050
+[engine=synapse phase=B scale=10000] starting
+  [B] update 500 docs...
+      9358 ops/s  RSS=952MB  cpu=22%
+[engine=synapse phase=B scale=10000] done ops_per_sec=9358
+[engine=synapse phase=C scale=10000] starting
+  [C] mixed 80/20 for 5s...
+      283.6 ops/s  p50=4.3ms  p95=4.9ms  p99=6.8ms
+[engine=synapse phase=C scale=10000] done ops_per_sec=283.6
+[engine=synapse phase=D scale=10000] starting
+  [D] 8-thread concurrent select for 5s...
+      46980.8 ops/s  p99=0.0ms
+[engine=synapse phase=D scale=10000] done ops_per_sec=46980.8
+[engine=synapse phase=E scale=10000] starting
+  [E] recall@10 (50 queries vs brute-force)...
+      recall@10=0.096
+[engine=synapse phase=E scale=10000] done recall=0.096
+  -> /Users/master/projects/synapse/bench/comprehensive/results/synapse_fast.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_fast.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+synapse               47050         9358        283.6      4.9      948     31.4
+[run] --- qdrant ---
+[bench] Loading dataset (10000 docs)...
+[bench] Loaded 10000 docs
+
+[bench] === qdrant ===
+[engine=qdrant phase=A scale=10000] starting
+  [A] bulk_insert 10000 docs...
+      6964 ops/s  RSS=1074MB  disk=0.0MB  cpu=80%
+[engine=qdrant phase=A scale=10000] done ops_per_sec=6964
+[engine=qdrant phase=B scale=10000] starting
+  [B] update 500 docs...
+      6499 ops/s  RSS=1077MB  cpu=30%
+[engine=qdrant phase=B scale=10000] done ops_per_sec=6499
+[engine=qdrant phase=C scale=10000] starting
+  [C] mixed 80/20 for 5s...
+      44.0 ops/s  p50=23.7ms  p95=47.0ms  p99=52.5ms
+[engine=qdrant phase=C scale=10000] done ops_per_sec=44.0
+[engine=qdrant phase=D scale=10000] starting
+  [D] 8-thread concurrent select for 5s...
+      33.6 ops/s  p99=489.8ms
+[engine=qdrant phase=D scale=10000] done ops_per_sec=33.6
+[engine=qdrant phase=E scale=10000] starting
+  [E] recall@10 (50 queries vs brute-force)...
+      recall@10=0.000
+[engine=qdrant phase=E scale=10000] done recall=0.000
+  -> /Users/master/projects/synapse/bench/comprehensive/results/qdrant_fast.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_fast.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+qdrant                 6964         6499         44.0     47.0     1074      0.0
+[run] Benchmark complete at Sat Apr 25 14:13:57 CEST 2026
+[report] Written: /Users/master/projects/synapse/bench/comprehensive/RESULTS_FAST.md
+# Synapse Comprehensive Benchmark Results
+> Generated: 2026-04-25 14:13  |  Run type: **fast**
+
+## Phase A — Bulk Insert
+
+| Engine | ops/sec | Elapsed (s) | Disk MB | RSS MB | CPU% |
+|--------|--------:|------------:|--------:|-------:|-----:|
+| chromadb | 1,457 | 6.9 | 53.4 | 1,095 | 266 |
+| duckdb | 111 | 90.0 | 9.4 | 2,024 | 241 |
+| lancedb | 64,759 | 0.2 | 43.1 | 1,029 | 76 |
+| qdrant | 6,964 | 1.4 | — | 1,074 | 80 |
+| sqlite-vec | 35,638 | 0.3 | 31.4 | 917 | 59 |
+| synapse | 47,050 | 0.2 | 31.4 | 948 | 50 |
+
+## Phase B — Update (random 1k rows)
+
+| Engine | ops/sec | Elapsed (s) | RSS MB | CPU% |
+|--------|--------:|------------:|-------:|-----:|
+| chromadb | 387 | 1.29 | 1,095 | 552 |
+| duckdb | 293 | 1.71 | 2,016 | 143 |
+| lancedb | — | — | — | — |
+| qdrant | 6,499 | 0.08 | 1,077 | 30 |
+| sqlite-vec | 10,626 | 0.05 | 921 | 19 |
+| synapse | 9,358 | 0.05 | 952 | 22 |
+
+## Phase C — Mixed 80/20 Read/Write (60s)
+
+| Engine | ops/sec | p50 ms | p95 ms | p99 ms |
+|--------|--------:|-------:|-------:|-------:|
+| chromadb | 64.6 | 9.7 | 23.9 | 26.1 |
+| duckdb | 158.6 | 6.2 | 10.5 | 14.6 |
+| lancedb | — | — | — | — |
+| qdrant | 44.0 | 23.7 | 47.0 | 52.5 |
+| sqlite-vec | 278.4 | 4.4 | 5.4 | 8.3 |
+| synapse | 283.6 | 4.3 | 4.9 | 6.8 |
+
+## Phase D — 8-Thread Concurrent Select
+
+| Engine | ops/sec | p50 ms | p95 ms | p99 ms |
+|--------|--------:|-------:|-------:|-------:|
+| chromadb | 224.8 | 33.9 | 58.6 | 86.7 |
+| duckdb | 1655.2 | 3.6 | 11.2 | 19.8 |
+| lancedb | — | — | — | — |
+| qdrant | 33.6 | 235.7 | 397.5 | 489.8 |
+| sqlite-vec | 55942.6 | 0.0 | 0.0 | 0.0 |
+| synapse | 46980.8 | 0.0 | 0.0 | 0.0 |
+
+## Overhead Analysis (CPU + RAM per 1k ops)
+
+| Engine | RAM/1k-inserts (MB) | CPU%-insert | p99-concurrent (ms) |
+|--------|--------------------:|------------:|--------------------:|
+| chromadb | 109.54 | 266 | 86.7 |
+| duckdb | 202.40 | 241 | 19.8 |
+| lancedb | 102.95 | 76 | — |
+| qdrant | 107.39 | 80 | 489.8 |
+| sqlite-vec | 91.74 | 59 | 0.0 |
+| synapse | 94.77 | 50 | 0.0 |
+
+## Phase E — Recall@10 (vs brute-force cosine)
+
+| Engine | Recall@10 | Queries |
+|--------|----------:|--------:|
+| chromadb | 0.920 | 50 |
+| duckdb | 0.000 | 50 |
+| lancedb | — | — |
+| qdrant | 0.000 | 50 |
+| sqlite-vec | 0.112 | 50 |
+| synapse | 0.096 | 50 |
+
+## Phase F — Concurrency Sweep (ops/sec vs threads)
+
+| Engine | 1T ops/s | 4T ops/s | 8T ops/s | 16T ops/s | 16T p99ms |
+|--------|----------:|---------:|---------:|----------:|----------:|
+| chromadb | — | — | — | — | — |
+| duckdb | — | — | — | — | — |
+| lancedb | — | — | — | — | — |
+| qdrant | — | — | — | — | — |
+| sqlite-vec | — | — | — | — | — |
+| synapse | — | — | — | — | — |
+
+## Phase G — Batch Update Sweep (ops/sec vs batch size)
+
+| Engine | batch=1 | batch=100 | batch=1000 |
+|--------|--------:|----------:|-----------:|
+| chromadb | — | — | — |
+| duckdb | — | — | — |
+| lancedb | — | — | — |
+| qdrant | — | — | — |
+| sqlite-vec | — | — | — |
+| synapse | — | — | — |
+
+## How to re-run
+
+```bash
+# Dry run (1k docs, ~2 min)
+DRY_RUN=1 bash bench/comprehensive/run.sh
+
+# Full run with all extended phases (100k docs)
+PHASES=all setsid nohup bash bench/comprehensive/run.sh > bench/comprehensive/run.log 2>&1 &
+tail -f bench/comprehensive/run.log
+```
+[run] Report written to /Users/master/projects/synapse/bench/comprehensive/RESULTS_FAST.md

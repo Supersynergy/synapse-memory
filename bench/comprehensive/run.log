@@ -100,3 +100,79 @@ existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_lance
   [duckdb] inserted 41000 rows total
   [duckdb] inserted 42000 rows total
   [duckdb] inserted 42000 rows total
+  [duckdb] inserted 43000 rows total
+  [duckdb] inserted 43000 rows total
+  [duckdb] inserted 44000 rows total
+  [duckdb] inserted 44000 rows total
+  [duckdb] inserted 45000 rows total
+  [duckdb] inserted 45000 rows total
+  [duckdb] inserted 46000 rows total
+  [duckdb] inserted 46000 rows total
+  [duckdb] inserted 47000 rows total
+  [duckdb] inserted 47000 rows total
+  [duckdb] inserted 48000 rows total
+  [duckdb] inserted 48000 rows total
+  [duckdb] inserted 49000 rows total
+  [duckdb] inserted 49000 rows total
+  [duckdb] inserted 50000 rows total
+  [duckdb] inserted 50000 rows total
+[2026-04-25T12:05:32Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_warm_lancedb_6_ydhd8i/lance/docs.lance, it will be created
+[2026-04-25T12:05:32Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_lancedb_y1ivto4i/lance/docs.lance, it will be created
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === chromadb ===
+[engine=chromadb phase=A scale=100000] starting
+  [A] bulk_insert 100000 docs...
+      764 ops/s  RSS=1836MB  disk=493.7MB  cpu=266%
+[engine=chromadb phase=A scale=100000] done ops_per_sec=764
+[engine=chromadb phase=B scale=100000] starting
+  [B] update 1000 docs...
+      290 ops/s  RSS=1836MB  cpu=472%
+[engine=chromadb phase=B scale=100000] done ops_per_sec=290
+[engine=chromadb phase=C scale=100000] starting
+  [C] mixed 80/20 for 10s...
+      14.5 ops/s  p50=67.7ms  p95=104.8ms  p99=133.0ms
+[engine=chromadb phase=C scale=100000] done ops_per_sec=14.5
+[engine=chromadb phase=D scale=100000] starting
+  [D] 8-thread concurrent select for 10s...
+      20.5 ops/s  p99=626.0ms
+[engine=chromadb phase=D scale=100000] done ops_per_sec=20.5
+  -> /Users/master/projects/synapse/bench/comprehensive/results/chromadb_full.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_full.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+chromadb                764          290         14.5    104.8     1836    493.7
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === synapse ===
+[synapse] Daemon unavailable, falling back to direct sqlite-vec
+[synapse] Daemon unavailable, falling back to direct sqlite-vec
+[engine=synapse phase=A scale=100000] starting
+  [A] bulk_insert 100000 docs...
+      39308 ops/s  RSS=1402MB  disk=306.2MB  cpu=87%
+[engine=synapse phase=A scale=100000] done ops_per_sec=39308
+[engine=synapse phase=B scale=100000] starting
+  [B] update 1000 docs...
+      3701 ops/s  RSS=1406MB  cpu=48%
+[engine=synapse phase=B scale=100000] done ops_per_sec=3701
+[engine=synapse phase=C scale=100000] starting
+  [C] mixed 80/20 for 10s...
+      29.5 ops/s  p50=40.7ms  p95=53.2ms  p99=62.4ms
+[engine=synapse phase=C scale=100000] done ops_per_sec=29.5
+[engine=synapse phase=D scale=100000] starting
+  [D] 8-thread concurrent select for 10s...
+      62125.3 ops/s  p99=0.0ms
+[engine=synapse phase=D scale=100000] done ops_per_sec=62125.3
+  -> /Users/master/projects/synapse/bench/comprehensive/results/synapse_full.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_full.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+synapse               39308         3701         29.5     53.2     1402    306.2

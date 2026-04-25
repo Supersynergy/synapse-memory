@@ -8,9 +8,13 @@ RESULTS_DIR = os.path.join(DIR, "results")
 OUT = os.path.join(DIR, "RESULTS.md")
 
 
-def load_latest():
-    # Prefer full per-engine files over dry
-    for suffix in ("full", "dry"):
+def load_latest(profile=None):
+    # profile overrides suffix search order
+    if profile:
+        order = (profile,)
+    else:
+        order = ("full", "dry")
+    for suffix in order:
         files = glob.glob(os.path.join(RESULTS_DIR, f"*_{suffix}.jsonl"))
         files = [f for f in files if "summary_" not in os.path.basename(f)]
         if files:
@@ -39,15 +43,19 @@ def main():
     parser.add_argument("--partial", action="store_true",
                         help="Generate partial/in-progress report from whatever JSONL is available")
     parser.add_argument("--out", default=None, help="Output path (default: RESULTS.md or RESULTS_INTERIM.md)")
+    parser.add_argument("--profile", default=None, choices=["full", "fast", "dry"],
+                        help="Which result set to load (fast/full/dry)")
     args = parser.parse_args()
 
-    results, run_type = load_latest()
+    results, run_type = load_latest(profile=args.profile)
     if not results:
         print("No results found. Run bench.py first.")
         return
 
     global OUT
-    if args.partial:
+    if args.profile == "fast":
+        OUT = os.path.join(DIR, "RESULTS_FAST.md")
+    elif args.partial:
         OUT = os.path.join(DIR, "RESULTS_INTERIM.md")
     if args.out:
         OUT = args.out

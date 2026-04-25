@@ -1,0 +1,12 @@
+[Unit]
+Description=Synapse MySQL drop-in
+After=network.target
+
+[Service]
+Type=simple
+User=synapse
+ExecStart=/usr/local/bin/synapse-mysql-async -f /var/lib/synapse/wp.db -b 0.0.0.0:3306
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

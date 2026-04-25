@@ -653,62 +653,6 @@ def run_phase_d(adapter, docs, n_threads=8, duration_s=10):
             "threads": n_threads}
 
 
-def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1):
-    tmpdir = tempfile.mkdtemp(prefix=f"bench_{adapter_cls.name}_")
-    results = {"engine": adapter_cls.name, "n_docs": len(docs)}
-
-    try:
-        adapter = adapter_cls()
-        adapter.setup(tmpdir)
-
-        # Warmup inserts (small, separate tmpdir)
-        for _ in range(warmup):
-            wtmp = tempfile.mkdtemp(prefix=f"bench_warm_{adapter_cls.name}_")
-            try:
-                wadapter = adapter_cls()
-                wadapter.setup(wtmp)
-                wadapter.bulk_insert(docs[:min(50, len(docs))])
-                wadapter.teardown()
-            except Exception:
-                pass
-            finally:
-                shutil.rmtree(wtmp, ignore_errors=True)
-
-        print(f"  [A] bulk_insert {len(docs)} docs...")
-        phase_a = run_phase_a(adapter, docs)
-        results["phase_a"] = phase_a
-        print(f"      {phase_a['ops_sec']:.0f} ops/s  RSS={phase_a['rss_mb']:.0f}MB  disk={phase_a['disk_mb']:.1f}MB  cpu={phase_a['cpu_pct_mean']:.0f}%")
-
-        print(f"  [B] update {min(1000, len(docs))} docs...")
-        phase_b = run_phase_b(adapter, docs, n_update=min(1000, len(docs)))
-        results["phase_b"] = phase_b
-        print(f"      {phase_b['ops_sec']:.0f} ops/s  RSS={phase_b['rss_mb']:.0f}MB  cpu={phase_b['cpu_pct_mean']:.0f}%")
-
-        dur = 5 if dry_run else 10
-        print(f"  [C] mixed 80/20 for {dur}s...")
-        phase_c = run_phase_c(adapter, docs, duration_s=dur)
-        results["phase_c"] = phase_c
-        print(f"      {phase_c['ops_sec']:.1f} ops/s  p50={phase_c['p50_ms']:.1f}ms  p95={phase_c['p95_ms']:.1f}ms  p99={phase_c['p99_ms']:.1f}ms")
-
-        print(f"  [D] 8-thread concurrent select for {dur}s...")
-        phase_d = run_phase_d(adapter, docs, n_threads=8, duration_s=dur)
-        results["phase_d"] = phase_d
-        print(f"      {phase_d['ops_sec']:.1f} ops/s  p99={phase_d['p99_ms']:.1f}ms")
-
-        adapter.teardown()
-
-    except Exception as e:
-        results["error"] = str(e)
-        print(f"  [ERROR] {adapter_cls.name}: {e}")
-    finally:
-        try:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-        except Exception:
-            pass
-
-    return results
-
-
 ADAPTERS = {
     "sqlite-vec": SqliteVecAdapter,
     "duckdb": DuckDBAdapter,
@@ -901,16 +845,29 @@ def run_phase_batch_update(adapter, docs, batch_sizes=(1, 100, 1000)):
     return results
 
 
-def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="base"):
+def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="base", fast=False):
     tmpdir = tempfile.mkdtemp(prefix=f"bench_{adapter_cls.name}_")
-    results = {"engine": adapter_cls.name, "n_docs": len(docs)}
+    results = {"engine": adapter_cls.name, "n_docs": len(docs), "profile": "fast" if fast else "full"}
+
+    fp = FAST_PROFILE if fast else {}
+    _warmup = 0 if fast else warmup
+    _n_update = fp.get("n_update", min(1000, len(docs))) if fast else min(1000, len(docs))
+    _dur = fp.get("phase_c_duration", 5 if dry_run else 10) if fast else (5 if dry_run else 10)
+
+    import signal
+
+    class TimeoutError(Exception):
+        pass
+
+    def _timeout_handler(signum, frame):
+        raise TimeoutError("engine timeout")
 
     try:
         adapter = adapter_cls()
         adapter.setup(tmpdir)
 
-        # Warmup inserts (small, separate tmpdir)
-        for _ in range(warmup):
+        # Warmup inserts
+        for _ in range(_warmup):
             wtmp = tempfile.mkdtemp(prefix=f"bench_warm_{adapter_cls.name}_")
             try:
                 wadapter = adapter_cls()
@@ -922,6 +879,12 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
             finally:
                 shutil.rmtree(wtmp, ignore_errors=True)
 
+        # Set per-engine timeout (90s in fast mode)
+        engine_timeout = 90 if fast else 0
+        if engine_timeout > 0:
+            signal.signal(signal.SIGALRM, _timeout_handler)
+            signal.alarm(engine_timeout)
+
         print(f"[engine={adapter_cls.name} phase=A scale={len(docs)}] starting")
         print(f"  [A] bulk_insert {len(docs)} docs...")
         phase_a = run_phase_a(adapter, docs)
@@ -930,52 +893,56 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
         print(f"[engine={adapter_cls.name} phase=A scale={len(docs)}] done ops_per_sec={phase_a['ops_sec']:.0f}")
 
         print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] starting")
-        print(f"  [B] update {min(1000, len(docs))} docs...")
-        phase_b = run_phase_b(adapter, docs, n_update=min(1000, len(docs)))
+        print(f"  [B] update {_n_update} docs...")
+        phase_b = run_phase_b(adapter, docs, n_update=_n_update)
         results["phase_b"] = phase_b
         print(f"      {phase_b['ops_sec']:.0f} ops/s  RSS={phase_b['rss_mb']:.0f}MB  cpu={phase_b['cpu_pct_mean']:.0f}%")
         print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] done ops_per_sec={phase_b['ops_sec']:.0f}")
 
-        dur = 5 if dry_run else 10
         print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] starting")
-        print(f"  [C] mixed 80/20 for {dur}s...")
-        phase_c = run_phase_c(adapter, docs, duration_s=dur)
+        print(f"  [C] mixed 80/20 for {_dur}s...")
+        phase_c = run_phase_c(adapter, docs, duration_s=_dur)
         results["phase_c"] = phase_c
         print(f"      {phase_c['ops_sec']:.1f} ops/s  p50={phase_c['p50_ms']:.1f}ms  p95={phase_c['p95_ms']:.1f}ms  p99={phase_c['p99_ms']:.1f}ms")
         print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] done ops_per_sec={phase_c['ops_sec']:.1f}")
 
         print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] starting")
-        print(f"  [D] 8-thread concurrent select for {dur}s...")
-        phase_d = run_phase_d(adapter, docs, n_threads=8, duration_s=dur)
+        print(f"  [D] 8-thread concurrent select for {_dur}s...")
+        phase_d = run_phase_d(adapter, docs, n_threads=8, duration_s=_dur)
         results["phase_d"] = phase_d
         print(f"      {phase_d['ops_sec']:.1f} ops/s  p99={phase_d['p99_ms']:.1f}ms")
         print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] done ops_per_sec={phase_d['ops_sec']:.1f}")
 
-        if phases == "all":
+        if phases == "all" or fast:
             # E: recall@10
+            n_recall = fp.get("phase_e_queries", 50) if fast else 50
             print(f"[engine={adapter_cls.name} phase=E scale={len(docs)}] starting")
-            print(f"  [E] recall@10 (50 queries vs brute-force)...")
-            phase_e = run_phase_recall(adapter, docs, n_queries=50)
+            print(f"  [E] recall@10 ({n_recall} queries vs brute-force)...")
+            phase_e = run_phase_recall(adapter, docs, n_queries=n_recall)
             results["phase_e"] = phase_e
             print(f"      recall@10={phase_e['recall_at_10']:.3f}")
             print(f"[engine={adapter_cls.name} phase=E scale={len(docs)}] done recall={phase_e['recall_at_10']:.3f}")
 
+        if phases == "all":
             # F: concurrency sweep
+            f_threads = fp.get("phase_f_threads", (8,)) if fast else (1, 4, 8, 16)
             print(f"[engine={adapter_cls.name} phase=F scale={len(docs)}] starting")
-            print(f"  [F] concurrency sweep 1/4/8/16 threads...")
-            phase_f = run_phase_concurrency(adapter, docs, thread_counts=(1, 4, 8, 16), duration_s=dur)
+            print(f"  [F] concurrency sweep {f_threads} threads...")
+            phase_f = run_phase_concurrency(adapter, docs, thread_counts=f_threads, duration_s=_dur)
             results["phase_f"] = phase_f
             print(f"[engine={adapter_cls.name} phase=F scale={len(docs)}] done")
 
             # G: batch update sweep
+            g_batches = fp.get("phase_g_batches", (100,)) if fast else (1, 100, 1000)
             print(f"[engine={adapter_cls.name} phase=G scale={len(docs)}] starting")
-            print(f"  [G] batch update sizes 1/100/1000...")
-            phase_g = run_phase_batch_update(adapter, docs, batch_sizes=(1, 100, 1000))
+            print(f"  [G] batch update sizes {g_batches}...")
+            phase_g = run_phase_batch_update(adapter, docs, batch_sizes=g_batches)
             results["phase_g"] = phase_g
             print(f"[engine={adapter_cls.name} phase=G scale={len(docs)}] done")
 
-            # H: soak test (3 min) — skip for dry-run
-            if not dry_run:
+            # H: soak — skip in fast mode and dry-run
+            skip_soak = fast or dry_run
+            if not skip_soak:
                 print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] starting")
                 print(f"  [H] soak test 180s mixed 80/20...")
                 phase_h = run_phase_soak(adapter, docs, duration_s=180)
@@ -985,11 +952,21 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
                 print(f"      ops_drift={drift:.1f}%  rss_growth={rss_growth:.0f}MB")
                 print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] done drift={drift:.1f}%")
 
+        if engine_timeout > 0:
+            signal.alarm(0)  # cancel alarm
+
         adapter.teardown()
 
     except Exception as e:
+        try:
+            if engine_timeout > 0:
+                signal.alarm(0)
+        except Exception:
+            pass
+        err_type = "TIMEOUT" if "timeout" in str(e).lower() else "ERROR"
         results["error"] = str(e)
-        print(f"  [ERROR] {adapter_cls.name}: {e}")
+        results["status"] = "SKIPPED" if err_type == "TIMEOUT" else "ERROR"
+        print(f"  [{err_type}] {adapter_cls.name}: {e}")
     finally:
         try:
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -1009,6 +986,20 @@ ADAPTERS = {
 }
 
 
+FAST_PROFILE = {
+    "n_docs": 10_000,
+    "n_update": 500,
+    "phase_c_duration": 5,
+    "phase_d_duration": 5,
+    "phase_e_queries": 50,
+    "phase_f_threads": (8,),       # skip 1/4/16
+    "phase_g_batches": (100,),     # skip 1/1000
+    "skip_soak": True,
+    "warmup": 0,                   # no warmup run
+    "hnsw_ef_construction": 64,
+}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--engine", default="all",
@@ -1018,9 +1009,18 @@ def main():
     parser.add_argument("--n-docs", type=int, default=100000)
     parser.add_argument("--phases", default="base", choices=["base", "all"],
                         help="'base' = A/B/C/D only (compat). 'all' = +E/F/G/H (recall/concurrency/batch/soak)")
+    parser.add_argument("--profile", default="full", choices=["full", "fast"],
+                        help="'fast' = 10k docs, reduced phases, ≤5 min total")
     args = parser.parse_args()
 
-    n_docs = 1000 if args.dry_run else args.n_docs
+    fast = args.profile == "fast"
+
+    if fast:
+        n_docs = FAST_PROFILE["n_docs"]
+    elif args.dry_run:
+        n_docs = 1000
+    else:
+        n_docs = args.n_docs
     print(f"[bench] Loading dataset ({n_docs} docs)...")
     docs = load_dataset(n_docs)
     print(f"[bench] Loaded {len(docs)} docs")
@@ -1047,22 +1047,28 @@ def main():
                 print(f"    ERROR: {e}")
 
     all_results = []
+    suffix = "fast" if fast else ("dry" if args.dry_run else "full")
+
     for engine in engines:
         if engine not in ADAPTERS:
             print(f"[warn] Unknown engine: {engine}, skipping")
             continue
+        out_path = os.path.join(RESULTS_DIR, f"{engine}_{suffix}.jsonl")
+        if fast and os.path.exists(out_path):
+            print(f"\n[bench] === {engine} SKIPPED (result exists) ===")
+            continue
         print(f"\n[bench] === {engine} ===")
-        result = run_adapter(ADAPTERS[engine], docs, dry_run=args.dry_run, phases=args.phases)
+        result = run_adapter(ADAPTERS[engine], docs, dry_run=args.dry_run, phases=args.phases,
+                             fast=fast)
         all_results.append(result)
 
-        suffix = "dry" if args.dry_run else "full"
         out_path = os.path.join(RESULTS_DIR, f"{engine}_{suffix}.jsonl")
         with open(out_path, "w") as f:
             f.write(json.dumps(result) + "\n")
         print(f"  -> {out_path}")
 
     # Summary JSONL
-    summary_path = os.path.join(RESULTS_DIR, f"summary_{'dry' if args.dry_run else 'full'}.jsonl")
+    summary_path = os.path.join(RESULTS_DIR, f"summary_{suffix}.jsonl")
     with open(summary_path, "w") as f:
         for r in all_results:
             f.write(json.dumps(r) + "\n")

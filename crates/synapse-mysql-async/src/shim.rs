@@ -22,7 +22,49 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::io;
 use std::num::NonZeroUsize;
+
+// ── wp_options autoload cache ─────────────────────────────────────────────────
+const AUTOLOAD_PATTERNS: &[&str] = &[
+    "select option_value from wp_options where autoload",
+    "select option_name, option_value from wp_options where autoload",
+    "select * from wp_options where autoload",
+];
+
+fn is_autoload_query(sql: &str) -> bool {
+    let lo = sql.to_ascii_lowercase();
+    AUTOLOAD_PATTERNS.iter().any(|p| lo.contains(p))
+}
+
+fn is_wp_options_write(sql: &str) -> bool {
+    let lo = sql.to_ascii_lowercase();
+    let is_write = lo.starts_with("insert")
+        || lo.starts_with("update")
+        || lo.starts_with("delete")
+        || lo.starts_with("replace");
+    is_write && lo.contains("wp_options")
+}
+// ── wp_postmeta covering-index optimization ───────────────────────────────────
+/// Returns true for WP's canonical postmeta IN-list query fired on every
+/// archive page render:
+///   SELECT * FROM wp_postmeta WHERE post_id IN (...) AND meta_key='...'
+fn is_postmeta_in_query(sql: &str) -> bool {
+    let lo = sql.to_ascii_lowercase();
+    lo.contains("wp_postmeta") && lo.contains("post_id") && lo.contains(" in ")
+}
+
+/// One-shot: CREATE INDEX IF NOT EXISTS idx_postmeta_key_post ON
+/// wp_postmeta(meta_key, post_id, meta_value)
+/// Covering index turns the IN-list scan into an index-only lookup.
+/// No-op if index already exists (IF NOT EXISTS). Safe to call concurrently.
+fn ensure_postmeta_index(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_postmeta_key_post \
+         ON wp_postmeta(meta_key, post_id, meta_value);",
+    )
+}
+// ─────────────────────────────────────────────────────────────────────────────
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::AsyncWrite;
@@ -46,6 +88,10 @@ pub struct SharedState {
     pub mode: String,
     pub cache: SharedCache,
     pub write_epoch: Arc<Mutex<u64>>,
+    /// WP-specific: tracks whether the covering index on wp_postmeta has been
+    /// created in this daemon lifetime. Set once on first postmeta IN-list query.
+    /// Only applied when the database contains wp_ prefix tables.
+    pub postmeta_index_created: Arc<AtomicBool>,
 }
 
 pub fn new_shared_state(file: PathBuf, mode: String) -> Arc<SharedState> {
@@ -56,6 +102,7 @@ pub fn new_shared_state(file: PathBuf, mode: String) -> Arc<SharedState> {
             NonZeroUsize::new(RESULT_CACHE_CAP).unwrap(),
         ))),
         write_epoch: Arc::new(Mutex::new(0)),
+        postmeta_index_created: Arc::new(AtomicBool::new(false)),
     })
 }
 
@@ -199,6 +246,35 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         }
 
         let conn = self.get_conn().await?;
+
+        // WP optimization: lazily create a covering index on wp_postmeta the
+        // first time we see a postmeta IN-list query. The index turns the
+        // per-row IN scan (p50 ~100ms) into an index-only lookup (<2ms).
+        // Guarded by an AtomicBool so we pay only one DDL round-trip per daemon
+        // lifetime regardless of connection count. Only fires for WP databases
+        // (query must reference wp_postmeta).
+        if is_postmeta_in_query(&rewritten)
+            && !self.state.postmeta_index_created.load(Ordering::Relaxed)
+        {
+            // Use compare_exchange to ensure a single writer wins the race.
+            if self.state.postmeta_index_created
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::Relaxed)
+                .is_ok()
+            {
+                let idx_conn = conn.clone();
+                tokio::task::spawn_blocking(move || {
+                    let c = idx_conn.lock();
+                    if let Err(e) = ensure_postmeta_index(&c) {
+                        warn!("wp_postmeta index creation failed: {}", e);
+                    } else {
+                        debug!("wp_postmeta covering index ensured (idx_postmeta_key_post)");
+                    }
+                })
+                .await
+                .map_err(io_other)?;
+            }
+        }
+
         let sql_owned = rewritten.clone();
         let exec = tokio::task::spawn_blocking(move || -> io::Result<(Vec<(String, String)>, Vec<Vec<String>>)> {
             let conn = conn.lock();

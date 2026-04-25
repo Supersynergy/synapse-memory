@@ -1,0 +1,1 @@
+{"engine": "lancedb", "n_docs": 10000, "profile": "fast", "phase_a": {"ops_sec": 64758.59062685387, "elapsed_s": 0.15441966700018384, "rss_mb": 1029.48864, "disk_mb": 43.073018, "cpu_pct_mean": 75.6}, "error": "engine timeout", "status": "SKIPPED"}

@@ -8,7 +8,23 @@ QDRANT_BIN="$HOME/.local/bin/qdrant"
 DRY_RUN="${DRY_RUN:-0}"
 N_DOCS="${N_DOCS:-100000}"
 PHASES="${PHASES:-base}"
-LOG="$DIR/run.log"
+PROFILE="${PROFILE:-full}"
+
+# Parse --profile=fast from CLI args
+for arg in "$@"; do
+  case "$arg" in
+    --profile=*) PROFILE="${arg#--profile=}" ;;
+    --profile) ;;
+  esac
+done
+
+if [ "$PROFILE" = "fast" ]; then
+  N_DOCS=10000
+  LOG="$DIR/run_fast.log"
+  ENGINE_TIMEOUT=120
+else
+  LOG="$DIR/run.log"
+fi
 
 source "$VENV/bin/activate"
 
@@ -79,6 +95,7 @@ fi
 SKIP_ENGINES="${SKIP_ENGINES:-}"
 SUFFIX="full"
 if [ "${DRY_RUN}" = "1" ]; then SUFFIX="dry"; fi
+if [ "$PROFILE" = "fast" ]; then SUFFIX="fast"; fi
 # Auto-skip engines with existing full results
 AUTO_SKIP=""
 IFS=',' read -ra _CHECK_LIST <<< "$ALL_ENGINES"
@@ -97,15 +114,17 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 PHASES_FLAG="--phases=$PHASES"
+PROFILE_FLAG="--profile=$PROFILE"
 
 echo "[run] Engines: $ALL_ENGINES"
 echo "[run] Phases: $PHASES"
+echo "[run] Profile: $PROFILE"
 echo "[run] Starting benchmark at $(date)"
 
 # Run each engine as separate process to avoid segfault from mixed .so loading
 # No -e: a segfault in one engine should not stop the rest
 IFS=',' read -ra ENGINE_LIST <<< "$ALL_ENGINES"
-ENGINE_TIMEOUT="${ENGINE_TIMEOUT:-1200}"  # 20min per engine default
+ENGINE_TIMEOUT="${ENGINE_TIMEOUT:-1200}"  # 20min per engine default (overridden by fast profile above)
 
 for engine in "${ENGINE_LIST[@]}"; do
   # Skip if in SKIP_ENGINES
@@ -119,7 +138,8 @@ for engine in "${ENGINE_LIST[@]}"; do
     --engine "$engine" \
     --n-docs "$N_DOCS" \
     $DRY_FLAG \
-    $PHASES_FLAG 2>&1 | tee -a "$LOG"
+    $PHASES_FLAG \
+    $PROFILE_FLAG 2>&1 | tee -a "$LOG"
   EXIT_CODE=${PIPESTATUS[0]}
   set -e
   if [ $EXIT_CODE -eq 124 ]; then
@@ -132,6 +152,10 @@ done
 echo "[run] Benchmark complete at $(date)"
 
 # Aggregate and generate report
-python3 "$DIR/report.py" --partial
-
-echo "[run] Report written to $DIR/RESULTS.md"
+if [ "$PROFILE" = "fast" ]; then
+  python3 "$DIR/report.py" --profile=fast
+  echo "[run] Report written to $DIR/RESULTS_FAST.md"
+else
+  python3 "$DIR/report.py" --partial
+  echo "[run] Report written to $DIR/RESULTS.md"
+fi
