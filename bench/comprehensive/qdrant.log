@@ -1,0 +1,8 @@
+<jemalloc>: option background_thread currently supports pthread only
+error: unexpected argument '--storage-path' found
+
+  tip: a similar argument exists: '--storage-snapshot'
+
+Usage: qdrant --storage-snapshot <PATH>
+
+For more information, try '--help'.

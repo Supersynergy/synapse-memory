@@ -48,4 +48,7 @@ bloat:
 release VER:
     cargo release {{VER}} --execute --no-publish
 
+turbo-daemon:
+    python3 tools/turbo/synapse_turbo.py daemon
+
 check-all: test lint fmt audit deny

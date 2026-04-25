@@ -10,6 +10,7 @@ members = [
     "crates/synapse-mcp",
     "crates/synapse-learn",
     "crates/synapse-mysql",
+    "crates/synapse-mysql-async",
     # scale-100M scaffolding (PR-0, empty stubs, TODO markers)
     "crates/synapse-ann",
     "crates/synapse-quant",

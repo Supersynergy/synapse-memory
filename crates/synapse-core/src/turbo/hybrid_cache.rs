@@ -15,7 +15,7 @@
 //! let emb = cache.get(&"MiniMax".to_string()).unwrap();
 //! ```
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use blake3::hash;
 use std::collections::HashMap;
 use std::sync::RwLock;

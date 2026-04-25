@@ -1,0 +1,28 @@
+[run] Starting Qdrant...
+[warn] Qdrant failed to start, will skip qdrant engine
+[run] Engines: sqlite-vec,duckdb,lancedb,chromadb,synapse
+[run] Starting benchmark at Sat Apr 25 12:01:40 CEST 2026
+[run] --- sqlite-vec ---
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === sqlite-vec ===
+  [A] bulk_insert 100000 docs...
+      39401 ops/s  RSS=1360MB  disk=306.2MB  cpu=80%
+  [B] update 1000 docs...
+      2903 ops/s  RSS=1364MB  cpu=65%
+  [C] mixed 80/20 for 10s...
+      46.5 ops/s  p50=23.8ms  p95=31.4ms  p99=49.3ms
+  [D] 8-thread concurrent select for 10s...
+      114738.8 ops/s  p99=0.0ms
+  -> /Users/master/projects/synapse/bench/comprehensive/results/sqlite-vec_full.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_full.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+sqlite-vec            39401         2903         46.5     31.4     1360    306.2
+[run] --- duckdb ---
+run.sh: line 64: 10416 Segmentation fault: 11     python3 "$DIR/bench.py" --engine "$engine" --n-docs "$N_DOCS" $DRY_FLAG 2>&1
+     10417 Done                       | tee -a "$LOG"

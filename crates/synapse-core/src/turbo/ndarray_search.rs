@@ -228,7 +228,7 @@ impl HybridSearch {
         // RRF fusion
         let mut scores: std::collections::HashMap<i64, (f64, HybridHit)> = Default::default();
 
-        for (i, (doc_id, score)) in fts_results.into_iter().enumerate() {
+        for (i, (doc_id, _score)) in fts_results.into_iter().enumerate() {
             let i_f64 = (i + 1) as f64;
             let rrf_score = 1.0 / (k_rrf + i_f64);
             let hit = HybridHit {
@@ -242,7 +242,7 @@ impl HybridSearch {
                 .or_insert((rrf_score, hit));
         }
 
-        for (i, (doc_id, dist)) in vec_results.into_iter().enumerate() {
+        for (i, (doc_id, _dist)) in vec_results.into_iter().enumerate() {
             let i_f64 = (i + 1) as f64;
             let rrf_score = 1.0 / (k_rrf + i_f64);
             if let Some(existing) = scores.get_mut(&doc_id) {

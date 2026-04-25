@@ -1,0 +1,32 @@
+[package]
+name = "synapse-mysql-async"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Async MySQL wire-protocol server for Synapse — opensrv-mysql + tokio. Phase 1 of MASTERPLAN-V2."
+
+[[bin]]
+name = "synapse-mysql-async"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tokio = { workspace = true, features = ["full"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite = { workspace = true, features = ["column_decltype"] }
+sqlite-vec.workspace = true
+synapse-core = { path = "../synapse-core" }
+synapse-mysql = { path = "../synapse-mysql" }   # reuse rewrite + acl logic
+opensrv-mysql = "0.7"
+mysql_common = "0.32"
+chrono = "0.4"
+regex = "1"
+sha1 = "0.10"
+blake3.workspace = true
+lru = "0.12"
+async-trait = "0.1"
+parking_lot = "0.12"

@@ -36,6 +36,7 @@ EMBED_DIM = 384
 DAEMON_PORT = 9477
 DAEMON_PID = os.path.expanduser("~/.synapse/turbo.pid")
 ONNX_THREADS = 8  # Optimal for M4 Max (benchmark-verified)
+FASTEMBED_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".fastembed_cache")
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # JSON: use orjson if available (5-10x faster), fall back to json
@@ -74,12 +75,24 @@ def qhash(text):
 
 _fe_model = None
 
+_embed_disabled = False
+
 def get_fastembed():
-    global _fe_model
+    global _fe_model, _embed_disabled
+    if _embed_disabled:
+        return None
     if _fe_model is None:
         os.environ["OMP_NUM_THREADS"] = str(ONNX_THREADS)
         from fastembed import TextEmbedding
-        _fe_model = TextEmbedding(model_name=EMBED_MODEL, threads=ONNX_THREADS)
+        kwargs = {"model_name": EMBED_MODEL, "threads": ONNX_THREADS}
+        if os.path.isdir(FASTEMBED_CACHE):
+            kwargs["cache_dir"] = FASTEMBED_CACHE
+        try:
+            _fe_model = TextEmbedding(**kwargs)
+        except Exception as e:
+            print(f"[warn] fastembed init failed ({e}); falling back to lex-only mode", flush=True)
+            _embed_disabled = True
+            return None
     return _fe_model
 
 def embed_text(model, text):
@@ -283,8 +296,11 @@ def cmd_daemon(port=None):
     print(f"[init] Loading fastembed model (threads={ONNX_THREADS})...", flush=True)
     t0 = time.perf_counter()
     model = get_fastembed()
-    list(model.embed(["warmup"]))
-    print(f"[init] Model ready: {(time.perf_counter()-t0)*1000:.0f}ms", flush=True)
+    if model is not None:
+        list(model.embed(["warmup"]))
+        print(f"[init] Model ready: {(time.perf_counter()-t0)*1000:.0f}ms", flush=True)
+    else:
+        print(f"[init] vec disabled — lex-only mode (fastembed unavailable)", flush=True)
 
     print(f"[init] Loading NumPy vector engine...", flush=True)
     t0 = time.perf_counter()
@@ -361,6 +377,13 @@ def cmd_daemon(port=None):
                         emb_mem[h] = emb_bytes
                     else:
                         # T3: Compute embedding
+                        if model is None:
+                            body = b'{"error":"vec disabled: fastembed model unavailable (lex-only mode)"}'
+                            resp = b'HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: ' + str(len(body)).encode() + b'\r\nConnection: close\r\n\r\n' + body
+                            writer.write(resp)
+                            await writer.drain()
+                            writer.close()
+                            return
                         emb_bytes = embed_text(model, query)
                         emb_mem[h] = emb_bytes
                         cache.execute("INSERT OR REPLACE INTO emb_cache (query_hash,query_text,embedding) VALUES (?,?,?)",
@@ -537,6 +560,8 @@ def main():
         i = args.index("--limit"); limit = int(args[i+1]); args = args[:i]+args[i+2:]
     if "--port" in args:
         i = args.index("--port"); port = int(args[i+1]); args = args[:i]+args[i+2:]
+    if "--no-embed" in args:
+        global _embed_disabled; _embed_disabled = True; args = [a for a in args if a != "--no-embed"]
 
     cmds = {
         "find": lambda: cmd_find(args[0], limit) if args else None,
