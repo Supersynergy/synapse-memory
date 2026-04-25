@@ -38,7 +38,7 @@ sleep 2
 if [ -x "$QDRANT_BIN" ]; then
   echo "[run] Starting Qdrant..."
   QDRANT_DATA=$(mktemp -d /tmp/qdrant-bench-XXXXXX)
-  "$QDRANT_BIN" --storage-path "$QDRANT_DATA" --port 6333 > "$DIR/qdrant.log" 2>&1 &
+  QDRANT__STORAGE__STORAGE_PATH="$QDRANT_DATA" QDRANT__SERVICE__HTTP_PORT=6333 "$QDRANT_BIN" > "$DIR/qdrant.log" 2>&1 &
   QDRANT_PID=$!
   # Health-check loop: up to 10s
   QDRANT_UP=0
@@ -75,6 +75,21 @@ if [ $QDRANT_PID -ne 0 ]; then
   ALL_ENGINES="$ALL_ENGINES,qdrant"
 fi
 
+# Allow skipping engines whose results already exist
+SKIP_ENGINES="${SKIP_ENGINES:-}"
+SUFFIX="full"
+if [ "${DRY_RUN}" = "1" ]; then SUFFIX="dry"; fi
+# Auto-skip engines with existing full results
+AUTO_SKIP=""
+IFS=',' read -ra _CHECK_LIST <<< "$ALL_ENGINES"
+for _e in "${_CHECK_LIST[@]}"; do
+  if [ -f "$DIR/results/${_e}_${SUFFIX}.jsonl" ]; then
+    AUTO_SKIP="${AUTO_SKIP:+$AUTO_SKIP,}$_e"
+    echo "[run] Skipping $_e (result exists: results/${_e}_${SUFFIX}.jsonl)"
+  fi
+done
+SKIP_ENGINES="${SKIP_ENGINES:+$SKIP_ENGINES,}$AUTO_SKIP"
+
 DRY_FLAG=""
 if [ "$DRY_RUN" = "1" ]; then
   DRY_FLAG="--dry-run"
@@ -90,18 +105,26 @@ echo "[run] Starting benchmark at $(date)"
 # Run each engine as separate process to avoid segfault from mixed .so loading
 # No -e: a segfault in one engine should not stop the rest
 IFS=',' read -ra ENGINE_LIST <<< "$ALL_ENGINES"
+ENGINE_TIMEOUT="${ENGINE_TIMEOUT:-1200}"  # 20min per engine default
+
 for engine in "${ENGINE_LIST[@]}"; do
+  # Skip if in SKIP_ENGINES
+  if echo "$SKIP_ENGINES" | grep -qE "(^|,)${engine}(,|$)"; then
+    echo "[run] --- $engine SKIPPED ---"
+    continue
+  fi
   echo "[run] --- $engine ---"
-  # Run in subshell; capture exit code without aborting whole script
   set +e
-  python3 "$DIR/bench.py" \
+  timeout "$ENGINE_TIMEOUT" python3 "$DIR/bench.py" \
     --engine "$engine" \
     --n-docs "$N_DOCS" \
     $DRY_FLAG \
     $PHASES_FLAG 2>&1 | tee -a "$LOG"
-  EXIT_CODE=$?
+  EXIT_CODE=${PIPESTATUS[0]}
   set -e
-  if [ $EXIT_CODE -ne 0 ]; then
+  if [ $EXIT_CODE -eq 124 ]; then
+    echo "[warn] engine=$engine TIMEOUT after ${ENGINE_TIMEOUT}s, continuing..."
+  elif [ $EXIT_CODE -ne 0 ]; then
     echo "[warn] engine=$engine exited with code=$EXIT_CODE (segfault=139), continuing..."
   fi
 done

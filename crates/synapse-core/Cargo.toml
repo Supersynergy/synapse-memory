@@ -52,7 +52,7 @@ async-trait = "0.1"
 tokio = { workspace = true }
 
 [dependencies.libsql]
-version = "0.6"
+version = "0.9"
 optional = true
 
 [features]

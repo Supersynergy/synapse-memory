@@ -139,8 +139,12 @@ mod tests {
         assert_eq!(row[0], "1");
     }
 
+    // Run in isolation: `cargo test -p synapse-core --no-default-features
+    // --features backend-libsql libsql_select_one` (libsql+rusqlite share one SQLite
+    // init slot; mixing them in one process triggers the SQLITE_CONFIG_SERIALIZED assert).
     #[cfg(feature = "backend-libsql")]
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
+    #[ignore = "must run in isolation without backend-rusqlite (dual-SQLite init conflict)"]
     async fn libsql_select_one() {
         let dir = tempfile::tempdir().unwrap();
         let backend = LibsqlBackend::new(dir.path().join("t.db").to_str().unwrap());

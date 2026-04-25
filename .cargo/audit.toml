@@ -3,4 +3,13 @@ ignore = [
     "RUSTSEC-2025-0119",
     "RUSTSEC-2024-0436",
     "RUSTSEC-2024-0370",
+    # rustls-webpki 0.102.8 CVEs — reachable ONLY via optional `backend-libsql`
+    # feature (libsql 0.9 -> hyper-rustls 0.25 -> rustls 0.22). Default build and
+    # Xi's TLS path (synapse-mysql-async) now use rustls 0.23 / webpki 0.103.13.
+    # Remove when libsql upstream migrates to hyper 1.x + rustls 0.23.
+    "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    # rustls-native-certs 0.7.3 -- same libsql optional dep chain only
+    "RUSTSEC-2025-0134",
 ]

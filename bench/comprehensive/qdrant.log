@@ -1,8 +1,55 @@
 <jemalloc>: option background_thread currently supports pthread only
-error: unexpected argument '--storage-path' found
+           _                 _    
+  __ _  __| |_ __ __ _ _ __ | |_  
+ / _` |/ _` | '__/ _` | '_ \| __| 
+| (_| | (_| | | | (_| | | | | |_  
+ \__, |\__,_|_|  \__,_|_| |_|\__| 
+    |_|                           
 
-  tip: a similar argument exists: '--storage-snapshot'
+Version: 1.17.1, build: eabee371
+Access web UI at http://localhost:6333/dashboard
 
-Usage: qdrant --storage-snapshot <PATH>
-
-For more information, try '--help'.
+2026-04-25T11:54:21.692644Z  WARN qdrant::settings: Config file not found: config/config
+2026-04-25T11:54:21.692900Z  WARN qdrant::settings: Config file not found: config/development
+2026-04-25T11:54:21.693454Z  INFO storage::content_manager::consensus::persistent: Initializing new raft state at /tmp/qdrant-bench-ZPs32V/raft_state.json
+2026-04-25T11:54:21.788216Z  INFO qdrant: Distributed mode disabled
+2026-04-25T11:54:21.788474Z  INFO qdrant: Telemetry reporting enabled, id: c6484447-1312-43e6-8af4-32cc96764302
+2026-04-25T11:54:21.790210Z  WARN qdrant::actix::web_ui: Static content folder for Web UI './static' does not exist
+2026-04-25T11:54:21.790243Z  INFO qdrant::actix: REST transport settings: keep_alive=5s, client_request_timeout=5s, client_disconnect_timeout=5s
+2026-04-25T11:54:21.790249Z  INFO qdrant::actix: TLS disabled for REST API
+2026-04-25T11:54:21.790801Z  INFO qdrant::actix: Qdrant HTTP listening on 6333
+2026-04-25T11:54:21.790822Z  INFO actix_server::builder: starting 15 workers
+2026-04-25T11:54:21.791036Z  INFO actix_server::server: Actix runtime found; starting in Actix runtime
+2026-04-25T11:54:21.791056Z  INFO actix_server::server: starting service: "actix-web-service-0.0.0.0:6333", workers: 15, listening on: 0.0.0.0:6333
+2026-04-25T11:54:21.794921Z  INFO qdrant::tonic: Qdrant gRPC listening on 6334
+2026-04-25T11:54:21.794944Z  INFO qdrant::tonic: TLS disabled for gRPC API
+2026-04-25T11:54:33.826926Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 62 "-" "Python-urllib/3.12" 0.000422
+2026-04-25T11:54:33.834962Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 57 "-" "Python-urllib/3.12" 0.000049
+2026-04-25T11:54:49.792324Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 59 "-" "Python-urllib/3.12" 0.000120
+2026-04-25T11:54:49.804228Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 59 "-" "Python-urllib/3.12" 0.000948
+2026-04-25T11:55:01.277180Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections/auto_memory HTTP/1.1" 404 92 "-" "Python-urllib/3.12" 0.000599
+2026-04-25T11:55:01.281159Z  INFO storage::content_manager::toc::collection_meta_ops: Creating collection auto_memory
+2026-04-25T11:55:01.920345Z  INFO actix_web::middleware::logger: 127.0.0.1 "PUT /collections/auto_memory HTTP/1.1" 200 48 "-" "Python-urllib/3.12" 0.641237
+2026-04-25T11:55:01.922924Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections/auto_memory_queue HTTP/1.1" 404 94 "-" "Python-urllib/3.12" 0.000060
+2026-04-25T11:55:01.924541Z  INFO storage::content_manager::toc::collection_meta_ops: Creating collection auto_memory_queue
+2026-04-25T11:55:02.591157Z  INFO actix_web::middleware::logger: 127.0.0.1 "PUT /collections/auto_memory_queue HTTP/1.1" 200 48 "-" "Python-urllib/3.12" 0.666702
+2026-04-25T11:55:02.594099Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections/auto_memory_reflections HTTP/1.1" 404 104 "-" "Python-urllib/3.12" 0.000139
+2026-04-25T11:55:02.597312Z  INFO storage::content_manager::toc::collection_meta_ops: Creating collection auto_memory_reflections
+2026-04-25T11:55:03.293934Z  INFO actix_web::middleware::logger: 127.0.0.1 "PUT /collections/auto_memory_reflections HTTP/1.1" 200 48 "-" "Python-urllib/3.12" 0.696706
+2026-04-25T11:55:03.306931Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000055
+2026-04-25T11:55:03.307303Z  INFO actix_web::middleware::logger: 127.0.0.1 "POST /collections/auto_memory_queue/points/scroll HTTP/1.1" 200 81 "-" "Python-urllib/3.12" 0.007092
+2026-04-25T11:55:03.327858Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000063
+2026-04-25T11:55:21.210559Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000069
+2026-04-25T11:55:21.223309Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 148 "-" "Python-urllib/3.12" 0.000481
+2026-04-25T11:55:35.056681Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000340
+2026-04-25T11:55:35.066760Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000052
+2026-04-25T11:55:50.031747Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000039
+2026-04-25T11:55:50.038493Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000053
+2026-04-25T11:56:04.380578Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000040
+2026-04-25T11:56:04.387627Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000048
+2026-04-25T11:56:36.031954Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000048
+2026-04-25T11:56:36.039746Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 144 "-" "Python-urllib/3.12" 0.000063
+2026-04-25T11:56:51.938214Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000049
+2026-04-25T11:56:51.953348Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000044
+2026-04-25T11:57:12.674726Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000052
+2026-04-25T11:57:12.688085Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000043

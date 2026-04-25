@@ -167,21 +167,27 @@ class DuckDBAdapter(Adapter):
         # HNSW index created after bulk insert
         self._has_index = False
 
+    def _build_hnsw(self):
+        if self._has_index or not self._has_vss:
+            return
+        try:
+            print(f"  [duckdb] Building HNSW index...", flush=True)
+            self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
+            self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS hnsw_idx ON docs USING HNSW (vec)")
+            self._has_index = True
+            print(f"  [duckdb] HNSW index done", flush=True)
+        except Exception as e:
+            print(f"  [duckdb] HNSW index skipped: {e}", flush=True)
+
     def bulk_insert(self, docs):
-        import duckdb
         rows = [(d["id"], d["text"], d["category"], d["score"],
                  d["timestamp"], d["source"], d["lang"],
                  np.frombuffer(d["vec"], dtype=np.float32).tolist()) for d in docs]
         self.conn.executemany(
             "INSERT OR IGNORE INTO docs VALUES (?,?,?,?,?,?,?,?)", rows)
-        if not self._has_index and self._has_vss:
-            try:
-                self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
-                self.conn.execute(
-                    "CREATE INDEX IF NOT EXISTS hnsw_idx ON docs USING HNSW (vec)")
-                self._has_index = True
-            except Exception:
-                pass
+        self._inserted = getattr(self, "_inserted", 0) + len(rows)
+        print(f"  [duckdb] inserted {self._inserted} rows total", flush=True)
 
     def update(self, ids, new_vecs, new_texts):
         for doc_id, vec, text in zip(ids, new_vecs, new_texts):
@@ -533,6 +539,9 @@ def run_phase_a(adapter, docs):
     batch_size = 1000
     for i in range(0, len(docs), batch_size):
         adapter.bulk_insert(docs[i:i+batch_size])
+    # Build HNSW index after all data is in (DuckDB VSS requirement)
+    if hasattr(adapter, "_build_hnsw"):
+        adapter._build_hnsw()
     elapsed = time.perf_counter() - t0
     cpu_samples = sampler.stop()
     rss = sampler.peak_rss_mb()

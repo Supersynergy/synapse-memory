@@ -1,35 +1,60 @@
+(eval):1: command not found: setsid
 [run] Starting Qdrant...
-[warn] Qdrant failed health-check, will skip qdrant engine
-[run] Engines: sqlite-vec,duckdb,lancedb,chromadb,synapse
+[run] Qdrant PID=31614 ready
+[run] Skipping sqlite-vec (result exists: results/sqlite-vec_full.jsonl)
+[run] Engines: sqlite-vec,duckdb,lancedb,chromadb,synapse,qdrant
 [run] Phases: base
-[run] Starting benchmark at Sat Apr 25 13:37:31 CEST 2026
-[run] --- sqlite-vec ---
+[run] Starting benchmark at Sat Apr 25 13:54:22 CEST 2026
+[run] --- sqlite-vec SKIPPED ---
+[run] --- duckdb ---
 [bench] Loading dataset (100000 docs)...
 [bench] Loaded 100000 docs
 
-[bench] === sqlite-vec ===
-[engine=sqlite-vec phase=A scale=100000] starting
+[bench] === duckdb ===
+  [duckdb] inserted 50 rows total
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === duckdb ===
+  [duckdb] inserted 50 rows total
+[engine=duckdb phase=A scale=100000] starting
   [A] bulk_insert 100000 docs...
-      38545 ops/s  RSS=1302MB  disk=306.2MB  cpu=91%
-[engine=sqlite-vec phase=A scale=100000] done ops_per_sec=38545
-[engine=sqlite-vec phase=B scale=100000] starting
-  [B] update 1000 docs...
-      3824 ops/s  RSS=1306MB  cpu=53%
-[engine=sqlite-vec phase=B scale=100000] done ops_per_sec=3824
-[engine=sqlite-vec phase=C scale=100000] starting
-  [C] mixed 80/20 for 10s...
-      42.5 ops/s  p50=29.6ms  p95=34.1ms  p99=36.3ms
-[engine=sqlite-vec phase=C scale=100000] done ops_per_sec=42.5
-[engine=sqlite-vec phase=D scale=100000] starting
-  [D] 8-thread concurrent select for 10s...
-      55857.7 ops/s  p99=0.0ms
-[engine=sqlite-vec phase=D scale=100000] done ops_per_sec=55857.7
-  -> /Users/master/projects/synapse/bench/comprehensive/results/sqlite-vec_full.jsonl
-
-[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_full.jsonl
-
-=== QUICK SUMMARY ===
-Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
---------------------------------------------------------------------------------
-sqlite-vec            38545         3824         42.5     34.1     1302    306.2
-[run] --- duckdb ---
+  [duckdb] inserted 1000 rows total
+[engine=duckdb phase=A scale=100000] starting
+  [A] bulk_insert 100000 docs...
+  [duckdb] inserted 1000 rows total
+  [duckdb] inserted 2000 rows total
+  [duckdb] inserted 2000 rows total
+  [duckdb] inserted 3000 rows total
+  [duckdb] inserted 3000 rows total
+  [duckdb] inserted 4000 rows total
+  [duckdb] inserted 4000 rows total
+  [duckdb] inserted 5000 rows total
+  [duckdb] inserted 5000 rows total
+  [duckdb] inserted 6000 rows total
+  [duckdb] inserted 6000 rows total
+  [duckdb] inserted 7000 rows total
+  [duckdb] inserted 7000 rows total
+  [duckdb] inserted 8000 rows total
+  [duckdb] inserted 8000 rows total
+  [duckdb] inserted 9000 rows total
+  [duckdb] inserted 9000 rows total
+  [duckdb] inserted 10000 rows total
+  [duckdb] inserted 10000 rows total
+  [duckdb] inserted 11000 rows total
+  [duckdb] inserted 11000 rows total
+  [duckbench/comprehensive/run.sh: line 93: 90096 Segmentation fault: 11     python3 "$DIR/bench.py" --engine "$engine" --n-docs "$N_DOCS" $DRY_FLAG $PHASES_FLAG 2>&1
+     90097 Done                       | tee -a "$LOG"
+[warn] engine=duckdb exited with code=139 (segfault=139), continuing...
+[run] --- lancedb ---
+[2026-04-25T11:56:45Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_warm_lancedb_oo6u87zv/lance/docs.lance, it will be created
+[2026-04-25T11:56:45Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_lancedb_ip_keunr/lance/docs.lance, it will be created
+existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_lancedb_ip_keunr/lance/docs.lance, it will be created
+  [duckdb] inserted 18000 rows total
+  [duckdb] inserted 18000 rows total
+  [duckdb] inserted 19000 rows total
+  [duckdb] inserted 19000 rows total
+  [duckdb] inserted 20000 rows total
+  [duckdb] inserted 20000 rows total
+  [duckdb] inserted 21000 rows total
+  [duckdb] inserted 21000 rows total
