@@ -9,3 +9,4 @@ Cargo.lock
 
 # Private strategy docs — never commit
 docs/strategy/
+bench/comprehensive/_qdrant_storage/
