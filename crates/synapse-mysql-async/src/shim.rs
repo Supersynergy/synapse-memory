@@ -174,7 +174,7 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             return writer.finish().await;
         }
         // Phase 1 MVP: skip rewrite for everything else, pass through to SQLite.
-        let rewritten = sql.to_string();
+        let rewritten = synapse_mysql::rewrite::rewrite(sql, &self.state.mode).unwrap_or_else(|_| sql.to_string());
         let _mode = &self.state.mode;
         let key = blake3_u64(&rewritten);
         let current_epoch = { *self.state.write_epoch.lock() };
@@ -246,7 +246,7 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             .get(&stmt_id)
             .cloned()
             .unwrap_or_else(|| "SELECT 1".to_string());
-        let rewritten = sql.clone();
+        let rewritten = synapse_mysql::rewrite::rewrite(&sql, &self.state.mode).unwrap_or_else(|_| sql.clone());
         let conn = self.get_conn().await?;
         let exec = tokio::task::spawn_blocking(move || -> io::Result<(Vec<(String, String)>, Vec<Vec<String>>)> {
             let conn = conn.lock();

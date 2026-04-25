@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "synapse_mysql"
+path = "src/lib.rs"
+
 [[bin]]
 name = "synapse-mysql"
 path = "src/main.rs"
