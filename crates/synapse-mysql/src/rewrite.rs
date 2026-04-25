@@ -313,6 +313,9 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     // Handle KEY/UNIQUE KEY inside CREATE TABLE by stripping inline index defs
     // and removing redundant PRIMARY KEY (col) when an AUTOINCREMENT column already implies PK.
     if upper.starts_with("CREATE TABLE") {
+        let re_trailing_comma = Regex::new(r",\s*$").unwrap();
+        let re_pk_line = Regex::new(r"(?i)^\s*PRIMARY\s+KEY\s+\(\s*\w+\s*\)\s*,?\s*$").unwrap();
+        let re_unique_key = Regex::new(r#"(?i)\bUNIQUE\s+KEY\s+(?:"[^"]+"|\w+)\s*(\([^)]+\))"#).unwrap();
         let mut cleaned: Vec<String> = Vec::new();
         let mut has_autoincrement = false;
         for line in out.lines() {
@@ -324,7 +327,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
             if trimmed_upper.starts_with("KEY ") || trimmed_upper.starts_with("INDEX ") || trimmed_upper.starts_with("FULLTEXT ") {
                 // Remove trailing comma from previous line to avoid syntax error
                 if let Some(last) = cleaned.last_mut() {
-                    *last = Regex::new(r",\s*$").unwrap().replace(last, "").to_string();
+                    *last = re_trailing_comma.replace(last, "").to_string();
                 }
                 continue;
             }
@@ -332,14 +335,14 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
                 has_autoincrement = true;
             }
             // Strip standalone PRIMARY KEY (single_col) when AUTOINCREMENT already implies PK
-            if has_autoincrement && Regex::new(r"(?i)^\s*PRIMARY\s+KEY\s+\(\s*\w+\s*\)\s*,?\s*$").unwrap().is_match(line) {
+            if has_autoincrement && re_pk_line.is_match(line) {
                 if let Some(last) = cleaned.last_mut() {
-                    *last = Regex::new(r",\s*$").unwrap().replace(last, "").to_string();
+                    *last = re_trailing_comma.replace(last, "").to_string();
                 }
                 continue;
             }
             // UNIQUE KEY name (cols) -> UNIQUE (cols)  (strip constraint name, SQLite syntax)
-            let fixed = Regex::new(r#"(?i)\bUNIQUE\s+KEY\s+(?:"[^"]+"|\w+)\s*(\([^)]+\))"#).unwrap().replace(line, "UNIQUE $1");
+            let fixed = re_unique_key.replace(line, "UNIQUE $1");
             cleaned.push(fixed.to_string());
         }
         // Fix commas: every body line must end with comma except the last before ')'
@@ -497,9 +500,229 @@ fn wp_conflict_column(table: &str) -> Option<&'static str> {
     }
 }
 
+/// Returns true if the SQL is a DDL statement that should be `execute`d rather
+/// than `query`d (CREATE / DROP / ALTER / TRUNCATE / RENAME / LOCK / UNLOCK /
+/// GRANT / ANALYZE).
+pub fn is_ddl(sql: &str) -> bool {
+    let upper = sql.trim_start().to_ascii_uppercase();
+    upper.starts_with("CREATE ")
+        || upper.starts_with("DROP ")
+        || upper.starts_with("ALTER ")
+        || upper.starts_with("TRUNCATE ")
+        || upper.starts_with("RENAME ")
+        || upper.starts_with("LOCK ")
+        || upper.starts_with("UNLOCK ")
+        || upper.starts_with("GRANT ")
+        || upper.starts_with("ANALYZE ")
+}
+
+/// Translate one MySQL DDL statement to one or more SQLite statements.
+///
+/// For CREATE TABLE this returns the cleaned CREATE TABLE statement plus any
+/// extracted `CREATE INDEX` / `CREATE UNIQUE INDEX` statements that were
+/// inline `KEY` / `UNIQUE KEY` clauses in the MySQL syntax.
+pub fn rewrite_ddl(sql: &str) -> Result<Vec<String>> {
+    let upper = sql.trim_start().to_ascii_uppercase();
+
+    // CREATE / DROP DATABASE / SCHEMA → no-op
+    if upper.starts_with("CREATE DATABASE")
+        || upper.starts_with("CREATE SCHEMA")
+        || upper.starts_with("DROP DATABASE")
+        || upper.starts_with("DROP SCHEMA")
+    {
+        return Ok(vec!["SELECT 1".to_string()]);
+    }
+
+    if upper.starts_with("CREATE TABLE") {
+        return rewrite_create_table(sql);
+    }
+
+    Ok(vec![rewrite(sql, "")?])
+}
+
+fn rewrite_create_table(sql: &str) -> Result<Vec<String>> {
+    let mut s = sql.replace('`', "\"");
+    s = normalise_create_table_body(&s);
+
+    // Strip table options after the closing `)`
+    s = Regex::new(r"(?is)\)\s*(ENGINE\s*=.*|DEFAULT\s+CHARSET\s*=.*|DEFAULT\s+CHARACTER\s+SET.*|COLLATE\s*=.*|ROW_FORMAT\s*=.*|AUTO_INCREMENT\s*=.*|PACK_KEYS\s*=.*|COMMENT\s*=.*|/\*!.*?\*/.*)*\s*;?\s*$")
+        .unwrap()
+        .replace(&s, ")")
+        .to_string();
+
+    let table_name = Regex::new(r#"(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?(\w+)"?"#)
+        .unwrap()
+        .captures(&s)
+        .and_then(|c| c.get(1).map(|m| m.as_str().to_string()))
+        .unwrap_or_else(|| "unknown_table".to_string());
+
+    // Strip widths on integer types: BIGINT(20) → BIGINT, INT(11) → INT
+    s = Regex::new(r"(?i)(BIGINT|SMALLINT|TINYINT|MEDIUMINT|INT)\s*\(\s*\d+\s*\)")
+        .unwrap()
+        .replace_all(&s, "$1")
+        .to_string();
+    s = Regex::new(r"(?i)\b(BIGINT|SMALLINT|TINYINT|MEDIUMINT|INT)\b")
+        .unwrap()
+        .replace_all(&s, "INTEGER")
+        .to_string();
+    s = Regex::new(r"(?i)\bUNSIGNED\b").unwrap().replace_all(&s, "").to_string();
+    s = Regex::new(r"(?i)\bZEROFILL\b").unwrap().replace_all(&s, "").to_string();
+    s = Regex::new(r"(?i)\b(LONGTEXT|MEDIUMTEXT|TINYTEXT)\b")
+        .unwrap()
+        .replace_all(&s, "TEXT")
+        .to_string();
+    s = Regex::new(r"(?i)\benum\s*\([^)]*\)").unwrap().replace_all(&s, "TEXT").to_string();
+    s = Regex::new(r"(?i)\bset\s*\([^)]*\)").unwrap().replace_all(&s, "TEXT").to_string();
+    s = Regex::new(r"(?i)\bCHARACTER\s+SET\s+\w+").unwrap().replace_all(&s, "").to_string();
+    s = Regex::new(r"(?i)\bCOLLATE\s+\w+").unwrap().replace_all(&s, "").to_string();
+    s = Regex::new(r"(?i)\bCOMMENT\s+'(?:[^'\\]|\\.|'')*'").unwrap().replace_all(&s, "").to_string();
+    s = Regex::new(r"(?i)\bON\s+UPDATE\s+CURRENT_TIMESTAMP(?:\(\))?").unwrap().replace_all(&s, "").to_string();
+
+    // AUTO_INCREMENT → INTEGER PRIMARY KEY AUTOINCREMENT
+    s = Regex::new(r#"(?i)("?\w+"?)\s+INTEGER\s+(?:NOT\s+NULL\s+)?AUTO_INCREMENT"#)
+        .unwrap()
+        .replace_all(&s, "$1 INTEGER PRIMARY KEY AUTOINCREMENT")
+        .to_string();
+
+    fn extract_paren_body(s: &str) -> Option<(String, usize)> {
+        let bytes = s.as_bytes();
+        let start = bytes.iter().position(|&b| b == b'(')?;
+        let mut depth = 0i32;
+        for (i, &b) in bytes.iter().enumerate().skip(start) {
+            if b == b'(' { depth += 1; }
+            else if b == b')' { depth -= 1; if depth == 0 { return Some((s[start+1..i].to_string(), i)); } }
+        }
+        None
+    }
+
+    let re_unique_idx = Regex::new(r#"(?i)^\s*UNIQUE\s+(?:KEY|INDEX)\s+"?(\w+)"?\s*\("#).unwrap();
+    let re_plain_idx = Regex::new(r#"(?i)^\s*(?:FULLTEXT\s+|SPATIAL\s+)?(?:KEY|INDEX)\s+"?(\w+)"?\s*\("#).unwrap();
+    let re_pk_line = Regex::new(r#"(?i)^\s*PRIMARY\s+KEY\s+\(\s*"?\w+"?\s*\)\s*,?\s*$"#).unwrap();
+    let re_trailing_comma = Regex::new(r",\s*$").unwrap();
+    let mut extracted: Vec<String> = Vec::new();
+    let mut cleaned_lines: Vec<String> = Vec::new();
+    let mut has_autoincrement = false;
+    for line in s.lines() {
+        let trimmed = line.trim();
+        let trimmed_clean = trimmed.trim_end_matches(',').trim();
+        let upper_l = trimmed_clean.to_ascii_uppercase();
+
+        if let Some(cap) = re_unique_idx.captures(trimmed_clean) {
+            let idx = cap.get(1).unwrap().as_str().to_string();
+            if let Some((cols, _)) = extract_paren_body(trimmed_clean) {
+                extracted.push(format!(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"{}_{}\" ON \"{}\" ({})",
+                    table_name, idx, table_name, strip_index_lengths(&cols)
+                ));
+                if let Some(last) = cleaned_lines.last_mut() {
+                    *last = re_trailing_comma.replace(last, "").to_string();
+                }
+                continue;
+            }
+        }
+        if !upper_l.starts_with("PRIMARY ") {
+            if let Some(cap) = re_plain_idx.captures(trimmed_clean) {
+                let idx = cap.get(1).unwrap().as_str().to_string();
+                if let Some((cols, _)) = extract_paren_body(trimmed_clean) {
+                    extracted.push(format!(
+                        "CREATE INDEX IF NOT EXISTS \"{}_{}\" ON \"{}\" ({})",
+                        table_name, idx, table_name, strip_index_lengths(&cols)
+                    ));
+                    if let Some(last) = cleaned_lines.last_mut() {
+                        *last = re_trailing_comma.replace(last, "").to_string();
+                    }
+                    continue;
+                }
+            }
+        }
+        if upper_l.contains("AUTOINCREMENT") {
+            has_autoincrement = true;
+        }
+        if has_autoincrement && re_pk_line.is_match(line) {
+            if let Some(last) = cleaned_lines.last_mut() {
+                *last = re_trailing_comma.replace(last, "").to_string();
+            }
+            continue;
+        }
+        cleaned_lines.push(line.to_string());
+    }
+
+    // Re-balance commas: drop trailing comma on last body line
+    for i in 0..cleaned_lines.len().saturating_sub(1) {
+        let curr = cleaned_lines[i].trim();
+        let next = cleaned_lines[i + 1].trim();
+        if curr.is_empty() || next.is_empty() { continue; }
+        if curr.to_ascii_uppercase().starts_with("CREATE TABLE") { continue; }
+        if next.starts_with(')') && curr.ends_with(',') {
+            cleaned_lines[i] = cleaned_lines[i].trim_end_matches(',').to_string();
+        }
+    }
+
+    let mut create_table_sql = cleaned_lines.join("\n");
+    create_table_sql = create_table_sql.trim_end_matches(';').trim().to_string();
+
+    let mut out = vec![create_table_sql];
+    out.extend(extracted);
+    Ok(out)
+}
+
+fn strip_index_lengths(cols: &str) -> String {
+    Regex::new(r"\(\s*\d+\s*\)").unwrap().replace_all(cols, "").to_string()
+}
+
+/// Reflow a CREATE TABLE so each top-level comma item is on its own line.
+fn normalise_create_table_body(sql: &str) -> String {
+    let bytes = sql.as_bytes();
+    let open = match bytes.iter().position(|&b| b == b'(') {
+        Some(p) => p,
+        None => return sql.to_string(),
+    };
+    let mut depth = 0i32;
+    let mut in_s = false;
+    let mut in_d = false;
+    let mut close = open;
+    for (i, &b) in bytes.iter().enumerate().skip(open) {
+        if in_s { if b == b'\'' && bytes.get(i+1) != Some(&b'\'') { in_s = false; } continue; }
+        if in_d { if b == b'"' { in_d = false; } continue; }
+        match b {
+            b'\'' => in_s = true,
+            b'"' => in_d = true,
+            b'(' => depth += 1,
+            b')' => { depth -= 1; if depth == 0 { close = i; break; } }
+            _ => {}
+        }
+    }
+    if close <= open { return sql.to_string(); }
+    let prefix = &sql[..=open];
+    let body = &sql[open+1..close];
+    let suffix = &sql[close..];
+
+    let mut items: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut depth = 0i32;
+    let mut in_s = false;
+    let mut in_d = false;
+    for c in body.chars() {
+        if in_s { cur.push(c); if c == '\'' { in_s = false; } continue; }
+        if in_d { cur.push(c); if c == '"' { in_d = false; } continue; }
+        match c {
+            '\'' => { in_s = true; cur.push(c); }
+            '"' => { in_d = true; cur.push(c); }
+            '(' => { depth += 1; cur.push(c); }
+            ')' => { depth -= 1; cur.push(c); }
+            ',' if depth == 0 => { items.push(cur.trim().to_string()); cur.clear(); }
+            _ => cur.push(c),
+        }
+    }
+    if !cur.trim().is_empty() { items.push(cur.trim().to_string()); }
+    let joined = items.join(",\n");
+    format!("{}\n{}\n{}", prefix, joined, suffix)
+}
+
 #[cfg(test)]
 mod tests {
     use super::rewrite;
+    use super::{is_ddl, rewrite_ddl};
 
     fn rw(sql: &str) -> String {
         rewrite(sql, "").expect("rewrite failed")
@@ -578,5 +801,107 @@ mod tests {
         let out = rw(sql);
         assert!(out.to_uppercase().contains("INSERT OR IGNORE"), "got: {out}");
         assert!(!out.contains("ON CONFLICT"), "got: {out}");
+    }
+
+    #[test]
+    fn test_is_ddl() {
+        assert!(is_ddl("CREATE DATABASE brain"));
+        assert!(is_ddl("CREATE TABLE x (id INT)"));
+        assert!(is_ddl("ALTER TABLE x ADD COLUMN y INT"));
+        assert!(!is_ddl("SELECT 1"));
+        assert!(!is_ddl("INSERT INTO x VALUES(1)"));
+    }
+
+    #[test]
+    fn test_create_database_noop() {
+        assert_eq!(rewrite_ddl("CREATE DATABASE brain").unwrap(), vec!["SELECT 1"]);
+        assert_eq!(rewrite_ddl("CREATE DATABASE IF NOT EXISTS brain").unwrap(), vec!["SELECT 1"]);
+        assert_eq!(rewrite_ddl("CREATE SCHEMA `brain`").unwrap(), vec!["SELECT 1"]);
+        assert_eq!(rewrite_ddl("DROP DATABASE brain").unwrap(), vec!["SELECT 1"]);
+    }
+
+    fn assert_ct_ok(stmts: &[String]) {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        for s in stmts {
+            conn.execute_batch(s).unwrap_or_else(|e| panic!("SQLite rejected: {s}\nerr: {e}"));
+        }
+    }
+
+    #[test]
+    fn test_wp_posts() {
+        let ddl = "CREATE TABLE wp_posts (\nID bigint(20) unsigned NOT NULL auto_increment,\npost_author bigint(20) unsigned NOT NULL default '0',\npost_date datetime NOT NULL default '0000-00-00 00:00:00',\npost_content longtext NOT NULL,\npost_title text NOT NULL,\npost_status varchar(20) NOT NULL default 'publish',\npost_name varchar(200) NOT NULL default '',\npost_modified datetime NOT NULL default '0000-00-00 00:00:00',\npost_parent bigint(20) unsigned NOT NULL default '0',\nguid varchar(255) NOT NULL default '',\nmenu_order int(11) NOT NULL default '0',\npost_type varchar(20) NOT NULL default 'post',\npost_mime_type varchar(100) NOT NULL default '',\ncomment_count bigint(20) NOT NULL default '0',\nPRIMARY KEY  (ID),\nKEY post_name (post_name(191)),\nKEY type_status_date (post_type,post_status,post_date,ID),\nKEY post_parent (post_parent),\nKEY post_author (post_author)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        let out = rewrite_ddl(ddl).unwrap();
+        assert!(out.len() >= 5, "expected table + 4 indexes, got {}: {:?}", out.len(), out);
+        assert!(out[0].to_uppercase().contains("AUTOINCREMENT"));
+        assert!(!out[0].to_uppercase().contains("ENGINE"));
+        assert_ct_ok(&out);
+    }
+
+    #[test]
+    fn test_wp_options() {
+        let ddl = "CREATE TABLE wp_options (\noption_id bigint(20) unsigned NOT NULL auto_increment,\noption_name varchar(191) NOT NULL default '',\noption_value longtext NOT NULL,\nautoload varchar(20) NOT NULL default 'yes',\nPRIMARY KEY  (option_id),\nUNIQUE KEY option_name (option_name),\nKEY autoload (autoload)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        let out = rewrite_ddl(ddl).unwrap();
+        assert_ct_ok(&out);
+        assert!(out.iter().any(|s| s.contains("UNIQUE INDEX")));
+    }
+
+    #[test]
+    fn test_wp_users() {
+        let ddl = "CREATE TABLE wp_users (\nID bigint(20) unsigned NOT NULL auto_increment,\nuser_login varchar(60) NOT NULL default '',\nuser_pass varchar(255) NOT NULL default '',\nuser_nicename varchar(50) NOT NULL default '',\nuser_email varchar(100) NOT NULL default '',\nuser_url varchar(100) NOT NULL default '',\nuser_registered datetime NOT NULL default '0000-00-00 00:00:00',\nuser_activation_key varchar(255) NOT NULL default '',\nuser_status int(11) NOT NULL default '0',\ndisplay_name varchar(250) NOT NULL default '',\nPRIMARY KEY  (ID),\nKEY user_login_key (user_login),\nKEY user_nicename (user_nicename),\nKEY user_email (user_email)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        assert_ct_ok(&rewrite_ddl(ddl).unwrap());
+    }
+
+    #[test]
+    fn test_wp_postmeta() {
+        let ddl = "CREATE TABLE wp_postmeta (\nmeta_id bigint(20) unsigned NOT NULL auto_increment,\npost_id bigint(20) unsigned NOT NULL default '0',\nmeta_key varchar(255) default NULL,\nmeta_value longtext,\nPRIMARY KEY  (meta_id),\nKEY post_id (post_id),\nKEY meta_key (meta_key(191))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        assert_ct_ok(&rewrite_ddl(ddl).unwrap());
+    }
+
+    #[test]
+    fn test_wp_meta_tables() {
+        for (table, id_col, fk) in &[
+            ("wp_usermeta", "umeta_id", "user_id"),
+            ("wp_termmeta", "meta_id", "term_id"),
+            ("wp_commentmeta", "meta_id", "comment_id"),
+        ] {
+            let ddl = format!("CREATE TABLE {table} (\n{id_col} bigint(20) unsigned NOT NULL auto_increment,\n{fk} bigint(20) unsigned NOT NULL default '0',\nmeta_key varchar(255) default NULL,\nmeta_value longtext,\nPRIMARY KEY  ({id_col}),\nKEY {fk} ({fk}),\nKEY meta_key (meta_key(191))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            assert_ct_ok(&rewrite_ddl(&ddl).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_wp_terms() {
+        let ddl = "CREATE TABLE wp_terms (\nterm_id bigint(20) unsigned NOT NULL auto_increment,\nname varchar(200) NOT NULL default '',\nslug varchar(200) NOT NULL default '',\nterm_group bigint(10) NOT NULL default 0,\nPRIMARY KEY  (term_id),\nKEY slug (slug(191)),\nKEY name (name(191))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        assert_ct_ok(&rewrite_ddl(ddl).unwrap());
+    }
+
+    #[test]
+    fn test_wp_term_taxonomy() {
+        let ddl = "CREATE TABLE wp_term_taxonomy (\nterm_taxonomy_id bigint(20) unsigned NOT NULL auto_increment,\nterm_id bigint(20) unsigned NOT NULL default 0,\ntaxonomy varchar(32) NOT NULL default '',\ndescription longtext NOT NULL,\nparent bigint(20) unsigned NOT NULL default 0,\ncount bigint(20) NOT NULL default 0,\nPRIMARY KEY  (term_taxonomy_id),\nUNIQUE KEY term_id_taxonomy (term_id,taxonomy),\nKEY taxonomy (taxonomy)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        assert_ct_ok(&rewrite_ddl(ddl).unwrap());
+    }
+
+    #[test]
+    fn test_wp_term_relationships() {
+        let ddl = "CREATE TABLE wp_term_relationships (\nobject_id bigint(20) unsigned NOT NULL default 0,\nterm_taxonomy_id bigint(20) unsigned NOT NULL default 0,\nterm_order int(11) NOT NULL default 0,\nPRIMARY KEY  (object_id,term_taxonomy_id),\nKEY term_taxonomy_id (term_taxonomy_id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        assert_ct_ok(&rewrite_ddl(ddl).unwrap());
+    }
+
+    #[test]
+    fn test_wp_comments() {
+        let ddl = "CREATE TABLE wp_comments (\ncomment_ID bigint(20) unsigned NOT NULL auto_increment,\ncomment_post_ID bigint(20) unsigned NOT NULL default '0',\ncomment_author tinytext NOT NULL,\ncomment_author_email varchar(100) NOT NULL default '',\ncomment_author_url varchar(200) NOT NULL default '',\ncomment_author_IP varchar(100) NOT NULL default '',\ncomment_date datetime NOT NULL default '0000-00-00 00:00:00',\ncomment_date_gmt datetime NOT NULL default '0000-00-00 00:00:00',\ncomment_content text NOT NULL,\ncomment_karma int(11) NOT NULL default '0',\ncomment_approved varchar(20) NOT NULL default '1',\ncomment_agent varchar(255) NOT NULL default '',\ncomment_type varchar(20) NOT NULL default 'comment',\ncomment_parent bigint(20) unsigned NOT NULL default '0',\nuser_id bigint(20) unsigned NOT NULL default '0',\nPRIMARY KEY  (comment_ID),\nKEY comment_post_ID (comment_post_ID),\nKEY comment_approved_date_gmt (comment_approved,comment_date_gmt),\nKEY comment_date_gmt (comment_date_gmt),\nKEY comment_parent (comment_parent),\nKEY comment_author_email (comment_author_email(10))\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        assert_ct_ok(&rewrite_ddl(ddl).unwrap());
+    }
+
+    #[test]
+    fn test_wp_links() {
+        let ddl = "CREATE TABLE wp_links (\nlink_id bigint(20) unsigned NOT NULL auto_increment,\nlink_url varchar(255) NOT NULL default '',\nlink_name varchar(255) NOT NULL default '',\nlink_image varchar(255) NOT NULL default '',\nlink_target varchar(25) NOT NULL default '',\nlink_description varchar(255) NOT NULL default '',\nlink_visible varchar(20) NOT NULL default 'Y',\nlink_owner bigint(20) unsigned NOT NULL default '1',\nlink_rating int(11) NOT NULL default '0',\nlink_updated datetime NOT NULL default '0000-00-00 00:00:00',\nlink_rel varchar(255) NOT NULL default '',\nlink_notes mediumtext NOT NULL,\nlink_rss varchar(255) NOT NULL default '',\nPRIMARY KEY  (link_id),\nKEY link_visible (link_visible)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        assert_ct_ok(&rewrite_ddl(ddl).unwrap());
+    }
+
+    #[test]
+    fn test_alter_add_index() {
+        let out = rw("ALTER TABLE wp_posts ADD INDEX idx_status (post_status)");
+        assert!(out.to_uppercase().contains("CREATE INDEX"), "got: {out}");
     }
 }

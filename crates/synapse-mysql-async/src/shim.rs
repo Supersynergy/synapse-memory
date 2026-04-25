@@ -88,10 +88,19 @@ fn is_autoload_query(sql: &str) -> bool {
 /// layer cares about (backticks, MySQL-only funcs, CALC_FOUND_ROWS, NOW(),
 /// ON DUPLICATE KEY, etc.) trigger the full rewriter. Otherwise pass through.
 fn needs_rewrite(sql: &str) -> bool {
-    if sql.as_bytes().iter().any(|&b| b == b'`') {
+    if sql.as_bytes().contains(&b'`') {
         return true;
     }
-    let upper = sql.to_ascii_uppercase();
+    let upper = sql.trim_start().to_ascii_uppercase();
+    // DDL must always go through the rewriter — SQLite syntax differs significantly.
+    if upper.starts_with("CREATE ") || upper.starts_with("DROP ") || upper.starts_with("ALTER ")
+        || upper.starts_with("TRUNCATE ") || upper.starts_with("RENAME ")
+        || upper.starts_with("LOCK ") || upper.starts_with("UNLOCK ")
+        || upper.starts_with("ANALYZE ") || upper.starts_with("GRANT ")
+        || upper.starts_with("REPLACE ") || upper.starts_with("INSERT IGNORE ")
+    {
+        return true;
+    }
     const TOKENS: &[&str] = &[
         "SQL_CALC_FOUND_ROWS",
         "FOUND_ROWS()",
@@ -102,6 +111,15 @@ fn needs_rewrite(sql: &str) -> bool {
         "DATE_FORMAT",
         "ON DUPLICATE KEY",
         "REGEXP",
+        "AUTO_INCREMENT",
+        "UNSIGNED",
+        "ENGINE=",
+        "ENGINE =",
+        "DEFAULT CHARSET",
+        "COLLATE",
+        "LONGTEXT",
+        "MEDIUMTEXT",
+        "TINYTEXT",
     ];
     TOKENS.iter().any(|t| upper.contains(t))
 }
@@ -147,7 +165,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::AsyncWrite;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 const RESULT_CACHE_CAP: usize = 4096;
 const CACHE_TTL: Duration = Duration::from_millis(500);
@@ -314,7 +332,7 @@ fn extract_table_name_from_show_columns(upper_sql: &str) -> String {
 }
 
 fn io_other<E: std::fmt::Display>(e: E) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, e.to_string())
+    io::Error::other(e.to_string())
 }
 
 #[async_trait]
@@ -415,7 +433,7 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
                 let c = conn.lock();
                 let pragma_sql = format!("PRAGMA table_info(\"{}\")", table_clone);
                 let mut stmt = c.prepare(&pragma_sql).map_err(io_other)?;
-                let col_count = stmt.column_count();
+                let _col_count = stmt.column_count();
                 let mut rows = Vec::new();
                 let mut q = stmt.query([]).map_err(io_other)?;
                 while let Some(row) = q.next().map_err(io_other)? {
@@ -461,6 +479,44 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             for row in &rows {
                 writer.write_row(row).await?;
             }
+            return writer.finish().await;
+        }
+        if upper.starts_with("SHOW TABLES") {
+            let conn = self.get_conn().await?;
+            let rows = tokio::task::spawn_blocking(move || -> io::Result<Vec<String>> {
+                let c = conn.lock();
+                let mut stmt = c.prepare(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_mysql_%' ORDER BY name"
+                ).map_err(io_other)?;
+                let mut q = stmt.query([]).map_err(io_other)?;
+                let mut out = Vec::new();
+                while let Some(r) = q.next().map_err(io_other)? {
+                    out.push(r.get::<_,String>(0).unwrap_or_default());
+                }
+                Ok(out)
+            }).await.map_err(io_other)??;
+            let cols = vec![Column {
+                table: String::new(),
+                column: "Tables_in_database".to_string(),
+                coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
+                colflags: ColumnFlags::empty(),
+                collen: 0,
+            }];
+            let mut writer = results.start(&cols).await?;
+            for r in &rows { writer.write_row(&[r.as_str()]).await?; }
+            return writer.finish().await;
+        }
+        if upper.starts_with("SHOW DATABASES") {
+            let cols = vec![Column {
+                table: String::new(),
+                column: "Database".to_string(),
+                coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
+                colflags: ColumnFlags::empty(),
+                collen: 0,
+            }];
+            let mut writer = results.start(&cols).await?;
+            let db = self.current_db.clone().unwrap_or_else(|| "wordpress".to_string());
+            writer.write_row(&[db.as_str()]).await?;
             return writer.finish().await;
         }
         if upper.starts_with("SHOW ") {
@@ -527,6 +583,31 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
             let mut writer = results.start(&cols).await?;
             writer.write_row(&[last_id.to_string()]).await?;
             return writer.finish().await;
+        }
+
+        // ── DDL (CREATE / DROP / ALTER / TRUNCATE / RENAME / GRANT / ANALYZE) ─
+        // MySQL DDL has dialects SQLite cannot parse (CREATE DATABASE,
+        // BIGINT(20) UNSIGNED, ENGINE=InnoDB, KEY foo (col), …). Translate via
+        // rewrite_ddl which returns 1+ statements (CREATE TABLE may emit
+        // accompanying CREATE INDEX statements for inline KEY clauses).
+        if synapse_mysql::rewrite::is_ddl(sql) {
+            let stmts = synapse_mysql::rewrite::rewrite_ddl(sql)
+                .unwrap_or_else(|_| vec![rewritten.clone()]);
+            let conn = self.get_conn().await?;
+            tokio::task::spawn_blocking(move || -> io::Result<()> {
+                let c = conn.lock();
+                for s in &stmts {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() { continue; }
+                    c.execute_batch(trimmed).map_err(io_other)?;
+                }
+                Ok(())
+            })
+            .await
+            .map_err(io_other)??;
+            { *self.state.write_epoch.lock() += 1; }
+            debug!("DDL ok ({}µs)", t0.elapsed().as_micros());
+            return results.completed(opensrv_mysql::OkResponse::default()).await;
         }
 
         // ── DML writes (INSERT / UPDATE / DELETE / REPLACE) ──────────────────────
