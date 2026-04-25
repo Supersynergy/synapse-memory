@@ -307,10 +307,15 @@ fn open_conn(file: &Path) -> io::Result<Connection> {
         .map_err(io_other)?;
     conn.pragma_update(None, "temp_store", "MEMORY")
         .map_err(io_other)?;
-    conn.pragma_update(None, "mmap_size", 268_435_456_i64)
+    conn.pragma_update(None, "mmap_size", 536_870_912_i64)
         .map_err(io_other)?;
     conn.pragma_update(None, "cache_size", -65536_i64)
         .map_err(io_other)?;
+    // Bump rusqlite's per-connection prepared-statement LRU from default 16 → 256.
+    // Hot OLTP point-select reuses parsed plans across many distinct SQL keys
+    // (sysbench oltp_point_select uses a single template, but mixed workloads
+    // benefit from larger headroom).
+    conn.set_prepared_statement_cache_capacity(256);
     // Register REGEXP UDF so MySQL `col REGEXP 'pattern'` works in SQLite.
     conn.create_scalar_function(
         "REGEXP",
@@ -353,7 +358,11 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
     }
 
     fn default_auth_plugin(&self) -> &str {
-        "caching_sha2_password"
+        // mysql_native_password is the most compatible plugin for PHP mysqli
+        // and the wp-cli toolchain. caching_sha2_password requires a public-key
+        // RSA handshake that opensrv-mysql does not implement without TLS,
+        // which manifested as "Error establishing a database connection" from wpdb.
+        "mysql_native_password"
     }
 
     async fn on_init<'a>(
