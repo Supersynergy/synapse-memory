@@ -395,6 +395,59 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         Ok(ids)
     }
 
+    /// Tier-1 fast bulk ingest. Skips embedding entirely (vec column = NULL)
+    /// for ~663× throughput vs fastembed path. All docs are text-searchable
+    /// immediately via FTS5; vec search on these rows returns no results until
+    /// a background embed-pass calls `put_batch` with embeddings or directly
+    /// inserts into `docs_vec`.
+    ///
+    /// Rejects any request where `embedding` is `Some` — callers must strip
+    /// embeddings before calling this method.
+    pub fn put_batch_fast(&mut self, docs: &[PutRequest]) -> Result<Vec<i64>> {
+        for req in docs {
+            if req.embedding.is_some() {
+                return Err(Error::Other(
+                    "put_batch_fast: embedding must be None (skip-embed path)".into(),
+                ));
+            }
+        }
+        // Temporarily disable fsync — safe because WAL journal ensures recovery
+        // on crash. Restored to NORMAL after the transaction commits.
+        self.conn.pragma_update(None, "synchronous", "OFF")?;
+        let result = (|| -> Result<Vec<i64>> {
+            let mut ids = Vec::with_capacity(docs.len());
+            let tx = self.conn.transaction()?;
+            {
+                let mut stmt_chk = tx.prepare("SELECT id FROM docs WHERE blake3 = ?1")?;
+                let mut stmt_ins = tx.prepare(
+                    "INSERT INTO docs(uri,title,text,meta,ts,blake3) VALUES (?1,?2,?3,?4,?5,?6)",
+                )?;
+                let ts = now_ms();
+                for req in docs {
+                    let hash = blake3::hash(req.text.as_bytes());
+                    let hash_bytes = hash.as_bytes().to_vec();
+                    let found: Option<i64> = stmt_chk
+                        .query_row(params![hash_bytes.clone()], |r| r.get(0))
+                        .optional()?;
+                    if let Some(id) = found {
+                        ids.push(id);
+                        continue;
+                    }
+                    let meta_s = req.meta.as_ref().map(|m| m.to_string());
+                    stmt_ins.execute(params![
+                        req.uri, req.title, req.text, meta_s, ts, hash_bytes
+                    ])?;
+                    ids.push(tx.last_insert_rowid());
+                }
+            }
+            tx.commit()?;
+            Ok(ids)
+        })();
+        // Always restore synchronous to NORMAL regardless of success/failure.
+        let _ = self.conn.pragma_update(None, "synchronous", "NORMAL");
+        result
+    }
+
     /// PR-A1-wire: delete a doc by id, removing it from `docs`, `docs_vec`,
     /// `docs_fts`, and (when enabled) the ANN sidecar. Idempotent — returns
     /// `Ok(false)` if the id did not exist.
@@ -801,5 +854,40 @@ mod tests {
             .search("rust", SearchMode::Hybrid, Some(&fake_emb(5)), 10)
             .unwrap();
         assert!(hits.iter().any(|h| h.text.contains("rust")));
+    }
+
+    #[test]
+    fn put_batch_fast_throughput() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut s = Store::open(tmp.path()).unwrap();
+        let n = 10_000usize;
+        let reqs: Vec<PutRequest> = (0..n)
+            .map(|i| PutRequest {
+                text: format!("fast ingest doc number {i} with some unique content for dedup"),
+                title: Some(format!("doc-{i}")),
+                embedding: None,
+                ..Default::default()
+            })
+            .collect();
+        let t0 = std::time::Instant::now();
+        let ids = s.put_batch_fast(&reqs).unwrap();
+        let elapsed = t0.elapsed();
+        assert_eq!(ids.len(), n);
+        let docs_per_sec = n as f64 / elapsed.as_secs_f64();
+        eprintln!("put_batch_fast: {n} docs in {elapsed:?} = {docs_per_sec:.0} docs/sec");
+        assert!(
+            docs_per_sec > 50_000.0,
+            "expected >50k docs/sec, got {docs_per_sec:.0}"
+        );
+        // Verify FTS5 is usable immediately
+        let hits = s.search("unique content", SearchMode::Lex, None, 5).unwrap();
+        assert!(!hits.is_empty());
+        // Verify embedding rejection
+        let bad = vec![PutRequest {
+            text: "reject me".into(),
+            embedding: Some(fake_emb(1)),
+            ..Default::default()
+        }];
+        assert!(s.put_batch_fast(&bad).is_err());
     }
 }

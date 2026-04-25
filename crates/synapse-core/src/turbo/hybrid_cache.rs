@@ -17,8 +17,7 @@
 
 use crate::error::Result;
 use blake3::hash;
-use std::collections::HashMap;
-use std::sync::RwLock;
+use dashmap::DashMap;
 
 /// Query hash type (16 bytes from BLAKE3)
 pub type QueryHash = [u8; 16];
@@ -26,9 +25,9 @@ pub type QueryHash = [u8; 16];
 /// In-memory hybrid cache with multiple tiers
 pub struct HybridCache {
     /// T1: Pre-computed results dict (hash → serialized JSON)
-    results_cache: RwLock<HashMap<QueryHash, Vec<u8>>>,
+    results_cache: DashMap<QueryHash, Vec<u8>>,
     /// T2: In-memory embedding cache (hash → f32 bytes)
-    emb_cache: RwLock<HashMap<QueryHash, Vec<f32>>>,
+    emb_cache: DashMap<QueryHash, Vec<f32>>,
     /// T3: Persistent SQLite cache path
     sqlite_cache_path: Option<std::path::PathBuf>,
 }
@@ -37,8 +36,8 @@ impl HybridCache {
     /// Create a new in-memory cache
     pub fn new() -> Result<Self> {
         Ok(Self {
-            results_cache: RwLock::new(HashMap::new()),
-            emb_cache: RwLock::new(HashMap::new()),
+            results_cache: DashMap::new(),
+            emb_cache: DashMap::new(),
             sqlite_cache_path: None,
         })
     }
@@ -62,8 +61,8 @@ impl HybridCache {
         )?;
 
         Ok(Self {
-            results_cache: RwLock::new(HashMap::new()),
-            emb_cache: RwLock::new(HashMap::new()),
+            results_cache: DashMap::new(),
+            emb_cache: DashMap::new(),
             sqlite_cache_path: Some(path.to_path_buf()),
         })
     }
@@ -82,10 +81,8 @@ impl HybridCache {
         let h = Self::hash_query(query);
 
         // T1: Check in-memory dict
-        if let Ok(guard) = self.emb_cache.read() {
-            if let Some(emb) = guard.get(&h) {
-                return Some(emb.clone());
-            }
+        if let Some(emb) = self.emb_cache.get(&h) {
+            return Some(emb.clone());
         }
 
         // T2: Check SQLite cache
@@ -103,9 +100,7 @@ impl HybridCache {
                         .collect();
 
                     // Promote to T2
-                    if let Ok(mut guard) = self.emb_cache.write() {
-                        guard.insert(h, floats.clone());
-                    }
+                    self.emb_cache.insert(h, floats.clone());
 
                     return Some(floats);
                 }
@@ -121,9 +116,7 @@ impl HybridCache {
         let emb_bytes: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
 
         // T1: Store in memory dict
-        if let Ok(mut guard) = self.emb_cache.write() {
-            guard.insert(h, embedding.to_vec());
-        }
+        self.emb_cache.insert(h, embedding.to_vec());
 
         // T2: Store in SQLite
         if let Some(ref path) = self.sqlite_cache_path {
@@ -139,15 +132,13 @@ impl HybridCache {
     /// Get pre-computed results
     pub fn get_results(&self, query: &str) -> Option<Vec<u8>> {
         let h = Self::hash_query(query);
-        self.results_cache.read().ok()?.get(&h).cloned()
+        self.results_cache.get(&h).map(|v| v.clone())
     }
 
     /// Store pre-computed results
     pub fn put_results(&self, query: &str, results: &[u8]) {
         let h = Self::hash_query(query);
-        if let Ok(mut guard) = self.results_cache.write() {
-            guard.insert(h, results.to_vec());
-        }
+        self.results_cache.insert(h, results.to_vec());
     }
 
     /// Pre-warm cache with common queries
@@ -159,8 +150,8 @@ impl HybridCache {
 
     /// Cache statistics
     pub fn stats(&self) -> CacheStats {
-        let emb_t1 = self.emb_cache.read().map(|g| g.len()).unwrap_or(0);
-        let results = self.results_cache.read().map(|g| g.len()).unwrap_or(0);
+        let emb_t1 = self.emb_cache.len();
+        let results = self.results_cache.len();
 
         let emb_t2 = self
             .sqlite_cache_path
