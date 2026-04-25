@@ -1,1 +1,6 @@
-(eval):1: command not found: setsid
+[run] Starting Qdrant...
+[warn] Qdrant failed health-check, will skip qdrant engine
+[run] Engines: sqlite-vec,duckdb,lancedb,chromadb,synapse
+[run] Phases: base
+[run] Starting benchmark at Sat Apr 25 13:37:31 CEST 2026
+[run] --- sqlite-vec ---
