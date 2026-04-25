@@ -1,4 +1,5 @@
 use anyhow::Result;
+use base64::Engine;
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -62,8 +63,12 @@ fn save_cache(cache: &LicenseCache) {
 
 const OFFLINE_GRACE_SECS: u64 = 30 * 24 * 3600;
 
-pub fn verify_license(jwt: &str, public_key_der: &[u8]) -> Result<License> {
-    let decoding_key = DecodingKey::from_ed_der(public_key_der);
+/// Verify a license JWT.
+/// `public_key_raw` must be the raw 32-byte Ed25519 public key (not DER-wrapped).
+pub fn verify_license(jwt: &str, public_key_raw: &[u8]) -> Result<License> {
+    let x = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public_key_raw);
+    let decoding_key = DecodingKey::from_ed_components(&x)
+        .map_err(|e| LicenseError::InvalidToken(e.to_string()))?;
 
     let mut validation = Validation::new(Algorithm::EdDSA);
     validation.validate_exp = false; // we validate manually for grace logic
@@ -221,56 +226,29 @@ fn get_cpu_brand() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_dalek::SigningKey;
     use jsonwebtoken::{EncodingKey, Header};
-    use rand::rngs::OsRng;
+    use ring::rand::SystemRandom;
+    use ring::signature::{Ed25519KeyPair, KeyPair};
 
-    fn make_keypair() -> (SigningKey, ed25519_dalek::VerifyingKey) {
-        let signing = SigningKey::generate(&mut OsRng);
-        let verifying = signing.verifying_key();
-        (signing, verifying)
+    struct TestKeypair {
+        pkcs8_der: Vec<u8>,
+        pub_raw: Vec<u8>,
     }
 
-    fn mint_jwt(signing: &SigningKey, claims: &Claims) -> String {
-        let der = signing_key_pkcs8_der(signing);
-        let enc_key = EncodingKey::from_ed_der(&der);
+    fn make_keypair() -> TestKeypair {
+        let rng = SystemRandom::new();
+        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
+        let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap();
+        let pub_raw = pair.public_key().as_ref().to_vec();
+        TestKeypair {
+            pkcs8_der: pkcs8.as_ref().to_vec(),
+            pub_raw,
+        }
+    }
+
+    fn mint_jwt(kp: &TestKeypair, claims: &Claims) -> String {
+        let enc_key = EncodingKey::from_ed_der(&kp.pkcs8_der);
         jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), claims, &enc_key).unwrap()
-    }
-
-    /// PKCS#8 DER for ed25519 private key (RFC 8410)
-    /// Structure: SEQUENCE { version=0, AlgorithmIdentifier { OID }, OCTET STRING { OCTET STRING { seed } } }
-    fn signing_key_pkcs8_der(signing: &SigningKey) -> Vec<u8> {
-        let seed = signing.to_bytes(); // 32 bytes
-        // Inner octet string: 04 20 <32 bytes>
-        // Outer octet string: 04 22 <inner>
-        // AlgId: 30 05 06 03 2b 65 70
-        // Version: 02 01 00
-        // Total inner: 02 01 00 + 30 05 06 03 2b 65 70 + 04 22 04 20 <32> = 3+7+36 = 46
-        // Outer SEQUENCE: 30 2e <46 bytes>
-        let mut der = vec![
-            0x30, 0x2e, // SEQUENCE (46)
-            0x02, 0x01, 0x00, // INTEGER 0
-            0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, // AlgId OID 1.3.101.112
-            0x04, 0x22, // OCTET STRING (34)
-            0x04, 0x20, // OCTET STRING (32)
-        ];
-        der.extend_from_slice(&seed);
-        der
-    }
-
-    /// SubjectPublicKeyInfo DER for ed25519 public key (RFC 8410)
-    fn verifying_key_der(vk: &ed25519_dalek::VerifyingKey) -> Vec<u8> {
-        let raw = vk.as_bytes(); // 32 bytes
-        // BIT STRING: 03 21 00 <32 bytes> = 35 bytes
-        // AlgId: 30 05 06 03 2b 65 70 = 7 bytes
-        // Total inner: 7+35 = 42 → 0x2a
-        let mut der = vec![
-            0x30, 0x2a, // SEQUENCE (42)
-            0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, // AlgId
-            0x03, 0x21, 0x00, // BIT STRING, 33 bytes, 0 unused
-        ];
-        der.extend_from_slice(raw);
-        der
     }
 
     fn make_claims(exp: u64, hw: &str) -> Claims {
@@ -284,14 +262,13 @@ mod tests {
 
     #[test]
     fn valid_license_verifies() {
-        let (signing, verifying) = make_keypair();
+        let kp = make_keypair();
         let fp = current_hw_fingerprint();
         let exp = (Utc::now().timestamp() as u64) + 86400 * 365;
         let claims = make_claims(exp, &fp);
-        let jwt = mint_jwt(&signing, &claims);
-        let pub_der = verifying_key_der(&verifying);
+        let jwt = mint_jwt(&kp, &claims);
 
-        let result = verify_license(&jwt, &pub_der);
+        let result = verify_license(&jwt, &kp.pub_raw);
         assert!(result.is_ok(), "expected Ok, got: {:?}", result.err());
         let lic = result.unwrap();
         assert_eq!(lic.tier, "pro");
@@ -300,12 +277,11 @@ mod tests {
 
     #[test]
     fn tampered_jwt_rejected() {
-        let (signing, verifying) = make_keypair();
+        let kp = make_keypair();
         let fp = current_hw_fingerprint();
         let exp = (Utc::now().timestamp() as u64) + 86400 * 365;
         let claims = make_claims(exp, &fp);
-        let jwt = mint_jwt(&signing, &claims);
-        let pub_der = verifying_key_der(&verifying);
+        let jwt = mint_jwt(&kp, &claims);
 
         // Flip a character in the signature (last segment)
         let mut parts: Vec<&str> = jwt.splitn(3, '.').collect();
@@ -315,7 +291,7 @@ mod tests {
         parts[2] = Box::leak(sig.into_boxed_str());
         let tampered = parts.join(".");
 
-        let result = verify_license(&tampered, &pub_der);
+        let result = verify_license(&tampered, &kp.pub_raw);
         assert!(result.is_err(), "expected Err for tampered JWT");
     }
 }
