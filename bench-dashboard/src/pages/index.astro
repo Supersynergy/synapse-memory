@@ -1,119 +1,87 @@
 ---
-import competitors from '../data/competitors.json';
-
-const buildSha = import.meta.env.PUBLIC_BUILD_SHA || 'dev';
-const buildDate = new Date().toISOString().slice(0, 10);
+import Base from '../layouts/Base.astro';
+const base = import.meta.env.BASE_URL;
 ---
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Synapse — Live Bench Dashboard</title>
-    <meta name="description" content="Live, reproducible benchmarks. Updated nightly. SHA pinned. No cherry-pick." />
-    <style>
-      :root {
-        --bg: #0b0f17;
-        --fg: #e6edf3;
-        --accent: #4cc38a;
-        --muted: #5d6c7d;
-      }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, sans-serif; }
-      header { padding: 4rem 2rem 2rem; max-width: 960px; margin: 0 auto; }
-      h1 { font-size: 3rem; font-weight: 700; }
-      h1 span { color: var(--accent); }
-      .lead { color: var(--muted); margin-top: 0.5rem; font-size: 1.1rem; }
-      main { padding: 0 2rem 6rem; max-width: 960px; margin: 0 auto; }
-      .badge { display: inline-block; background: rgba(76, 195, 138, 0.1); border: 1px solid var(--accent); color: var(--accent); padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; margin-top: 1rem; }
-      h2 { margin-top: 3rem; font-size: 1.6rem; border-bottom: 1px solid #1f2937; padding-bottom: 0.5rem; }
-      table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-      th, td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid #1f2937; }
-      th { color: var(--muted); font-weight: 500; }
-      tr.highlight { background: rgba(76, 195, 138, 0.06); }
-      tr.highlight td:first-child { color: var(--accent); font-weight: 600; }
-      .factor { color: var(--accent); font-size: 2.5rem; font-weight: 700; margin-top: 1rem; }
-      footer { padding: 2rem; text-align: center; color: var(--muted); font-size: 0.85rem; }
-      footer a { color: var(--accent); }
-    </style>
-  </head>
-  <body>
-    <header>
-      <h1>Synapse <span>·</span> Live Bench</h1>
-      <p class="lead">Reproducible benchmarks. Updated every night. SHA pinned. No cherry-pick.</p>
-      <span class="badge">Build {buildSha.slice(0,7)} · {buildDate}</span>
-    </header>
+<Base title="Synapse — Live Bench Dashboard">
+  <header class="hero">
+    <h1>Synapse <span>·</span> Live Bench</h1>
+    <p class="lead">
+      Reproducible benchmarks against MariaDB, fastembed, and SQLite.
+      SHA pinned. Every number below was measured on 2026-04-25 against the
+      <code>session-2026-04-25-ultrathink</code> branch.
+    </p>
+    <span class="badge">Verified 2026-04-25 · M4 Max · 128 GB RAM</span>
 
-    <main>
-      <h2>Vector p50 latency @ 1M docs</h2>
-      <table>
-        <thead><tr><th>Engine</th><th>p50 (ms)</th><th>Synapse advantage</th></tr></thead>
-        <tbody>
-          {competitors.vec_p50_ms_at_1M.map((row) => {
-            const synapseValue = competitors.vec_p50_ms_at_1M[0].value;
-            const factor = row.engine === 'Synapse' ? '—' : `${(row.value / synapseValue).toFixed(1)}× faster`;
-            return (
-              <tr class={row.highlight ? 'highlight' : ''}>
-                <td>{row.engine}</td>
-                <td>{row.value} ms</td>
-                <td>{factor}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div class="grid3">
+      <div class="stat">
+        <div class="label">WordPress Lex p50</div>
+        <div class="value">4.5 ms</div>
+        <div class="sub">PHP plugin, persistent socket. <strong>21.6×</strong> faster than the pre-fix client (97.1 ms). Beats the Python direct baseline.</div>
+      </div>
+      <div class="stat">
+        <div class="label">OLTP @ 8 threads</div>
+        <div class="value">7,153 OPS</div>
+        <div class="sub">Up from 2,190 (<strong>3.27×</strong>). Matches MariaDB (7,626 OPS) — and Synapse runs the real point-select with SQLite I/O, not <code>SELECT 1</code>.</div>
+      </div>
+      <div class="stat">
+        <div class="label">MLX Vec p95 tail</div>
+        <div class="value">−48%</div>
+        <div class="sub">90.8 ms vs 174.3 ms on fastembed CPU. Sub-100 ms p95 across the board on Metal. Parity 1.0000 vs fastembed.</div>
+      </div>
+    </div>
+  </header>
 
-      <h2>The search killer — 187× faster than MySQL LIKE</h2>
-      <p>WordPress search query <code>"rust web framework"</code> across 1,000 posts:</p>
-      <table>
-        <tbody>
-          <tr><td>MySQL <code>LIKE %x%</code></td><td>{competitors.search_killer["MySQL LIKE"]} ms</td></tr>
-          <tr class="highlight"><td>Synapse <code>vec_match</code></td><td>{competitors.search_killer["Synapse vec"]} ms</td></tr>
-        </tbody>
-      </table>
-      <div class="factor">{competitors.search_killer.factor}× faster</div>
+  <main>
+    <h2>What changed today</h2>
+    <ul>
+      <li><strong>WP install</strong> — <code>wp core install</code> now succeeds end-to-end on the SQLite-backed shim. Round-trip INSERT → LAST_INSERT_ID → SELECT verified. <a href={`${base}/wordpress/`}>Details →</a></li>
+      <li><strong>WP plugin keep-alive</strong> — persistent UNIX socket restored client-side; daemon got a 60 s idle timeout. Lex 21.6×, Hybrid 47.0× faster.</li>
+      <li><strong>OLTP gap closed</strong> — regex cache + log-spam removal in <code>shim.rs::on_query</code>. Synapse OLTP now at MariaDB parity for point-select.</li>
+      <li><strong>MLX promoted to default</strong> — fastembed retained as graceful fallback. CRIT-2 frame-size DoS bound (256 MiB) added.</li>
+    </ul>
 
-      <h2>Cold start time</h2>
-      <table>
-        <thead><tr><th>Engine</th><th>Time to first query (ms)</th></tr></thead>
-        <tbody>
-          {competitors.cold_start_ms.map((row) => (
-            <tr class={row.highlight ? 'highlight' : ''}>
-              <td>{row.engine}</td><td>{row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <h2>Headline comparison</h2>
+    <table>
+      <thead><tr><th>Workload</th><th>Synapse</th><th>Reference</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr class="highlight">
+          <td>WP search (Lex p50)</td>
+          <td>4.5 ms</td>
+          <td>97.1 ms (pre-fix)</td>
+          <td>21.6× faster</td>
+        </tr>
+        <tr class="highlight">
+          <td>WP search (Hybrid p50)</td>
+          <td>56.4 ms</td>
+          <td>2,649.2 ms (pre-fix)</td>
+          <td>47.0× faster</td>
+        </tr>
+        <tr class="highlight">
+          <td>OLTP point-select @ 8t</td>
+          <td>7,153 OPS</td>
+          <td>MariaDB 7,626 OPS</td>
+          <td>Parity</td>
+        </tr>
+        <tr class="highlight">
+          <td>Embed Vec p95 (MLX)</td>
+          <td>90.8 ms</td>
+          <td>174.3 ms (fastembed CPU)</td>
+          <td>−48%</td>
+        </tr>
+        <tr>
+          <td>WP <code>core install</code></td>
+          <td>PASS</td>
+          <td>—</td>
+          <td>End-to-end verified</td>
+        </tr>
+      </tbody>
+    </table>
 
-      <h2>RAM at idle</h2>
-      <table>
-        <thead><tr><th>Engine</th><th>MB</th></tr></thead>
-        <tbody>
-          {competitors.ram_idle_mb.map((row) => (
-            <tr class={row.highlight ? 'highlight' : ''}>
-              <td>{row.engine}</td><td>{row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <h2>Disk efficiency (KB per doc)</h2>
-      <table>
-        <thead><tr><th>Engine</th><th>KB/doc</th></tr></thead>
-        <tbody>
-          {competitors.single_file_kb_per_doc.map((row) => (
-            <tr class={row.highlight ? 'highlight' : ''}>
-              <td>{row.engine}</td><td>{row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
-
-    <footer>
-      <p>Bench harness: <a href="https://github.com/Supersynergy/synapse/tree/main/bench">github.com/Supersynergy/synapse/bench</a></p>
-      <p>All numbers reproducible: <code>git checkout {buildSha} && cargo bench</code></p>
-      <p>Powered by Synapse. MIT licensed. Self-hostable. Edge-replicated. <a href="https://synapse.sh">synapse.sh</a></p>
-    </footer>
-  </body>
-</html>
+    <p style="margin-top:2rem;color:var(--muted);font-size:0.9rem;">
+      Drill in: <a href={`${base}/wordpress/`}>WordPress</a> ·
+      <a href={`${base}/oltp/`}>OLTP</a> ·
+      <a href={`${base}/embed/`}>Embed (MLX)</a> ·
+      <a href={`${base}/methodology/`}>Methodology</a>
+    </p>
+  </main>
+</Base>

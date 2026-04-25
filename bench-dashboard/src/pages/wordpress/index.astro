@@ -1,0 +1,71 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Synapse Bench — WordPress">
+  <header class="hero">
+    <h1>WordPress <span>·</span> Plugin Bench</h1>
+    <p class="lead">
+      End-to-end <code>wp core install</code> now passes on the Synapse MySQL shim,
+      and the PHP search plugin runs at sub-5 ms p50 thanks to a persistent-socket fix.
+    </p>
+    <span class="badge">Verified 2026-04-25 · HEAD 30c645a</span>
+  </header>
+
+  <main>
+    <h2>WP <code>core install</code> — verified PASS</h2>
+    <p>Daemon: <code>target/release/synapse-mysql-async</code> on <code>127.0.0.1:13317</code>.
+       DB file: <code>/tmp/wp-install-retry.db</code>. WordPress 6.x.</p>
+    <table>
+      <thead><tr><th>Command</th><th>Output</th></tr></thead>
+      <tbody>
+        <tr><td><code>wp core install</code></td><td>Success: WordPress installed successfully.</td></tr>
+        <tr><td><code>wp option get siteurl</code></td><td><code>http://localhost</code></td></tr>
+        <tr><td><code>wp post list</code></td><td>1 · Hello world! · publish</td></tr>
+        <tr><td><code>wp post create --porcelain</code></td><td><code>4</code> (round-trip OK)</td></tr>
+        <tr><td><code>wp user list</code></td><td>admin · administrator</td></tr>
+      </tbody>
+    </table>
+    <p>The full DDL surface WordPress emits during install (inline <code>KEY</code>, <code>UNIQUE KEY</code>,
+       <code>FULLTEXT KEY</code>, <code>BIGINT(20) UNSIGNED</code>, <code>ENGINE=InnoDB</code>,
+       <code>DEFAULT CHARSET=utf8mb4</code>, <code>COLLATE=utf8mb4_unicode_520_ci</code>) is now
+       translated end-to-end through the SQLite-backed <code>brain.db</code>.</p>
+
+    <h2>Plugin keep-alive fix — before / after</h2>
+    <p>Root cause was <em>client-side</em>, not the daemon: <code>Client.php::callOnce</code> had been
+       force-closing the UNIX socket on every call. Restoring the persistent-socket lazy-singleton
+       eliminated ~80 ms per round-trip. The daemon's existing length-prefixed framing already
+       supported keep-alive.</p>
+
+    <table>
+      <thead><tr><th>Mode</th><th>Before p50</th><th>After p50</th><th>Before p95</th><th>After p95</th><th>p50 Speedup</th></tr></thead>
+      <tbody>
+        <tr class="highlight"><td>Lex</td>    <td>97.1 ms</td>   <td><strong>4.5 ms</strong></td>  <td>2,185.8 ms</td><td><strong>16.6 ms</strong></td><td class="delta-good">21.6×</td></tr>
+        <tr class="highlight"><td>Vec</td>    <td>1,163.6 ms</td><td><strong>81.9 ms</strong></td> <td>8,207.6 ms</td><td><strong>174.3 ms</strong></td><td class="delta-good">14.2×</td></tr>
+        <tr class="highlight"><td>Hybrid</td> <td>2,649.2 ms</td><td><strong>56.4 ms</strong></td> <td>6,374.7 ms</td><td><strong>64.8 ms</strong></td><td class="delta-good">47.0×</td></tr>
+      </tbody>
+    </table>
+
+    <h3>PHP plugin vs Python direct baseline</h3>
+    <table>
+      <thead><tr><th>Client</th><th>Lex p50</th></tr></thead>
+      <tbody>
+        <tr><td>Python direct (reconnect-per-call)</td><td>13.6 ms</td></tr>
+        <tr class="highlight"><td>PHP plugin, persistent socket</td><td><strong>4.5 ms</strong></td></tr>
+      </tbody>
+    </table>
+    <p>PHP now beats the prior Python baseline because both used reconnect-per-call.
+       With persistent socket, framing overhead is the only PHP-specific cost (~0.5 ms on top
+       of the daemon's ~4 ms FTS5 query).</p>
+
+    <h3>Files changed</h3>
+    <ul>
+      <li><code>crates/synapsed/src/main.rs</code> — 60 s idle timeout on read loop (defensive; no protocol change)</li>
+      <li><code>synapse-wp/src/Client.php</code> — persistent-socket restore + read hardening</li>
+    </ul>
+
+    <h2 class="superseded">Earlier Daleth2 plugin numbers (superseded)</h2>
+    <p class="superseded">An initial benchmark from earlier in the day showed Lex p50 in the
+       97–100 ms range — that data reflected the broken reconnect-per-call client path and is
+       kept in <code>wp-plugin-real-bench.md</code> for context only.</p>
+  </main>
+</Base>

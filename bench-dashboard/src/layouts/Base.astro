@@ -1,0 +1,77 @@
+---
+const { title = 'Synapse Bench', description = 'Reproducible benchmarks. SHA pinned. No cherry-pick.' } = Astro.props;
+const buildSha = import.meta.env.PUBLIC_BUILD_SHA || 'session-2026-04-25-ultrathink';
+const verifiedDate = '2026-04-25';
+const base = import.meta.env.BASE_URL;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <style is:global>
+      :root {
+        --bg: #0b0f17;
+        --panel: #0f1623;
+        --fg: #e6edf3;
+        --accent: #4cc38a;
+        --warn: #f5a524;
+        --muted: #5d6c7d;
+        --border: #1f2937;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, -apple-system, sans-serif; }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em; background: rgba(255,255,255,0.05); padding: 0.1em 0.35em; border-radius: 3px; }
+      nav { border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+      nav .brand { font-weight: 700; color: var(--fg); }
+      nav .brand span { color: var(--accent); }
+      nav a { color: var(--muted); font-size: 0.95rem; }
+      nav a.active, nav a:hover { color: var(--fg); }
+      header.hero { padding: 3rem 2rem 1.5rem; max-width: 1080px; margin: 0 auto; }
+      h1 { font-size: 2.5rem; font-weight: 700; line-height: 1.1; }
+      h1 span { color: var(--accent); }
+      .lead { color: var(--muted); margin-top: 0.6rem; font-size: 1.1rem; max-width: 720px; }
+      .badge { display: inline-block; background: rgba(76, 195, 138, 0.1); border: 1px solid var(--accent); color: var(--accent); padding: 0.35rem 0.7rem; border-radius: 4px; font-size: 0.8rem; margin-top: 1rem; font-family: ui-monospace, monospace; }
+      main { padding: 1rem 2rem 6rem; max-width: 1080px; margin: 0 auto; }
+      h2 { margin-top: 2.8rem; font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+      h3 { margin-top: 1.8rem; font-size: 1.1rem; color: var(--fg); }
+      p { margin-top: 0.9rem; color: #c5cdd6; }
+      ul, ol { margin: 0.8rem 0 0.8rem 1.4rem; color: #c5cdd6; }
+      li { margin: 0.25rem 0; }
+      table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.95rem; }
+      th, td { padding: 0.55rem 0.9rem; text-align: left; border-bottom: 1px solid var(--border); }
+      th { color: var(--muted); font-weight: 500; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      tr.highlight { background: rgba(76, 195, 138, 0.07); }
+      tr.highlight td:first-child { color: var(--accent); font-weight: 600; }
+      tr.warn { background: rgba(245, 165, 36, 0.05); }
+      .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+      .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1.4rem; }
+      .stat .label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      .stat .value { color: var(--accent); font-size: 2.2rem; font-weight: 700; margin-top: 0.4rem; line-height: 1; }
+      .stat .sub { color: #c5cdd6; font-size: 0.9rem; margin-top: 0.5rem; }
+      .superseded { opacity: 0.55; }
+      footer { padding: 2rem; text-align: center; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+      .delta-good { color: var(--accent); font-weight: 600; }
+      .delta-bad  { color: var(--warn); }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <a class="brand" href={base}>Synapse <span>·</span> Live Bench</a>
+      <a href={base}>Overview</a>
+      <a href={`${base}/wordpress/`}>WordPress</a>
+      <a href={`${base}/oltp/`}>OLTP</a>
+      <a href={`${base}/embed/`}>Embed (MLX)</a>
+      <a href={`${base}/methodology/`}>Methodology</a>
+    </nav>
+    <slot />
+    <footer>
+      <p>Verified {verifiedDate} · Branch <code>{buildSha}</code> · M4 Max, 128 GB RAM, macOS 24.5</p>
+      <p>All numbers reproducible. Source: <code>bench/results/2026-04-25/</code></p>
+    </footer>
+  </body>
+</html>
