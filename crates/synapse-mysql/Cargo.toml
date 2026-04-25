@@ -12,7 +12,18 @@ path = "src/lib.rs"
 name = "synapse-mysql"
 path = "src/main.rs"
 
+[[bin]]
+name = "synapse-mysql-async"
+path = "src/main_async.rs"
+required-features = ["async-proxy"]
+
+[features]
+async-proxy = ["dep:opensrv-mysql", "dep:async-trait"]
+
 [dependencies]
+opensrv-mysql = { version = "0.7", optional = true }
+async-trait = { version = "0.1", optional = true }
+
 anyhow.workspace = true
 clap.workspace = true
 tokio.workspace = true
