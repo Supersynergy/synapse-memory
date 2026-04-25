@@ -9,13 +9,18 @@ use proto::{PutReq, Request, Response};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use synapse_core::{embed::Embedder, snap, PutRequest, SearchMode, Store};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
+use tokio::time::timeout;
 use tracing::{error, info, warn};
+
+/// Idle timeout between requests on a kept-alive socket. Prevents fd leaks
+/// from clients that connect but never send (or never disconnect cleanly).
+const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Parser)]
 #[command(name = "synapsed", version, about = "Synapse daemon")]
@@ -201,8 +206,17 @@ async fn main() -> Result<()> {
 async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
     loop {
         let mut lenbuf = [0u8; 4];
-        if stream.read_exact(&mut lenbuf).await.is_err() {
-            return Ok(());
+        // Idle timeout: if no new request frame arrives within IDLE_TIMEOUT,
+        // close the connection to free the fd. This keeps the socket alive
+        // across back-to-back PHP calls (typical gap < 1ms) while bounding
+        // resource usage.
+        match timeout(IDLE_TIMEOUT, stream.read_exact(&mut lenbuf)).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(_)) => return Ok(()), // EOF or read error → client gone
+            Err(_) => {
+                // Idle timeout elapsed
+                return Ok(());
+            }
         }
         let len = u32::from_le_bytes(lenbuf) as usize;
         if len == 0 || len > 256 * 1024 * 1024 {
