@@ -562,7 +562,7 @@ fn execute_select(
     let col_defs: Vec<(String, String)> = (0..col_count)
         .map(|i| {
             let name = stmt.column_name(i).unwrap_or("?").to_string();
-            let decl = stmt.column_decl_type(i).unwrap_or("TEXT").to_string();
+            let decl = "TEXT".to_string();
             (name, decl)
         })
         .collect();
@@ -593,10 +593,12 @@ fn execute_select_with_params(
 ) -> Result<(Vec<(String, String)>, Vec<Vec<String>>), rusqlite::Error> {
     let mut stmt = conn.prepare(sql)?;
     let col_count = stmt.column_count();
-    let col_defs: Vec<(String, String)> = (0..col_count)
-        .map(|i| {
-            let name = stmt.column_name(i).unwrap_or("?").to_string();
-            let decl = stmt.column_decl_type(i).unwrap_or("TEXT").to_string();
+    let col_defs: Vec<(String, String)> = stmt
+        .columns()
+        .into_iter()
+        .map(|c| {
+            let name = c.name().to_string();
+            let decl = c.decl_type().unwrap_or("TEXT").to_string();
             (name, decl)
         })
         .collect();

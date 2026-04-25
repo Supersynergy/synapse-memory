@@ -9,12 +9,14 @@ DRY_RUN="${DRY_RUN:-0}"
 N_DOCS="${N_DOCS:-100000}"
 PHASES="${PHASES:-base}"
 PROFILE="${PROFILE:-full}"
+WITH_POWER=0
 
-# Parse --profile=fast from CLI args
+# Parse --profile=fast / --with-power from CLI args
 for arg in "$@"; do
   case "$arg" in
     --profile=*) PROFILE="${arg#--profile=}" ;;
     --profile) ;;
+    --with-power) WITH_POWER=1 ;;
   esac
 done
 
@@ -134,12 +136,21 @@ for engine in "${ENGINE_LIST[@]}"; do
   fi
   echo "[run] --- $engine ---"
   set +e
-  timeout "$ENGINE_TIMEOUT" python3 "$DIR/bench.py" \
-    --engine "$engine" \
-    --n-docs "$N_DOCS" \
-    $DRY_FLAG \
-    $PHASES_FLAG \
-    $PROFILE_FLAG 2>&1 | tee -a "$LOG"
+  if [ "$WITH_POWER" = "1" ]; then
+    timeout "$ENGINE_TIMEOUT" python3 "$DIR/powermetrics_wrap.py" \
+      --engine "$engine" \
+      --profile "$PROFILE" \
+      --n-docs "$N_DOCS" \
+      --phases "$PHASES" \
+      ${DRY_RUN:+--dry-run} 2>&1 | tee -a "$LOG"
+  else
+    timeout "$ENGINE_TIMEOUT" python3 "$DIR/bench.py" \
+      --engine "$engine" \
+      --n-docs "$N_DOCS" \
+      $DRY_FLAG \
+      $PHASES_FLAG \
+      $PROFILE_FLAG 2>&1 | tee -a "$LOG"
+  fi
   EXIT_CODE=${PIPESTATUS[0]}
   set -e
   if [ $EXIT_CODE -eq 124 ]; then
@@ -159,3 +170,11 @@ else
   python3 "$DIR/report.py" --partial
   echo "[run] Report written to $DIR/RESULTS.md"
 fi
+
+# Dashboard
+echo "[run] Generating dashboard..."
+python3 "$DIR/dashboard.py" && echo "[run] Dashboard: $DIR/dashboard.html"
+
+# Trend tracking
+echo "[run] Seeding Synapse brain.db..."
+python3 "$DIR/trend.py" && echo "[run] Trend seeding complete"

@@ -27,7 +27,7 @@ pub struct Claims {
 /// Embedded Ed25519 public key (PEM). Obfuscated at rest via obfstr; decoded only at use.
 fn embedded_pubkey_pem() -> String {
     // Replace at build-time via build.rs reading PUB_KEY_PEM env.
-    s!("-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA__REPLACE_ME_AT_BUILD__AAAAAAAAAAAAAAAAAAAAAA=\n-----END PUBLIC KEY-----\n").to_string()
+    s!("-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA/FxYUTzRxZrmjxQ6s2Ulynf/RqFUmiynSPn1pHA7Luw=\n-----END PUBLIC KEY-----\n").to_string()
 }
 
 #[allow(dead_code)]

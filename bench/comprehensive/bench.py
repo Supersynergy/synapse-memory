@@ -253,6 +253,16 @@ class LanceDBAdapter(Adapter):
 
     def bulk_insert(self, docs):
         import pyarrow as pa
+        _schema = pa.schema([
+            pa.field("id", pa.string()),
+            pa.field("text", pa.string()),
+            pa.field("category", pa.string()),
+            pa.field("score", pa.float64()),
+            pa.field("timestamp", pa.int64()),
+            pa.field("source", pa.string()),
+            pa.field("lang", pa.string()),
+            pa.field("vec", pa.list_(pa.float32(), 384)),
+        ])
         rows = [{
             "id": d["id"],
             "text": d["text"],
@@ -264,7 +274,7 @@ class LanceDBAdapter(Adapter):
             "vec": np.frombuffer(d["vec"], dtype=np.float32).tolist(),
         } for d in docs]
         if self._tbl is None:
-            self._tbl = self.db.create_table("docs", data=rows, mode="overwrite")
+            self._tbl = self.db.create_table("docs", data=rows, schema=_schema, mode="overwrite")
         else:
             self._tbl.add(rows)
         for r in rows:
@@ -297,12 +307,12 @@ class LanceDBAdapter(Adapter):
     def hybrid_select(self, query_vec, text_filter, k=10):
         arr = np.frombuffer(query_vec, dtype=np.float32).tolist()
         try:
-            rows = (self._tbl.search(arr)
+            rows = (self._tbl.search(arr, vector_column_name="vec")
                     .where(f"category = '{text_filter}'")
                     .limit(k)
                     .to_list())
         except Exception:
-            rows = (self._tbl.search(arr).limit(k).to_list())
+            rows = (self._tbl.search(arr, vector_column_name="vec").limit(k).to_list())
         return rows
 
     def disk_bytes(self):
@@ -320,10 +330,36 @@ class LanceDBAdapter(Adapter):
 class QdrantAdapter(Adapter):
     name = "qdrant"
 
+    def _ensure_server(self):
+        import requests, subprocess, time as _time
+        for attempt in range(3):
+            try:
+                r = requests.get(f"{self.base}/healthz", timeout=3)
+                if r.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            if attempt == 0:
+                # Try to start qdrant
+                qdrant_bin = "/Users/master/.local/bin/qdrant"
+                log_path = os.path.join(DIR, "qdrant.log")
+                try:
+                    subprocess.Popen(
+                        [qdrant_bin],
+                        stdout=open(log_path, "a"),
+                        stderr=subprocess.STDOUT,
+                    )
+                    _time.sleep(3)
+                except Exception:
+                    pass
+        return False
+
     def setup(self, tmpdir):
         import requests
         self.base = "http://localhost:6333"
         self.collection = "bench_test"
+        if not self._ensure_server():
+            raise RuntimeError("Qdrant server unavailable at localhost:6333")
         # Delete if exists
         try:
             requests.delete(f"{self.base}/collections/{self.collection}", timeout=5)
@@ -342,6 +378,12 @@ class QdrantAdapter(Adapter):
             self._id_map[s] = self._counter
             self._counter += 1
         return self._id_map[s]
+
+    def _int_to_str(self, i):
+        for s, v in self._id_map.items():
+            if v == i:
+                return s
+        return str(i)
 
     def bulk_insert(self, docs):
         import requests
@@ -375,6 +417,7 @@ class QdrantAdapter(Adapter):
 
     def hybrid_select(self, query_vec, text_filter, k=10):
         import requests
+        self._ensure_server()
         arr = np.frombuffer(query_vec, dtype=np.float32).tolist()
         r = requests.post(f"{self.base}/collections/{self.collection}/points/search",
                           json={
@@ -383,7 +426,9 @@ class QdrantAdapter(Adapter):
                                                    "match": {"value": text_filter}}]},
                               "with_payload": False,
                           }, timeout=10)
-        return r.json().get("result", [])
+        raw = r.json().get("result", [])
+        # Map int ids back to original string ids for recall computation
+        return [{"id": self._int_to_str(hit["id"]), "score": hit.get("score", 0)} for hit in raw]
 
     def disk_bytes(self):
         return 0  # external process
@@ -620,9 +665,12 @@ def run_phase_b(adapter, docs, n_update=1000):
     cpu_samples = sampler.stop()
     rss = sampler.peak_rss_mb()
     ops_sec = len(ids) / elapsed if elapsed > 0 else 0
+    # Return updated id→vec_bytes so callers can sync their docs snapshot
+    _updated = {doc_id: vec for doc_id, vec in zip(ids, new_vecs_bytes)}
     return {"ops_sec": ops_sec, "elapsed_s": elapsed,
             "rss_mb": rss,
-            "cpu_pct_mean": float(np.mean(cpu_samples)) if cpu_samples else 0}
+            "cpu_pct_mean": float(np.mean(cpu_samples)) if cpu_samples else 0,
+            "_updated_vecs": _updated}
 
 
 def run_phase_c(adapter, docs, duration_s=10):
@@ -944,6 +992,13 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
         print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] starting")
         print(f"  [B] update {_n_update} docs...")
         phase_b = run_phase_b(adapter, docs, n_update=_n_update)
+        # Sync docs snapshot so Phase E brute-force GT matches engine's current state
+        _updated_vecs = phase_b.pop("_updated_vecs", {})
+        if _updated_vecs:
+            _docs_by_id = {d["id"]: d for d in docs}
+            for _uid, _uvec in _updated_vecs.items():
+                if _uid in _docs_by_id:
+                    _docs_by_id[_uid]["vec"] = _uvec
         results["phase_b"] = phase_b
         print(f"      {phase_b['ops_sec']:.0f} ops/s  RSS={phase_b['rss_mb']:.0f}MB  cpu={phase_b['cpu_pct_mean']:.0f}%")
         print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] done ops_per_sec={phase_b['ops_sec']:.0f}")
