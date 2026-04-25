@@ -15,7 +15,7 @@ use async_trait::async_trait;
 use lru::LruCache;
 use opensrv_mysql::{
     AsyncMysqlShim, Column, ColumnFlags, ColumnType, ErrorKind, InitWriter, ParamParser,
-    QueryResultWriter, StatementMetaWriter,
+    QueryResultWriter, StatementMetaWriter, ValueInner,
 };
 use parking_lot::Mutex;
 use rusqlite::Connection;
@@ -131,6 +131,8 @@ pub struct SynapseMysqlAsync {
     prepared: HashMap<u32, String>,
     /// Last _found_rows value from SQL_CALC_FOUND_ROWS queries, per connection.
     last_found_rows: u64,
+    /// Tracks whether a MySQL transaction is in progress (mapped to SQLite SAVEPOINT).
+    in_tx: bool,
 }
 
 impl SynapseMysqlAsync {
@@ -142,6 +144,7 @@ impl SynapseMysqlAsync {
             next_stmt_id: 1,
             prepared: HashMap::new(),
             last_found_rows: 0,
+            in_tx: false,
         }
     }
 
@@ -236,12 +239,46 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         // pymysql/JDBC drivers can complete handshake without errors.
         let trimmed = sql.trim_end_matches(';').trim();
         let upper = trimmed.to_uppercase();
-        if upper.starts_with("SET ")
-            || upper.starts_with("USE ")
-            || upper == "BEGIN"
-            || upper == "COMMIT"
-            || upper == "ROLLBACK"
-        {
+        if upper.starts_with("SET ") || upper.starts_with("USE ") {
+            return results.completed(opensrv_mysql::OkResponse::default()).await;
+        }
+        if upper == "BEGIN" || upper.starts_with("START TRANSACTION") {
+            if self.in_tx {
+                warn!("BEGIN within BEGIN: nested transactions not supported, ignoring");
+                return results.completed(opensrv_mysql::OkResponse::default()).await;
+            }
+            let conn = self.get_conn().await?;
+            tokio::task::spawn_blocking(move || -> io::Result<()> {
+                conn.lock().execute("SAVEPOINT mysql_tx", []).map_err(io_other)?;
+                Ok(())
+            })
+            .await
+            .map_err(io_other)??;
+            self.in_tx = true;
+            return results.completed(opensrv_mysql::OkResponse::default()).await;
+        }
+        if upper == "COMMIT" {
+            let conn = self.get_conn().await?;
+            tokio::task::spawn_blocking(move || -> io::Result<()> {
+                conn.lock().execute("RELEASE SAVEPOINT mysql_tx", []).map_err(io_other)?;
+                Ok(())
+            })
+            .await
+            .map_err(io_other)??;
+            self.in_tx = false;
+            return results.completed(opensrv_mysql::OkResponse::default()).await;
+        }
+        if upper == "ROLLBACK" {
+            let conn = self.get_conn().await?;
+            tokio::task::spawn_blocking(move || -> io::Result<()> {
+                let c = conn.lock();
+                c.execute("ROLLBACK TO SAVEPOINT mysql_tx", []).map_err(io_other)?;
+                c.execute("RELEASE SAVEPOINT mysql_tx", []).map_err(io_other)?;
+                Ok(())
+            })
+            .await
+            .map_err(io_other)??;
+            self.in_tx = false;
             return results.completed(opensrv_mysql::OkResponse::default()).await;
         }
         if upper.starts_with("SHOW ") {
@@ -434,21 +471,71 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
     async fn on_execute<'a>(
         &'a mut self,
         stmt_id: u32,
-        _params: ParamParser<'a>,
+        params: ParamParser<'a>,
         results: QueryResultWriter<'a, W>,
     ) -> io::Result<()> {
-        // Phase 1 MVP: re-route to on_query without params (most WP prepared
-        // statements have inline values via php-pdo emulate-prepares=true).
         let sql = self
             .prepared
             .get(&stmt_id)
             .cloned()
             .unwrap_or_else(|| "SELECT 1".to_string());
-        let rewritten = synapse_mysql::rewrite::rewrite(&sql, &self.state.mode).unwrap_or_else(|_| sql.clone());
+
+        // Collect bound parameter values from the binary protocol.
+        let mut values: Vec<rusqlite::types::Value> = vec![];
+        for pv in params {
+            let v = match pv.value.into_inner() {
+                ValueInner::NULL => rusqlite::types::Value::Null,
+                ValueInner::Int(i) => rusqlite::types::Value::Integer(i),
+                ValueInner::UInt(u) => rusqlite::types::Value::Integer(u as i64),
+                ValueInner::Double(d) => rusqlite::types::Value::Real(d),
+                ValueInner::Bytes(b) => {
+                    rusqlite::types::Value::Text(String::from_utf8_lossy(b).into_owned())
+                }
+                // Date/Time/Datetime: convert bytes to string representation
+                ValueInner::Date(b) | ValueInner::Time(b) | ValueInner::Datetime(b) => {
+                    rusqlite::types::Value::Text(String::from_utf8_lossy(b).into_owned())
+                }
+            };
+            values.push(v);
+        }
+
+        let rewritten = synapse_mysql::rewrite::rewrite(&sql, &self.state.mode)
+            .unwrap_or_else(|_| sql.clone());
+
+        // DML path
+        if is_dml_write(&rewritten) {
+            let sql_owned = rewritten.clone();
+            let conn = self.get_conn().await?;
+            let (rows_affected, last_insert_id) =
+                tokio::task::spawn_blocking(move || -> io::Result<(u64, u64)> {
+                    let c = conn.lock();
+                    c.execute(
+                        &sql_owned,
+                        rusqlite::params_from_iter(values.iter()),
+                    )
+                    .map_err(io_other)?;
+                    let affected = c.changes();
+                    let last_id = c.last_insert_rowid() as u64;
+                    Ok((affected, last_id))
+                })
+                .await
+                .map_err(io_other)??;
+            { *self.state.write_epoch.lock() += 1; }
+            if is_wp_options_write(&rewritten) {
+                self.state.autoload_cache.lock().clear();
+            }
+            return results.completed(opensrv_mysql::OkResponse {
+                affected_rows: rows_affected,
+                last_insert_id,
+                ..Default::default()
+            }).await;
+        }
+
+        // SELECT path
         let conn = self.get_conn().await?;
         let exec = tokio::task::spawn_blocking(move || -> io::Result<(Vec<(String, String)>, Vec<Vec<String>>)> {
             let conn = conn.lock();
-            execute_select(&conn, &rewritten).map_err(io_other)
+            execute_select_with_params(&conn, &rewritten, &values).map_err(io_other)
         })
         .await
         .map_err(io_other)??;
@@ -483,6 +570,39 @@ fn execute_select(
 
     let mut rows: Vec<Vec<String>> = Vec::new();
     let mut q = stmt.query([])?;
+    while let Some(row) = q.next()? {
+        let mut r = Vec::with_capacity(col_count);
+        for i in 0..col_count {
+            let val: rusqlite::types::Value = row.get(i)?;
+            r.push(match val {
+                rusqlite::types::Value::Null => String::from(""),
+                rusqlite::types::Value::Integer(n) => n.to_string(),
+                rusqlite::types::Value::Real(f) => f.to_string(),
+                rusqlite::types::Value::Text(s) => s,
+                rusqlite::types::Value::Blob(b) => format!("0x{}", hex::encode(&b)),
+            });
+        }
+        rows.push(r);
+    }
+    Ok((col_defs, rows))
+}
+
+fn execute_select_with_params(
+    conn: &Connection,
+    sql: &str,
+    params: &[rusqlite::types::Value],
+) -> Result<(Vec<(String, String)>, Vec<Vec<String>>), rusqlite::Error> {
+    let mut stmt = conn.prepare(sql)?;
+    let col_count = stmt.column_count();
+    let col_defs: Vec<(String, String)> = (0..col_count)
+        .map(|i| {
+            let name = stmt.column_name(i).unwrap_or("?").to_string();
+            (name, "TEXT".to_string())
+        })
+        .collect();
+
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut q = stmt.query(rusqlite::params_from_iter(params.iter()))?;
     while let Some(row) = q.next()? {
         let mut r = Vec::with_capacity(col_count);
         for i in 0..col_count {

@@ -36,6 +36,12 @@ struct Cli {
     /// Max bytes accepted per `Put.text`. Default: 16 MiB.
     #[arg(long, default_value_t = 16 * 1024 * 1024)]
     max_put_bytes: usize,
+    /// Path to license JWT file (Pro+ tier). Default: ~/.config/synapse/license.jwt
+    #[arg(long)]
+    license_jwt: Option<PathBuf>,
+    /// Ed25519 public key hex (32 bytes) used to verify the license JWT.
+    #[arg(long, default_value = "0000000000000000000000000000000000000000000000000000000000000000")]
+    license_pubkey: String,
     /// Prometheus metrics endpoint. Default: 127.0.0.1:9090. Env: SYNAPSE_METRICS_ADDR.
     #[arg(long, env = "SYNAPSE_METRICS_ADDR", default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
@@ -66,6 +72,56 @@ impl State {
     }
 }
 
+fn open_store(
+    file: &PathBuf,
+    license_jwt_path: &Option<PathBuf>,
+    pubkey_hex: &str,
+) -> Result<Store> {
+    #[cfg(feature = "licensed")]
+    {
+        let jwt_path = license_jwt_path.clone().unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".config/synapse/license.jwt")
+        });
+        if jwt_path.exists() {
+            let jwt = match std::fs::read_to_string(&jwt_path) {
+                Ok(s) => s.trim().to_owned(),
+                Err(e) => {
+                    warn!("failed to read license file {}: {e} — falling back to free tier", jwt_path.display());
+                    return Store::open(file).context("open store (free tier)");
+                }
+            };
+            let pubkey_bytes = match hex::decode(pubkey_hex) {
+                Ok(b) if b.len() == 32 => b,
+                _ => {
+                    warn!("invalid --license-pubkey (must be 32-byte hex) — falling back to free tier");
+                    return Store::open(file).context("open store (free tier)");
+                }
+            };
+            match synapse_license::verify_license(&jwt, &pubkey_bytes) {
+                Ok(license) => {
+                    info!("license verified: customer={} tier={}", license.customer_id, license.tier);
+                    let hw_fp = synapse_license::current_hw_fingerprint();
+                    // Use the raw JWT bytes as the "signature" material for brain_key derivation.
+                    let brain_key = synapse_core::db::derive_brain_key(jwt.as_bytes(), &hw_fp);
+                    info!("brain_key derived — opening encrypted store");
+                    return Store::open_with_brain_key(file, &brain_key).context("open encrypted store");
+                }
+                Err(e) => {
+                    warn!("license invalid ({e}) — falling back to free tier (unencrypted)");
+                    return Store::open(file).context("open store (free tier)");
+                }
+            }
+        } else {
+            info!("no license file found at {} — running free tier", jwt_path.display());
+        }
+    }
+    #[cfg(not(feature = "licensed"))]
+    let _ = (license_jwt_path, pubkey_hex);
+    Store::open(file).context("open store")
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -84,7 +140,7 @@ async fn main() -> Result<()> {
     let metrics_addr = cli.metrics_addr;
     tokio::spawn(metrics::serve(metrics_handle.handle.clone(), metrics_addr));
 
-    let store = Store::open(&cli.file).context("open store")?;
+    let store = open_store(&cli.file, &cli.license_jwt, &cli.license_pubkey)?;
     let cache_path = cli.emb_cache.clone().unwrap_or_else(|| {
         let mut p = cli.file.clone();
         let name = p

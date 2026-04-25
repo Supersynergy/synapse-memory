@@ -1,0 +1,34 @@
+# Hardened release profile snippet for Synapse
+# Append to workspace Cargo.toml or copy into crate root.
+# Usage: cargo build --profile release-secure
+
+[profile.release]
+opt-level = "z"           # size-optimized; switch to 3 if perf-critical
+lto = "fat"               # full link-time optimization across crates
+codegen-units = 1         # single CGU for max optimization, slower compile
+panic = "abort"           # no unwinding metadata, smaller binary, harder RE
+strip = "symbols"         # strip debug + symbol tables
+debug = 0                 # no DWARF in release
+overflow-checks = true    # keep arithmetic checks even in release
+incremental = false       # deterministic output
+rpath = false
+
+# Hardened secure release used for customer-distributed binaries.
+# Inherits from release; tightens further and disables features that aid RE.
+[profile.release-secure]
+inherits = "release"
+opt-level = 3             # speed wins over size for shipped engine
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = 0
+overflow-checks = true
+incremental = false
+split-debuginfo = "off"   # do NOT emit dSYM / debug-link sidecars
+debug-assertions = false  # remove debug_assert! paths
+
+# Tighten dependencies too — many crates default to opt-level 0 in release.
+[profile.release-secure.package."*"]
+opt-level = 3
+codegen-units = 1
