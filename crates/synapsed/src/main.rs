@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use synapse_core::{embed::Embedder, snap, PutRequest, SearchMode, Store};
+use synapse_core::{embed::Embedder, embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
@@ -54,7 +54,7 @@ struct Cli {
 
 struct State {
     store: Mutex<Store>,
-    embedder: Mutex<Option<Embedder>>,
+    embedder: Mutex<Option<Box<dyn TextEmbedder>>>,
     db_path: PathBuf,
     cache_path: PathBuf,
     snap_dir: PathBuf,
@@ -70,7 +70,7 @@ impl State {
                 self.cache_path.display()
             );
             let t0 = std::time::Instant::now();
-            *g = Some(Embedder::new_with_cache(Some(&self.cache_path)).context("embedder init")?);
+            *g = Some(synapse_core::embed::pick_embedder_with_cache(Some(&self.cache_path)));
             info!("embedder ready in {:?}", t0.elapsed());
         }
         Ok(())
@@ -155,11 +155,11 @@ async fn main() -> Result<()> {
         p.set_file_name(name);
         p
     });
-    let embedder = if cli.lazy_embed {
+    let embedder: Option<Box<dyn TextEmbedder>> = if cli.lazy_embed {
         None
     } else {
         info!("warming embedder…");
-        Some(Embedder::new_with_cache(Some(&cache_path)).context("embedder init")?)
+        Some(synapse_core::embed::pick_embedder_with_cache(Some(&cache_path)))
     };
     let snap_dir = cli.snap_dir.clone().unwrap_or_else(|| {
         cli.file

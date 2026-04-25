@@ -172,6 +172,16 @@ impl Embedder {
 /// falls back to fastembed on error. Everywhere else: returns fastembed ONNX CPU.
 #[cfg(feature = "turbo")]
 pub fn pick_embedder() -> Box<dyn crate::embedder_trait::TextEmbedder> {
+    pick_embedder_with_cache::<&std::path::Path>(None)
+}
+
+/// Variant that lets the caller supply a fastembed cache path. The MLX path
+/// has no equivalent cache concept (sidecar handles model load itself), so
+/// the cache argument is only consumed by the fastembed fallback.
+#[cfg(feature = "turbo")]
+pub fn pick_embedder_with_cache<P: AsRef<std::path::Path>>(
+    cache_path: Option<P>,
+) -> Box<dyn crate::embedder_trait::TextEmbedder> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "embed-mlx"))]
     {
         use crate::embed_mlx::MlxMetalEmbedder;
@@ -197,5 +207,7 @@ pub fn pick_embedder() -> Box<dyn crate::embedder_trait::TextEmbedder> {
         model = "bge-small-en-v1.5",
         "pick_embedder: fastembed ONNX CPU selected"
     );
-    Box::new(Embedder::new().expect("fastembed pool init failed"))
+    Box::new(
+        Embedder::new_with_cache(cache_path).expect("fastembed pool init failed"),
+    )
 }
