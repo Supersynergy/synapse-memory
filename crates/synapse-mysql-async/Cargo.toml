@@ -21,7 +21,7 @@ rusqlite = { workspace = true, features = ["column_decltype"] }
 sqlite-vec.workspace = true
 synapse-core = { path = "../synapse-core" }
 synapse-mysql = { path = "../synapse-mysql" }   # reuse rewrite + acl logic
-opensrv-mysql = "0.7"
+opensrv-mysql = { git = "https://github.com/databendlabs/opensrv.git", tag = "v0.10.0", features = ["tls"] }
 mysql_common = "0.32"
 chrono = "0.4"
 regex = "1"

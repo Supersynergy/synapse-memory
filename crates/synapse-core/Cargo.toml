@@ -64,6 +64,8 @@ bench-jemalloc = ["dep:tikv-jemallocator"]
 # PR-A1-wire: enable usearch-backed Store::search_vec fast-path with
 # sidecar persistence. Default OFF per SPEC §3 (pure-Rust default build).
 ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot"]
+# Phase 5 MLX Metal embedder scaffold (Apple Silicon only). Real mlx-rs dep added Day 57.
+embed-mlx = []
 
 [dev-dependencies]
 tempfile = "3"

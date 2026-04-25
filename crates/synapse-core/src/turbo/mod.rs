@@ -32,6 +32,7 @@ pub mod candle_metal_embedder;
 pub mod mrl_embedder;
 
 pub mod hybrid_cache;
+pub mod rrf_simd;
 pub mod ndarray_search;
 
 /// Thompson-bandit adaptive routing across ANN strategies.

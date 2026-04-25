@@ -165,3 +165,21 @@ impl Embedder {
         Ok(Some(t.len().map_err(|e| Error::Other(format!("{e}")))?))
     }
 }
+
+/// Pick the best available embedder backend at runtime.
+///
+/// On Apple Silicon with `embed-mlx` + `turbo` features: attempts MLX Metal,
+/// falls back to fastembed on error. Everywhere else: returns fastembed ONNX CPU.
+#[cfg(feature = "turbo")]
+pub fn pick_embedder() -> Box<dyn crate::embedder_trait::TextEmbedder> {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "embed-mlx"))]
+    {
+        use crate::embed_mlx::MlxMetalEmbedder;
+        if let Ok(mlx) = MlxMetalEmbedder::new() {
+            return Box::new(mlx);
+        }
+        // MLX scaffold not ready yet — fall through to fastembed.
+    }
+    // Default: fastembed ONNX CPU (always available when `embed` feature is on).
+    Box::new(Embedder::new().expect("fastembed pool init failed"))
+}

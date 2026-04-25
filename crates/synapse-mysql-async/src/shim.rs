@@ -128,6 +128,10 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         format!("8.0.30-synapse-{}", env!("CARGO_PKG_VERSION"))
     }
 
+    fn default_auth_plugin(&self) -> &str {
+        "caching_sha2_password"
+    }
+
     async fn on_init<'a>(
         &'a mut self,
         database: &'a str,
@@ -168,6 +172,7 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
                 column: "v".to_string(),
                 coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
                 colflags: ColumnFlags::empty(),
+                collen: 0,
             }];
             let mut writer = results.start(&cols).await?;
             writer.write_row(&["8.0.30-synapse"]).await?;
@@ -314,6 +319,7 @@ async fn write_cached<'a, W: AsyncWrite + Send + Sync + Unpin>(
             column: name.clone(),
             coltype: map_decl_to_mysql(decl),
             colflags: ColumnFlags::empty(),
+            collen: 0,
         })
         .collect();
     let mut writer = results.start(&columns).await?;
