@@ -49,6 +49,15 @@ fn count_placeholders(sql: &str) -> usize {
     let mut in_back = false;
     while i < bytes.len() {
         let b = bytes[i];
+        // Skip dollar-quoted token boundaries (e.g. PostgreSQL-style $$body$$).
+        // Outside of any quoted region, treat `$$` as a no-op pair so the bytes
+        // inside cannot be miscounted as `?` placeholders.
+        if !in_single && !in_double && !in_back
+            && b == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'$'
+        {
+            i += 2;
+            continue;
+        }
         if !in_double && !in_back && b == b'\'' {
             // toggle, accounting for escaped quote ''
             if in_single && i + 1 < bytes.len() && bytes[i + 1] == b'\'' {
@@ -981,6 +990,35 @@ fn blake3_u64(s: &str) -> u64 {
     let h = blake3::hash(s.as_bytes());
     let b = h.as_bytes();
     u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::count_placeholders;
+
+    #[test]
+    fn count_placeholders_basic() {
+        assert_eq!(count_placeholders("SELECT 1"), 0);
+        assert_eq!(count_placeholders("SELECT ?"), 1);
+        assert_eq!(count_placeholders("SELECT ?, ?, ?"), 3);
+    }
+
+    #[test]
+    fn count_placeholders_skips_dollar_dollar() {
+        // Per HIGH-2: `$$` token boundary must be skipped so it cannot
+        // be misread as anything placeholder-bearing.
+        assert_eq!(count_placeholders("select $$"), 0);
+        // After a `$$` opener and a matching `$$` closer, normal scanning
+        // resumes; the `?` outside is counted.
+        assert_eq!(count_placeholders("select $$ $$ ?"), 1);
+    }
+
+    #[test]
+    fn count_placeholders_skips_strings_and_comments() {
+        assert_eq!(count_placeholders("SELECT '?'"), 0);
+        assert_eq!(count_placeholders("SELECT \"?\""), 0);
+        assert_eq!(count_placeholders("SELECT 1 -- ?\n , ?"), 1);
+    }
 }
 
 // hex used in execute_select for BLOB → text rendering

@@ -13,6 +13,57 @@ fn re_at_var() -> &'static Regex {
     R.get_or_init(|| Regex::new(r"@@(?:SESSION\.|GLOBAL\.)?(\w+)").unwrap())
 }
 
+/// Canonical MySQL system-variable defaults used by `SHOW VARIABLES LIKE ...`.
+/// wp-cli / wpdb consult these during connect; if `Value` is empty for any of
+/// `character_set_*`, the install routine bails with exit 0 (silent skip).
+pub(crate) const MYSQL_DEFAULT_VARS: &[(&str, &str)] = &[
+    ("character_set_client", "utf8mb4"),
+    ("character_set_connection", "utf8mb4"),
+    ("character_set_database", "utf8mb4"),
+    ("character_set_filesystem", "binary"),
+    ("character_set_results", "utf8mb4"),
+    ("character_set_server", "utf8mb4"),
+    ("character_set_system", "utf8"),
+    ("collation_connection", "utf8mb4_unicode_ci"),
+    ("collation_database", "utf8mb4_unicode_ci"),
+    ("collation_server", "utf8mb4_unicode_ci"),
+    ("sql_mode", "NO_ENGINE_SUBSTITUTION"),
+    ("max_allowed_packet", "67108864"),
+    ("wait_timeout", "28800"),
+    ("interactive_timeout", "28800"),
+    ("net_read_timeout", "30"),
+    ("net_write_timeout", "60"),
+    ("version", "8.0.35-synapse"),
+    ("version_comment", "Synapse MySQL shim"),
+    ("version_compile_os", "macos"),
+    ("innodb_version", "8.0.35"),
+    ("protocol_version", "10"),
+    ("have_innodb", "YES"),
+    ("have_query_cache", "NO"),
+    ("lower_case_table_names", "2"),
+    ("time_zone", "+00:00"),
+    ("system_time_zone", "UTC"),
+    ("default_storage_engine", "InnoDB"),
+    ("storage_engine", "InnoDB"),
+    ("autocommit", "ON"),
+    ("foreign_key_checks", "ON"),
+    ("unique_checks", "ON"),
+];
+
+/// Validate a table name for safe interpolation into SQL.
+/// SHOW COLUMNS / SHOW INDEX / SHOW CREATE / DESCRIBE all need to interpolate
+/// the table name into a `pragma_table_info('{}')` call. Allow only
+/// `[A-Za-z0-9_]+`, max 64 chars (MySQL identifier limit). Reject anything else.
+pub(crate) fn safe_table_name(t: &str) -> Result<&str> {
+    if t.is_empty() || t.len() > 64 {
+        anyhow::bail!("invalid table name length");
+    }
+    if !t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+        anyhow::bail!("invalid table name characters");
+    }
+    Ok(t)
+}
+
 pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     let mut out = sql.to_string();
     let upper = out.trim().to_uppercase();
@@ -86,22 +137,49 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         return Ok("SELECT name as Database FROM pragma_database_list()".to_string());
     }
 
-    // SHOW VARIABLES LIKE ... -> dummy (WordPress checks some vars)
+    // SHOW VARIABLES LIKE ... -> canonical MySQL defaults so wp-cli/wpdb
+    // charset/version checks don't silently bail. wp-cli exits 0 when these
+    // queries return empty `Value` fields (it skips the data-write phase).
     if upper.starts_with("SHOW VARIABLES") {
-        if let Some(cap) = Regex::new(r"LIKE\s+'([^']+)'").unwrap().captures(&out) {
-            let var = cap.get(1).unwrap().as_str();
-            return Ok(format!(
-                "SELECT '{}' as Variable_name, '' as Value UNION ALL SELECT 'max_allowed_packet','67108864' UNION ALL SELECT 'sql_mode','NO_ENGINE_SUBSTITUTION'",
-                var
-            ));
+        if let Some(cap) = Regex::new(r"(?i)LIKE\s+'([^']+)'").unwrap().captures(&out) {
+            let pat = cap.get(1).unwrap().as_str();
+            // Map LIKE pattern → canonical (Variable_name, Value).
+            // Pattern is glob-style (% wildcard); we resolve to the table.
+            let pat_l = pat.to_lowercase();
+            let pat_re = pat_l.replace('%', ".*");
+            let re = Regex::new(&format!("^{}$", pat_re)).unwrap_or_else(|_| Regex::new("^$").unwrap());
+            let mut rows: Vec<(&str, &str)> = Vec::new();
+            for (k, v) in MYSQL_DEFAULT_VARS {
+                if re.is_match(k) {
+                    rows.push((*k, *v));
+                }
+            }
+            if rows.is_empty() {
+                // Fall back: return the literal name with utf8mb4 default so
+                // charset checks pass instead of silently aborting.
+                rows.push((pat, "utf8mb4"));
+            }
+            let body = rows
+                .iter()
+                .map(|(k, v)| format!("SELECT '{}' as Variable_name, '{}' as Value", k.replace('\'', "''"), v.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(" UNION ALL ");
+            return Ok(body);
         }
-        return Ok("SELECT '' as Variable_name, '' as Value WHERE 0=1".to_string());
+        // No LIKE clause → emit full canonical table.
+        let body = MYSQL_DEFAULT_VARS
+            .iter()
+            .map(|(k, v)| format!("SELECT '{}' as Variable_name, '{}' as Value", k, v))
+            .collect::<Vec<_>>()
+            .join(" UNION ALL ");
+        return Ok(body);
     }
 
     // SHOW CREATE TABLE
     if upper.starts_with("SHOW CREATE TABLE ") {
         if let Some(t) = out.split_whitespace().nth(3) {
-            let t = t.trim_matches('`');
+            let t = t.trim_matches('`').trim_end_matches(';');
+            let t = safe_table_name(t)?;
             return Ok(format!(
                 "SELECT '{}' as Table, ('CREATE TABLE ' || name || '(' || group_concat(name || ' ' || type, ', ') || ')') as CreateTable FROM pragma_table_info('{}')",
                 t, t
@@ -115,7 +193,8 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     if upper.starts_with("SHOW FULL COLUMNS FROM ") || upper.starts_with("SHOW COLUMNS FROM ") {
         let words: Vec<&str> = out.split_whitespace().collect();
         if let Some(t) = words.last() {
-            let t = t.trim_matches('`').trim_matches('\'');
+            let t = t.trim_matches('`').trim_matches('\'').trim_end_matches(';');
+            let t = safe_table_name(t)?;
             return Ok(format!(
                 "SELECT name as Field, type as Type, \
                  CASE \"notnull\" WHEN 1 THEN 'NO' ELSE 'YES' END as \"Null\", \
@@ -135,7 +214,8 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     if upper.starts_with("SHOW INDEX FROM ") || upper.starts_with("SHOW KEYS FROM ") {
         let words: Vec<&str> = out.split_whitespace().collect();
         if let Some(t) = words.last() {
-            let t = t.trim_matches('`').trim_matches('\'');
+            let t = t.trim_matches('`').trim_matches('\'').trim_end_matches(';');
+            let t = safe_table_name(t)?;
             return Ok(format!(
                 "SELECT name as Key_name, seq as Seq_in_index, 'BTREE' as Index_type FROM pragma_index_list('{}')",
                 t
@@ -161,6 +241,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         let parts: Vec<&str> = out.split_whitespace().collect();
         if parts.len() >= 2 {
             let t = parts[1].trim_matches('`').trim_end_matches(';');
+            let t = safe_table_name(t)?;
             return Ok(format!(
                 "SELECT name as Field, type as Type, \
                  CASE \"notnull\" WHEN 1 THEN 'NO' ELSE 'YES' END as \"Null\", \
@@ -903,5 +984,52 @@ mod tests {
     fn test_alter_add_index() {
         let out = rw("ALTER TABLE wp_posts ADD INDEX idx_status (post_status)");
         assert!(out.to_uppercase().contains("CREATE INDEX"), "got: {out}");
+    }
+
+    #[test]
+    fn test_safe_table_name_accepts_valid() {
+        assert!(super::safe_table_name("wp_posts").is_ok());
+        assert!(super::safe_table_name("Table_123").is_ok());
+    }
+
+    #[test]
+    fn test_safe_table_name_rejects_injection() {
+        assert!(super::safe_table_name("evil'); DROP TABLE x; --").is_err());
+        assert!(super::safe_table_name("a b").is_err());
+        assert!(super::safe_table_name("").is_err());
+        assert!(super::safe_table_name(&"x".repeat(65)).is_err());
+        assert!(super::safe_table_name("foo;bar").is_err());
+    }
+
+    #[test]
+    fn test_show_variables_returns_canonical_charset() {
+        let out = rw("SHOW VARIABLES LIKE 'character_set_client'");
+        // wpdb requires Value = utf8mb4 (or another charset) — never empty.
+        assert!(out.contains("'character_set_client'"), "got: {out}");
+        assert!(out.contains("'utf8mb4'"), "got: {out}");
+        assert!(!out.contains("'' as Value"), "Value must not be empty: {out}");
+    }
+
+    #[test]
+    fn test_show_variables_glob_expands() {
+        let out = rw("SHOW VARIABLES LIKE 'character_set_%'");
+        assert!(out.contains("'character_set_client'"), "got: {out}");
+        assert!(out.contains("'character_set_connection'"), "got: {out}");
+        assert!(out.contains("'character_set_results'"), "got: {out}");
+    }
+
+    #[test]
+    fn test_show_columns_rejects_injection() {
+        let res = rewrite(
+            "SHOW COLUMNS FROM \"evil'); DROP TABLE x; --\"",
+            "wp",
+        );
+        assert!(res.is_err(), "expected parse error, got: {:?}", res);
+    }
+
+    #[test]
+    fn test_show_index_rejects_injection() {
+        let res = rewrite("SHOW INDEX FROM `bad'name`", "wp");
+        assert!(res.is_err());
     }
 }
