@@ -1,0 +1,16 @@
+{
+  "name": "synapse-bench-dashboard",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Live bench dashboard for synapse.sh/bench — Phase 6",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "ingest-results": "node scripts/ingest-bench-results.mjs"
+  },
+  "dependencies": {
+    "astro": "^5.0.0",
+    "chart.js": "^4.4.0"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "vec_p50_ms_at_1M": [
+    { "engine": "Synapse", "value": 0.28, "highlight": true },
+    { "engine": "Chroma",  "value": 0.63 },
+    { "engine": "sqlite-vec", "value": 271.84 },
+    { "engine": "Qdrant", "value": 38.7 },
+    { "engine": "Pinecone", "value": 840 }
+  ],
+  "search_killer": {
+    "MySQL LIKE": 1500,
+    "Synapse vec": 8,
+    "factor": 187
+  },
+  "cold_start_ms": [
+    { "engine": "Synapse", "value": 0.69, "highlight": true },
+    { "engine": "SQLite", "value": 50 },
+    { "engine": "Postgres 16", "value": 1500 },
+    { "engine": "MySQL 8", "value": 15000 }
+  ],
+  "ram_idle_mb": [
+    { "engine": "Synapse", "value": 64, "highlight": true },
+    { "engine": "MariaDB 11", "value": 256 },
+    { "engine": "Postgres 16", "value": 256 },
+    { "engine": "MySQL 8", "value": 512 },
+    { "engine": "TiDB", "value": 4096 }
+  ],
+  "single_file_kb_per_doc": [
+    { "engine": "Synapse", "value": 2.2, "highlight": true },
+    { "engine": "Chroma", "value": 4.4 },
+    { "engine": "LanceDB", "value": 1.6 }
+  ]
+}

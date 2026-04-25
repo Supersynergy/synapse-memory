@@ -1,0 +1,75 @@
+name: nightly-bench
+
+on:
+  schedule:
+    - cron: "0 4 * * *"   # 04:00 UTC daily
+  workflow_dispatch:       # manual trigger
+
+jobs:
+  bench:
+    runs-on: macos-15-arm64
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install bench tools
+        run: |
+          brew install sysbench
+          pip install --break-system-packages chromadb lancedb pymysql faiss-cpu
+
+      - name: Build release binaries
+        run: cargo build --release -p synapsed -p synapse-mysql-async -p synapse-lib-demo
+
+      - name: Run real_competitors.py
+        run: cargo run --release -p synapse-lib-demo --bin synapse-lib-demo > /tmp/lib-demo.log
+        continue-on-error: true
+
+      - name: Run bench_scale_ladder.py
+        run: python3 bench/bench_scale_ladder.py > /tmp/scale.log
+        continue-on-error: true
+
+      - name: syn bench (113k brain)
+        run: |
+          ./target/release/synapsed -f /tmp/bench-brain.db -s /tmp/bench.sock &
+          sleep 5
+          ~/.local/bin/syn bench
+          kill %1
+        continue-on-error: true
+
+      - name: Aggregate JSONL
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          mkdir -p bench/results/$DATE
+          # convert text outputs to jsonl rows  (script TBD)
+          echo "{\"date\":\"$DATE\",\"sha\":\"${{ github.sha }}\",\"suite\":\"smoke\",\"status\":\"ok\"}" > bench/results/$DATE/run.jsonl
+
+      - name: Build dashboard
+        working-directory: bench-dashboard
+        run: |
+          npm install
+          PUBLIC_BUILD_SHA=${{ github.sha }} npm run build
+
+      - name: Commit + push results
+        run: |
+          git config user.name "synapse-bench-bot"
+          git config user.email "bench@supersynergy.de"
+          git add bench/results/
+          git diff --cached --quiet || git commit -m "bench: nightly $(date -u +%Y-%m-%d) [skip ci]"
+          git push origin HEAD
+        continue-on-error: true
+
+      - name: Upload to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: bench-dashboard/dist
+          publish_branch: gh-pages
+          cname: synapse.sh

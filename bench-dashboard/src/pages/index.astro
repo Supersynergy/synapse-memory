@@ -1,0 +1,119 @@
+---
+import competitors from '../data/competitors.json';
+
+const buildSha = import.meta.env.PUBLIC_BUILD_SHA || 'dev';
+const buildDate = new Date().toISOString().slice(0, 10);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Synapse — Live Bench Dashboard</title>
+    <meta name="description" content="Live, reproducible benchmarks. Updated nightly. SHA pinned. No cherry-pick." />
+    <style>
+      :root {
+        --bg: #0b0f17;
+        --fg: #e6edf3;
+        --accent: #4cc38a;
+        --muted: #5d6c7d;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, sans-serif; }
+      header { padding: 4rem 2rem 2rem; max-width: 960px; margin: 0 auto; }
+      h1 { font-size: 3rem; font-weight: 700; }
+      h1 span { color: var(--accent); }
+      .lead { color: var(--muted); margin-top: 0.5rem; font-size: 1.1rem; }
+      main { padding: 0 2rem 6rem; max-width: 960px; margin: 0 auto; }
+      .badge { display: inline-block; background: rgba(76, 195, 138, 0.1); border: 1px solid var(--accent); color: var(--accent); padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.85rem; margin-top: 1rem; }
+      h2 { margin-top: 3rem; font-size: 1.6rem; border-bottom: 1px solid #1f2937; padding-bottom: 0.5rem; }
+      table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+      th, td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid #1f2937; }
+      th { color: var(--muted); font-weight: 500; }
+      tr.highlight { background: rgba(76, 195, 138, 0.06); }
+      tr.highlight td:first-child { color: var(--accent); font-weight: 600; }
+      .factor { color: var(--accent); font-size: 2.5rem; font-weight: 700; margin-top: 1rem; }
+      footer { padding: 2rem; text-align: center; color: var(--muted); font-size: 0.85rem; }
+      footer a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Synapse <span>·</span> Live Bench</h1>
+      <p class="lead">Reproducible benchmarks. Updated every night. SHA pinned. No cherry-pick.</p>
+      <span class="badge">Build {buildSha.slice(0,7)} · {buildDate}</span>
+    </header>
+
+    <main>
+      <h2>Vector p50 latency @ 1M docs</h2>
+      <table>
+        <thead><tr><th>Engine</th><th>p50 (ms)</th><th>Synapse advantage</th></tr></thead>
+        <tbody>
+          {competitors.vec_p50_ms_at_1M.map((row) => {
+            const synapseValue = competitors.vec_p50_ms_at_1M[0].value;
+            const factor = row.engine === 'Synapse' ? '—' : `${(row.value / synapseValue).toFixed(1)}× faster`;
+            return (
+              <tr class={row.highlight ? 'highlight' : ''}>
+                <td>{row.engine}</td>
+                <td>{row.value} ms</td>
+                <td>{factor}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      <h2>The search killer — 187× faster than MySQL LIKE</h2>
+      <p>WordPress search query <code>"rust web framework"</code> across 1,000 posts:</p>
+      <table>
+        <tbody>
+          <tr><td>MySQL <code>LIKE %x%</code></td><td>{competitors.search_killer["MySQL LIKE"]} ms</td></tr>
+          <tr class="highlight"><td>Synapse <code>vec_match</code></td><td>{competitors.search_killer["Synapse vec"]} ms</td></tr>
+        </tbody>
+      </table>
+      <div class="factor">{competitors.search_killer.factor}× faster</div>
+
+      <h2>Cold start time</h2>
+      <table>
+        <thead><tr><th>Engine</th><th>Time to first query (ms)</th></tr></thead>
+        <tbody>
+          {competitors.cold_start_ms.map((row) => (
+            <tr class={row.highlight ? 'highlight' : ''}>
+              <td>{row.engine}</td><td>{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h2>RAM at idle</h2>
+      <table>
+        <thead><tr><th>Engine</th><th>MB</th></tr></thead>
+        <tbody>
+          {competitors.ram_idle_mb.map((row) => (
+            <tr class={row.highlight ? 'highlight' : ''}>
+              <td>{row.engine}</td><td>{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h2>Disk efficiency (KB per doc)</h2>
+      <table>
+        <thead><tr><th>Engine</th><th>KB/doc</th></tr></thead>
+        <tbody>
+          {competitors.single_file_kb_per_doc.map((row) => (
+            <tr class={row.highlight ? 'highlight' : ''}>
+              <td>{row.engine}</td><td>{row.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </main>
+
+    <footer>
+      <p>Bench harness: <a href="https://github.com/Supersynergy/synapse/tree/main/bench">github.com/Supersynergy/synapse/bench</a></p>
+      <p>All numbers reproducible: <code>git checkout {buildSha} && cargo bench</code></p>
+      <p>Powered by Synapse. MIT licensed. Self-hostable. Edge-replicated. <a href="https://synapse.sh">synapse.sh</a></p>
+    </footer>
+  </body>
+</html>
