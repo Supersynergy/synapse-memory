@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
@@ -232,41 +232,42 @@ mod tests {
     }
 
     fn mint_jwt(signing: &SigningKey, claims: &Claims) -> String {
-        let der = signing.to_pkcs8_der_bytes();
+        let der = signing_key_pkcs8_der(signing);
         let enc_key = EncodingKey::from_ed_der(&der);
         jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), claims, &enc_key).unwrap()
     }
 
-    trait ToPkcs8DerBytes {
-        fn to_pkcs8_der_bytes(&self) -> Vec<u8>;
-    }
-
-    impl ToPkcs8DerBytes for SigningKey {
-        fn to_pkcs8_der_bytes(&self) -> Vec<u8> {
-            // Raw 32-byte seed wrapped in PKCS#8 DER for ed25519
-            // OID: 1.3.101.112 → 06 03 2B 65 70
-            let seed = self.to_bytes();
-            let mut der = vec![
-                0x30, 0x2e, // SEQUENCE (46 bytes)
-                0x02, 0x01, 0x00, // INTEGER 0 (version)
-                0x30, 0x05, // SEQUENCE (5 bytes)
-                0x06, 0x03, 0x2b, 0x65, 0x70, // OID 1.3.101.112
-                0x04, 0x22, // OCTET STRING (34 bytes)
-                0x04, 0x20, // OCTET STRING (32 bytes)
-            ];
-            der.extend_from_slice(&seed);
-            der
-        }
-    }
-
-    fn verifying_key_der(vk: &ed25519_dalek::VerifyingKey) -> Vec<u8> {
-        // SubjectPublicKeyInfo DER for Ed25519
-        let raw = vk.as_bytes();
+    /// PKCS#8 DER for ed25519 private key (RFC 8410)
+    /// Structure: SEQUENCE { version=0, AlgorithmIdentifier { OID }, OCTET STRING { OCTET STRING { seed } } }
+    fn signing_key_pkcs8_der(signing: &SigningKey) -> Vec<u8> {
+        let seed = signing.to_bytes(); // 32 bytes
+        // Inner octet string: 04 20 <32 bytes>
+        // Outer octet string: 04 22 <inner>
+        // AlgId: 30 05 06 03 2b 65 70
+        // Version: 02 01 00
+        // Total inner: 02 01 00 + 30 05 06 03 2b 65 70 + 04 22 04 20 <32> = 3+7+36 = 46
+        // Outer SEQUENCE: 30 2e <46 bytes>
         let mut der = vec![
-            0x30, 0x2a, // SEQUENCE (42 bytes)
-            0x30, 0x05, // SEQUENCE (5 bytes)
-            0x06, 0x03, 0x2b, 0x65, 0x70, // OID
-            0x03, 0x21, 0x00, // BIT STRING (33 bytes, 0 unused bits)
+            0x30, 0x2e, // SEQUENCE (46)
+            0x02, 0x01, 0x00, // INTEGER 0
+            0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, // AlgId OID 1.3.101.112
+            0x04, 0x22, // OCTET STRING (34)
+            0x04, 0x20, // OCTET STRING (32)
+        ];
+        der.extend_from_slice(&seed);
+        der
+    }
+
+    /// SubjectPublicKeyInfo DER for ed25519 public key (RFC 8410)
+    fn verifying_key_der(vk: &ed25519_dalek::VerifyingKey) -> Vec<u8> {
+        let raw = vk.as_bytes(); // 32 bytes
+        // BIT STRING: 03 21 00 <32 bytes> = 35 bytes
+        // AlgId: 30 05 06 03 2b 65 70 = 7 bytes
+        // Total inner: 7+35 = 42 → 0x2a
+        let mut der = vec![
+            0x30, 0x2a, // SEQUENCE (42)
+            0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, // AlgId
+            0x03, 0x21, 0x00, // BIT STRING, 33 bytes, 0 unused
         ];
         der.extend_from_slice(raw);
         der

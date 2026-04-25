@@ -917,8 +917,6 @@ mod tests {
     #[cfg(feature = "encryption")]
     #[test]
     fn brain_key_derive_and_roundtrip() {
-        use crate::db::{derive_brain_key, Store};
-
         let sig = b"abcdefghijklmnopqrstuvwxyz012345abcdefghijklmnopqrstuvwxyz012345";
         let hw = "AA:BB:CC:DD:EE:FF";
         let key = derive_brain_key(sig, hw);

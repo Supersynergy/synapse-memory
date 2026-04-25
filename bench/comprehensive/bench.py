@@ -900,9 +900,13 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
             finally:
                 shutil.rmtree(wtmp, ignore_errors=True)
 
-        # Set per-engine timeout (90s in fast mode)
-        engine_timeout = 90 if fast else 0
+        # Set per-engine timeout — duckdb gets 300s (INSERT with FLOAT[384] is ~10s/1k rows)
+        if fast:
+            engine_timeout = 300 if adapter_cls.name == "duckdb" else 90
+        else:
+            engine_timeout = 0
         if engine_timeout > 0:
+            signal.alarm(0)  # cancel any leftover alarm first
             signal.signal(signal.SIGALRM, _timeout_handler)
             signal.alarm(engine_timeout)
 
