@@ -706,6 +706,296 @@ ADAPTERS = {
 }
 
 
+# ─── Extended phases (--phases=all) ────────────────────────────────────────────
+
+def run_phase_scale(adapter_cls, docs_full, scales=(1000, 10000, 100000)):
+    """Scale-curve: insert+query at each scale, return list of {scale, insert_ops, query_ms}."""
+    results = []
+    for n in scales:
+        if n > len(docs_full):
+            continue
+        subset = docs_full[:n]
+        tmpdir = tempfile.mkdtemp(prefix=f"bench_scale_{adapter_cls.name}_{n}_")
+        try:
+            adapter = adapter_cls()
+            adapter.setup(tmpdir)
+            t0 = time.perf_counter()
+            batch = 1000
+            for i in range(0, len(subset), batch):
+                adapter.bulk_insert(subset[i:i+batch])
+            insert_s = time.perf_counter() - t0
+            insert_ops = n / insert_s if insert_s > 0 else 0
+
+            # 20 random queries
+            rng = np.random.default_rng(42)
+            lats = []
+            for _ in range(20):
+                q = rng.standard_normal(384).astype(np.float32)
+                q /= np.linalg.norm(q)
+                cat = random.choice(CATEGORIES)
+                t0 = time.perf_counter()
+                try:
+                    adapter.hybrid_select(q.tobytes(), cat, k=10)
+                except Exception:
+                    pass
+                lats.append((time.perf_counter() - t0) * 1000)
+            adapter.teardown()
+            results.append({"scale": n, "insert_ops_sec": insert_ops,
+                            "query_p50_ms": sorted(lats)[10], "query_p95_ms": sorted(lats)[18]})
+            print(f"    scale={n:>7d}  insert={insert_ops:.0f} ops/s  q_p50={sorted(lats)[10]:.1f}ms")
+        except Exception as e:
+            results.append({"scale": n, "error": str(e)})
+            print(f"    scale={n}: ERROR {e}")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+    return results
+
+
+def brute_force_recall(docs, query_vec, k=10, filter_cat=None):
+    """Ground-truth top-k ids via cosine similarity (numpy)."""
+    q = np.frombuffer(query_vec, dtype=np.float32)
+    q = q / (np.linalg.norm(q) + 1e-9)
+    filtered = [d for d in docs if filter_cat is None or d["category"] == filter_cat]
+    if not filtered:
+        return []
+    vecs = np.array([np.frombuffer(d["vec"], dtype=np.float32) for d in filtered])
+    norms = np.linalg.norm(vecs, axis=1, keepdims=True) + 1e-9
+    vecs = vecs / norms
+    scores = vecs @ q
+    top_idx = np.argpartition(scores, -min(k, len(scores)))[-min(k, len(scores)):]
+    top_idx = top_idx[np.argsort(scores[top_idx])[::-1]]
+    return [filtered[i]["id"] for i in top_idx]
+
+
+def run_phase_recall(adapter, docs, n_queries=50):
+    """Recall@10 vs brute-force cosine ground truth."""
+    rng = np.random.default_rng(123)
+    hits = 0
+    total = 0
+    for _ in range(n_queries):
+        q = rng.standard_normal(384).astype(np.float32)
+        q /= np.linalg.norm(q)
+        cat = random.choice(CATEGORIES)
+        gt = set(brute_force_recall(docs, q.tobytes(), k=10, filter_cat=cat))
+        try:
+            result = adapter.hybrid_select(q.tobytes(), cat, k=10)
+            # normalize result format
+            if result and isinstance(result[0], (list, tuple)):
+                got_ids = set(r[0] for r in result)
+            elif result and isinstance(result[0], dict):
+                got_ids = set(r.get("id", r.get("_id", "")) for r in result)
+            else:
+                got_ids = set(str(r) for r in result)
+        except Exception:
+            got_ids = set()
+        hits += len(gt & got_ids)
+        total += len(gt)
+    recall = hits / total if total > 0 else 0.0
+    return {"recall_at_10": recall, "n_queries": n_queries}
+
+
+def run_phase_soak(adapter, docs, duration_s=180):
+    """3-min sustained 80/20 — ops/sec drift + RSS growth (memory leak detector)."""
+    rng = np.random.default_rng(77)
+    write_docs = docs[:100]
+    proc = psutil.Process(os.getpid())
+    window = 10  # sample every 10s
+    buckets = []  # (t, ops_in_window, rss_mb)
+    ops_window = 0
+    t_window_start = time.perf_counter()
+    t_end = time.perf_counter() + duration_s
+
+    while time.perf_counter() < t_end:
+        if random.random() < 0.8:
+            q = rng.standard_normal(384).astype(np.float32)
+            q /= np.linalg.norm(q)
+            cat = random.choice(CATEGORIES)
+            try:
+                adapter.hybrid_select(q.tobytes(), cat, k=10)
+            except Exception:
+                pass
+        else:
+            d = random.choice(write_docs)
+            v = rng.standard_normal(384).astype(np.float32)
+            v /= np.linalg.norm(v)
+            try:
+                adapter.update([d["id"]], [v.tobytes()], [f"soak_{ops_window}"])
+            except Exception:
+                pass
+        ops_window += 1
+        now = time.perf_counter()
+        if now - t_window_start >= window:
+            rss = proc.memory_info().rss / 1e6
+            buckets.append({"t_s": now, "ops_per_s": ops_window / window, "rss_mb": rss})
+            ops_window = 0
+            t_window_start = now
+
+    if not buckets:
+        return {"error": "no data"}
+    ops_first = buckets[0]["ops_per_s"]
+    ops_last = buckets[-1]["ops_per_s"]
+    rss_first = buckets[0]["rss_mb"]
+    rss_last = buckets[-1]["rss_mb"]
+    return {
+        "duration_s": duration_s,
+        "ops_first": ops_first,
+        "ops_last": ops_last,
+        "ops_drift_pct": ((ops_last - ops_first) / (ops_first + 1e-9)) * 100,
+        "rss_first_mb": rss_first,
+        "rss_last_mb": rss_last,
+        "rss_growth_mb": rss_last - rss_first,
+        "buckets": buckets,
+    }
+
+
+def run_phase_concurrency(adapter, docs, thread_counts=(1, 4, 8, 16), duration_s=10):
+    """Concurrency sweep: ops/sec + p99 vs thread count."""
+    results = []
+    for n_threads in thread_counts:
+        r = run_phase_d(adapter, docs, n_threads=n_threads, duration_s=duration_s)
+        r["threads"] = n_threads
+        results.append(r)
+        print(f"    threads={n_threads:>2d}  ops/s={r['ops_sec']:.0f}  p99={r['p99_ms']:.1f}ms")
+    return results
+
+
+def run_phase_batch_update(adapter, docs, batch_sizes=(1, 100, 1000)):
+    """Batch-size sweep for updates."""
+    rng = np.random.default_rng(55)
+    results = []
+    sample_pool = docs[:2000]
+    for bsz in batch_sizes:
+        n_total = min(bsz * 10, 1000)
+        sample = random.sample(sample_pool, min(n_total, len(sample_pool)))
+        new_vecs = [rng.standard_normal(384).astype(np.float32) for _ in sample]
+        for v in new_vecs:
+            v /= np.linalg.norm(v)
+        new_vecs_b = [v.tobytes() for v in new_vecs]
+        new_texts = [f"batch_{i}" for i in range(len(sample))]
+        ids = [d["id"] for d in sample]
+
+        t0 = time.perf_counter()
+        try:
+            for i in range(0, len(ids), bsz):
+                adapter.update(ids[i:i+bsz], new_vecs_b[i:i+bsz], new_texts[i:i+bsz])
+            elapsed = time.perf_counter() - t0
+            ops_sec = len(ids) / elapsed if elapsed > 0 else 0
+        except Exception as e:
+            ops_sec = 0
+            elapsed = 0
+        results.append({"batch_size": bsz, "ops_sec": ops_sec, "total": len(ids)})
+        print(f"    batch_size={bsz:>5d}  ops/s={ops_sec:.0f}")
+    return results
+
+
+def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="base"):
+    tmpdir = tempfile.mkdtemp(prefix=f"bench_{adapter_cls.name}_")
+    results = {"engine": adapter_cls.name, "n_docs": len(docs)}
+
+    try:
+        adapter = adapter_cls()
+        adapter.setup(tmpdir)
+
+        # Warmup inserts (small, separate tmpdir)
+        for _ in range(warmup):
+            wtmp = tempfile.mkdtemp(prefix=f"bench_warm_{adapter_cls.name}_")
+            try:
+                wadapter = adapter_cls()
+                wadapter.setup(wtmp)
+                wadapter.bulk_insert(docs[:min(50, len(docs))])
+                wadapter.teardown()
+            except Exception:
+                pass
+            finally:
+                shutil.rmtree(wtmp, ignore_errors=True)
+
+        print(f"[engine={adapter_cls.name} phase=A scale={len(docs)}] starting")
+        print(f"  [A] bulk_insert {len(docs)} docs...")
+        phase_a = run_phase_a(adapter, docs)
+        results["phase_a"] = phase_a
+        print(f"      {phase_a['ops_sec']:.0f} ops/s  RSS={phase_a['rss_mb']:.0f}MB  disk={phase_a['disk_mb']:.1f}MB  cpu={phase_a['cpu_pct_mean']:.0f}%")
+        print(f"[engine={adapter_cls.name} phase=A scale={len(docs)}] done ops_per_sec={phase_a['ops_sec']:.0f}")
+
+        print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] starting")
+        print(f"  [B] update {min(1000, len(docs))} docs...")
+        phase_b = run_phase_b(adapter, docs, n_update=min(1000, len(docs)))
+        results["phase_b"] = phase_b
+        print(f"      {phase_b['ops_sec']:.0f} ops/s  RSS={phase_b['rss_mb']:.0f}MB  cpu={phase_b['cpu_pct_mean']:.0f}%")
+        print(f"[engine={adapter_cls.name} phase=B scale={len(docs)}] done ops_per_sec={phase_b['ops_sec']:.0f}")
+
+        dur = 5 if dry_run else 10
+        print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] starting")
+        print(f"  [C] mixed 80/20 for {dur}s...")
+        phase_c = run_phase_c(adapter, docs, duration_s=dur)
+        results["phase_c"] = phase_c
+        print(f"      {phase_c['ops_sec']:.1f} ops/s  p50={phase_c['p50_ms']:.1f}ms  p95={phase_c['p95_ms']:.1f}ms  p99={phase_c['p99_ms']:.1f}ms")
+        print(f"[engine={adapter_cls.name} phase=C scale={len(docs)}] done ops_per_sec={phase_c['ops_sec']:.1f}")
+
+        print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] starting")
+        print(f"  [D] 8-thread concurrent select for {dur}s...")
+        phase_d = run_phase_d(adapter, docs, n_threads=8, duration_s=dur)
+        results["phase_d"] = phase_d
+        print(f"      {phase_d['ops_sec']:.1f} ops/s  p99={phase_d['p99_ms']:.1f}ms")
+        print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] done ops_per_sec={phase_d['ops_sec']:.1f}")
+
+        if phases == "all":
+            # E: recall@10
+            print(f"[engine={adapter_cls.name} phase=E scale={len(docs)}] starting")
+            print(f"  [E] recall@10 (50 queries vs brute-force)...")
+            phase_e = run_phase_recall(adapter, docs, n_queries=50)
+            results["phase_e"] = phase_e
+            print(f"      recall@10={phase_e['recall_at_10']:.3f}")
+            print(f"[engine={adapter_cls.name} phase=E scale={len(docs)}] done recall={phase_e['recall_at_10']:.3f}")
+
+            # F: concurrency sweep
+            print(f"[engine={adapter_cls.name} phase=F scale={len(docs)}] starting")
+            print(f"  [F] concurrency sweep 1/4/8/16 threads...")
+            phase_f = run_phase_concurrency(adapter, docs, thread_counts=(1, 4, 8, 16), duration_s=dur)
+            results["phase_f"] = phase_f
+            print(f"[engine={adapter_cls.name} phase=F scale={len(docs)}] done")
+
+            # G: batch update sweep
+            print(f"[engine={adapter_cls.name} phase=G scale={len(docs)}] starting")
+            print(f"  [G] batch update sizes 1/100/1000...")
+            phase_g = run_phase_batch_update(adapter, docs, batch_sizes=(1, 100, 1000))
+            results["phase_g"] = phase_g
+            print(f"[engine={adapter_cls.name} phase=G scale={len(docs)}] done")
+
+            # H: soak test (3 min) — skip for dry-run
+            if not dry_run:
+                print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] starting")
+                print(f"  [H] soak test 180s mixed 80/20...")
+                phase_h = run_phase_soak(adapter, docs, duration_s=180)
+                results["phase_h"] = phase_h
+                drift = phase_h.get("ops_drift_pct", 0)
+                rss_growth = phase_h.get("rss_growth_mb", 0)
+                print(f"      ops_drift={drift:.1f}%  rss_growth={rss_growth:.0f}MB")
+                print(f"[engine={adapter_cls.name} phase=H scale={len(docs)}] done drift={drift:.1f}%")
+
+        adapter.teardown()
+
+    except Exception as e:
+        results["error"] = str(e)
+        print(f"  [ERROR] {adapter_cls.name}: {e}")
+    finally:
+        try:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        except Exception:
+            pass
+
+    return results
+
+
+ADAPTERS = {
+    "sqlite-vec": SqliteVecAdapter,
+    "duckdb": DuckDBAdapter,
+    "lancedb": LanceDBAdapter,
+    "qdrant": QdrantAdapter,
+    "chromadb": ChromaAdapter,
+    "synapse": SynapseAdapter,
+}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--engine", default="all",
@@ -713,6 +1003,8 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Use 1k docs for validation")
     parser.add_argument("--n-docs", type=int, default=100000)
+    parser.add_argument("--phases", default="base", choices=["base", "all"],
+                        help="'base' = A/B/C/D only (compat). 'all' = +E/F/G/H (recall/concurrency/batch/soak)")
     args = parser.parse_args()
 
     n_docs = 1000 if args.dry_run else args.n_docs
@@ -725,18 +1017,34 @@ def main():
     else:
         engines = [e.strip() for e in args.engine.split(",")]
 
+    # Scale-curve: run separately before main phases if phases=all
+    if args.phases == "all":
+        print("\n[bench] === SCALE CURVE (1k/10k/100k) ===")
+        for engine in engines:
+            if engine not in ADAPTERS:
+                continue
+            print(f"  [{engine}]")
+            try:
+                scale_results = run_phase_scale(ADAPTERS[engine], docs,
+                                                scales=(1000, 10000, min(100000, len(docs))))
+                sc_path = os.path.join(RESULTS_DIR, f"{engine}_scale.jsonl")
+                with open(sc_path, "w") as f:
+                    f.write(json.dumps({"engine": engine, "scale_curve": scale_results}) + "\n")
+            except Exception as e:
+                print(f"    ERROR: {e}")
+
     all_results = []
     for engine in engines:
         if engine not in ADAPTERS:
             print(f"[warn] Unknown engine: {engine}, skipping")
             continue
         print(f"\n[bench] === {engine} ===")
-        result = run_adapter(ADAPTERS[engine], docs, dry_run=args.dry_run)
+        result = run_adapter(ADAPTERS[engine], docs, dry_run=args.dry_run, phases=args.phases)
         all_results.append(result)
 
         suffix = "dry" if args.dry_run else "full"
         out_path = os.path.join(RESULTS_DIR, f"{engine}_{suffix}.jsonl")
-        with open(out_path, "a") as f:
+        with open(out_path, "w") as f:
             f.write(json.dumps(result) + "\n")
         print(f"  -> {out_path}")
 

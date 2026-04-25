@@ -36,6 +36,7 @@ impl Store {
         conn.pragma_update(None, "wal_autocheckpoint", 0_i64)?;
         // Pre-allocate page-cache slots, reduce first-access allocation stalls.
         conn.pragma_update(None, "page_size", 4096_i64)?;
+        crate::sql_fns::register_synapse_match(&conn)?;
         #[cfg(feature = "ann-usearch")]
         let s = {
             let mut store = Self {
