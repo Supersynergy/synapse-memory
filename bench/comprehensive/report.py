@@ -34,10 +34,23 @@ def fmt(v, decimals=0):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--partial", action="store_true",
+                        help="Generate partial/in-progress report from whatever JSONL is available")
+    parser.add_argument("--out", default=None, help="Output path (default: RESULTS.md or RESULTS_INTERIM.md)")
+    args = parser.parse_args()
+
     results, run_type = load_latest()
     if not results:
         print("No results found. Run bench.py first.")
         return
+
+    global OUT
+    if args.partial:
+        OUT = os.path.join(DIR, "RESULTS_INTERIM.md")
+    if args.out:
+        OUT = args.out
 
     lines = [
         f"# Synapse Comprehensive Benchmark Results",
@@ -139,6 +152,73 @@ def main():
             lines.append(f"- **{eng}**: `{err}`")
         lines += [""]
 
+    # Extended phases if present
+    extended_engines = [r for r in results if r.get("phase_e") or r.get("phase_f") or r.get("phase_g")]
+    if extended_engines:
+        lines += [
+            "## Phase E — Recall@10 (vs brute-force cosine)",
+            "",
+            "| Engine | Recall@10 | Queries |",
+            "|--------|----------:|--------:|",
+        ]
+        for r in results:
+            e = r.get("phase_e", {})
+            if not e:
+                lines.append(f"| {r['engine']} | — | — |")
+                continue
+            lines.append(f"| {r['engine']} | {e.get('recall_at_10', 0):.3f} | {e.get('n_queries', 0)} |")
+        lines += [""]
+
+        lines += [
+            "## Phase F — Concurrency Sweep (ops/sec vs threads)",
+            "",
+            "| Engine | 1T ops/s | 4T ops/s | 8T ops/s | 16T ops/s | 16T p99ms |",
+            "|--------|----------:|---------:|---------:|----------:|----------:|",
+        ]
+        for r in results:
+            f_data = r.get("phase_f", [])
+            if not f_data:
+                lines.append(f"| {r['engine']} | — | — | — | — | — |")
+                continue
+            by_t = {x["threads"]: x for x in f_data}
+            def g(t): return fmt(by_t.get(t, {}).get("ops_sec"), 0)
+            p99_16 = fmt(by_t.get(16, {}).get("p99_ms"), 1)
+            lines.append(f"| {r['engine']} | {g(1)} | {g(4)} | {g(8)} | {g(16)} | {p99_16} |")
+        lines += [""]
+
+        lines += [
+            "## Phase G — Batch Update Sweep (ops/sec vs batch size)",
+            "",
+            "| Engine | batch=1 | batch=100 | batch=1000 |",
+            "|--------|--------:|----------:|-----------:|",
+        ]
+        for r in results:
+            g_data = r.get("phase_g", [])
+            if not g_data:
+                lines.append(f"| {r['engine']} | — | — | — |")
+                continue
+            by_b = {x["batch_size"]: x for x in g_data}
+            def gb(b): return fmt(by_b.get(b, {}).get("ops_sec"), 0)
+            lines.append(f"| {r['engine']} | {gb(1)} | {gb(100)} | {gb(1000)} |")
+        lines += [""]
+
+        soak_engines = [r for r in results if r.get("phase_h")]
+        if soak_engines:
+            lines += [
+                "## Phase H — Soak Test (3 min, 80/20 mixed)",
+                "",
+                "| Engine | ops/s start | ops/s end | drift% | RSS growth MB |",
+                "|--------|------------:|----------:|-------:|--------------:|",
+            ]
+            for r in results:
+                h = r.get("phase_h", {})
+                if not h or "error" in h:
+                    lines.append(f"| {r['engine']} | — | — | — | — |")
+                    continue
+                lines.append(f"| {r['engine']} | {fmt(h.get('ops_first'),1)} | {fmt(h.get('ops_last'),1)} | "
+                             f"{fmt(h.get('ops_drift_pct'),1)} | {fmt(h.get('rss_growth_mb'),0)} |")
+            lines += [""]
+
     lines += [
         "## How to re-run",
         "",
@@ -146,8 +226,8 @@ def main():
         "# Dry run (1k docs, ~2 min)",
         "DRY_RUN=1 bash bench/comprehensive/run.sh",
         "",
-        "# Full run (100k docs, ~20-40 min)",
-        "bash bench/comprehensive/run.sh > bench/comprehensive/run.log 2>&1 &",
+        "# Full run with all extended phases (100k docs)",
+        "PHASES=all setsid nohup bash bench/comprehensive/run.sh > bench/comprehensive/run.log 2>&1 &",
         "tail -f bench/comprehensive/run.log",
         "```",
     ]

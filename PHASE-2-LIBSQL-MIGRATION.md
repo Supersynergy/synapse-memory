@@ -17,15 +17,29 @@ Replace rusqlite with libSQL backend for async WAL + concurrent writers + free T
 - p99 <50ms held
 - Recall 1.000 held (HNSW path unchanged)
 
-## ABI Compat Test (5 LOC reproducer, GO/NO-GO gate)
+## ABI Compat Test — RESULT: ✅ PASS (2026-04-24)
+
+**Verdict: GO**
+
+Critical finding: `sqlite3_auto_extension` must be called **before** opening the connection that uses the extension. The extension registration fires on `db.connect()`, not on DB open.
+
 ```rust
-let conn = libsql::Builder::new_local("/tmp/test.db").build().await?;
-unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(sqlite_vec::sqlite3_vec_init)); }
-conn.execute("CREATE VIRTUAL TABLE t USING vec0(id INTEGER, e FLOAT[384])", ()).await?;
-conn.execute("CREATE VIRTUAL TABLE f USING fts5(c)", ()).await?;
-println!("PASS: both extensions load on libsql");
+// CORRECT pattern — register THEN open new connection
+unsafe {
+    libsql::ffi::sqlite3_auto_extension(Some(
+        std::mem::transmute::<*const (), unsafe extern "C" fn(*mut libsql::ffi::sqlite3, *mut *const i8, *const libsql::ffi::sqlite3_api_routines) -> i32>(
+            sqlite_vec::sqlite3_vec_init as *const ()
+        )
+    ));
+}
+let db = libsql::Builder::new_local("/tmp/test.db").build().await?;
+let conn = db.connect()?; // extension fires here
+conn.execute("CREATE VIRTUAL TABLE v USING vec0(id INTEGER PRIMARY KEY, e FLOAT[384])", ()).await?;
+conn.execute("CREATE VIRTUAL TABLE f USING fts5(content)", ()).await?;
+println!("PASS: FTS5 + vec0 both work on libsql");
 ```
-**MUST pass before Phase 2 lock-in.**
+
+Test crate: `/tmp/libsql-abi-test/` · libsql = 0.6.0 · sqlite-vec = 0.1.9
 
 ## Architecture — Backend Trait
 

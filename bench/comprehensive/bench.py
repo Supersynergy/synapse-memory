@@ -146,12 +146,15 @@ class DuckDBAdapter(Adapter):
         import duckdb
         self.db_path = os.path.join(tmpdir, "duck.db")
         self.conn = duckdb.connect(self.db_path)
+        self._has_vss = False
+        # VSS extension can segfault on some builds — load in a safe way
         try:
-            self.conn.execute("INSTALL vss; LOAD vss;")
+            self.conn.execute("INSTALL vss;")
         except Exception:
-            pass  # VSS may already be loaded
+            pass
         try:
             self.conn.execute("LOAD vss;")
+            self._has_vss = True
         except Exception:
             pass
         self.conn.execute("""
@@ -170,9 +173,10 @@ class DuckDBAdapter(Adapter):
                  d["timestamp"], d["source"], d["lang"],
                  np.frombuffer(d["vec"], dtype=np.float32).tolist()) for d in docs]
         self.conn.executemany(
-            "INSERT OR REPLACE INTO docs VALUES (?,?,?,?,?,?,?,?)", rows)
-        if not self._has_index:
+            "INSERT OR IGNORE INTO docs VALUES (?,?,?,?,?,?,?,?)", rows)
+        if not self._has_index and self._has_vss:
             try:
+                self.conn.execute("SET hnsw_enable_experimental_persistence=true;")
                 self.conn.execute(
                     "CREATE INDEX IF NOT EXISTS hnsw_idx ON docs USING HNSW (vec)")
                 self._has_index = True
