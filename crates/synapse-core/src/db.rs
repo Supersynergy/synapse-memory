@@ -8,6 +8,30 @@ use ed25519_dalek::SigningKey;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
+/// HKDF-derive a SQLCipher key from a license signature + hardware fingerprint.
+///
+/// Key derivation:
+///   salt  = BLAKE3(hw_fingerprint)  [32 bytes]
+///   prk   = first 32 bytes of license_sig
+///   key   = BLAKE3_keyed(key=salt, data = "synapse-brain-v1" || prk)  [32 bytes]
+///
+/// The key is never persisted; callers must re-derive on every launch.
+/// Requires feature `encryption` (blake3 dep present regardless, but the
+/// function is gated so it is only compiled when encryption is in use).
+#[cfg(feature = "encryption")]
+pub fn derive_brain_key(license_sig: &[u8], hw_fingerprint: &str) -> [u8; 32] {
+    let salt: [u8; 32] = {
+        let mut h = blake3::Hasher::new();
+        h.update(hw_fingerprint.as_bytes());
+        *h.finalize().as_bytes()
+    };
+    let prk_input = &license_sig[..32.min(license_sig.len())];
+    let mut hkdf_h = blake3::Hasher::new_keyed(&salt);
+    hkdf_h.update(b"synapse-brain-v1");
+    hkdf_h.update(prk_input);
+    *hkdf_h.finalize().as_bytes()
+}
+
 pub struct Store {
     pub conn: Connection,
     /// PR-A1-wire: optional usearch ANN fast-path. `None` = brute-force
@@ -690,6 +714,40 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         Ok(out)
     }
 
+    /// Open or create an encrypted (SQLCipher) database using a raw 32-byte key
+    /// derived by the caller via `derive_brain_key`. The key is passed directly
+    /// as `PRAGMA key="x'<hex>'"` before any other SQL; no KDF is applied here.
+    ///
+    /// Requires feature `encryption`.
+    #[cfg(feature = "encryption")]
+    pub fn open_with_brain_key(path: impl AsRef<Path>, key: &[u8; 32]) -> Result<Self> {
+        let key_hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
+        unsafe {
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+        let conn = Connection::open(path.as_ref())?;
+        conn.pragma_update(None, "key", format!("x'{key_hex}'"))?;
+        // Verify the key is correct by attempting a read; SQLCipher will return
+        // SQLITE_NOTADB / error 26 if the key is wrong.
+        conn.execute_batch("SELECT count(*) FROM sqlite_master;")?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "busy_timeout", 10000_i64)?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        conn.pragma_update(None, "mmap_size", 268_435_456_i64)?;
+        conn.pragma_update(None, "cache_size", -65536_i64)?;
+        conn.pragma_update(None, "wal_autocheckpoint", 0_i64)?;
+        crate::sql_fns::register_synapse_match(&conn)?;
+        #[cfg(feature = "ann-usearch")]
+        let s = Self { conn, ann: None };
+        #[cfg(not(feature = "ann-usearch"))]
+        let s = Self { conn };
+        s.migrate()?;
+        Ok(s)
+    }
+
     /// Verify the Ed25519 signature on a doc. Returns Err if no sig or invalid.
     pub fn verify(&self, id: i64, vk: &ed25519_dalek::VerifyingKey) -> Result<()> {
         let (text, sig_opt): (String, Option<Vec<u8>>) = self
@@ -854,6 +912,55 @@ mod tests {
             .search("rust", SearchMode::Hybrid, Some(&fake_emb(5)), 10)
             .unwrap();
         assert!(hits.iter().any(|h| h.text.contains("rust")));
+    }
+
+    #[cfg(feature = "encryption")]
+    #[test]
+    fn brain_key_derive_and_roundtrip() {
+        use crate::db::{derive_brain_key, Store};
+
+        let sig = b"abcdefghijklmnopqrstuvwxyz012345abcdefghijklmnopqrstuvwxyz012345";
+        let hw = "AA:BB:CC:DD:EE:FF";
+        let key = derive_brain_key(sig, hw);
+
+        // Key must be deterministic
+        let key2 = derive_brain_key(sig, hw);
+        assert_eq!(key, key2);
+
+        // Different hw_fp must yield different key
+        let key_other = derive_brain_key(sig, "11:22:33:44:55:66");
+        assert_ne!(key, key_other);
+
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let path = tmp.path().to_owned();
+
+        // Write with correct key
+        {
+            let mut s = Store::open_with_brain_key(&path, &key).unwrap();
+            s.put(&PutRequest {
+                text: "brain key test document".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        }
+
+        // Reopen with same key — must find the document
+        {
+            let s = Store::open_with_brain_key(&path, &key).unwrap();
+            let hits = s
+                .search("brain key", SearchMode::Lex, None, 5)
+                .unwrap();
+            assert_eq!(hits.len(), 1, "should find the stored doc on reopen");
+        }
+
+        // Reopen with wrong key — must fail
+        {
+            let result = Store::open_with_brain_key(&path, &key_other);
+            assert!(
+                result.is_err(),
+                "wrong key must produce an error, not open successfully"
+            );
+        }
     }
 
     #[test]

@@ -43,6 +43,14 @@ fn is_wp_options_write(sql: &str) -> bool {
         || lo.starts_with("replace");
     is_write && lo.contains("wp_options")
 }
+fn is_dml_write(sql: &str) -> bool {
+    let upper = sql.trim_start().to_uppercase();
+    upper.starts_with("INSERT")
+        || upper.starts_with("UPDATE")
+        || upper.starts_with("DELETE")
+        || upper.starts_with("REPLACE")
+}
+
 // ── wp_postmeta covering-index optimization ───────────────────────────────────
 /// Returns true for WP's canonical postmeta IN-list query fired on every
 /// archive page render:
@@ -121,6 +129,8 @@ pub struct SynapseMysqlAsync {
     current_db: Option<String>,
     next_stmt_id: u32,
     prepared: HashMap<u32, String>,
+    /// Last _found_rows value from SQL_CALC_FOUND_ROWS queries, per connection.
+    last_found_rows: u64,
 }
 
 impl SynapseMysqlAsync {
@@ -131,6 +141,7 @@ impl SynapseMysqlAsync {
             current_db: None,
             next_stmt_id: 1,
             prepared: HashMap::new(),
+            last_found_rows: 0,
         }
     }
 
@@ -168,6 +179,24 @@ fn open_conn(file: &Path) -> io::Result<Connection> {
         .map_err(io_other)?;
     conn.pragma_update(None, "cache_size", -65536_i64)
         .map_err(io_other)?;
+    // Register REGEXP UDF so MySQL `col REGEXP 'pattern'` works in SQLite.
+    conn.create_scalar_function(
+        "REGEXP",
+        2,
+        rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC
+            | rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+        |ctx| -> rusqlite::Result<bool> {
+            let pattern: String = ctx.get(0)?;
+            let text: String = ctx.get(1)?;
+            let re = regex::Regex::new(&pattern).map_err(|e| {
+                rusqlite::Error::UserFunctionError(
+                    format!("REGEXP: bad pattern: {e}").into(),
+                )
+            })?;
+            Ok(re.is_match(&text))
+        },
+    )
+    .map_err(io_other)?;
     Ok(conn)
 }
 
@@ -236,6 +265,52 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         // Phase 1 MVP: skip rewrite for everything else, pass through to SQLite.
         let rewritten = synapse_mysql::rewrite::rewrite(sql, &self.state.mode).unwrap_or_else(|_| sql.to_string());
         let _mode = &self.state.mode;
+
+        // FOUND_ROWS() sentinel → return cached last_found_rows value
+        if rewritten.contains("FOUND_ROWS_SENTINEL") {
+            let found = self.last_found_rows;
+            let cols = vec![Column {
+                table: String::new(),
+                column: "FOUND_ROWS()".to_string(),
+                coltype: ColumnType::MYSQL_TYPE_LONGLONG,
+                colflags: ColumnFlags::empty(),
+                collen: 0,
+            }];
+            let mut writer = results.start(&cols).await?;
+            writer.write_row(&[found.to_string()]).await?;
+            return writer.finish().await;
+        }
+
+        // ── DML writes (INSERT / UPDATE / DELETE / REPLACE) ──────────────────────
+        if is_dml_write(&rewritten) {
+            let sql_owned = rewritten.clone();
+            let conn = self.get_conn().await?;
+            let (rows_affected, last_insert_id) =
+                tokio::task::spawn_blocking(move || -> io::Result<(u64, u64)> {
+                    let c = conn.lock();
+                    c.execute(&sql_owned, []).map_err(io_other)?;
+                    let affected = c.changes();
+                    let last_id = c.last_insert_rowid() as u64;
+                    Ok((affected, last_id))
+                })
+                .await
+                .map_err(io_other)??;
+            { *self.state.write_epoch.lock() += 1; }
+            if is_wp_options_write(&rewritten) {
+                self.state.autoload_cache.lock().clear();
+                debug!("wp_options write — autoload cache invalidated");
+            }
+            debug!("DML {} → affected={} last_id={} ({}µs)",
+                &rewritten[..rewritten.len().min(50)],
+                rows_affected, last_insert_id,
+                t0.elapsed().as_micros()
+            );
+            return results.completed(opensrv_mysql::OkResponse {
+                affected_rows: rows_affected,
+                last_insert_id,
+                ..Default::default()
+            }).await;
+        }
 
         // ── wp_options autoload dedicated cache ───────────────────────────────
         // Any write to wp_options invalidates the autoload cache immediately.
@@ -309,6 +384,15 @@ impl<W: AsyncWrite + Send + Sync + Unpin> AsyncMysqlShim<W> for SynapseMysqlAsyn
         })
         .await
         .map_err(io_other)??;
+
+        // Track _found_rows value for subsequent SELECT FOUND_ROWS() calls
+        if let Some(idx) = exec.0.iter().position(|(name, _)| name == "_found_rows") {
+            if let Some(first_row) = exec.1.first() {
+                if let Some(val) = first_row.get(idx) {
+                    self.last_found_rows = val.parse().unwrap_or(0);
+                }
+            }
+        }
 
         let cached = CachedResult {
             col_defs: exec.0,

@@ -178,10 +178,13 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         }
     }
 
-    // REGEXP -> SQLite has no REGEXP without extension; rewrite to no-op SELECT
-    if upper.contains(" REGEXP ") {
-        return Ok("SELECT 1".to_string());
+    // FOUND_ROWS() → sentinel so shim can substitute cached _found_rows value
+    if upper.trim() == "SELECT FOUND_ROWS()" {
+        return Ok("SELECT 0 as FOUND_ROWS_SENTINEL".to_string());
     }
+
+    // REGEXP → now handled as a real SQLite UDF (registered in shim.rs)
+    // No rewrite needed; pass through to SQLite.
 
     // Large transient cache INSERTs can exceed mysqlnd's net_cmd_buffer_size.
     // These are non-critical cached values; skip them silently.
@@ -260,8 +263,17 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         }
     }
 
-    // SQL_CALC_FOUND_ROWS is MySQL-only; SQLite has no equivalent, strip it
-    out = Regex::new(r"(?i)\bSQL_CALC_FOUND_ROWS\b\s*").unwrap().replace(&out, "").to_string();
+    // SQL_CALC_FOUND_ROWS → rewrite to window function so WP can read total count
+    // SELECT SQL_CALC_FOUND_ROWS ... → SELECT *, COUNT(*) OVER() as _found_rows ...
+    if Regex::new(r"(?i)\bSQL_CALC_FOUND_ROWS\b").unwrap().is_match(&out) {
+        // Strip the SQL_CALC_FOUND_ROWS hint
+        out = Regex::new(r"(?i)\bSQL_CALC_FOUND_ROWS\b\s*").unwrap().replace(&out, "").to_string();
+        // Inject COUNT(*) OVER() as _found_rows after SELECT keyword
+        out = Regex::new(r"(?i)^(\s*SELECT\s+)")
+            .unwrap()
+            .replace(&out, "${1}COUNT(*) OVER() as _found_rows, ")
+            .to_string();
+    }
 
     // FORCE INDEX(...) / USE INDEX(...) / IGNORE INDEX(...) -> strip (SQLite has no index hints)
     out = Regex::new(r"(?i)\b(?:FORCE|USE|IGNORE)\s+INDEX\s*\([^)]*\)\s*").unwrap().replace_all(&out, "").to_string();
@@ -479,6 +491,19 @@ mod tests {
 
     fn rw(sql: &str) -> String {
         rewrite(sql, "").expect("rewrite failed")
+    }
+
+    #[test]
+    fn test_sql_calc_found_rows_rewrite() {
+        let out = rw("SELECT SQL_CALC_FOUND_ROWS * FROM x LIMIT 5");
+        assert!(out.contains("COUNT(*) OVER()"), "got: {out}");
+        assert!(!out.contains("SQL_CALC_FOUND_ROWS"), "got: {out}");
+    }
+
+    #[test]
+    fn test_found_rows_sentinel() {
+        let out = rw("SELECT FOUND_ROWS()");
+        assert!(out.contains("FOUND_ROWS_SENTINEL"), "got: {out}");
     }
 
     // Basic single-column ON DUPLICATE KEY UPDATE

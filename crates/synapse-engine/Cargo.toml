@@ -1,0 +1,11 @@
+[package]
+name = "synapse-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[lib]
+name = "synapse_engine"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]

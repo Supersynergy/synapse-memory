@@ -226,6 +226,7 @@ class LanceDBAdapter(Adapter):
         self.db_path = os.path.join(tmpdir, "lance")
         self.db = lancedb.connect(self.db_path)
         self._tbl = None
+        self._row_cache = {}  # id -> full row dict for O(1) lookup in update()
 
     def bulk_insert(self, docs):
         import pyarrow as pa
@@ -243,12 +244,32 @@ class LanceDBAdapter(Adapter):
             self._tbl = self.db.create_table("docs", data=rows, mode="overwrite")
         else:
             self._tbl.add(rows)
+        for r in rows:
+            self._row_cache[r["id"]] = r
 
     def update(self, ids, new_vecs, new_texts):
+        import pyarrow as pa
+        # Batch upsert via merge_insert — O(batch) not O(N) per row on append-log storage
+        full_rows = []
         for doc_id, vec, text in zip(ids, new_vecs, new_texts):
-            arr = np.frombuffer(vec, dtype=np.float32).tolist()
-            self._tbl.update(where=f"id = '{doc_id}'",
-                             values={"vec": arr, "text": text})
+            base = self._row_cache.get(doc_id, {})
+            row = {
+                "id": doc_id,
+                "text": text,
+                "category": base.get("category", ""),
+                "score": base.get("score", 0.0),
+                "timestamp": base.get("timestamp", 0),
+                "source": base.get("source", ""),
+                "lang": base.get("lang", ""),
+                "vec": np.frombuffer(vec, dtype=np.float32).tolist(),
+            }
+            full_rows.append(row)
+            self._row_cache[doc_id] = row
+        updates_tbl = pa.Table.from_pylist(full_rows)
+        (self._tbl.merge_insert("id")
+            .when_matched_update_all()
+            .when_not_matched_insert_all()
+            .execute(updates_tbl))
 
     def hybrid_select(self, query_vec, text_filter, k=10):
         arr = np.frombuffer(query_vec, dtype=np.float32).tolist()
@@ -912,6 +933,11 @@ def run_adapter(adapter_cls, docs, dry_run=False, n_runs=3, warmup=1, phases="ba
         results["phase_d"] = phase_d
         print(f"      {phase_d['ops_sec']:.1f} ops/s  p99={phase_d['p99_ms']:.1f}ms")
         print(f"[engine={adapter_cls.name} phase=D scale={len(docs)}] done ops_per_sec={phase_d['ops_sec']:.1f}")
+
+        # Cancel alarm before optional phases (brute-force recall can be slow)
+        if engine_timeout > 0:
+            signal.alarm(0)
+            engine_timeout = 0
 
         if phases == "all" or fast:
             # E: recall@10

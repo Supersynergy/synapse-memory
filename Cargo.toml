@@ -17,6 +17,8 @@ members = [
     "crates/synapse-wal",
     "crates/synapse-seg",
     "crates/synapse-lib-demo",
+    "crates/synapse-engine",
+    "crates/synapse-license",
 ]
 
 [workspace.package]

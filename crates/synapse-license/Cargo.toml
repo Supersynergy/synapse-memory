@@ -1,0 +1,22 @@
+[package]
+name = "synapse-license"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+ed25519-dalek = { workspace = true }
+jsonwebtoken = "9"
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1"
+blake3 = { workspace = true }
+base64 = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+dirs = "5"
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true, features = ["rand_core"] }
+rand = "0.8"
