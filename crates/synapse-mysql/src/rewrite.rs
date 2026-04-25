@@ -1,12 +1,24 @@
 use anyhow::Result;
 use regex::Regex;
+use std::sync::OnceLock;
+
+// Pre-compiled regexes — `Regex::new` per call was the OLTP hot-path bottleneck.
+// Each pattern compiles once, lives forever.
+fn re_delete_multi() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"(?i)^DELETE\s+\w+,\s*\w+\s+FROM").unwrap())
+}
+fn re_at_var() -> &'static Regex {
+    static R: OnceLock<Regex> = OnceLock::new();
+    R.get_or_init(|| Regex::new(r"@@(?:SESSION\.|GLOBAL\.)?(\w+)").unwrap())
+}
 
 pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     let mut out = sql.to_string();
     let upper = out.trim().to_uppercase();
 
     // Multi-table DELETE (WordPress transient cleanup) -> no-op
-    if Regex::new(r"(?i)^DELETE\s+\w+,\s*\w+\s+FROM").unwrap().is_match(&upper) {
+    if re_delete_multi().is_match(&upper) {
         return Ok("SELECT 1".to_string());
     }
 
@@ -25,7 +37,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     // SELECT @@SESSION.* / @@GLOBAL.* MySQL system variables
     // Replace each @@var with a literal value; keeps SELECT structure intact.
     if upper.contains("@@") {
-        let re = Regex::new(r"@@(?:SESSION\.|GLOBAL\.)?(\w+)").unwrap();
+        let re = re_at_var();
         let rewritten = re.replace_all(&out, |caps: &regex::Captures| {
             let var = caps.get(1).unwrap().as_str().to_lowercase();
             match var.as_str() {

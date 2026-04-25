@@ -131,7 +131,7 @@ async fn main() -> Result<()> {
         let state = Arc::clone(&state);
         let tls_config = tls_config.clone();
         tokio::spawn(async move {
-            info!("conn from {}", addr);
+            tracing::debug!("conn from {}", addr);
             let (r, w) = stream.into_split();
             let shim = SynapseMysqlAsync::new(state);
 
