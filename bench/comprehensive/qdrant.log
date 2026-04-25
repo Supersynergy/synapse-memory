@@ -1100,3 +1100,7 @@ Access web UI at http://localhost:6333/dashboard
 2026-04-25T17:21:58.465559Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000054
 2026-04-25T17:22:29.252841Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000057
 2026-04-25T17:22:30.103209Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000055
+2026-04-25T17:23:07.692494Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 144 "-" "Python-urllib/3.12" 0.000054
+2026-04-25T17:23:07.927483Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000056
+2026-04-25T17:23:40.371268Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000058
+2026-04-25T17:23:40.524297Z  INFO actix_web::middleware::logger: 127.0.0.1 "GET /collections HTTP/1.1" 200 145 "-" "Python-urllib/3.12" 0.000046
