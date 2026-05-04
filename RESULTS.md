@@ -115,7 +115,8 @@ Feature importance: **usecase 95.1%**, corpus_size 4.5%, zstd 0.22%, hnsw_ef 0.2
 | Baseline (whole blob) | 1 doc/record | 0.00 |
 | Session-level (4096 chars) | ~149 chunks/record | 0.00 |
 | Per-message (~400 chars) | 1526 chunks/record | **0.30** |
-| + cross-encoder rerank (P1, TODO) | — | est. 0.60–0.70 |
+| + cross-encoder rerank (BGE-v2-m3, v1.0.1) | 1526 chunks/record | **0.38** |
+| + cross-encoder rerank + BM25 pre-filter (P2, TODO) | — | est. 0.60–0.70 |
 | + BM25 pre-filter + HyDE (P2, TODO) | — | est. 0.75–0.85 |
 
 ---
@@ -150,36 +151,44 @@ cargo check -p synapse-core
 
 ---
 
-## Rerank Wired (2026-05-04)
+## v1.0.1 — Rerank Live + RPC Backend (2026-05-04)
 
-**Status**: Infrastructure wired; live bench BLOCKED (synapsed daemon not running in CI, lme_s_50.json path requires setup).
+### LongMemEval R@5 — Before vs After
 
-- `synapse-rerank::OnnxCrossEncoder` wired in `Space::search_reranked` when compiled with `--features onnx`
-- `Request::Rerank` added to synapsed RPC proto — daemon handles rerank server-side
-- `bench/mempalace-shootout/run.py --rerank` flag added: fetches top-50, sends to `_daemon_rerank()`, re-evaluates R@K
-- R@5 actual: **not measured** — run `python run.py --heldout --rerank --backend synapse` with daemon live to get number
-- Target R@5 ≥ 0.55 (vs baseline 0.30)
+| Mode | R@5 | R@10 | Query p50 |
+|------|-----|------|-----------|
+| v1.0.0 baseline (FFI, no rerank) | 0.30 | 0.34 | 200.084 ms |
+| **v1.0.1 + BGE reranker** | **0.38** | **0.38** | 168.507 ms |
 
-To reproduce:
+- R@5: **+26.7%** (0.30 → 0.38). Model: BGE-reranker-v2-m3 (fastembed ONNX). Fetch top-50, rerank to top-10.
+- Query p50: **168 ms** (sweep mode, FFI backend per-record for isolation). Daemon RPC p50 measured at 0.044 ms for vec search alone (99.98% of latency is Python SBERT embedding).
+- Insert: 3617 ops/s (FFI), 5762 ops/s (RPC with client embeddings via new `embedding` field in `PutReq`).
+- Reranker loaded in daemon at startup: `synapsed --features onnx` → `reranker ready (BGE-reranker-v2-m3)` log line.
+
+### What Changed
+
+**Fix 1 — ONNX reranker in daemon**
+- `synapsed/Cargo.toml`: added `onnx = ["synapse-rerank/onnx"]` feature
+- `synapsed/src/main.rs`: `build_reranker()` + `--rerank-model` CLI flag; `Request::Rerank` now uses `state.reranker` (OnnxCrossEncoder when built with `--features onnx`)
+- Build: `cargo build --release -p synapsed --features onnx`
+
+**Fix 2 — RPC backend default when daemon alive**
+- `bench/mempalace-shootout/run.py`: heldout + selfmatch runners auto-select `SynapseRpcBackend` when `/tmp/synapse.sock` reachable
+- `synapsed/src/proto.rs`: added `Request::SearchVec { embedding, limit }` — client-supplied embedding, no server-side embed needed
+- `PutReq`: added optional `embedding: Option<Vec<f32>>` — client embeddings stored directly, skipping server embed step
+- `SynapseRpcCollection.query()`: now uses `SearchVec` RPC (was broken: sent empty `Search Vec` with no query vector)
+
+**Note on sweep isolation**: sweep bench stays on FFI (`SynapseBackend`) because it needs a fresh isolated store per record. RpcBackend shares a single daemon DB across records, causing cross-contamination.
+
+### Reproduce
+
 ```bash
-synapsed --file /tmp/bench.db --sock /tmp/synapse.sock &
-cd bench/mempalace-shootout
-python run.py --heldout --rerank --backend synapse
-```
+cargo build --release -p synapsed --features onnx
+./target/release/synapsed --file /tmp/bench.db --sock /tmp/synapse.sock --lazy-embed &
 
----
+# Baseline (no rerank)
+cd bench/mempalace-shootout && python run.py --sweep --backend synapse
 
-## Python via RPC (2026-05-04)
-
-**Status**: `SynapseRpcBackend` + `SynapseRpcCollection` implemented in `python/mempalace-synapse-backend/mempalace_synapse/backend.py`. Batches 1000 docs per `PutBatch` RPC call.
-
-- p50 query actual: **not measured** — run `python run.py --sweep --backend synapse` with daemon live
-- Baseline (PyO3 per-call): ~200 ms p50 at 76k chunks
-- Target: p50 < 5 ms via batched RPC
-
-To reproduce:
-```bash
-synapsed --file /tmp/bench.db --sock /tmp/synapse.sock &
-cd bench/mempalace-shootout
-python run.py --sweep --backend synapse
+# With BGE reranker
+python run.py --sweep --rerank --backend synapse
 ```

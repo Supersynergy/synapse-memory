@@ -283,8 +283,14 @@ def run_backend_heldout(
                 return collection.query(query_embeddings=[emb], n_results=n)
 
         elif backend_name == "synapse":
-            from mempalace_synapse.backend import SynapseBackend
-            be = SynapseBackend(persist_dir=store_dir)
+            if _daemon_alive():
+                from mempalace_synapse.backend import SynapseRpcBackend
+                be = SynapseRpcBackend()
+                print("    [synapse] using SynapseRpcBackend (daemon alive)")
+            else:
+                from mempalace_synapse.backend import SynapseBackend
+                be = SynapseBackend(persist_dir=store_dir)
+                print("    [synapse] using SynapseBackend (FFI, daemon not reachable)")
             collection = be.get_collection("lme_heldout")
 
             def _add(ids, embeddings, documents, metadatas):
@@ -396,8 +402,14 @@ def run_backend_selfmatch(
                 return collection.query(query_embeddings=[emb], n_results=n)
 
         elif backend_name == "synapse":
-            from mempalace_synapse.backend import SynapseBackend
-            be = SynapseBackend(persist_dir=store_dir)
+            if _daemon_alive():
+                from mempalace_synapse.backend import SynapseRpcBackend
+                be = SynapseRpcBackend()
+                print("    [synapse] using SynapseRpcBackend (daemon alive)")
+            else:
+                from mempalace_synapse.backend import SynapseBackend
+                be = SynapseBackend(persist_dir=store_dir)
+                print("    [synapse] using SynapseBackend (FFI, daemon not reachable)")
             collection = be.get_collection("lme_s_bench")
 
             def _add(ids, embeddings, documents, metadatas):
@@ -459,6 +471,7 @@ def run_backend_sweep(
     embedder,
     store_dir: str,
     use_daemon: bool = False,
+    use_rerank: bool = False,
 ) -> dict:
     """
     Per-record sweep evaluation (correct LME setup):
@@ -505,6 +518,7 @@ def run_backend_sweep(
                     return (qr.get("documents") or [[]])[0][:k]
 
             elif backend_name == "synapse":
+                # sweep needs per-record isolation: always use FFI backend (own DB per rec_dir)
                 from mempalace_synapse.backend import SynapseBackend
                 be = SynapseBackend(persist_dir=rec_dir)
                 col = be.get_collection("lme-rec")
@@ -551,14 +565,25 @@ def run_backend_sweep(
         if qemb is None:
             qemb = embedder.encode([q_text], show_progress_bar=False).tolist()[0]
 
+        fetch_n = 50 if use_rerank else max(K_VALUES)
         qt = time.perf_counter()
-        qr = _query(qemb, max(K_VALUES))
+        qr = _query(qemb, fetch_n)
         query_latencies.append((time.perf_counter() - qt) * 1000)
+
+        top_texts_raw = _top_texts(qr, fetch_n)
+        if use_rerank and top_texts_raw:
+            candidates = [
+                {"id": i, "text": txt, "score": 0.5, "uri": None, "title": None}
+                for i, txt in enumerate(top_texts_raw)
+            ]
+            reranked = _daemon_rerank(rec["question"], candidates, max(K_VALUES))
+            if reranked:
+                top_texts_raw = [str(h.get("text", "")) for h in reranked]
 
         # Check if top-K texts contain the answer
         answer_lc = rec["answer"].lower().strip()
         for k in K_VALUES:
-            top = _top_texts(qr, k)
+            top = top_texts_raw[:k]
             if any(answer_lc[:30] in t.lower() for t in top):
                 hits_at[k] += 1
 
@@ -633,7 +658,7 @@ def main():
         for bname in backends:
             store_dir = tempfile.mkdtemp(prefix=f"mp-sweep-{bname}-")
             print(f"\nRunning {bname} (sweep) ...")
-            r = run_backend_sweep(bname, eval_recs, embedder, store_dir, use_daemon=use_daemon)
+            r = run_backend_sweep(bname, eval_recs, embedder, store_dir, use_daemon=use_daemon, use_rerank=args.rerank)
             results.append(r)
             if r.get("error"):
                 print(f"  ERROR: {r['error']}")

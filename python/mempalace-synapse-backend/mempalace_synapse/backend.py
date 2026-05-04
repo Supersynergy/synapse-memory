@@ -320,8 +320,9 @@ class SynapseRpcCollection:
                 batch_meta = metas[start:start + _RPC_BATCH_SIZE]
                 reqs = [
                     {"title": sid, "uri": sid, "text": doc,
-                     "meta": {"_id": sid, **meta}, "embed": False}
-                    for sid, doc, meta in zip(batch_ids, batch_doc, batch_meta)
+                     "meta": {"_id": sid, **meta}, "embed": False,
+                     "embedding": emb}
+                    for sid, doc, meta, emb in zip(batch_ids, batch_doc, batch_meta, batch_emb)
                 ]
                 resp = _rpc_call({"op": "PutBatch", "args": reqs}, self._sock)
                 row_ids = []
@@ -351,9 +352,9 @@ class SynapseRpcCollection:
         with self._lock:
             for qemb in query_embeddings:
                 resp = _rpc_call(
-                    {"op": "Search", "args": {
-                        "mode": "Vec", "q": "", "limit": n_results,
-                        "embed_query": False,
+                    {"op": "SearchVec", "args": {
+                        "embedding": qemb,
+                        "limit": n_results,
                     }},
                     self._sock,
                 )

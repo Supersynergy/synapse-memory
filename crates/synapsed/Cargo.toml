@@ -18,7 +18,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 synapse-core = { path = "../synapse-core", features = ["embed", "turbo"] }
-synapse-rerank = { path = "../synapse-rerank" }
+synapse-rerank = { path = "../synapse-rerank", features = [] }
 synapse-license = { path = "../synapse-license", optional = true }
 hex = { version = "0.4", optional = true }
 dirs = { version = "6", optional = true }
@@ -31,3 +31,4 @@ metrics-exporter-prometheus = "0.18"
 default = ["embed-mlx"]
 embed-mlx = ["synapse-core/embed-mlx"]
 licensed = ["dep:synapse-license", "dep:hex", "dep:dirs", "synapse-core/encryption"]
+onnx = ["synapse-rerank/onnx"]

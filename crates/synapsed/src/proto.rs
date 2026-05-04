@@ -42,6 +42,11 @@ pub enum Request {
     Embed {
         text: String,
     },
+    /// Vector search with a raw client-supplied embedding (no server-side embed needed).
+    SearchVec {
+        embedding: Vec<f32>,
+        limit: usize,
+    },
     /// Rerank candidates server-side using cross-encoder (IdentityReranker unless `onnx` feature).
     /// Returns top_k hits sorted by rerank score.
     Rerank {
@@ -63,8 +68,11 @@ pub struct PutReq {
     pub uri: Option<String>,
     pub text: String,
     pub meta: Option<serde_json::Value>,
-    /// If true, embed server-side before insert.
+    /// If true, embed server-side before insert. Ignored when `embedding` is provided.
     pub embed: bool,
+    /// Client-supplied embedding. If Some, skips server-side embed step.
+    #[serde(default)]
+    pub embedding: Option<Vec<f32>>,
 }
 
 impl From<PutReq> for PutRequest {

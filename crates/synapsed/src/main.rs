@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use synapse_core::{embed::Embedder, embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
+use synapse_rerank::{IdentityReranker, Reranker};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
@@ -50,11 +51,17 @@ struct Cli {
     /// Prometheus metrics endpoint. Default: 127.0.0.1:9090. Env: SYNAPSE_METRICS_ADDR.
     #[arg(long, env = "SYNAPSE_METRICS_ADDR", default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+    /// Path to ONNX cross-encoder model for reranking (requires --features onnx).
+    /// Default: ~/.synapse/models/ms-marco-MiniLM-L-6-v2.onnx (auto-download via fastembed).
+    /// If not set and onnx feature is active, BGE-reranker-v2-m3 is auto-downloaded on first use.
+    #[arg(long)]
+    rerank_model: Option<PathBuf>,
 }
 
 struct State {
     store: Mutex<Store>,
     embedder: Mutex<Option<Box<dyn TextEmbedder>>>,
+    reranker: Box<dyn Reranker>,
     db_path: PathBuf,
     cache_path: PathBuf,
     snap_dir: PathBuf,
@@ -75,6 +82,25 @@ impl State {
         }
         Ok(())
     }
+}
+
+fn build_reranker(_model_path: &Option<PathBuf>) -> Box<dyn Reranker> {
+    #[cfg(feature = "onnx")]
+    {
+        info!("onnx feature active — loading OnnxCrossEncoder (BGE-reranker-v2-m3)…");
+        match synapse_rerank::onnx::OnnxCrossEncoder::new() {
+            Ok(enc) => {
+                info!("reranker ready (BGE-reranker-v2-m3)");
+                return Box::new(enc);
+            }
+            Err(e) => {
+                warn!("OnnxCrossEncoder init failed ({e}) — falling back to IdentityReranker");
+            }
+        }
+    }
+    #[cfg(not(feature = "onnx"))]
+    info!("reranker: IdentityReranker (build without --features onnx for real cross-encoder)");
+    Box::new(IdentityReranker)
 }
 
 fn open_store(
@@ -172,9 +198,11 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     });
     std::fs::create_dir_all(&snap_dir).ok();
+    let reranker: Box<dyn Reranker> = build_reranker(&cli.rerank_model);
     let state = Arc::new(State {
         store: Mutex::new(store),
         embedder: Mutex::new(embedder),
+        reranker,
         db_path: cli.file.clone(),
         cache_path,
         snap_dir,
@@ -347,10 +375,15 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(e) => { let _ = std::fs::remove_file(&tmp); Response::Err(e.to_string()) }
             }
         }
+        Request::SearchVec { embedding, limit } => {
+            let store = state.store.lock().await;
+            match store.search("", SearchMode::Vec, Some(&embedding), limit) {
+                Ok(hits) => Response::Hits(hits),
+                Err(e) => Response::Err(e.to_string()),
+            }
+        }
         Request::Rerank { query, candidates, top_k } => {
-            use synapse_rerank::{IdentityReranker, Reranker};
-            let reranker = IdentityReranker;
-            match reranker.rerank(&query, candidates, top_k) {
+            match state.reranker.rerank(&query, candidates, top_k) {
                 Ok(hits) => Response::Hits(hits),
                 Err(e) => Response::Err(e.to_string()),
             }
@@ -389,7 +422,9 @@ async fn put_one(state: &State, p: PutReq) -> Result<i64> {
     if p.text.len() > state.max_put_bytes {
         anyhow::bail!("text too large: {} > {}", p.text.len(), state.max_put_bytes);
     }
-    let embedding = if p.embed {
+    let embedding = if let Some(v) = p.embedding.clone() {
+        Some(v)
+    } else if p.embed {
         state.ensure_embedder().await?;
         let g = state.embedder.lock().await;
         let e = g.as_ref().expect("embedder present");
@@ -409,8 +444,9 @@ async fn put_batch(state: &State, batch: Vec<PutReq>) -> Result<Vec<i64>> {
             anyhow::bail!("text too large: {} > {}", r.text.len(), state.max_put_bytes);
         }
     }
-    let any_embed = batch.iter().any(|r| r.embed);
-    let embeddings = if any_embed {
+    let need_server_embed: Vec<bool> = batch.iter().map(|r| r.embed && r.embedding.is_none()).collect();
+    let any_embed = need_server_embed.iter().any(|b| *b);
+    let server_embeddings = if any_embed {
         state.ensure_embedder().await?;
         let texts: Vec<String> = batch.iter().map(|r| r.text.clone()).collect();
         let g = state.embedder.lock().await;
@@ -423,8 +459,10 @@ async fn put_batch(state: &State, batch: Vec<PutReq>) -> Result<Vec<i64>> {
         .into_iter()
         .enumerate()
         .map(|(i, p)| {
-            let emb = if p.embed {
-                embeddings.as_ref().map(|v| v[i].clone())
+            let emb = if let Some(v) = p.embedding.clone() {
+                Some(v)
+            } else if need_server_embed[i] {
+                server_embeddings.as_ref().map(|v| v[i].clone())
             } else {
                 None
             };

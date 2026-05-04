@@ -1,21 +1,5 @@
 [
   {
-    "backend": "chroma",
-    "error": null,
-    "mode": "sweep-per-record",
-    "n_records": 50,
-    "daemon_embed": true,
-    "total_chunks": 76306,
-    "avg_chunks_per_rec": 1526,
-    "insert_ops_per_s": 1882,
-    "recall_at_5": 0.3,
-    "recall_at_10": 0.34,
-    "query_p50_ms": 2.311,
-    "query_p99_ms": 9.319,
-    "rss_mb": 2418.5,
-    "wall_s": 160.01
-  },
-  {
     "backend": "synapse",
     "error": null,
     "mode": "sweep-per-record",
@@ -23,12 +7,12 @@
     "daemon_embed": true,
     "total_chunks": 76306,
     "avg_chunks_per_rec": 1526,
-    "insert_ops_per_s": 2688,
-    "recall_at_5": 0.3,
-    "recall_at_10": 0.34,
-    "query_p50_ms": 200.084,
-    "query_p99_ms": 272.344,
-    "rss_mb": 2507.5,
-    "wall_s": 176.41
+    "insert_ops_per_s": 3617,
+    "recall_at_5": 0.38,
+    "recall_at_10": 0.38,
+    "query_p50_ms": 168.507,
+    "query_p99_ms": 199.82,
+    "rss_mb": 1946.3,
+    "wall_s": 296.58
   }
 ]
