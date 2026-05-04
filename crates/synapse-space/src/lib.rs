@@ -109,6 +109,56 @@ impl Space {
             .collect())
     }
 
+    /// BM25+vec fusion via Reciprocal Rank Fusion (RRF, k=60), then optionally
+    /// reranked. Returns top-`k` from fused list.
+    ///
+    /// `fts_n` and `vec_n` control candidate pool size for each leg.
+    /// Default: fts_n=100, vec_n=100.
+    pub fn search_hybrid_rrf(
+        &self,
+        query: &str,
+        embedding: &[f32],
+        k: usize,
+        fts_n: usize,
+        vec_n: usize,
+    ) -> Result<Vec<DrawerHit>> {
+        use std::collections::HashMap;
+        use synapse_core::types::SearchMode;
+
+        let fts_hits = self.store.search(query, SearchMode::Lex, None, fts_n)?;
+        let vec_hits = self.store.search(query, SearchMode::Vec, Some(embedding), vec_n)?;
+
+        // Map id → RRF score
+        let mut scores: HashMap<i64, f64> = HashMap::new();
+        let k_rrf = 60.0_f64;
+
+        for (rank, h) in fts_hits.iter().enumerate() {
+            *scores.entry(h.id).or_insert(0.0) += 1.0 / (k_rrf + (rank + 1) as f64);
+        }
+        for (rank, h) in vec_hits.iter().enumerate() {
+            *scores.entry(h.id).or_insert(0.0) += 1.0 / (k_rrf + (rank + 1) as f64);
+        }
+
+        // Build merged set (preserve text from whichever list has it)
+        let mut id_text: HashMap<i64, String> = HashMap::new();
+        for h in fts_hits.iter().chain(vec_hits.iter()) {
+            id_text.entry(h.id).or_insert_with(|| h.text.clone());
+        }
+
+        let mut ranked: Vec<(i64, f64)> = scores.into_iter().collect();
+        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.truncate(k);
+
+        Ok(ranked
+            .into_iter()
+            .map(|(id, score)| DrawerHit {
+                id,
+                text: id_text.get(&id).cloned().unwrap_or_default(),
+                score,
+            })
+            .collect())
+    }
+
     /// Hybrid search: FTS top-50 candidates reranked by cosine vs `query_emb`.
     /// Only active when caller supplies an embedding. Falls back to pure FTS.
     #[cfg(feature = "mlx")]

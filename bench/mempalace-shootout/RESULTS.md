@@ -123,6 +123,39 @@ These are tracked in `crates/synapse-space/ROADMAP.md` P0/P1.
 
 ---
 
+## v1.0.2 — RRF + Pool Tuning (WIP, R@5 < 0.50)
+
+**Setup**: 50 records, synapse backend only, per-record sweep eval.  
+Embedder: all-MiniLM-L6-v2 (SBERT insert, BGE-small daemon query).  
+RRF: BM25 FTS5 top-N + vec cosine top-N fused via RRF (k=60).
+
+| Config | pool_size | Insert ops/s | Query p50 ms | R@5 | R@10 | Wall s |
+|--------|-----------|-------------|--------------|-----|------|--------|
+| rrf=on | 50 | 7 926 | 82.9 ms | 0.30 | 0.34 | 78.6 s |
+| rrf=on | 100 | 8 176 | 77.4 ms | 0.30 | 0.34 | 81.3 s |
+| rrf=on | 200 | 4 846 | 137.3 ms | 0.30 | 0.34 | 101.6 s |
+| rrf=off | 50 | 5 329 | 117.6 ms | 0.30 | 0.34 | 95.1 s |
+| rrf=off | 100 | 5 614 | 112.3 ms | 0.30 | 0.34 | 92.0 s |
+| rrf=off | 200 | 5 941 | 105.8 ms | 0.30 | 0.34 | 90.9 s |
+
+**Winner**: rrf=on, pool=100 (best balance of recall + latency).  
+**R@5 = 0.30 — unchanged.** No version tag (threshold: ≥0.50).
+
+### Why RRF did not improve R@5
+
+The bottleneck is the embedding model, not retrieval fusion:
+- 76 306 chunks/record average = 1 526 chunks per query target.
+- Short answer facts ("4 days", "Emma") match semantically similar chunks across all sessions.
+- BM25 FTS5 leg requires exact keyword overlap; natural-language questions rarely share tokens with buried answer facts.
+- RRF re-weights already-poor candidates — signal quality is the ceiling, not candidate count.
+
+**Path to R@5 ≥ 0.50**:
+1. Cross-encoder rerank (ONNX BGE-v2-m3) re-scores top-100 — primary lever.
+2. HyDE: generate hypothetical answer → embed → retrieve (bypasses question/answer vocabulary mismatch).
+3. Stronger embedder (e5-large-v2, 1024-dim) — 384-dim MiniLM saturates at 0.30 on LME.
+
+---
+
 ## maturin fix
 
 `pyo3/abi3-py39` dropped from `crates/synapse-py/Cargo.toml`.

@@ -465,6 +465,17 @@ def run_backend_selfmatch(
 # Sweep bench — session-level chunking + hybrid query (Track C)
 # ---------------------------------------------------------------------------
 
+def _rrf_fuse(fts_hits: list[str], vec_hits: list[str], k: float = 60.0) -> list[str]:
+    """Fuse two ranked text lists via RRF, return merged list ordered by score."""
+    from collections import defaultdict
+    scores: dict[str, float] = defaultdict(float)
+    for rank, text in enumerate(fts_hits):
+        scores[text] += 1.0 / (k + rank + 1)
+    for rank, text in enumerate(vec_hits):
+        scores[text] += 1.0 / (k + rank + 1)
+    return sorted(scores, key=lambda t: scores[t], reverse=True)
+
+
 def run_backend_sweep(
     backend_name: str,
     records: list[dict],
@@ -472,6 +483,8 @@ def run_backend_sweep(
     store_dir: str,
     use_daemon: bool = False,
     use_rerank: bool = False,
+    use_rrf: bool = False,
+    pool_size: int = 50,
 ) -> dict:
     """
     Per-record sweep evaluation (correct LME setup):
@@ -480,7 +493,8 @@ def run_backend_sweep(
     Each record gets a fresh collection (clean DB per record, no cross-contamination).
     """
     result = {"backend": backend_name, "error": None, "mode": "sweep-per-record",
-              "n_records": len(records), "daemon_embed": use_daemon}
+              "n_records": len(records), "daemon_embed": use_daemon,
+              "rrf": use_rrf, "pool_size": pool_size}
     t0_wall = time.perf_counter()
 
     K_VALUES = [5, 10]
@@ -565,12 +579,25 @@ def run_backend_sweep(
         if qemb is None:
             qemb = embedder.encode([q_text], show_progress_bar=False).tolist()[0]
 
-        fetch_n = 50 if use_rerank else max(K_VALUES)
+        fetch_n = pool_size if (use_rerank or use_rrf) else max(K_VALUES)
         qt = time.perf_counter()
-        qr = _query(qemb, fetch_n)
+
+        if use_rrf and backend_name == "synapse" and hasattr(col, "_brain"):
+            # FTS leg via Brain.search_lex
+            try:
+                fts_raw = col._brain.search_lex(q_text, fetch_n)
+                fts_texts = [doc for _, doc, _ in fts_raw]
+            except Exception:
+                fts_texts = []
+            qr = _query(qemb, fetch_n)
+            vec_texts = _top_texts(qr, fetch_n)
+            top_texts_raw = _rrf_fuse(fts_texts, vec_texts)
+        else:
+            qr = _query(qemb, fetch_n)
+            top_texts_raw = _top_texts(qr, fetch_n)
+
         query_latencies.append((time.perf_counter() - qt) * 1000)
 
-        top_texts_raw = _top_texts(qr, fetch_n)
         if use_rerank and top_texts_raw:
             candidates = [
                 {"id": i, "text": txt, "score": 0.5, "uri": None, "title": None}
@@ -619,6 +646,10 @@ def main():
                         help="Session-level chunking + hybrid query (Track C)")
     parser.add_argument("--rerank", action="store_true",
                         help="After FTS+vec top-50, rerank via synapsed Request::Rerank (daemon must be running)")
+    parser.add_argument("--rrf", action="store_true",
+                        help="BM25+vec fusion via RRF before top-K selection")
+    parser.add_argument("--pool-size", type=int, default=50,
+                        help="Candidate pool size (default 50). Sweep mode tests 50/100/200 automatically.")
     args = parser.parse_args()
 
     if args.data:
@@ -655,22 +686,35 @@ def main():
         use_daemon = daemon_up and _has_msgpack
         print(f"Sweep eval: {len(eval_recs)} records (per-record index+query)")
         print(f"Daemon embed for queries: {'YES (/tmp/synapse.sock)' if use_daemon else 'NO (SBERT fallback)'}")
+        # pool sweep: if --rrf, test 50/100/200; otherwise single pool_size
+        pool_sizes = [50, 100, 200] if args.rrf else [args.pool_size]
+        rrf_modes = [True, False] if args.rrf else [False]
+
         for bname in backends:
-            store_dir = tempfile.mkdtemp(prefix=f"mp-sweep-{bname}-")
-            print(f"\nRunning {bname} (sweep) ...")
-            r = run_backend_sweep(bname, eval_recs, embedder, store_dir, use_daemon=use_daemon, use_rerank=args.rerank)
-            results.append(r)
-            if r.get("error"):
-                print(f"  ERROR: {r['error']}")
-            else:
-                print(
-                    f"  chunks={r.get('total_chunks','?')} avg={r.get('avg_chunks_per_rec','?')}/rec "
-                    f"insert={r['insert_ops_per_s']} ops/s "
-                    f"p50={r['query_p50_ms']}ms "
-                    f"R@5={r.get('recall_at_5','?')} R@10={r.get('recall_at_10','?')} "
-                    f"rss={r['rss_mb']}MB wall={r['wall_s']}s"
-                )
-            shutil.rmtree(store_dir, ignore_errors=True)
+            for use_rrf in rrf_modes:
+                for ps in pool_sizes:
+                    tag = f"rrf={use_rrf} pool={ps}"
+                    store_dir = tempfile.mkdtemp(prefix=f"mp-sweep-{bname}-")
+                    print(f"\nRunning {bname} (sweep {tag}) ...")
+                    r = run_backend_sweep(
+                        bname, eval_recs, embedder, store_dir,
+                        use_daemon=use_daemon, use_rerank=args.rerank,
+                        use_rrf=use_rrf, pool_size=ps,
+                    )
+                    results.append(r)
+                    if r.get("error"):
+                        print(f"  ERROR: {r['error']}")
+                    else:
+                        print(
+                            f"  [{tag}] chunks={r.get('total_chunks','?')} avg={r.get('avg_chunks_per_rec','?')}/rec "
+                            f"insert={r['insert_ops_per_s']} ops/s "
+                            f"p50={r['query_p50_ms']}ms "
+                            f"R@5={r.get('recall_at_5','?')} R@10={r.get('recall_at_10','?')} "
+                            f"rss={r['rss_mb']}MB wall={r['wall_s']}s"
+                        )
+                    shutil.rmtree(store_dir, ignore_errors=True)
+                    if not args.rrf:
+                        break  # no sweep needed without --rrf
     elif args.heldout:
         train, test = make_splits(records, args.n_train, args.n_test)
         print(f"Held-out split: {len(train)} train / {len(test)} test")
