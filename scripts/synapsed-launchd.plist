@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.supersynergy.synapsed</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/synapsed</string>
+        <string>--sock</string>
+        <string>/tmp/synapse.sock</string>
+        <string>--db</string>
+        <string>/Users/Shared/synapse/brain.db</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>PathState</key>
+        <dict>
+            <key>/tmp/synapse.sock</key>
+            <false/>
+        </dict>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/Shared/synapse/synapsed.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/Shared/synapse/synapsed.log</string>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/Shared/synapse</string>
+</dict>
+</plist>

@@ -1,6 +1,3 @@
-[patch.crates-io]
-msql-srv = { path = "crates/msql-srv-patched" }
-
 [workspace]
 resolver = "2"
 members = [
@@ -9,20 +6,27 @@ members = [
     "crates/synapsed",
     "crates/synapse-mcp",
     "crates/synapse-learn",
-    "crates/synapse-mysql",
-    "crates/synapse-mysql-async",
     # scale-100M scaffolding (PR-0, empty stubs, TODO markers)
     "crates/synapse-ann",
     "crates/synapse-quant",
     "crates/synapse-wal",
     "crates/synapse-seg",
-    "crates/synapse-lib-demo",
     "crates/synapse-engine",
     "crates/synapse-license",
+    # SOTA agent-memory layer (2026-04-29)
+    "crates/synapse-rerank",
+    "crates/synapse-extract",
+    "crates/synapse-temporal",
+    # End-to-end LongMemEval benchmark runner (rule + optional MLX hooks)
+    "bench/longmemeval",
+    # Space concept hierarchy: Space → Wing → Room → Drawer
+    "crates/synapse-space",
+    # Criterion bench: synapse-space insert+query vs ChromaDB
+    "bench/space-vs-chroma",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0-rc.1"
 edition = "2021"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"
@@ -34,7 +38,7 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rmp-serde = "1"
-rusqlite = { version = "0.33", features = ["bundled", "blob", "backup", "functions"] }
+rusqlite = { version = "0.39", features = ["bundled", "blob", "backup", "functions"] }
 sqlite-vec = "0.1"
 zstd = "0.13"
 blake3 = "1"
@@ -42,24 +46,28 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive", "env"] }
-fastembed = "5"
+fastembed = { version = "5", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"] }
+# For Linux cross-compile, use: fastembed-dynamic = { package = "fastembed", version = "5", default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls"] }
+# PINNED: redb 4.x has heavy schema breaking changes; revisit later.
 redb = "2"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
-rand = "0.8"
+rand = "0.10"
+# PINNED: age 0.11, yrs 0.25 require API audit; revisit later.
 age = { version = "0.10", features = ["armor"] }
 yrs = "0.21"
 linfa = "0.8"
 linfa-clustering = "0.8"
+# PINNED: ndarray 0.17 conflicts with linfa 0.8 (needs 0.16).
 ndarray = "0.16.1"
 fastbloom = "0.17"
-toml = "0.8"
+toml = "1.1"
 base64 = "0.22"
 axum = "0.8"
 argon2 = "0.5"
 parking_lot = "0.12"
 once_cell = "1"
 statrs = "0.18"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "blocking"] }
 
 [profile.release-hardened]
 inherits = "release"
