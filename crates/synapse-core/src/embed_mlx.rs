@@ -248,6 +248,148 @@ impl TextEmbedder for MlxMetalEmbedder {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 1ms coalesce window
+// ---------------------------------------------------------------------------
+//
+// Rationale: real bench (50 Vec, 50 Hybrid) showed singleton p50 +5ms (Vec)
+// and +35ms (Hybrid) vs fastembed CPU because each query pays one round-trip
+// of msgpack-framed sidecar IPC. The MLX *batched* path is dramatically
+// faster (~0.2ms/doc at batch=32). Solution: coalesce concurrent
+// `embed_one` calls within a 1ms window into a single sidecar batch.
+//
+// Design:
+//   * A worker thread owns the sidecar handle (no Mutex contention).
+//   * Each `embed_one` call sends `(text, oneshot::Sender<Vec<f32>>)` over
+//     a std::sync::mpsc and blocks on the reply.
+//   * Worker drains the queue with a 1ms timeout; flushes when either
+//     1ms elapses since the first queued item OR queue size hits 32.
+//   * Pre-existing `embed_batch` path bypasses the coalescer (explicit
+//     batch callers already pay one IPC for many docs).
+
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
+
+const COALESCE_WINDOW: Duration = Duration::from_millis(1);
+const COALESCE_MAX_BATCH: usize = 32;
+
+type ReplySender = std::sync::mpsc::Sender<Result<Vec<f32>>>;
+type BatchFn = dyn Fn(&[String]) -> Result<Vec<Vec<f32>>> + Send + Sync;
+
+struct CoalesceReq {
+    text: String,
+    reply: ReplySender,
+}
+
+/// Coalescing wrapper around [`MlxMetalEmbedder`]. Drop-in for
+/// `Arc<dyn TextEmbedder>` consumers; transparently merges concurrent
+/// singleton calls into batched sidecar invocations.
+pub struct CoalescingMlxEmbedder {
+    name: String,
+    dim: usize,
+    inner: std::sync::Arc<MlxMetalEmbedder>,
+    tx: mpsc::Sender<CoalesceReq>,
+    _worker: std::sync::Arc<thread::JoinHandle<()>>,
+}
+
+impl CoalescingMlxEmbedder {
+    pub fn new() -> Result<Self> {
+        let inner = std::sync::Arc::new(MlxMetalEmbedder::new()?);
+        let name = format!("{}+coalesce1ms", inner.name);
+        let dim = inner.dim;
+
+        let (tx, rx) = mpsc::channel::<CoalesceReq>();
+        let worker_inner = inner.clone();
+        let batch_fn: std::sync::Arc<BatchFn> =
+            std::sync::Arc::new(move |texts: &[String]| worker_inner.embed_batch(texts));
+        let worker = thread::Builder::new()
+            .name("mlx-coalesce".into())
+            .spawn(move || coalesce_run(rx, batch_fn))
+            .map_err(|e| Error::Other(format!("coalesce worker spawn: {e}")))?;
+
+        Ok(Self {
+            name,
+            dim,
+            inner,
+            tx,
+            _worker: std::sync::Arc::new(worker),
+        })
+    }
+}
+
+fn coalesce_run(rx: mpsc::Receiver<CoalesceReq>, batch_fn: std::sync::Arc<BatchFn>) {
+    loop {
+        // Block until first request arrives.
+        let first = match rx.recv() {
+            Ok(r) => r,
+            Err(_) => return, // channel closed
+        };
+        let mut batch: Vec<CoalesceReq> = vec![first];
+        let deadline = Instant::now() + COALESCE_WINDOW;
+
+        // Drain additional requests within the 1ms window or up to the cap.
+        while batch.len() < COALESCE_MAX_BATCH {
+            let now = Instant::now();
+            if now >= deadline {
+                break;
+            }
+            match rx.recv_timeout(deadline - now) {
+                Ok(r) => batch.push(r),
+                Err(mpsc::RecvTimeoutError::Timeout) => break,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+
+        let texts: Vec<String> = batch.iter().map(|r| r.text.clone()).collect();
+        match batch_fn(&texts) {
+            Ok(vecs) => {
+                debug_assert_eq!(vecs.len(), batch.len());
+                for (req, v) in batch.into_iter().zip(vecs.into_iter()) {
+                    let _ = req.reply.send(Ok(v));
+                }
+            }
+            Err(e) => {
+                let msg = format!("{e}");
+                for req in batch {
+                    let _ = req.reply.send(Err(Error::Other(msg.clone())));
+                }
+            }
+        }
+    }
+}
+
+impl TextEmbedder for CoalescingMlxEmbedder {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn dim(&self) -> usize {
+        self.dim
+    }
+
+    /// Batch path: bypass the coalescer entirely. The caller already
+    /// amortised IPC cost themselves.
+    fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        self.inner.embed_batch(texts)
+    }
+
+    /// Single path: enqueue + block on oneshot reply. Concurrent callers
+    /// merge into a single sidecar batch within `COALESCE_WINDOW`.
+    fn embed_one(&self, text: &str) -> Result<Vec<f32>> {
+        let (reply_tx, reply_rx) = mpsc::channel::<Result<Vec<f32>>>();
+        self.tx
+            .send(CoalesceReq {
+                text: text.to_string(),
+                reply: reply_tx,
+            })
+            .map_err(|_| Error::Other("mlx coalesce worker dead".into()))?;
+        reply_rx
+            .recv()
+            .map_err(|_| Error::Other("mlx coalesce reply dropped".into()))?
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,5 +404,90 @@ mod tests {
             .expect("embed");
         assert_eq!(v.len(), 2);
         assert_eq!(v[0].len(), 384);
+    }
+
+    /// Coalescer microbench: a fake batch_fn sleeps 5ms (≈ MLX IPC roundtrip)
+    /// but returns vectors for the entire batch. Drive 16 concurrent
+    /// `embed_one`-style senders. Total wall-time should be ~5ms (one batch
+    /// pays IPC) — *not* 16×5=80ms (one IPC per query, the pre-coalescer
+    /// behaviour). This proves fan-in works.
+    #[test]
+    fn coalescer_fans_in_concurrent_singletons() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let batch_calls = Arc::new(AtomicUsize::new(0));
+        let bc = batch_calls.clone();
+        let fake: Arc<BatchFn> = Arc::new(move |texts: &[String]| {
+            bc.fetch_add(1, Ordering::SeqCst);
+            // Simulate the ~5ms msgpack-IPC roundtrip seen in real bench.
+            std::thread::sleep(Duration::from_millis(5));
+            Ok(texts.iter().map(|_| vec![0.1f32; 384]).collect())
+        });
+
+        let (tx, rx) = mpsc::channel::<CoalesceReq>();
+        let _w = thread::spawn(move || coalesce_run(rx, fake));
+
+        let start = Instant::now();
+        let n = 16;
+        let mut replies = Vec::with_capacity(n);
+        for i in 0..n {
+            let (rtx, rrx) = mpsc::channel();
+            tx.send(CoalesceReq {
+                text: format!("doc-{i}"),
+                reply: rtx,
+            })
+            .unwrap();
+            replies.push(rrx);
+        }
+        // Collect all replies.
+        for rrx in replies {
+            let v = rrx.recv().unwrap().expect("vec");
+            assert_eq!(v.len(), 384);
+        }
+        let elapsed = start.elapsed();
+
+        // With coalescing: 1 batch call covers all 16 → ~5ms + overhead.
+        // Without: 16 batch calls → ~80ms. Assert we're well under 40ms.
+        assert!(
+            elapsed < Duration::from_millis(40),
+            "coalescer took {:?}, expected < 40ms (fan-in failed?)",
+            elapsed
+        );
+        // 16 concurrent sends within 1ms window should batch into 1 call.
+        // Allow up to 2 in case scheduling jitter splits them.
+        let calls = batch_calls.load(Ordering::SeqCst);
+        assert!(
+            calls <= 2,
+            "expected ≤2 batch calls, got {calls} (poor fan-in)"
+        );
+    }
+
+    /// Verify the deadline mechanism: a single in-flight request flushes
+    /// after ~1ms even if no further requests arrive.
+    #[test]
+    fn coalescer_flushes_lone_request_after_window() {
+        use std::sync::Arc;
+        let fake: Arc<BatchFn> = Arc::new(|texts: &[String]| {
+            Ok(texts.iter().map(|_| vec![0.0f32; 384]).collect())
+        });
+        let (tx, rx) = mpsc::channel::<CoalesceReq>();
+        let _w = thread::spawn(move || coalesce_run(rx, fake));
+
+        let start = Instant::now();
+        let (rtx, rrx) = mpsc::channel();
+        tx.send(CoalesceReq {
+            text: "alone".to_string(),
+            reply: rtx,
+        })
+        .unwrap();
+        let v = rrx.recv().unwrap().expect("vec");
+        assert_eq!(v.len(), 384);
+        // Single request should be flushed within ~1ms + jitter.
+        assert!(
+            start.elapsed() < Duration::from_millis(20),
+            "lone request took {:?}",
+            start.elapsed()
+        );
     }
 }

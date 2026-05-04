@@ -18,8 +18,8 @@ All numbers verified from bench runs in this repo.
 
 | Metric | Target | Source |
 |--------|--------|--------|
-| Insert single-thread | ≥ 50 000 ops/s | RESULTS-V2-FULL.md uc01 ~67 ms/1k = 14k/s at zstd=3; criterion bench shows 4 760 ops/s (Python adapter); Rust FTS5 = 10 ms/50 docs → **4 760 ops/s Python**, target ≥ 50k ops/s Rust direct |
-| Insert 4-thread | ≥ 250 000 ops/s | rayon .with_min_len() enabled; target |
+| Insert single-thread | ≥ 50 000 ops/s | Python adapter: 4 760 ops/s; Rust direct: **TBD** — run `cargo bench -p synapse-core -- insert` to establish baseline |
+| Insert 4-thread | ≥ 250 000 ops/s | **TBD** — rayon path exists; run `cargo bench -p synapse-core -- insert_parallel` to establish baseline |
 | FTS query p50 | ≤ 0.05 ms | criterion: 51 µs/query ✓ (already hit) |
 | Hybrid query p50 | ≤ 0.10 ms | target; FTS at 51 µs + vec overhead |
 | Single embed | ≤ 2.5 ms | Ollama/FastEmbed path; BGE-small-en-v1.5 |
@@ -30,27 +30,27 @@ All numbers verified from bench runs in this repo.
 
 ---
 
-## Architecture — 17 Active Crates
+## Architecture — 15 Active Crates
 
 | Crate | Role |
 |-------|------|
 | `synapse-core` | Store, chunk CRUD, FTS5 (Tantivy bridge), vector index (sqlite-vec), KG triples, zstd/blake3 I/O. **API frozen at v1.** |
-| `synapse-engine` | Higher-level query planner: hybrid FTS+vec, result fusion, cache layer |
+| `synapse-engine` | ABI bridge + RRF fusion: wires FTS+vec results into ranked output |
 | `synapse-space` | Agent-memory layer: Space→Wing→Room→Drawer hierarchy, sweep/compact/evolve ops |
 | `synapsed` | Unix-socket RPC daemon; multiplexes core across callers without re-opening DB |
-| `synapse-cli` (`syn`) | CLI: `syn put`, `syn hybrid`, `syn find`, `syn stats`, daemon control |
-| `synapse-mcp` | MCP server: `synapse_search`, `synapse_put`, `synapse_find`, `synapse_stats` |
+| `synapse-cli` (`syn`) | CLI: `syn put`, `syn hybrid`, `syn find`, `syn stats`, `syn merge`, `syn sign`, `syn verify` |
+| `synapse-mcp` | MCP server: `synapse_search`, `synapse_put`, `synapse_find`, `synapse_stats`, `synapse_merge`, `synapse_verify` |
 | `synapse-learn` | Bandit router (Thompson sampling), per-query calibration, EWMA feedback |
-| `synapse-rerank` | Cross-encoder rerank via ONNX runtime; two-stage retrieval (FTS→rerank) |
+| `synapse-rerank` | Cross-encoder rerank; `IdentityReranker` default, `OnnxCrossEncoder` with `--features onnx` |
 | `synapse-extract` | Text extraction and chunking: per-message, fixed-window, semantic boundary |
-| `synapse-temporal` | Temporal KG: validity ranges, version chains, bitemporal filter |
+| `synapse-temporal` | NL date phrase parser via chrono-english; bitemporal filter |
 | `synapse-metal` | Metal/ANE compute kernels: SimSIMD cos_f32/dot_i8/hamming_b8, MRL truncation |
 | `synapse-ann` | Scale-100M ANN scaffold: HNSW live-wire, PQ quantisation (stub, P0 TODO) |
-| `synapse-quant` | Quantisation helpers: f32→i8, f32→f16, f32→binary; matryoshka MRL |
-| `synapse-wal` | Write-ahead-log helpers for crash-safe bulk ingest |
-| `synapse-seg` | Segment/shard management for large corpora (>10M chunks) |
+| `synapse-quant` | Quantisation helpers: f32→i8, f32→f16, f32→binary; matryoshka MRL. **Experimental — unvalidated on production workloads.** |
 | `synapse-license` | License key validation (embedded binary check) |
 | `synapse-py` | PyO3 Python wheel: `synapse.Brain`, `synapse.MultiIndex`, `synapse.AdaptiveRouter`, integrations (LangChain, Mem0, LlamaIndex) |
+
+> **Note**: `synapse-wal` (crash-safe ingest WAL, PR-E1) and `synapse-seg` (LSM segment store, PR-B1) are scaffolding stubs in `synapsestore/crates/` — not part of active workspace build.
 
 ---
 

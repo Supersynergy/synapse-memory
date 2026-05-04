@@ -12,7 +12,7 @@ thiserror.workspace = true
 usearch = { version = "2.25", optional = true }
 
 [dev-dependencies]
-criterion = { version = "0.5", default-features = false }
+criterion = { version = "0.8", default-features = false }
 tempfile = "3"
 proptest = "1"
 

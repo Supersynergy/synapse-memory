@@ -1,0 +1,5 @@
+{
+  "stack": "D",
+  "available": false,
+  "reason": "crate exists at /Users/master/projects/synapse/crates/synapse-ultra but daemon not running (tried http://localhost:9478 and /tmp/synapse-ultra.sock)"
+}

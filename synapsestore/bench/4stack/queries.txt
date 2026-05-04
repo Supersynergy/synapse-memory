@@ -1,0 +1,107 @@
+vector search performance benchmark
+embedding similarity cosine distance
+rust async tokio runtime
+sqlite full text search fts5
+machine learning model inference
+neural network attention mechanism
+retrieval augmented generation RAG
+knowledge graph entity extraction
+semantic search dense retrieval
+transformer architecture self-attention
+database query optimization index
+memory efficient data structures
+concurrent programming mutex deadlock
+distributed systems consensus protocol
+natural language processing tokenization
+code generation language model
+binary search tree traversal
+hash map collision resolution
+gradient descent optimization learning rate
+reinforcement learning reward signal
+how to implement a REST API in Rust
+best practices for vector database indexing
+what is the difference between BM25 and dense retrieval
+explain transformer attention mechanism
+how does fastembed work for sentence embeddings
+setup launchd daemon on macOS
+configure SQLite WAL mode for performance
+implement Unix domain socket server
+msgpack serialization format comparison
+build release binary with cargo
+benchmark latency p50 p95 p99 percentiles
+QPS queries per second throughput measurement
+recall at K evaluation metric
+HNSW approximate nearest neighbor index
+product quantization vector compression
+inverted index posting list
+TF-IDF term frequency inverse document frequency
+BM25 Okapi ranking function
+hybrid search sparse dense fusion
+re-ranking cross-encoder model
+knowledge base retrieval augmentation
+document chunking overlap strategy
+embedding cache warm cold performance
+mlx apple silicon metal acceleration
+fastembed BGE small english model
+all-minilm sentence transformers 384 dimensions
+nomic embed text model comparison
+openai text embedding ada 002
+cohere embed multilingual
+DuckDB analytical query performance
+polars dataframe lazy evaluation
+Cargo.toml workspace dependencies
+serde json deserialization derive macro
+tokio spawn blocking thread pool
+axum web framework handler routing
+tracing structured logging instrumentation
+criterion benchmarking statistical analysis
+redb embedded key value store
+sqlite-vec vector extension cosine
+qdrant vector database payload filtering
+lancedb columnar vector storage
+meilisearch full text search facets
+synapse brain memory retrieval
+superknow memory consolidation
+German company lead generation database
+DSGVO compliance data protection
+auth.js v5 magic link passkey
+Next.js 16 app router streaming
+Astro static site generation islands
+SurrealDB graph traversal query
+CatBoost gradient boosting tabular
+TabPFN prior-fitted network classification
+LightGBM feature importance SHAP
+vector quantization codebook training
+contrastive learning positive negative pairs
+sentence-BERT semantic textual similarity
+cross-lingual multilingual embedding
+zero-shot classification prompt template
+few-shot in-context learning examples
+chain of thought reasoning step by step
+tool use function calling agent
+multi-agent orchestration planning
+memory management arena allocator
+SIMD AVX2 vectorized operations
+mmap memory mapped file io
+lock-free concurrent data structure
+actor model message passing Erlang
+event sourcing CQRS pattern
+saga distributed transaction pattern
+API rate limiting token bucket
+JWT authentication bearer token
+Ed25519 signature verification
+AES encryption key derivation HKDF
+TLS certificate pinning handshake
+WebSocket real-time bidirectional
+HTTP/2 multiplexing server push
+protobuf schema evolution backward compatible
+capnproto zero-copy serialization
+flatbuffers builder parser
+WASM WebAssembly component model
+Rust unsafe FFI C interop
+Python ctypes cffi native extension
+benchmark harness warm up iterations
+statistical significance confidence interval
+Amdahl law parallel speedup
+cache miss L1 L2 L3 hierarchy
+branch prediction pipeline stall

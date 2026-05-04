@@ -1,6 +1,6 @@
 //! Thompson-sampling shard router.
 use anyhow::Result;
-use rand::Rng;
+use rand::RngExt;
 use statrs::distribution::{Beta, ContinuousCDF};
 use std::collections::HashMap;
 
@@ -19,7 +19,7 @@ impl ShardBandit {
         if candidates.is_empty() {
             return None;
         }
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut best: Option<(&ShardId, f64)> = None;
         for sid in candidates {
             let (w, l) = self.priors.get(sid).copied().unwrap_or((1, 1));
@@ -27,7 +27,7 @@ impl ShardBandit {
             let beta_param = l as f64;
             let sample = if alpha > 0.0 && beta_param > 0.0 {
                 // Thompson sample via beta distribution quantile of uniform
-                let u: f64 = rng.gen_range(0.0..1.0);
+                let u: f64 = rng.random_range(0.0..1.0);
                 Beta::new(alpha, beta_param)
                     .map(|b| b.inverse_cdf(u.clamp(1e-9, 1.0 - 1e-9)))
                     .unwrap_or(0.5)

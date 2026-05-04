@@ -380,10 +380,10 @@ mod tests {
     use super::*;
     use crate::crdt;
     use ed25519_dalek::SigningKey;
-    use rand::rngs::OsRng;
+    use crate::sign::random_signing_key;
 
     fn make_fed() -> Federation {
-        let sk = SigningKey::generate(&mut OsRng);
+        let sk = random_signing_key();
         Federation::new(sk)
     }
 
@@ -414,7 +414,7 @@ mod tests {
     fn bad_signature_rejected() {
         let fed = make_fed();
         let update = crdt::new_meta(&[("tags", "test")]).unwrap();
-        let sk2 = SigningKey::generate(&mut OsRng);
+        let sk2 = random_signing_key();
         let bad_sig = sign::sign_bytes(&sk2, b"wrong data").to_vec();
         let vk = sk2.verifying_key().to_bytes().to_vec();
         let msg = Msg::Update {
@@ -428,8 +428,8 @@ mod tests {
 
     #[test]
     fn two_nodes_sync_via_tcp() {
-        let sk_a = SigningKey::generate(&mut OsRng);
-        let sk_b = SigningKey::generate(&mut OsRng);
+        let sk_a = random_signing_key();
+        let sk_b = random_signing_key();
         let fed_a = Federation::new(sk_a);
         let fed_b = Federation::new(sk_b.clone());
 

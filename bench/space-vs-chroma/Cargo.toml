@@ -1,0 +1,22 @@
+[package]
+name = "space-vs-chroma"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Criterion bench: synapse-space insert + query vs ChromaDB (Chroma column = not-installed)."
+
+[[bench]]
+name = "insert_query"
+harness = false
+
+[dependencies]
+synapse-core = { path = "../../crates/synapse-core" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3"

@@ -1,0 +1,35 @@
+[usearch] 1000 queries, corpus=168438, loading corpus...
+  Building index usearch M=16 ef=64 (168438 vecs)...
+    build: 4.5s
+    p50=0.2ms p95=0.3ms QPS=4853 R@10=0.9236 R@100=0.8686
+  Building index usearch M=16 ef=128 (168438 vecs)...
+    build: 4.4s
+    p50=0.2ms p95=0.4ms QPS=4017 R@10=0.9297 R@100=0.8890
+[
+  {
+    "engine": "usearch M=16 ef=64",
+    "available": true,
+    "build_s": 4.477967375016306,
+    "n_queries": 1000,
+    "p50_ms": 0.2053340431302786,
+    "p95_ms": 0.3447500057518482,
+    "p99_ms": 0.4262079601176083,
+    "mean_ms": 0.20606809912715107,
+    "qps_1c": 4852.764713391983,
+    "recall_at_10": 0.9236000000000001,
+    "recall_at_100": 0.8686400000000001
+  },
+  {
+    "engine": "usearch M=16 ef=128",
+    "available": true,
+    "build_s": 4.357493916992098,
+    "n_queries": 1000,
+    "p50_ms": 0.24745799601078033,
+    "p95_ms": 0.4206669982522726,
+    "p99_ms": 0.5098340334370732,
+    "mean_ms": 0.24892704089870676,
+    "qps_1c": 4017.2413426427197,
+    "recall_at_10": 0.9297000000000001,
+    "recall_at_100": 0.8890399999999999
+  }
+]

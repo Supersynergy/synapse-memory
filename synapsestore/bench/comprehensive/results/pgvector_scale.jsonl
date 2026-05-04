@@ -1,0 +1,1 @@
+{"engine": "pgvector", "scale_curve": [{"scale": 1000, "error": "pgvector SKIPPED: pg_isready not found \u2014 PostgreSQL not installed"}, {"scale": 10000, "error": "pgvector SKIPPED: pg_isready not found \u2014 PostgreSQL not installed"}, {"scale": 100000, "error": "pgvector SKIPPED: pg_isready not found \u2014 PostgreSQL not installed"}]}

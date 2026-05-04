@@ -76,7 +76,7 @@ impl LearnStore {
             params![shape_hash as i64],
             |r| {
                 Ok((
-                    r.get::<_, usize>(0)?,
+                    r.get::<_, i64>(0)? as usize,
                     r.get::<_, u32>(1)?,
                     r.get::<_, u32>(2)?,
                 ))

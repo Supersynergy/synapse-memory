@@ -13,5 +13,23 @@ anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
 tracing-subscriber.workspace = true
-synapse-core = { path = "../synapse-core", features = ["embed"] }
+blake3.workspace = true
+rusqlite.workspace = true
 synapse-learn = { path = "../synapse-learn" }
+# synapse-core base (no embed features) — embed variant selected via [features] below.
+synapse-core = { path = "../synapse-core" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# default: static ORT linked at build time. Works on mac and native linux.
+default = ["static-ort"]
+# static-ort: enable synapse-core's `embed` feature (ORT linked statically).
+static-ort = ["synapse-core/embed"]
+# cross-linux: enable synapse-core's `embed-dynamic` feature (ORT via dlopen at runtime).
+# Required when cross-compiling from mac-arm64 to linux without a Linux libstdc++ sysroot.
+# Build: cargo zigbuild --profile release-hardened --target aarch64-unknown-linux-gnu
+#          --no-default-features --features cross-linux --bin synapse
+# Ship libonnxruntime.so alongside the binary (see release/README.md for download URL).
+cross-linux = ["synapse-core/embed-dynamic"]

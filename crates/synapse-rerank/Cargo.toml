@@ -1,0 +1,24 @@
+[package]
+name = "synapse-rerank"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Cross-encoder rerank for Synapse (ms-marco-MiniLM-L-6-v2 / bge-reranker via fastembed ONNX)."
+keywords = ["rerank", "cross-encoder", "onnx", "agent-memory"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+synapse-core = { path = "../synapse-core" }
+# fastembed gated behind feature so default workspace build stays light.
+fastembed = { workspace = true, optional = true }
+
+[features]
+default = []
+# Enable real ONNX cross-encoder (downloads model on first use).
+onnx = ["dep:fastembed"]

@@ -100,7 +100,15 @@ async fn handle(sock: &PathBuf, req: &JsonRpc) -> Result<Value> {
             }}},
             {"name": "verify", "description": "Verify Ed25519 signature on a doc.", "inputSchema": {"type": "object", "properties": {
                 "id": {"type": "integer"}, "vk": {"type": "array", "items": {"type": "integer"}}
-            }, "required": ["id", "vk"]}}
+            }, "required": ["id", "vk"]}},
+            {"name": "synapse_merge", "description": "Merge a peer brainpack snapshot into the brain (CRDT, offline-safe). Requires synapsed to have filesystem access.", "inputSchema": {"type": "object", "properties": {
+                "snapshot_path": {"type": "string", "description": "Absolute path to peer .brainpack file"},
+                "out_path": {"type": "string", "description": "Output merged .brainpack path", "default": "/tmp/synapse-merged.brainpack"},
+                "level": {"type": "integer", "default": 3}
+            }, "required": ["snapshot_path"]}},
+            {"name": "synapse_verify", "description": "Verify Ed25519 signature on a doc by id. Returns ok or error.", "inputSchema": {"type": "object", "properties": {
+                "doc_id": {"type": "integer"}, "vk": {"type": "array", "items": {"type": "integer"}}
+            }, "required": ["doc_id", "vk"]}}
         ]})),
         "tools/call" => {
             let name = req
@@ -147,6 +155,26 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
                 .get("id")
                 .and_then(|v| v.as_i64())
                 .context("verify requires id")?;
+            let vk_bytes = json_array_to_bytes(args.get("vk"))?;
+            json!({"op": "Verify", "args": {"id": id, "vk": vk_bytes}})
+        }
+        "synapse_merge" => {
+            let snapshot_path = args
+                .get("snapshot_path")
+                .and_then(|v| v.as_str())
+                .context("synapse_merge requires snapshot_path")?;
+            let out_path = args
+                .get("out_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("/tmp/synapse-merged.brainpack");
+            let level = args.get("level").and_then(|v| v.as_i64()).unwrap_or(3) as i32;
+            json!({"op": "SnapMerge", "args": {"snapshot_path": snapshot_path, "out_path": out_path, "level": level}})
+        }
+        "synapse_verify" => {
+            let id = args
+                .get("doc_id")
+                .and_then(|v| v.as_i64())
+                .context("synapse_verify requires doc_id")?;
             let vk_bytes = json_array_to_bytes(args.get("vk"))?;
             json!({"op": "Verify", "args": {"id": id, "vk": vk_bytes}})
         }

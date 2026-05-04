@@ -4,7 +4,10 @@
 //! reused across all Embedder instances — eliminates per-request model reload overhead.
 
 use crate::error::{Error, Result};
+#[cfg(feature = "embed")]
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+#[cfg(all(feature = "embed-dynamic", not(feature = "embed")))]
+use fastembed_dynamic::{EmbeddingModel, InitOptions, TextEmbedding};
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use redb::{Database, ReadableTableMetadata, TableDefinition};

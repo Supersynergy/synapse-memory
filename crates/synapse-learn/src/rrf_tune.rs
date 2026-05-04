@@ -1,6 +1,6 @@
 //! Adaptive hybrid-RRF-alpha via Thompson sampling per query-shape.
 use anyhow::Result;
-use rand::Rng;
+use rand::RngExt;
 use statrs::distribution::{Beta, ContinuousCDF};
 
 pub const ALPHA_BUCKETS: [f64; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
@@ -20,7 +20,7 @@ pub fn query_shape_hash(query: &str) -> u8 {
 }
 
 pub fn pick_alpha(store: &crate::LearnStore, shape_hash: u8) -> Result<(usize, f64)> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut best_bucket = 2usize;
     let mut best_sample = -1f64;
 
@@ -41,7 +41,7 @@ pub fn pick_alpha(store: &crate::LearnStore, shape_hash: u8) -> Result<(usize, f
                 Err(e) => return Err(e.into()),
             }
         };
-        let u: f64 = rng.gen_range(0.0..1.0);
+        let u: f64 = rng.random_range(0.0..1.0);
         let sample = Beta::new(w as f64, l as f64)
             .map(|b| b.inverse_cdf(u.clamp(1e-9, 1.0 - 1e-9)))
             .unwrap_or(0.5);

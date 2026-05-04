@@ -1,0 +1,14 @@
+[package]
+name = "synapse-temporal"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Natural-language temporal phrase parser for Synapse recall (yesterday, last week, Q3 2025, vor 3 Tagen)."
+
+[dependencies]
+chrono = "0.4"
+# Mined: stevedonovan/chrono-english (used by facebook/sapling, pamburus/hl).
+# Provides parse_date_string("yesterday"), parse_duration("3 days"). ~50 LOC reuse, 0 LOC adapted.
+chrono-english = "0.1"
+anyhow = { workspace = true }

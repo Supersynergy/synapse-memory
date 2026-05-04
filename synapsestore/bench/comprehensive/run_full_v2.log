@@ -1,0 +1,606 @@
+[run] Starting Qdrant...
+[run] Qdrant PID=70401 ready
+[run] Skipping sqlite-vec (result exists: results/sqlite-vec_full.jsonl)
+[run] Skipping chromadb (result exists: results/chromadb_full.jsonl)
+[run] Skipping synapse (result exists: results/synapse_full.jsonl)
+[run] Skipping qdrant (result exists: results/qdrant_full.jsonl)
+[run] Engines: sqlite-vec,duckdb,lancedb,chromadb,synapse,milvus,qdrant,pgvector
+[run] Phases: all
+[run] Profile: full
+[run] Starting benchmark at Sat Apr 25 20:56:11 CEST 2026
+[run] --- sqlite-vec SKIPPED ---
+[run] --- duckdb ---
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === SCALE CURVE (1k/10k/100k) ===
+  [duckdb]
+  [duckdb] inserted 1000 rows total
+    scale=   1000  insert=103 ops/s  q_p50=3.5ms
+  [duckdb] inserted 1000 rows total
+  [duckdb] inserted 2000 rows total
+  [duckdb] inserted 3000 rows total
+  [duckdb] inserted 4000 rows total
+  [duckdb] inserted 5000 rows total
+  [duckdb] inserted 6000 rows total
+  [duckdb] inserted 7000 rows total
+  [duckdb] inserted 8000 rows total
+  [duckdb] inserted 9000 rows total
+  [duckdb] inserted 10000 rows total
+    scale=  10000  insert=88 ops/s  q_p50=10.9ms
+  [duckdb] inserted 1000 rows total
+  [duckdb] inserted 2000 rows total
+  [duckdb] inserted 3000 rows total
+  [duckdb] inserted 4000 rows total
+  [duckdb] inserted 5000 rows total
+  [duckdb] inserted 6000 rows total
+  [duckdb] inserted 7000 rows total
+  [duckdb] inserted 8000 rows total
+  [duckdb] inserted 9000 rows total
+  [duckdb] inserted 10000 rows total
+  [duckdb] inserted 11000 rows total
+  [duckdb] inserted 12000 rows total
+  [duckdb] inserted 13000 rows total
+  [duckdb] inserted 14000 rows total
+  [duckdb] inserted 15000 rows total
+  [duckdb] inserted 16000 rows total
+  [duckdb] inserted 17000 rows total
+  [duckdb] inserted 18000 rows total
+  [duckdb] inserted 19000 rows total
+  [duckdb] inserted 20000 rows total
+  [duckdb] inserted 21000 rows total
+  [duckdb] inserted 22000 rows total
+  [duckdb] inserted 23000 rows total
+  [duckdb] inserted 24000 rows total
+  [duckdb] inserted 25000 rows total
+  [duckdb] inserted 26000 rows total
+  [duckdb] inserted 27000 rows total
+  [duckdb] inserted 28000 rows total
+  [duckdb] inserted 29000 rows total
+  [duckdb] inserted 30000 rows total
+  [duckdb] inserted 31000 rows total
+  [duckdb] inserted 32000 rows total
+  [duckdb] inserted 33000 rows total
+  [duckdb] inserted 34000 rows total
+  [duckdb] inserted 35000 rows total
+  [duckdb] inserted 36000 rows total
+  [duckdb] inserted 37000 rows total
+  [duckdb] inserted 38000 rows total
+  [duckdb] inserted 39000 rows total
+  [duckdb] inserted 40000 rows total
+  [duckdb] inserted 41000 rows total
+  [duckdb] inserted 42000 rows total
+  [duckdb] inserted 43000 rows total
+  [duckdb] inserted 44000 rows total
+  [duckdb] inserted 45000 rows total
+  [duckdb] inserted 46000 rows total
+  [duckdb] inserted 47000 rows total
+  [duckdb] inserted 48000 rows total
+  [duckdb] inserted 49000 rows total
+  [duckdb] inserted 50000 rows total
+  [duckdb] inserted 51000 rows total
+  [duckdb] inserted 52000 rows total
+  [duckdb] inserted 53000 rows total
+  [duckdb] inserted 54000 rows total
+  [duckdb] inserted 55000 rows total
+  [duckdb] inserted 56000 rows total
+  [duckdb] inserted 57000 rows total
+  [duckdb] inserted 58000 rows total
+  [duckdb] inserted 59000 rows total
+  [duckdb] inserted 60000 rows total
+  [duckdb] inserted 61000 rows total
+  [duckdb] inserted 62000 rows total
+  [duckdb] inserted 63000 rows total
+  [duckdb] inserted 64000 rows total
+  [duckdb] inserted 65000 rows total
+  [duckdb] inserted 66000 rows total
+  [duckdb] inserted 67000 rows total
+  [duckdb] inserted 68000 rows total
+  [duckdb] inserted 69000 rows total
+  [duckdb] inserted 70000 rows total
+  [duckdb] inserted 71000 rows total
+  [duckdb] inserted 72000 rows total
+  [duckdb] inserted 73000 rows total
+  [duckdb] inserted 74000 rows total
+  [duckdb] inserted 75000 rows total
+  [duckdb] inserted 76000 rows total
+  [duckdb] inserted 77000 rows total
+  [duckdb] inserted 78000 rows total
+  [duckdb] inserted 79000 rows total
+  [duckdb] inserted 80000 rows total
+  [duckdb] inserted 81000 rows total
+  [duckdb] inserted 82000 rows total
+  [duckdb] inserted 83000 rows total
+  [duckdb] inserted 84000 rows total
+  [duckdb] inserted 85000 rows total
+  [duckdb] inserted 86000 rows total
+  [duckdb] inserted 87000 rows total
+  [duckdb] inserted 88000 rows total
+  [duckdb] inserted 89000 rows total
+  [duckdb] inserted 90000 rows total
+  [duckdb] inserted 91000 rows total
+  [duckdb] inserted 92000 rows total
+  [duckdb] inserted 93000 rows total
+  [duckdb] inserted 94000 rows total
+  [duckdb] inserted 95000 rows total
+  [duckdb] inserted 96000 rows total
+  [duckdb] inserted 97000 rows total
+  [duckdb] inserted 98000 rows total
+  [duckdb] inserted 99000 rows total
+  [duckdb] inserted 100000 rows total
+    scale= 100000  insert=130 ops/s  q_p50=46.5ms
+
+[bench] === duckdb ===
+  [duckdb] inserted 50 rows total
+[engine=duckdb phase=A scale=100000] starting
+  [A] bulk_insert 100000 docs...
+  [duckdb] inserted 1000 rows total
+  [duckdb] inserted 2000 rows total
+  [duckdb] inserted 3000 rows total
+  [duckdb] inserted 4000 rows total
+  [duckdb] inserted 5000 rows total
+  [duckdb] inserted 6000 rows total
+  [duckdb] inserted 7000 rows total
+  [duckdb] inserted 8000 rows total
+  [duckdb] inserted 9000 rows total
+  [duckdb] inserted 10000 rows total
+  [duckdb] inserted 11000 rows total
+  [duckdb] inserted 12000 rows total
+  [duckdb] inserted 13000 rows total
+  [duckdb] inserted 14000 rows total
+  [duckdb] inserted 15000 rows total
+  [duckdb] inserted 16000 rows total
+  [duckdb] inserted 17000 rows total
+  [duckdb] inserted 18000 rows total
+  [duckdb] inserted 19000 rows total
+  [duckdb] inserted 20000 rows total
+  [duckdb] inserted 21000 rows total
+  [duckdb] inserted 22000 rows total
+  [duckdb] inserted 23000 rows total
+  [duckdb] inserted 24000 rows total
+  [duckdb] inserted 25000 rows total
+  [duckdb] inserted 26000 rows total
+  [duckdb] inserted 27000 rows total
+  [duckdb] inserted 28000 rows total
+  [duckdb] inserted 29000 rows total
+  [duckdb] inserted 30000 rows total
+  [duckdb] inserted 31000 rows total
+  [duckdb] inserted 32000 rows total
+  [duckdb] inserted 33000 rows total
+  [duckdb] inserted 34000 rows total
+  [duckdb] inserted 35000 rows total
+  [duckdb] inserted 36000 rows total
+  [duckdb] inserted 37000 rows total
+  [duckdb] inserted 38000 rows total
+  [duckdb] inserted 39000 rows total
+  [duckdb] inserted 40000 rows total
+  [duckdb] inserted 41000 rows total
+  [duckdb] inserted 42000 rows total
+  [duckdb] inserted 43000 rows total
+  [duckdb] inserted 44000 rows total
+  [duckdb] inserted 45000 rows total
+  [duckdb] inserted 46000 rows total
+  [duckdb] inserted 47000 rows total
+  [duckdb] inserted 48000 rows total
+  [duckdb] inserted 49000 rows total
+  [duckdb] inserted 50000 rows total
+  [duckdb] inserted 51000 rows total
+  [duckdb] inserted 52000 rows total
+  [duckdb] inserted 53000 rows total
+  [duckdb] inserted 54000 rows total
+  [duckdb] inserted 55000 rows total
+  [duckdb] inserted 56000 rows total
+  [duckdb] inserted 57000 rows total
+  [duckdb] inserted 58000 rows total
+  [duckdb] inserted 59000 rows total
+  [duckdb] inserted 60000 rows total
+  [duckdb] inserted 61000 rows total
+  [duckdb] inserted 62000 rows total
+  [duckdb] inserted 63000 rows total
+  [duckdb] inserted 64000 rows total
+  [duckdb] inserted 65000 rows total
+  [duckdb] inserted 66000 rows total
+  [duckdb] inserted 67000 rows total
+  [duckdb] inserted 68000 rows total
+  [duckdb] inserted 69000 rows total
+  [duckdb] inserted 70000 rows total
+  [duckdb] inserted 71000 rows total
+  [duckdb] inserted 72000 rows total
+  [duckdb] inserted 73000 rows total
+  [duckdb] inserted 74000 rows total
+  [duckdb] inserted 75000 rows total
+  [duckdb] inserted 76000 rows total
+  [duckdb] inserted 77000 rows total
+  [duckdb] inserted 78000 rows total
+  [duckdb] inserted 79000 rows total
+  [duckdb] inserted 80000 rows total
+  [duckdb] inserted 81000 rows total
+  [duckdb] inserted 82000 rows total
+  [duckdb] inserted 83000 rows total
+  [duckdb] inserted 84000 rows total
+  [duckdb] inserted 85000 rows total
+  [duckdb] inserted 86000 rows total
+  [duckdb] inserted 87000 rows total
+  [duckdb] inserted 88000 rows total
+  [duckdb] inserted 89000 rows total
+  [duckdb] inserted 90000 rows total
+  [duckdb] inserted 91000 rows total
+  [duckdb] inserted 92000 rows total
+  [duckdb] inserted 93000 rows total
+  [duckdb] inserted 94000 rows total
+  [duckdb] inserted 95000 rows total
+  [duckdb] inserted 96000 rows total
+  [duckdb] inserted 97000 rows total
+  [duckdb] inserted 98000 rows total
+  [duckdb] inserted 99000 rows total
+  [duckdb] inserted 100000 rows total
+  [duckdb] Timing HNSW build via subprocess (ef_construction=64, M=16)...
+  [duckdb] HNSW 1k-sample: 0.20s, est 33.1s for 100000 rows
+[warn] engine=duckdb TIMEOUT after 1800s, continuing...
+[run] --- lancedb ---
+[2026-04-25T19:26:13Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_scale_lancedb_1000_kz6gntc6/lance/docs.lance, it will be created
+[2026-04-25T19:26:13Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_scale_lancedb_10000_48uv0h1z/lance/docs.lance, it will be created
+[2026-04-25T19:26:13Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_scale_lancedb_100000_ka1swovt/lance/docs.lance, it will be created
+[2026-04-25T19:26:15Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_warm_lancedb_lydo2bwe/lance/docs.lance, it will be created
+[2026-04-25T19:26:15Z WARN  lance::dataset::write::insert] No existing dataset at /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/bench_lancedb_dnd_qnzn/lance/docs.lance, it will be created
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === SCALE CURVE (1k/10k/100k) ===
+  [lancedb]
+    scale=   1000  insert=19375 ops/s  q_p50=2.0ms
+    scale=  10000  insert=69174 ops/s  q_p50=3.4ms
+    scale= 100000  insert=61619 ops/s  q_p50=13.5ms
+
+[bench] === lancedb ===
+[engine=lancedb phase=A scale=100000] starting
+  [A] bulk_insert 100000 docs...
+      56239 ops/s  RSS=3155MB  disk=275.6MB  cpu=97%
+[engine=lancedb phase=A scale=100000] done ops_per_sec=56239
+[engine=lancedb phase=E scale=100000] starting
+  [E] recall@10 (50 queries vs brute-force)...
+      recall@10=1.000
+[engine=lancedb phase=E scale=100000] done recall=1.000
+[engine=lancedb phase=I scale=100000] starting
+  [I] cache hitrate (1001 identical vec_only_select calls)...
+      first=10.34ms  mean_repeat=9.9443ms  speedup=1.0x
+[engine=lancedb phase=I scale=100000] done speedup=1.0x
+[engine=lancedb phase=B scale=100000] starting
+  [B] update 1000 docs...
+      4521 ops/s  RSS=3474MB  cpu=268%
+[engine=lancedb phase=B scale=100000] done ops_per_sec=4521
+[engine=lancedb phase=C scale=100000] starting
+  [C] mixed 80/20 for 10s...
+      54.6 ops/s  p50=18.9ms  p95=22.3ms  p99=36.9ms
+[engine=lancedb phase=C scale=100000] done ops_per_sec=54.6
+[engine=lancedb phase=D scale=100000] starting
+  [D] 8-thread concurrent select for 10s...
+      118.0 ops/s  p99=128.3ms
+[engine=lancedb phase=D scale=100000] done ops_per_sec=118.0
+[engine=lancedb phase=F scale=100000] starting
+  [F] concurrency saturation sweep (6 thread counts x 5s)...
+    threads= 1  ops/s=39  p99=32.9ms
+    threads= 4  ops/s=108  p99=56.1ms
+    threads= 8  ops/s=111  p99=121.8ms
+    threads=16  ops/s=108  p99=218.4ms
+    threads=32  ops/s=122  p99=409.3ms
+    threads=64  ops/s=118  p99=933.6ms
+      saturation_threads=8
+[engine=lancedb phase=F scale=100000] done saturation_threads=8
+[engine=lancedb phase=G scale=100000] starting
+  [G] parquet pre-embed bulk load (100000 docs, no embedding compute)...
+      57589 docs/s  rss_delta=485MB  disk=555.1MB  wall=1.7s
+[engine=lancedb phase=G] done
+[engine=lancedb phase=H scale=100000] starting
+  [H] group-commit batch sweep [1,10,100,1000,10000]...
+    [H] batch=     1  ops/s=4  commits=5000
+    [H] batch=    10  ops/s=18  commits=500
+    [H] batch=   100  ops/s=199  commits=50
+    [H] batch=  1000  ops/s=15368  commits=5
+    [H] batch= 10000  ops/s=45873  commits=0
+      best_batch=10000  best_ops/s=45873
+[engine=lancedb phase=H scale=100000] done
+[engine=lancedb phase=J scale=100000] starting
+  [J] mixed embed/skip-embed workload (1000 ops each side)...
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 5 files:  20%|██        | 1/5 [00:00<00:01,  2.99it/s]Fetching 5 files:  40%|████      | 2/5 [00:21<00:38, 12.83s/it]Fetching 5 files: 100%|██████████| 5/5 [00:21<00:00,  4.38s/it]
+/opt/homebrew/Cellar/python@3.12/3.12.13_1/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+[warn] engine=lancedb TIMEOUT after 1800s, continuing...
+[run] --- chromadb SKIPPED ---
+[run] --- synapse SKIPPED ---
+[run] --- milvus ---
+/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/milvus_lite/__init__.py:15: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  from pkg_resources import DistributionNotFound, get_distribution
+E20260425 21:56:14.833884 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:14.914099 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:14.998013 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:15.079772 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:15.158869 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:15.237704 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:15.315778 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:15.392642 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:15.469909 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:15.548231 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.153645 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.234942 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.314152 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.394691 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.474416 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.551887 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.636562 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.716730 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.796409 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.876300 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:16.960522 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.037844 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.116724 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.192925 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.268854 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.344879 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.437705 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.513055 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.591058 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.669464 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.749153 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.828886 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.906438 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:17.982403 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.059556 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.136014 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.211946 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.288777 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.364987 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.441028 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.518882 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.594398 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.669977 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.746774 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.824971 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.904815 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:18.985759 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.065060 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.143843 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.226121 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.304659 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.383040 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.463337 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.542048 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.619138 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.696899 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.774458 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.852098 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:19.932435 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.013576 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.094856 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.172197 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.249972 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.326879 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.407008 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.484153 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.560498 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.638221 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.716027 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.794142 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.870939 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:20.947175 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.023211 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.100044 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.180220 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.259152 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.339449 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.418335 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.497005 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.577356 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.660740 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.740629 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.819769 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.898768 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:21.978343 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.059602 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.138959 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.216387 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.294234 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.371687 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.451894 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.531603 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.611593 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.691622 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.767904 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.843840 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:22.919886 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:23.002070 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:23.935885 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.024840 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.110884 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.201583 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.289690 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.374934 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.461366 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.547037 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.633956 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.721535 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.810611 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:24.899142 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:25.949126 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.036139 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.124593 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.211791 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.300866 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.389500 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.477174 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.572819 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.660494 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.749497 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.839217 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:26.925454 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.015136 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.101712 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.188565 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.276482 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.368309 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.457988 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.546128 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.636484 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.722102 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.810051 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.897552 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:27.984197 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.070751 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.156096 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.241652 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.327749 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.415038 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.502910 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.591740 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.678709 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.764875 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.848351 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:28.935048 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.021330 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.106333 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.194890 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.283418 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.373208 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.460315 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.548050 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.637717 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.728737 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.818222 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.908279 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:29.997246 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.088882 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.176149 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.279053 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.367426 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.456678 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.546648 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.636905 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.725960 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.818325 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.908618 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:30.998508 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.085404 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.173188 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.258736 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.347416 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.433106 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.517757 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.602665 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.687567 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.774534 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.861505 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:31.948371 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.036578 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.124722 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.212464 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.299762 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.387866 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.476575 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.562109 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.651801 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.736522 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.823949 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.910269 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:32.999046 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.085409 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.172498 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.260296 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.349550 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.439378 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.526069 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.613188 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.700688 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.788123 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.874660 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:33.962993 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.052896 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.143368 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.232165 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.319887 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.410437 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.501586 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.593894 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.686801 25601466 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:34.778923 25601419 collection_data.cpp:84] [SERVER][Insert][][]Insert data failed, errs: attempt to write a readonly database
+E20260425 21:56:36.216001 25601419 collection_data.cpp:164] [SERVER][Delete][][]Delete data failed, errs: attempt to write a readonly database
+2026-04-25 21:56:36,218 [ERROR][_log_rpc_error]: RPC error: [upsert_rows], <MilvusException: (code=5, message=internal error)>, <elapsed:5.2ms>
+Traceback:
+Traceback (most recent call last):
+  File "/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/pymilvus/decorators.py", line 404, in handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/pymilvus/decorators.py", line 451, in handler
+    return func(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/pymilvus/decorators.py", line 342, in handler
+    raise e from e
+  File "/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/pymilvus/decorators.py", line 305, in handler
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/pymilvus/decorators.py", line 118, in handler
+    return func(self, collection_name, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/pymilvus/client/grpc_handler.py", line 1115, in upsert_rows
+    check_status(response.status)
+  File "/Users/master/.venvs/synapse-bench/lib/python3.12/site-packages/pymilvus/client/utils.py", line 76, in check_status
+    raise MilvusException(status.code, status.reason, status.error_code)
+pymilvus.exceptions.MilvusException: <MilvusException: (code=5, message=internal error)>
+ (decorators.py:358)
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === SCALE CURVE (1k/10k/100k) ===
+  [milvus]
+    scale=   1000  insert=11538 ops/s  q_p50=0.3ms
+    scale=  10000  insert=12607 ops/s  q_p50=0.7ms
+    scale= 100000  insert=11334 ops/s  q_p50=1.2ms
+
+[bench] === milvus ===
+[engine=milvus phase=A scale=100000] starting
+  [A] bulk_insert 100000 docs...
+      11322 ops/s  RSS=1524MB  disk=0.0MB  cpu=62%
+[engine=milvus phase=A scale=100000] done ops_per_sec=11322
+[engine=milvus phase=E scale=100000] starting
+  [E] recall@10 (50 queries vs brute-force)...
+      recall@10=0.088
+[engine=milvus phase=E scale=100000] done recall=0.088
+[engine=milvus phase=I scale=100000] starting
+  [I] cache hitrate (1001 identical vec_only_select calls)...
+      first=0.83ms  mean_repeat=0.4967ms  speedup=1.7x
+[engine=milvus phase=I scale=100000] done speedup=1.7x
+[engine=milvus phase=B scale=100000] starting
+  [B] update 1000 docs...
+  [ERROR] milvus: <MilvusException: (code=5, message=internal error)>
+  -> /Users/master/projects/synapse/bench/comprehensive/results/milvus_full.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_full.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+milvus                11322            0          0.0      0.0     1524      0.0
+[run] --- qdrant SKIPPED ---
+[run] --- pgvector ---
+[bench] Loading dataset (100000 docs)...
+[bench] Loaded 100000 docs
+
+[bench] === SCALE CURVE (1k/10k/100k) ===
+  [pgvector]
+    scale=1000: ERROR pgvector SKIPPED: pg_isready not found — PostgreSQL not installed
+    scale=10000: ERROR pgvector SKIPPED: pg_isready not found — PostgreSQL not installed
+    scale=100000: ERROR pgvector SKIPPED: pg_isready not found — PostgreSQL not installed
+
+[bench] === pgvector ===
+  [ERROR] pgvector: pgvector SKIPPED: pg_isready not found — PostgreSQL not installed
+  -> /Users/master/projects/synapse/bench/comprehensive/results/pgvector_full.jsonl
+
+[bench] Results: /Users/master/projects/synapse/bench/comprehensive/results/summary_full.jsonl
+
+=== QUICK SUMMARY ===
+Engine          InsertOps/s  UpdateOps/s   MixedOps/s    p95ms   RSS MB  Disk MB
+--------------------------------------------------------------------------------
+pgvector       ERROR: pgvector SKIPPED: pg_isready not found —
+[run] Benchmark complete at Sat Apr 25 21:56:37 CEST 2026
+usage: report.py [-h] [--profile {fast,full,dry}]
+report.py: error: unrecognized arguments: --partial

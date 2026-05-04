@@ -20,7 +20,10 @@ rusqlite.workspace = true
 tokio = { workspace = true }
 synapse-core = { path = "../../crates/synapse-core", features = ["embed"] }
 synapse-extract = { path = "../../crates/synapse-extract" }
+synapse-rerank = { path = "../../crates/synapse-rerank" }
 
 [features]
-default = []
+default = ["minimax", "rerank"]
 mlx = ["synapse-extract/mlx"]
+minimax = ["synapse-extract/minimax"]
+rerank = ["synapse-rerank/onnx"]

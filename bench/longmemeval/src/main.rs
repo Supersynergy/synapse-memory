@@ -98,6 +98,22 @@ struct Args {
     /// from sanitization.
     #[arg(long, default_value_t = false)]
     raw_query: bool,
+    /// Use MiniMax-M2.7 highspeed for PipelineHooks (decompose / grade / hyde).
+    /// Requires MINIMAX_API_KEY env. Overrides --use-mlx.
+    #[arg(long, default_value_t = false)]
+    use_minimax: bool,
+    /// Run cross-encoder rerank (fastembed JINA v2 multilingual) over top-N hits.
+    /// 0 disables. Default 20 = re-rank candidate pool, return top-k.
+    #[arg(long, default_value_t = 20)]
+    rerank_top: usize,
+    /// Enable Personalized PageRank (HippoRAG-2) signal in recall fusion.
+    #[arg(long, default_value_t = false)]
+    ppr: bool,
+    /// Pre-extract typed memories from each session via MiniMax before recall.
+    /// Activates type-weighted RRF + entity edges + PPR for the bench.
+    /// Requires --use-minimax. Adds ~3s per session (one LLM call per doc).
+    #[arg(long, default_value_t = false)]
+    pre_extract: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -213,7 +229,10 @@ fn run_question<H: PipelineHooks>(
     relevance_floor: f64,
     hyde_threshold: usize,
     embedder: Option<&Embedder>,
-) -> Result<(bool, bool, u128, usize, Vec<String>)> {
+    reranker: Option<&dyn synapse_rerank::Reranker>,
+    ppr: bool,
+    pre_extractor: Option<&dyn synapse_extract::Extractor>,
+) -> Result<(bool, bool, u128, usize, Vec<String>, Vec<String>)> {
     // Fresh tempfile-backed store per question (Store::open requires a path).
     let tmp = tempfile_path(&q.question_id)?;
     // Make sure no leftover.
@@ -237,6 +256,44 @@ fn run_question<H: PipelineHooks>(
         };
         store.put(&req)?;
     }
+    // Pre-extraction: parallelize the LLM HTTP round-trips via std::thread::scope
+    // (no new deps). DB writes still serial. With ~47 docs and 8 worker threads,
+    // total cost ≈ ceil(47/8) × per-call latency ≈ 6 × 1.5s ≈ 9s instead of 47×6s.
+    if let Some(ext) = pre_extractor {
+        use synapse_extract::{ExtractedMemory, enqueue_extraction_helper};
+        // 1) extract in parallel.
+        let n = docs.len();
+        let results: Vec<(i64, Vec<ExtractedMemory>)> = std::thread::scope(|s| {
+            let workers = 8usize;
+            let chunk = (n + workers - 1) / workers;
+            let mut handles = Vec::new();
+            for w in 0..workers {
+                let start = w * chunk;
+                let end = ((w + 1) * chunk).min(n);
+                if start >= end { continue; }
+                let docs_ref = &docs;
+                let ext_ref = ext;
+                handles.push(s.spawn(move || {
+                    let mut local: Vec<(i64, Vec<ExtractedMemory>)> = Vec::new();
+                    for i in start..end {
+                        let did = (i + 1) as i64;
+                        match ext_ref.extract(&docs_ref[i]) {
+                            Ok(items) => local.push((did, items)),
+                            Err(_) => local.push((did, Vec::new())),
+                        }
+                    }
+                    local
+                }));
+            }
+            let mut all = Vec::with_capacity(n);
+            for h in handles { all.extend(h.join().unwrap_or_default()); }
+            all
+        });
+        // 2) write serially.
+        for (doc_id, items) in results {
+            let _ = enqueue_extraction_helper(&store.conn, doc_id, &items);
+        }
+    }
     let q_emb: Option<Vec<f32>> = if let Some(emb) = embedder {
         Some(emb.embed_one(&q.question)?)
     } else {
@@ -250,9 +307,10 @@ fn run_question<H: PipelineHooks>(
     // distort multi-session retrieval. Entity-expand off: per-question fresh
     // store has no extracted memories yet (extraction pipeline not in bench).
     params.heat = false;
-    params.entity_expand = false;
-    params.rerank_top = 0;
-    let hits = pipeline_recall(
+    params.entity_expand = pre_extractor.is_some(); // only meaningful with extracted memories
+    params.ppr = ppr && pre_extractor.is_some();    // PPR needs edges
+    params.rerank_top = if reranker.is_some() { 20 } else { 0 };
+    let mut hits = pipeline_recall(
         &store,
         hooks,
         &params,
@@ -260,6 +318,16 @@ fn run_question<H: PipelineHooks>(
         relevance_floor,
         hyde_threshold,
     )?;
+    if let Some(r) = reranker {
+        let cand: Vec<synapse_core::Hit> = hits.iter().map(|h| h.hit.clone()).collect();
+        let rer = r.rerank(&q.question, cand, params.k)
+            .unwrap_or_else(|_| hits.iter().map(|h| h.hit.clone()).collect());
+        // Re-key reranked hits back into RecallHit (memory_id/type lost — fine for bench).
+        hits = rer
+            .into_iter()
+            .map(|h| synapse_core::sota::RecallHit { hit: h, memory_id: None, memory_type: None })
+            .collect();
+    }
     let elapsed = t.elapsed().as_micros();
 
     let top5: Vec<&str> = hits.iter().take(5).map(|h| h.hit.text.as_str()).collect();
@@ -267,6 +335,7 @@ fn run_question<H: PipelineHooks>(
     let r5 = answer_in_any(&q.answer, &top5);
     let r10 = answer_in_any(&q.answer, &top10);
     let top5_owned: Vec<String> = top5.iter().map(|s| s.to_string()).collect();
+    let top10_owned: Vec<String> = top10.iter().map(|s| s.to_string()).collect();
     if std::env::var("LME_DEBUG_TOP5").ok().as_deref() == Some("1") {
         for (i, t) in top5.iter().enumerate() {
             let head: String = t.chars().take(140).collect();
@@ -278,7 +347,7 @@ fn run_question<H: PipelineHooks>(
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_file(format!("{}-wal", tmp.display()));
     let _ = std::fs::remove_file(format!("{}-shm", tmp.display()));
-    Ok((r5, r10, elapsed, n_docs, top5_owned))
+    Ok((r5, r10, elapsed, n_docs, top5_owned, top10_owned))
 }
 
 fn tempfile_path(qid: &str) -> Result<PathBuf> {
@@ -306,6 +375,52 @@ fn main() -> Result<()> {
     let rule = RuleHooks::default();
     #[allow(unused_variables)]
     let mlx_hooks = mlx::MlxHooks::new(args.mlx_model.clone(), args.mlx_timeout_ms);
+    #[cfg(feature = "minimax")]
+    let minimax_hooks: Option<synapse_extract::minimax::MinimaxHooks> = if args.use_minimax {
+        match synapse_extract::minimax::MinimaxHooks::from_env() {
+            Ok(h) => { println!("Hooks: MiniMax-M2.7-highspeed (HTTP)"); Some(h) }
+            Err(e) => { eprintln!("WARN: minimax init failed: {} — falling back to Rule", e); None }
+        }
+    } else { None };
+    #[cfg(not(feature = "minimax"))]
+    let minimax_hooks: Option<()> = None;
+
+    // Reranker init (lazy, prints model on first load).
+    #[cfg(feature = "rerank")]
+    let reranker_box: Option<Box<dyn synapse_rerank::Reranker>> = if args.rerank_top > 0 {
+        match synapse_rerank::onnx::OnnxCrossEncoder::new() {
+            Ok(r) => { println!("Reranker: JINA-rerank-v2-base-multilingual (ONNX, top={})", args.rerank_top); Some(Box::new(r)) }
+            Err(e) => { eprintln!("WARN: reranker init failed: {} — running rerank-off", e); None }
+        }
+    } else { None };
+    #[cfg(not(feature = "rerank"))]
+    let reranker_box: Option<Box<dyn synapse_rerank::Reranker>> = None;
+    let reranker_ref = reranker_box.as_deref();
+
+    // Pre-extractor: when --pre-extract + --use-minimax, runs hierarchical
+    // extract over each session BEFORE recall, populating typed memories +
+    // entity edges so PPR + RRF-typed are non-trivial.
+    // Pre-extractor selection:
+    //   --pre-extract + --use-minimax → MiniMax hierarchical (best, ~30s/call)
+    //   --pre-extract alone           → RuleExtractor (fast, no LLM)
+    //   default                       → none (no typed memories, PPR signal weak)
+    #[cfg(feature = "minimax")]
+    let pre_extractor_box: Option<Box<dyn synapse_extract::Extractor>> = if args.pre_extract {
+        if args.use_minimax {
+            match synapse_extract::minimax::MinimaxExtractor::from_env() {
+                Ok(e) => { println!("Pre-extract: MiniMax-M2 hierarchical (Mem0-v3)"); Some(Box::new(e)) }
+                Err(e) => { eprintln!("WARN: pre_extract minimax init failed: {} — falling back to rule", e); Some(Box::new(synapse_extract::RuleExtractor)) }
+            }
+        } else {
+            println!("Pre-extract: RuleExtractor (fast, no LLM)");
+            Some(Box::new(synapse_extract::RuleExtractor))
+        }
+    } else { None };
+    #[cfg(not(feature = "minimax"))]
+    let pre_extractor_box: Option<Box<dyn synapse_extract::Extractor>> = if args.pre_extract {
+        Some(Box::new(synapse_extract::RuleExtractor))
+    } else { None };
+    let pre_extractor_ref: Option<&dyn synapse_extract::Extractor> = pre_extractor_box.as_deref();
 
     let embedder = if args.embed {
         match Embedder::new() {
@@ -327,6 +442,7 @@ fn main() -> Result<()> {
     let mut r10_hits = 0usize;
     let mut judge_r5_hits = 0usize;
     let mut judge_r5_evaluated = 0usize;
+    let mut judge_r10_hits = 0usize;
     let mut total_ms: u128 = 0;
     let mut total_docs: usize = 0;
     let mut errs: Vec<(String, String)> = Vec::new();
@@ -343,15 +459,27 @@ fn main() -> Result<()> {
     };
 
     for (i, q) in qs.iter().enumerate() {
-        let res = if args.use_mlx {
+        #[cfg(feature = "minimax")]
+        let res = if let Some(mh) = minimax_hooks.as_ref() {
+            let san = SanHooks { inner: mh };
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+        } else if args.use_mlx {
             let san = SanHooks { inner: &mlx_hooks };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref)
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
         } else {
             let san = SanHooks { inner: &rule };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref)
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+        };
+        #[cfg(not(feature = "minimax"))]
+        let res = if args.use_mlx {
+            let san = SanHooks { inner: &mlx_hooks };
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+        } else {
+            let san = SanHooks { inner: &rule };
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
         };
         match res {
-            Ok((r5, r10, ms, nd, top5)) => {
+            Ok((r5, r10, ms, nd, top5, top10)) => {
                 if r5 {
                     r5_hits += 1;
                 }
@@ -362,18 +490,30 @@ fn main() -> Result<()> {
                 total_docs += nd;
                 let mut judge_verdict: Option<bool> = None;
                 if let Some(j) = judge.as_ref() {
-                    let refs: Vec<&str> = top5.iter().map(|s| s.as_str()).collect();
-                    if let Some(v) = j.judge(&q.question, &q.answer, &refs) {
-                        judge_r5_evaluated += 1;
-                        if v {
-                            judge_r5_hits += 1;
+                    let refs5: Vec<&str> = top5.iter().map(|s| s.as_str()).collect();
+                    let v5 = j.judge(&q.question, &q.answer, &refs5);
+                    match v5 {
+                        Some(v) => {
+                            judge_r5_evaluated += 1;
+                            if v {
+                                judge_r5_hits += 1;
+                                judge_r10_hits += 1; // top-5 ⊂ top-10
+                            } else {
+                                // Top-5 missed; ask judge over top-10.
+                                let refs10: Vec<&str> = top10.iter().map(|s| s.as_str()).collect();
+                                if matches!(j.judge(&q.question, &q.answer, &refs10), Some(true)) {
+                                    judge_r10_hits += 1;
+                                }
+                            }
+                            judge_verdict = Some(v);
                         }
-                        judge_verdict = Some(v);
-                    } else if r5 {
-                        // Judge unavailable / parse-fail → trust substring
-                        judge_r5_evaluated += 1;
-                        judge_r5_hits += 1;
-                        judge_verdict = Some(true);
+                        None if r5 => {
+                            judge_r5_evaluated += 1;
+                            judge_r5_hits += 1;
+                            judge_r10_hits += 1;
+                            judge_verdict = Some(true);
+                        }
+                        None => {}
                     }
                 }
                 if args.verbose {
@@ -411,12 +551,17 @@ fn main() -> Result<()> {
     if args.judge {
         let denom = qs.len() as f64;
         let jr5 = if denom > 0.0 { judge_r5_hits as f64 / denom } else { 0.0 };
+        let jr10 = if denom > 0.0 { judge_r10_hits as f64 / denom } else { 0.0 };
         println!(
             "Judge-R@5    : {:.3}  ({}/{} evaluated, {} total)",
             jr5,
             judge_r5_hits,
             judge_r5_evaluated,
             qs.len()
+        );
+        println!(
+            "Judge-R@10   : {:.3}  ({}/{})",
+            jr10, judge_r10_hits, qs.len()
         );
     }
     println!("Latency avg  : {:.2} ms (recall only, ingest excluded)", avg_ms / 1000.0);

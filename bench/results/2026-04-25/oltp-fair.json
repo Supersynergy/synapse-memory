@@ -1,0 +1,10 @@
+[
+  {"target":"synapse","threads":1,"tps":322.55,"qps":322.55,"p95_ms":0.00},
+  {"target":"synapse","threads":4,"tps":1085.93,"qps":1085.93,"p95_ms":0.00},
+  {"target":"synapse","threads":8,"tps":1552.79,"qps":1552.79,"p95_ms":0.00},
+  {"target":"synapse","threads":16,"tps":2005.52,"qps":2005.52,"p95_ms":0.00},
+  {"target":"mysql","threads":1,"tps":10153.28,"qps":10153.28,"p95_ms":0.00},
+  {"target":"mysql","threads":4,"tps":36694.34,"qps":36694.34,"p95_ms":0.00},
+  {"target":"mysql","threads":8,"tps":44887.79,"qps":44887.79,"p95_ms":0.00},
+  {"target":"mysql","threads":16,"tps":64725.55,"qps":64725.55,"p95_ms":0.00}
+]

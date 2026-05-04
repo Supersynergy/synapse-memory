@@ -1,0 +1,16 @@
+[sqlite-vec] 100 queries (capped), corpus=168438
+  corpus rows: 168864
+  p50=233.6ms p95=258.4ms QPS=4 R@10=1.0000
+{
+  "engine": "sqlite-vec (brute)",
+  "available": true,
+  "n_queries": 100,
+  "note": "capped at 100 queries (700ms/q on 168k corpus)",
+  "p50_ms": 233.5884589701891,
+  "p95_ms": 258.3843340398744,
+  "p99_ms": 278.2174170133658,
+  "mean_ms": 234.3878166883951,
+  "qps_1c": 4.266433358733153,
+  "recall_at_10": 1.0,
+  "recall_at_100": 0.9998
+}

@@ -22,9 +22,13 @@ zstd.workspace = true
 blake3.workspace = true
 tracing.workspace = true
 fastembed = { workspace = true, optional = true }
+# embed-dynamic: same as embed but ORT loaded via dlopen at runtime (no libstdc++ at link time).
+# Required when cross-compiling from mac to linux without a Linux sysroot.
+fastembed-dynamic = { package = "fastembed", version = "5", default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls"], optional = true }
 redb = { workspace = true, optional = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
+getrandom = "0.2"
 age = { workspace = true }
 yrs = { workspace = true }
 rmp-serde = { workspace = true }
@@ -44,7 +48,7 @@ reqwest = { workspace = true, optional = true }
 # M4 Max integration: NEON-native SIMD distances (f32/f16/i8/b8).
 simsimd = { version = "6.5", optional = true }
 # f16 storage/conversion helpers in turbo::f16_kernels (50% RAM savings).
-half = "2.4"
+half = "2.7"
 # Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
 tikv-jemallocator = { version = "0.6", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
@@ -52,6 +56,9 @@ synapse-ann = { path = "../synapse-ann", optional = true }
 synapse-engine = { path = "../synapse-engine" }
 async-trait = "0.1"
 tokio = { workspace = true }
+# SOTA agent-memory layer: NER gazetteer + temporal/regex extraction.
+aho-corasick = "1"
+regex = "1"
 # embed-mlx feature: msgpack codec for the Python sidecar IPC.
 rmpv = { version = "1", optional = true }
 
@@ -64,6 +71,9 @@ default = ["backend-rusqlite"]
 backend-rusqlite = []
 backend-libsql = ["dep:libsql"]
 embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
+# embed-dynamic: ORT loaded via dlopen. Use for Linux cross-compile builds.
+# At runtime, libonnxruntime.so must be on LD_LIBRARY_PATH or next to the binary.
+embed-dynamic = ["dep:fastembed-dynamic", "dep:redb", "dep:parking_lot", "dep:once_cell"]
 encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 turbo = []
 ollama = ["turbo", "dep:reqwest"]
@@ -83,10 +93,10 @@ embed-mlx = ["turbo", "dep:rmpv"]
 [dev-dependencies]
 tempfile = "3"
 tokio = { workspace = true }
-criterion = { version = "0.5", default-features = false }
+criterion = { version = "0.8", default-features = false }
 # scale-bench example (PR-G2)
 clap = { version = "4", features = ["derive"] }
-sha2 = "0.10"
+sha2 = "0.11"
 
 [[example]]
 name = "synapse_scale_bench"
@@ -115,5 +125,10 @@ harness = false
 
 [[bench]]
 name = "kernels_progression"
+harness = false
+required-features = ["turbo", "simsimd"]
+
+[[bench]]
+name = "simsimd_vs_ndarray"
 harness = false
 required-features = ["turbo", "simsimd"]

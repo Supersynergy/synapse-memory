@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use rusqlite;
 use std::path::PathBuf;
 use synapse_core::{
     embed::Embedder,
@@ -97,6 +98,22 @@ enum Cmd {
         out: PathBuf,
         #[arg(long, default_value_t = 3)]
         level: i32,
+    },
+    /// Merge a peer snapshot into the current brain file (CRDT, offline-safe).
+    /// Equivalent to: syn merge <current-brain-snap> <peer> --out merged.brainpack
+    MergeSnap {
+        peer: PathBuf,
+        #[arg(short = 'o', long, default_value = "merged.brainpack")]
+        out: PathBuf,
+        #[arg(long, default_value_t = 3)]
+        level: i32,
+    },
+    /// Sign a doc by id — writes/updates ed25519 signature on the stored doc.
+    Sign {
+        id: i64,
+        /// Path to Ed25519 signing key (32-byte raw file)
+        #[arg(long, default_value = "synapse.sk")]
+        sk: PathBuf,
     },
     /// Federation: peer-to-peer CRDT sync
     Federate {
@@ -291,6 +308,28 @@ fn main() -> Result<()> {
         } => {
             snap::merge_packs(&file_a, &file_b, &out, level)?;
             println!("ok merge {}", out.display());
+        }
+        Cmd::MergeSnap { peer, out, level } => {
+            // Export current brain as a temp snap, then merge with peer.
+            let tmp = std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
+            snap::export(&cli.file, &tmp, level)?;
+            snap::merge_packs(&tmp, &peer, &out, level)?;
+            let _ = std::fs::remove_file(&tmp);
+            println!("ok merge-snap {}", out.display());
+        }
+        Cmd::Sign { id, sk } => {
+            let store = Store::open(&cli.file)?;
+            let doc = store.get(id)?;
+            let signing_key = sign::load_signing_key(&sk).context("load signing key")?;
+            // Sign blake3(text) — same algorithm as Store::verify uses
+            let hash = blake3::hash(doc.text.as_bytes());
+            let sig = sign::sign_bytes(&signing_key, hash.as_bytes());
+            // Write signature into the sig column of the existing row
+            store.conn.execute(
+                "UPDATE docs SET sig = ?1 WHERE id = ?2",
+                rusqlite::params![sig.as_ref(), id],
+            ).context("update sig")?;
+            println!("ok signed id={}", id);
         }
         Cmd::Shard { action } => match action {
             ShardCmd::Split {

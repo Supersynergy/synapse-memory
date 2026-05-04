@@ -39,9 +39,27 @@ pub struct Store {
     /// feature `ann-usearch` is enabled.
     #[cfg(feature = "ann-usearch")]
     pub(crate) ann: Option<crate::ann::Ann>,
+    /// Turbo fast-path: in-memory ndarray brute-force kNN.
+    /// Lazily built on first `search_vec` call (interior mutability), then
+    /// extended in lockstep with `put`/`put_batch`.
+    #[cfg(feature = "turbo")]
+    pub(crate) ndarray_search:
+        std::sync::RwLock<Option<crate::turbo::ndarray_search::NdArraySearch>>,
 }
 
 impl Store {
+    /// Internal constructor — centralizes the per-feature field init so
+    /// `open`, `open_encrypted`, `open_with_brain_key` stay tidy.
+    fn from_conn(conn: Connection) -> Self {
+        Self {
+            conn,
+            #[cfg(feature = "ann-usearch")]
+            ann: None,
+            #[cfg(feature = "turbo")]
+            ndarray_search: std::sync::RwLock::new(None),
+        }
+    }
+
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         #[allow(clippy::missing_transmute_annotations)]
         unsafe {
@@ -55,21 +73,19 @@ impl Store {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "busy_timeout", 10000_i64)?;
         conn.pragma_update(None, "temp_store", "MEMORY")?;
-        conn.pragma_update(None, "mmap_size", 268_435_456_i64)?;
-        // 64 MB page cache — keeps FTS5 BM25 + vec0 working-set resident.
-        conn.pragma_update(None, "cache_size", -65536_i64)?;
+        // 1 GB mmap + 256 MB page cache — auto-tune sweep winner (2026-05-03, 30-config random search).
+        // Key finding: batch_size dominates insert throughput (210k ops/s spread); page_size/cache secondary.
+        conn.pragma_update(None, "mmap_size", 1_073_741_824_i64)?;
+        conn.pragma_update(None, "cache_size", -262_144_i64)?; // 256 MB
         // Disable automatic WAL checkpoint. Manual checkpoint only — avoids
         // stall under concurrent write load (8+ threads).
         conn.pragma_update(None, "wal_autocheckpoint", 0_i64)?;
         // Pre-allocate page-cache slots, reduce first-access allocation stalls.
-        conn.pragma_update(None, "page_size", 4096_i64)?;
+        conn.pragma_update(None, "page_size", 8192_i64)?; // auto-tune winner: 8192 > 4096
         crate::sql_fns::register_synapse_match(&conn)?;
         #[cfg(feature = "ann-usearch")]
         let s = {
-            let mut store = Self {
-                conn,
-                ann: None,
-            };
+            let mut store = Self::from_conn(conn);
             store.migrate()?;
             // Try to load sidecar; if missing/corrupt, rebuild from docs_vec.
             let sidecar = crate::ann::Ann::sidecar_for(&db_path);
@@ -91,7 +107,7 @@ impl Store {
         };
         #[cfg(not(feature = "ann-usearch"))]
         let s = {
-            let store = Self { conn };
+            let store = Self::from_conn(conn);
             store.migrate()?;
             store
         };
@@ -154,10 +170,7 @@ impl Store {
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "mmap_size", 268_435_456_i64)?;
         // Encrypted DB + ANN sidecar is a later PR; for now, no ANN here.
-        #[cfg(feature = "ann-usearch")]
-        let s = Self { conn, ann: None };
-        #[cfg(not(feature = "ann-usearch"))]
-        let s = Self { conn };
+        let s = Self::from_conn(conn);
         s.migrate()?;
         Ok(s)
     }
@@ -355,6 +368,23 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 tracing::warn!("ann insert failed for id {id}: {e}; sidecar will rebuild on next open");
             }
         }
+        // Turbo: append to in-memory ndarray index iff already built.
+        // Not built yet → next search_vec rebuilds from SQL and picks up this row.
+        #[cfg(feature = "turbo")]
+        if let Some(ref emb) = req.embedding {
+            if let Ok(mut guard) = self.ndarray_search.write() {
+                if let Some(ref mut idx) = *guard {
+                    if !idx.is_empty() {
+                        if let Err(e) = idx.add_row(id, emb) {
+                            tracing::warn!(
+                                "turbo ndarray add_row id {id} failed: {e}; invalidating cache"
+                            );
+                            *guard = None;
+                        }
+                    }
+                }
+            }
+        }
         Ok(id)
     }
 
@@ -413,6 +443,27 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                         tracing::warn!(
                             "ann batch insert id {id} failed: {e}; sidecar will rebuild on next open"
                         );
+                    }
+                }
+            }
+        }
+        // Turbo: append batch to in-memory ndarray index iff already built.
+        #[cfg(feature = "turbo")]
+        {
+            if let Ok(mut guard) = self.ndarray_search.write() {
+                if let Some(ref mut idx) = *guard {
+                    if !idx.is_empty() {
+                        for (id, req) in ids.iter().zip(reqs.iter()) {
+                            if let Some(ref emb) = req.embedding {
+                                if let Err(e) = idx.add_row(*id, emb) {
+                                    tracing::warn!(
+                                        "turbo ndarray batch add_row id {id} failed: {e}; invalidating cache"
+                                    );
+                                    *guard = None;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -562,6 +613,11 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         if let Some(ref ann) = self.ann {
             let _ = ann.remove(id);
         }
+        // Turbo: invalidate ndarray cache; rebuilt on next search_vec.
+        #[cfg(feature = "turbo")]
+        if let Ok(mut guard) = self.ndarray_search.write() {
+            *guard = None;
+        }
         Ok(changed > 0 || doc_changed > 0)
     }
 
@@ -574,6 +630,45 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             ann.save()?;
         }
         Ok(())
+    }
+
+    /// Pre-warm the turbo ndarray search engine.
+    /// Call this at startup (before accepting requests) to avoid blocking
+    /// the async runtime on the first search request.
+    ///
+    /// Under `#[cfg(feature = "turbo")]`: loads the full 164K-vector
+    /// matrix into memory (~250ms on M4 Max) and pre-normalizes it.
+    /// Subsequent `search_vec` calls hit this in-memory index (~5ms)
+    /// instead of sqlite-vec brute-force (~112ms).
+    #[cfg(feature = "turbo")]
+    pub fn warm_turbo(&self) {
+        // Fast path: already built
+        {
+            let guard = self.ndarray_search.read().unwrap();
+            if let Some(ref idx) = *guard {
+                if !idx.is_empty() {
+                    tracing::info!("turbo ndarray_search already warm: {} vectors", idx.len());
+                    return;
+                }
+            }
+        }
+        // Slow path: lazy-build synchronously (caller should do this at startup)
+        let mut guard = self.ndarray_search.write().unwrap();
+        if guard.is_none() {
+            tracing::info!("turbo ndarray_search building from SQL (first-time, ~2s)...");
+            match crate::turbo::ndarray_search::NdArraySearch::from_connection(&self.conn) {
+                Ok(idx) => {
+                    tracing::info!("turbo ndarray_search warmed: {} vectors", idx.len());
+                    *guard = Some(idx);
+                }
+                Err(e) => {
+                    tracing::warn!("turbo ndarray_search warm skipped: {e}");
+                    *guard = Some(crate::turbo::ndarray_search::NdArraySearch::empty(
+                        crate::types::EMBED_DIM,
+                    ));
+                }
+            }
+        }
     }
 
     /// PR-A1-wire internal: rebuild the ANN index from `docs_vec` rows.
@@ -687,6 +782,63 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             }
         }
 
+        // Turbo fast-path: in-memory ndarray brute-force kNN.
+        // Build cache lazily on first call (one-time ~250ms scan @ 162k×384).
+        // Subsequent calls hit the matrix directly (~7ms p50 @ 162k vs ~50ms sqlite-vec).
+        #[cfg(feature = "turbo")]
+        {
+            // Fast path: cache already built.
+            {
+                let guard = self.ndarray_search.read().unwrap();
+                if let Some(ref idx) = *guard {
+                    if !idx.is_empty() {
+                        let pairs = idx.search(emb, limit);
+                        if !pairs.is_empty() {
+                            return self.hydrate_hits_by_id_dist(&pairs);
+                        }
+                    }
+                }
+            }
+            // Slow path: lazy-build, then retry.
+            {
+                let mut guard = self.ndarray_search.write().unwrap();
+                if guard.is_none() {
+                    match crate::turbo::ndarray_search::NdArraySearch::from_connection(
+                        &self.conn,
+                    ) {
+                        Ok(idx) => {
+                            tracing::info!(
+                                "turbo ndarray_search built: {} vectors",
+                                idx.len()
+                            );
+                            *guard = Some(idx);
+                        }
+                        Err(e) => {
+                            // Empty DB or other failure — install empty index so we
+                            // do not retry on every call. Falls through to sqlite-vec.
+                            tracing::debug!(
+                                "turbo ndarray_search build skipped: {e}"
+                            );
+                            *guard = Some(
+                                crate::turbo::ndarray_search::NdArraySearch::empty(
+                                    EMBED_DIM,
+                                ),
+                            );
+                        }
+                    }
+                }
+                if let Some(ref idx) = *guard {
+                    if !idx.is_empty() {
+                        let pairs = idx.search(emb, limit);
+                        drop(guard);
+                        if !pairs.is_empty() {
+                            return self.hydrate_hits_by_id_dist(&pairs);
+                        }
+                    }
+                }
+            }
+        }
+
         let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
         let sql = "SELECT d.id,d.uri,d.title,d.text,v.distance
                    FROM docs_vec v JOIN docs d ON d.id = v.id
@@ -759,6 +911,55 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         Ok(out)
     }
 
+    /// Turbo helper: given `(id, distance)` pairs from the ndarray index,
+    /// fetch full `Hit` records (uri/title/text) from SQL in one round-trip.
+    /// Preserves input order. Used by the turbo fast-path in `search_vec`.
+    #[cfg(feature = "turbo")]
+    fn hydrate_hits_by_id_dist(&self, pairs: &[(i64, f32)]) -> Result<Vec<Hit>> {
+        if pairs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = (0..pairs.len())
+            .map(|i| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql =
+            format!("SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})");
+        let mut stmt = self.conn.prepare(&sql)?;
+        let ids: Vec<i64> = pairs.iter().map(|(i, _)| *i).collect();
+        let params_iter: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
+        let mut by_id: std::collections::HashMap<
+            i64,
+            (Option<String>, Option<String>, String),
+        > = Default::default();
+        let rows = stmt.query_map(params_iter.as_slice(), |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, String>(3)?,
+            ))
+        })?;
+        for row in rows {
+            let (id, uri, title, text) = row?;
+            by_id.insert(id, (uri, title, text));
+        }
+        let mut out = Vec::with_capacity(pairs.len());
+        for (id, dist) in pairs.iter() {
+            if let Some((uri, title, text)) = by_id.remove(id) {
+                out.push(Hit {
+                    id: *id,
+                    uri,
+                    title,
+                    text,
+                    score: 1.0_f64 / (1.0_f64 + *dist as f64),
+                });
+            }
+        }
+        Ok(out)
+    }
+
     fn search_hybrid(&self, q: &str, emb: &[f32], limit: usize) -> Result<Vec<Hit>> {
         let k = limit * 3;
         let lex = self.search_lex(q, k).unwrap_or_default();
@@ -817,10 +1018,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         conn.pragma_update(None, "cache_size", -65536_i64)?;
         conn.pragma_update(None, "wal_autocheckpoint", 0_i64)?;
         crate::sql_fns::register_synapse_match(&conn)?;
-        #[cfg(feature = "ann-usearch")]
-        let s = Self { conn, ann: None };
-        #[cfg(not(feature = "ann-usearch"))]
-        let s = Self { conn };
+        let s = Self::from_conn(conn);
         s.migrate()?;
         Ok(s)
     }

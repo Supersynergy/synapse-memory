@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mempalace-synapse-backend"
+version = "0.1.0"
+description = "MemPalace backend adapter backed by Synapse (Rust embedded vector+FTS)"
+requires-python = ">=3.13"
+dependencies = [
+    "mempalace>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["mempalace_synapse"]
+
+[project.entry-points."mempalace.backends"]
+synapse = "mempalace_synapse.backend:SynapseBackend"

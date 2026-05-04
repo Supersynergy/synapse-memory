@@ -334,8 +334,8 @@ mod tests {
     #[test]
     fn signed_roundtrip() {
         use ed25519_dalek::SigningKey;
-        use rand::rngs::OsRng;
-        let sk = SigningKey::generate(&mut OsRng);
+        use crate::sign::random_signing_key;
+        let sk = random_signing_key();
         let db = tempfile::NamedTempFile::new().unwrap();
         {
             let mut s = Store::open(db.path()).unwrap();

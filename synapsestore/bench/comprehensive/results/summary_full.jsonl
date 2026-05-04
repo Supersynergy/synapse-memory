@@ -1,0 +1,1 @@
+{"engine": "pgvector", "n_docs": 100000, "profile": "full", "error": "pgvector SKIPPED: pg_isready not found \u2014 PostgreSQL not installed", "status": "ERROR"}

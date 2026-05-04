@@ -146,6 +146,10 @@ async fn main() -> Result<()> {
     tokio::spawn(metrics::serve(metrics_handle.handle.clone(), metrics_addr));
 
     let store = open_store(&cli.file, &cli.license_jwt, &cli.license_pubkey)?;
+    // Pre-warm the turbo ndarray search engine (loads 164K vectors, ~1.7s).
+    // Must happen BEFORE the server starts accepting requests, otherwise the
+    // first search blocks the tokio async runtime for ~2 seconds.
+    store.warm_turbo();
     let cache_path = cli.emb_cache.clone().unwrap_or_else(|| {
         let mut p = cli.file.clone();
         let name = p
@@ -327,7 +331,38 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 },
             }
         }
+        Request::Embed { text } => {
+            match embed_one(state, &text).await {
+                Ok(vec) => Response::Embed { vec },
+                Err(e) => Response::Err(e.to_string()),
+            }
+        }
+        Request::SnapMerge { snapshot_path, out_path, level } => {
+            let db_path = state.db_path.clone();
+            let tmp = std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
+            match synapse_core::snap::export(&db_path, &tmp, level)
+                .and_then(|_| synapse_core::snap::merge_packs(&tmp, std::path::Path::new(&snapshot_path), std::path::Path::new(&out_path), level))
+            {
+                Ok(_) => { let _ = std::fs::remove_file(&tmp); Response::Ok }
+                Err(e) => { let _ = std::fs::remove_file(&tmp); Response::Err(e.to_string()) }
+            }
+        }
+        Request::Rerank { query, candidates, top_k } => {
+            use synapse_rerank::{IdentityReranker, Reranker};
+            let reranker = IdentityReranker;
+            match reranker.rerank(&query, candidates, top_k) {
+                Ok(hits) => Response::Hits(hits),
+                Err(e) => Response::Err(e.to_string()),
+            }
+        }
     }
+}
+
+async fn embed_one(state: &State, text: &str) -> Result<Vec<f32>> {
+    state.ensure_embedder().await?;
+    let g = state.embedder.lock().await;
+    let e = g.as_ref().expect("embedder present after ensure");
+    Ok(e.embed_one(text)?)
 }
 
 fn sanitize_snap_path(base: &std::path::Path, out: &str) -> Result<PathBuf> {

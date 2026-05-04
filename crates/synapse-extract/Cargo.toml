@@ -1,0 +1,37 @@
+[package]
+name = "synapse-extract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Async LLM extraction pipeline: docs -> typed memories + entities (smollm2 / qwen MLX subprocess)."
+keywords = ["llm", "extraction", "agent-memory", "synapse"]
+
+[[bin]]
+name = "synapse-extract-worker"
+path = "src/bin/worker.rs"
+
+[[bin]]
+name = "synapse-lifecycle"
+path = "src/bin/lifecycle.rs"
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+rusqlite.workspace = true
+clap = { workspace = true }
+synapse-core = { path = "../synapse-core" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls"], optional = true }
+
+[features]
+default = []
+# Enable subprocess-based MLX extractor (smollm2). Off by default in CI.
+mlx = []
+# Enable MiniMax-M2.7 highspeed LLM hooks (HTTPS, OpenAI-compatible endpoint).
+minimax = ["dep:reqwest"]

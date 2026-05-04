@@ -1,0 +1,650 @@
+=== 4-Stack Vector Bench 2026-04-26T00-09-38 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T00-39-42 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T01-09-43 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T01-39-54 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T02-09-56 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T02-45-44 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T10-16-17 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T10-46-20 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T11-16-21 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T11-46-23 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T12-16-24 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T12-46-25 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T13-16-26 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T13-46-27 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T14-16-28 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T14-46-29 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T15-16-30 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T15-46-31 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T16-16-32 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T16-46-32 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T17-16-33 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T17-46-34 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T18-16-35 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T18-46-35 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T19-16-36 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T19-46-36 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T20-16-37 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T20-46-38 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T21-16-38 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T21-46-39 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T22-16-39 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T22-46-40 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T23-16-41 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-26T23-46-43 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-26/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T00-16-44 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T00-46-51 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T01-16-52 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T20-23-29 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T20-53-31 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T21-23-32 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T21-53-34 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T22-23-34 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-27T22-53-35 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-27/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-28T00-06-34 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-28T00-36-44 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-28T01-06-44 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-28T01-36-45 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-28T02-06-45 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-28T02-36-46 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_D.json]
+
+[5/5] Aggregating results...
+=== 4-Stack Vector Bench 2026-04-28T11-39-11 ===
+Output: /Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28
+
+[1/4] Stack A — sqlite-vec via synapsed
+  Stack A ... ERROR (see /tmp/bench_stack_A_err.txt)
+[2/4] Stack B — Python turbo :9477
+  Stack B ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_B.json]
+[3/4] Stack C — Core+ndarray Step-5 (skip if absent)
+  Stack C ... SKIP  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_C.json]
+[4/4] Stack D — synapse-ultra (skip if absent)
+  Stack D ... YES  [/Users/master/projects/synapse/bench/4stack/../results/4stack-2026-04-28/stack_D.json]
+
+[5/5] Aggregating results...

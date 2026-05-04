@@ -1,0 +1,36 @@
+[lance] 1000 queries, corpus=168438, loading corpus...
+  Writing lance dataset to /var/folders/bm/0dt5fcdn56vg7pnkkzptmlkh0000gn/T/lance_bench_warnkqv9/bench.lance...
+  Building lance IVF_PQ...
+    build: 40.8s
+    p50=3.7ms p95=6.1ms QPS=248 R@10=0.6033
+  Building lance IVF_HNSW_SQ...
+    build: 15.3s
+    p50=4.1ms p95=14.3ms QPS=176 R@10=0.8619
+[
+  {
+    "engine": "lance IVF_PQ",
+    "available": true,
+    "build_s": 40.80932462500641,
+    "n_queries": 1000,
+    "p50_ms": 3.6807090509682894,
+    "p95_ms": 6.070083996746689,
+    "p99_ms": 12.493667018134147,
+    "mean_ms": 4.036965768493246,
+    "qps_1c": 247.71079502446193,
+    "recall_at_10": 0.6033,
+    "recall_at_100": 0.5807100000000001
+  },
+  {
+    "engine": "lance IVF_HNSW_SQ",
+    "available": true,
+    "build_s": 15.258165750012267,
+    "n_queries": 1000,
+    "p50_ms": 4.107832966838032,
+    "p95_ms": 14.2605000291951,
+    "p99_ms": 34.75533297751099,
+    "mean_ms": 5.670989477308467,
+    "qps_1c": 176.33607045143282,
+    "recall_at_10": 0.8619000000000001,
+    "recall_at_100": 0.84004
+  }
+]

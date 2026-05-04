@@ -36,7 +36,11 @@ EMBED_DIM = 384
 DAEMON_PORT = 9477
 DAEMON_PID = os.path.expanduser("~/.synapse/turbo.pid")
 ONNX_THREADS = 8  # Optimal for M4 Max (benchmark-verified)
-FASTEMBED_CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".fastembed_cache")
+# FASTEMBED_CACHE: env var overrides compiled-in path (set by launchd plist)
+FASTEMBED_CACHE = os.environ.get(
+    "FASTEMBED_CACHE_DIR",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".fastembed_cache")
+)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # JSON: use orjson if available (5-10x faster), fall back to json
@@ -334,6 +338,10 @@ def cmd_daemon(port=None):
     with open(DAEMON_PID, 'w') as f:
         f.write(str(os.getpid()))
 
+    _daemon_start = time.time()
+    _cache_hits = [0]   # mutable counter (list to allow closure mutation)
+    _cache_misses = [0]
+
     async def handle_request(reader, writer):
         t0 = time.perf_counter()
         data = await reader.readuntil(b'\r\n\r\n')
@@ -345,9 +353,32 @@ def cmd_daemon(port=None):
             return
         parsed = urlparse(parts[1])
         params = parse_qs(parsed.query)
+        mode = parsed.path.strip('/')
+
+        if mode == 'health':
+            uptime = time.time() - _daemon_start
+            hits = _cache_hits[0]
+            misses = _cache_misses[0]
+            body = json_dumps({
+                "status": "ok",
+                "uptime_s": round(uptime, 1),
+                "pid": os.getpid(),
+                "cache_hits": hits,
+                "cache_misses": misses,
+                "hitrate": round(hits / (hits + misses), 4) if (hits + misses) > 0 else 0.0,
+                "precomputed_queries": len(results_cache),
+                "numpy_docs": np_engine.doc_count,
+                "embed_disabled": _embed_disabled,
+            })
+            resp = (b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: '
+                    + str(len(body)).encode() + b'\r\nConnection: close\r\n\r\n' + body)
+            writer.write(resp)
+            await writer.drain()
+            writer.close()
+            return
+
         query = params.get('q', [''])[0]
         limit = int(params.get('limit', ['5'])[0])
-        mode = parsed.path.strip('/')
 
         if not query or mode not in ('find', 'vec', 'hybrid'):
             body = b'{"error":"use /find?q=... or /vec?q=... or /hybrid?q=..."}'
@@ -366,8 +397,10 @@ def cmd_daemon(port=None):
             # T1: Check pre-computed results cache (0.0003ms)
             pre = results_cache.get(h)
             if pre and mode in pre:
+                _cache_hits[0] += 1
                 out = pre[mode][:limit]
             else:
+                _cache_misses[0] += 1
                 # T2/T3: Need embedding
                 emb_bytes = emb_mem.get(h)
                 if not emb_bytes:

@@ -147,3 +147,39 @@ cargo bench -p bench-space-vs-chroma
 # Core check
 cargo check -p synapse-core
 ```
+
+---
+
+## Rerank Wired (2026-05-04)
+
+**Status**: Infrastructure wired; live bench BLOCKED (synapsed daemon not running in CI, lme_s_50.json path requires setup).
+
+- `synapse-rerank::OnnxCrossEncoder` wired in `Space::search_reranked` when compiled with `--features onnx`
+- `Request::Rerank` added to synapsed RPC proto — daemon handles rerank server-side
+- `bench/mempalace-shootout/run.py --rerank` flag added: fetches top-50, sends to `_daemon_rerank()`, re-evaluates R@K
+- R@5 actual: **not measured** — run `python run.py --heldout --rerank --backend synapse` with daemon live to get number
+- Target R@5 ≥ 0.55 (vs baseline 0.30)
+
+To reproduce:
+```bash
+synapsed --file /tmp/bench.db --sock /tmp/synapse.sock &
+cd bench/mempalace-shootout
+python run.py --heldout --rerank --backend synapse
+```
+
+---
+
+## Python via RPC (2026-05-04)
+
+**Status**: `SynapseRpcBackend` + `SynapseRpcCollection` implemented in `python/mempalace-synapse-backend/mempalace_synapse/backend.py`. Batches 1000 docs per `PutBatch` RPC call.
+
+- p50 query actual: **not measured** — run `python run.py --sweep --backend synapse` with daemon live
+- Baseline (PyO3 per-call): ~200 ms p50 at 76k chunks
+- Target: p50 < 5 ms via batched RPC
+
+To reproduce:
+```bash
+synapsed --file /tmp/bench.db --sock /tmp/synapse.sock &
+cd bench/mempalace-shootout
+python run.py --sweep --backend synapse
+```

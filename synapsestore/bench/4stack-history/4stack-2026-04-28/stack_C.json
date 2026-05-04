@@ -1,0 +1,5 @@
+{
+  "stack": "C",
+  "available": false,
+  "reason": "CORE_TURBO=1 not set \u2014 Step-5 ndarray build not requested"
+}

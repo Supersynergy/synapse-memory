@@ -1,0 +1,42 @@
+[package]
+name = "synapse-mysql"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "synapse_mysql"
+path = "src/lib.rs"
+
+[[bin]]
+name = "synapse-mysql"
+path = "src/main.rs"
+
+[[bin]]
+name = "synapse-mysql-async"
+path = "src/main_async.rs"
+required-features = ["async-proxy"]
+
+[features]
+async-proxy = ["dep:opensrv-mysql", "dep:async-trait"]
+
+[dependencies]
+opensrv-mysql = { version = "0.7", optional = true }
+async-trait = { version = "0.1", optional = true }
+
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite = { workspace = true, features = ["column_decltype"] }
+synapse-core = { path = "../synapse-core" }
+msql-srv = "0.11"
+mysql_common = "0.37"
+chrono = "0.4"
+regex = "1"
+sha1 = "0.11"
+blake3.workspace = true
+lru = "0.18"

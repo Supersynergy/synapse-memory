@@ -9,8 +9,8 @@ members = [
     # scale-100M scaffolding (PR-0, empty stubs, TODO markers)
     "crates/synapse-ann",
     "crates/synapse-quant",
-    "crates/synapse-wal",
-    "crates/synapse-seg",
+    "synapsestore/crates/synapse-wal",
+    "synapsestore/crates/synapse-seg",
     "crates/synapse-engine",
     "crates/synapse-license",
     # SOTA agent-memory layer (2026-04-29)
@@ -26,7 +26,7 @@ members = [
 ]
 
 [workspace.package]
-version = "1.0.0-rc.1"
+version = "1.0.0"
 edition = "2021"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"

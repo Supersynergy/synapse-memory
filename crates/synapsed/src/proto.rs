@@ -37,6 +37,24 @@ pub enum Request {
         id: i64,
         vk: Vec<u8>,
     },
+    /// Embed a single text string server-side. Returns the raw float vector.
+    /// Does NOT store the document — pure compute, no side effects.
+    Embed {
+        text: String,
+    },
+    /// Rerank candidates server-side using cross-encoder (IdentityReranker unless `onnx` feature).
+    /// Returns top_k hits sorted by rerank score.
+    Rerank {
+        query: String,
+        candidates: Vec<Hit>,
+        top_k: usize,
+    },
+    /// Merge a peer brainpack snapshot into the DB file. daemon must have fs access.
+    SnapMerge {
+        snapshot_path: String,
+        out_path: String,
+        level: i32,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,4 +89,6 @@ pub enum Response {
     Stats { docs: i64, vecs: i64 },
     Ok,
     Err(String),
+    /// Response to `Request::Embed`. Contains the raw embedding vector.
+    Embed { vec: Vec<f32> },
 }

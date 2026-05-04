@@ -22,7 +22,7 @@ OUT_DIR="${OUT_DIR:-$ROOT/release/dist/$CUSTOMER_ID}"
 PROFILE="release-secure"
 BIN_NAME="${BIN_NAME:-synapse}"
 
-DEFAULT_TARGETS="x86_64-apple-darwin aarch64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu"
+DEFAULT_TARGETS="aarch64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu"
 TARGETS="${TARGETS:-$DEFAULT_TARGETS}"
 
 mkdir -p "$OUT_DIR"
@@ -32,7 +32,8 @@ log() { printf '[build-secure] %s\n' "$*" >&2; }
 fail() { printf '[build-secure][FATAL] %s\n' "$*" >&2; exit 1; }
 
 # Tools
-command -v cargo    >/dev/null || fail "cargo missing"
+command -v cargo          >/dev/null || fail "cargo missing"
+command -v cargo-zigbuild >/dev/null 2>&1 || fail "install: cargo install --locked cargo-zigbuild && brew install zig"
 command -v sha256sum >/dev/null 2>&1 || SHA256="shasum -a 256"
 SHA256="${SHA256:-sha256sum}"
 command -v rsign2   >/dev/null || command -v minisign >/dev/null || \
@@ -53,9 +54,13 @@ done
 # Step 3: per-target build
 for TARGET in $TARGETS; do
   log "building $BIN_NAME for $TARGET"
+  CARGO_CMD="cargo build"
+  case "$TARGET" in
+    *linux-gnu) CARGO_CMD="cargo zigbuild" ;;
+  esac
   RUSTFLAGS="-C link-arg=-s -D warnings --remap-path-prefix=$HOME=/build" \
     SYNAPSE_CUSTOMER_ID="$CUSTOMER_ID" \
-    cargo build --profile "$PROFILE" --target "$TARGET" --bin "$BIN_NAME" \
+    $CARGO_CMD --profile "$PROFILE" --target "$TARGET" --bin "$BIN_NAME" \
     || fail "cargo build failed for $TARGET"
 
   SRC="target/$TARGET/$PROFILE/$BIN_NAME"
