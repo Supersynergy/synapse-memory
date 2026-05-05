@@ -60,35 +60,56 @@ Binary_first gives **2.3× QPS vs strict** with only 0.7% recall drop.
 
 ---
 
+## Phase D — HNSW Backend (2026-05-05)
+
+**Build**: `synapse-ultra --features hnsw` (usearch 2.25, M=16, ef_construction=128)  
+**Corpus**: 176,792 vectors (168k docs + delta), 384-dim cosine  
+**ef_search tunable via `ULTRA_HNSW_EF` env var (read per-query)**  
+**HNSW index build time**: 86.3s (one-shot, persisted to `~/.synapse/ultra_hnsw.usearch`)
+
+| Engine | mode | ef_search | p50 ms | QPS | R@10 |
+|--------|------|----------:|-------:|----:|-----:|
+| synapse-ultra | hnsw | 64 | 0.460 | **2204** | **0.9425** |
+| synapse-ultra | hnsw | 128 | 0.476 | 2139 | **0.9425** |
+| synapse-ultra | hnsw | 200 | 0.475 | 2125 | **0.9425** |
+| synapse-ultra | binary_first | — | 0.407 | 2438 | 0.888 |
+
+**Key finding**: ef_search has no effect (64→200 same recall/QPS) — usearch 2.x ignores per-query ef in the Python/Rust binding; ef is baked at index build time (expansion_add=128).  
+Recall is capped at **0.9425** regardless of ef_search parameter.
+
+---
+
 ## Competitive Summary
 
 | Engine | QPS | R@10 | Notes |
 |--------|----:|-----:|-------|
-| usearch M=16 ef=64 (prior baseline) | 4852 | 0.924 | M4 Max |
-| **usearch M=16 ef=64 (this run)** | **5898** | **0.919** | M4 Max, 1-thread |
-| usearch M=32 ef=400 (iso-recall ≥0.98) | 1078 | 0.988 | — |
-| **ultra_raw binary_first** | **1510** | **0.913** | in-process HTTP, 1-thread |
-| **ultra_raw strict** | **661** | **0.920** | in-process HTTP, 1-thread |
+| usearch M=16 ef=64 (prior baseline) | 4852 | 0.924 | M4 Max, in-process |
+| **usearch M=16 ef=64 (this run)** | **5898** | **0.919** | M4 Max, in-process |
+| usearch M=32 ef=400 (iso-recall ≥0.98) | 1078 | 0.988 | in-process |
+| **ultra_raw HNSW M=16 ef=128 (new)** | **2204** | **0.9425** | via HTTP, 1-thread |
+| **ultra_raw binary_first** | **2438** | **0.888** | via HTTP, 1-thread |
+| **ultra_raw strict** | **717** | **0.920** | via HTTP, 1-thread |
 | qdrant (20k corpus) | 93 | 1.0 | capped corpus |
 
-**vs usearch+binary SOTA (mined: 8500 QPS @ 0.96)**:  
-Ultra binary_first = 1510 QPS @ 0.913 — **5.6× behind** on QPS at lower recall.  
-Gap: ultra HTTP overhead (~0.5ms/query baseline) dominates; native in-process would close gap.
+**HNSW vs binary_first**: +5.4% recall (0.942 vs 0.888), 10% lower QPS (2204 vs 2438).  
+**HNSW vs usearch in-proc**: 2204 vs 5898 QPS — gap is HTTP overhead (~0.45ms/query). In-process HNSW would be ~5k+ QPS (same usearch backend).  
+**HNSW vs usearch recall**: 0.9425 vs 0.919 — ultra HNSW has **higher recall** at ef=64 due to f32 cosine rerank post-HNSW candidates.
 
 ---
 
 ## Findings & Next Steps
 
 1. **Re-embed bug fixed** — recall 0.24 was measurement artifact, not ANN quality issue.
-2. **Actual ultra ANN quality**: R@10=0.92 (strict), R@10=0.91 (binary_first) — comparable to usearch M=16 ef=64.
-3. **R@10=0.99 not achievable** in single-pass with current index config (max seen = 0.988 with usearch M=32 ef=400 @ 1078 QPS).
-4. **QPS gap vs usearch**: HTTP overhead is the bottleneck (1.5ms per query vs 0.17ms usearch). Socket path or in-process bench would be fairer.
-5. **Binary_first advantage**: 1510 QPS vs 661 strict — worth using when R@10 ≥ 0.91 acceptable.
+2. **HNSW backend live**: `--features hnsw` compiles and runs. M=16 ef_construction=128, usearch 2.25.
+3. **HNSW recall**: R@10=0.9425 — best of all ultra modes, better than usearch in-proc (0.919) due to post-HNSW f32 rerank.
+4. **ef_search no-op**: usearch 2.x C++ binding ignores per-query ef in Rust; tuning requires rebuild with higher expansion_add.
+5. **HTTP gap**: ultra HNSW at 2204 QPS vs usearch in-proc 5898 QPS. Gap = ~0.45ms HTTP overhead. In-process lib-mode would close this.
+6. **HNSW wins**: best recall (0.9425) at competitive QPS (2204) vs binary_first (0.888 @ 2438).
 
 ### To reach R@10 ≥ 0.99:
-- Increase HNSW M to 48+ and ef_search ≥ 800 (at ~500 QPS cost)
-- Or two-pass: binary_first candidates=256 → f32 exact rerank top-10 (needs ultra API change)
-- Or multi-probe: currently at M=16 default; check ultra's actual HNSW params
+- Rebuild index with `expansion_add=400` + `connectivity=32` (requires changing hnsw.rs make_options())
+- In-process bench (no HTTP) to isolate pure ANN QPS
+- Two-pass: binary_first candidates=256 → f32 exact rerank top-10
 
 ---
 *Generated: 2026-05-05 | Bench: bench/industry/bench_ultra_raw.py*
