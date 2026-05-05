@@ -123,6 +123,9 @@ impl NdArraySearch {
             .iter()
             .map(|&(_, idx)| {
                 let row = &flat[idx * self.dim..(idx + 1) * self.dim];
+                #[cfg(feature = "simsimd")]
+                let cos: f32 = crate::turbo::simsimd_kernels::cos_f32(&qn, row).unwrap_or(0.0);
+                #[cfg(not(feature = "simsimd"))]
                 let cos: f32 = qn.iter().zip(row.iter()).map(|(a, b)| a * b).sum();
                 (cos, idx)
             })
