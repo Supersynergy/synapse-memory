@@ -61,7 +61,9 @@ SELECT * FROM wp_posts
 WHERE synapse_match(post_title || post_content, 'rust web framework') > 0.7
 -- HNSW vec → 8ms
 ```
-**187× speedup.** This is the demo that wins HN.
+**Revised: ~50× from FTS5 alone (10k+ posts), +3–5× from Synapse semantic layer in-process.**
+Headline "187×" was conflated — see bench/results/2026-05-05/wp_bench_fair_decomp.md for decomposition.
+Honest claim: "up to 100–250× over unindexed LIKE at 50k posts; FTS5 break-even ~5k rows; at 1k posts vanilla LIKE wins."
 
 ## Implementation Tasks
 | Task | Owner | Est |
@@ -74,3 +76,15 @@ WHERE synapse_match(post_title || post_content, 'rust web framework') > 0.7
 | GitHub Actions CI | γ2 | 2h |
 
 **Total:** ~14h work · target Day 49 of Phase 4
+
+## Verdict Update — 2026-05-05
+
+**Status: GO** (was: PAUSE pending fair decomposition)
+
+Decomposition complete. Honest numbers do not kill the demo — they make it reproducible:
+- 50× from FTS5 is real and measurable above 10k posts
+- 3–5× Synapse semantic on top is real (in-process, no CLI IPC)
+- Combined ~150–250× at 50k posts is defensible with disclosed methodology
+- Drop "187×" headline; use "up to 100×" with footnote linking to fair-decomp doc
+
+See: bench/results/2026-05-05/wp_bench_fair_decomp.md
