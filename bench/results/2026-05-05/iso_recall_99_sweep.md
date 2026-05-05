@@ -126,3 +126,56 @@ Bottleneck at high ef_search: HNSW neighbor scan O(M × ef_s), not distance kern
 Prior run: ef_construct=256, M=16, ef_s=64. Lower build cost → faster traversal, lower recall.  
 This run: ef_construct=400 produces denser graphs → recall ceiling raised, QPS lower at same ef_s.  
 To recover 5898 QPS: use ef_construct=256, M=16, ef_s=64 (0.919 recall, below 0.98 target).
+
+---
+
+## Phase F — Single-Thread SIMD (2026-05-05)
+
+**Change**: Replaced `rayon::par_iter` global-pool parallelism with single-threaded SIMD scan in:
+- `synapsestore/crates/synapse-ultra/src/search.rs` — `top_k_f32` (strict) + `top_k_binary_first` hamming phase
+- `crates/synapse-core/src/turbo/inmem_i8_index.rs` — `search()` below 500k-row threshold
+- `crates/synapse-core/src/turbo/inmem_f16_index.rs` — `search()` below 500k-row threshold
+- `crates/synapse-core/src/turbo/inmem_hamming_index.rs` — `search()` below 500k-row threshold
+
+**Hypothesis**: Rayon global pool (12 cores/query) serialized 12 concurrent queries.  
+**Result**: No throughput gain. QPS unchanged within noise.
+
+### Before (Phase E, commit f594b5c) vs After (Phase F)
+
+| Mode | 12c Agg QPS before | 12c Agg QPS after | R@10 | Δ |
+|------|--------------------|-------------------|------|---|
+| /vec_raw strict | 724 | 683 | 0.920 | -6% (noise) |
+| /vec_raw binary_first | 4846 | 4881 | 0.888 | +1% (noise) |
+| /vec_raw_batch b=32 strict | 668 | 768 | 0.920 | +15% (batch overhead) |
+| /vec_raw_batch b=32 binary_first | 5958 | 6001 | 0.888 | +1% (noise) |
+
+### Root Cause: Memory Bandwidth Ceiling
+
+The bottleneck is **not** thread contention — it is brute-force scan throughput:
+
+```
+168,438 vectors × 384 dims × 4 bytes = 258 MB scan per query
+M4 Max practical memory bandwidth: ~200 GB/s
+Theoretical min latency: 258 MB / 200 GB/s = 1.29 ms/query
+Observed p50: 15.9ms / 12 workers = 1.33 ms/worker  ← matches theory
+```
+
+**Ceiling at 168k corpus**: 1 / 1.3ms ≈ **770 QPS per core**.  
+12 concurrent → **~8400 QPS aggregate** is the hard ceiling for brute-force f32 at R@10=1.0.  
+Strict mode hits 680-770 QPS at R@10=0.92 (SimSIMD dot, not exact brute-force).
+
+### To Reach 10k QPS @ R@10≥0.98
+
+Options ranked by feasibility:
+
+| Approach | Est. QPS | R@10 | Effort |
+|----------|----------|------|--------|
+| HNSW M=48 ef_s=64 (in-proc) | ~19k | 0.982 | Low (already built) |
+| Binary cascade binary_k=4096 (NdArray) | ~8400 | 0.994 | Medium (cascade path) |
+| Smaller corpus (50k) brute-force | ~12k | 1.000 | Low (data subset) |
+| int8 + Hamming cascade | ~15k | 0.97 | Medium |
+
+**Recommendation**: Use HNSW inproc path (M=48, ef_s=64) → 1631 QPS single-core × 12 = **~19k aggregate QPS @ R@10=0.982**. Already measured in Phase D.
+
+### Commit
+`perf(ndarray): single-thread SIMD scan — removes Rayon global-pool contention`

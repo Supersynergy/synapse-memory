@@ -11,9 +11,17 @@
 
 use rayon::prelude::*;
 
-/// Same tuning rationale as `inmem_i8_index::SEARCH_MIN_LEN` — min rows per
-/// rayon thread, picked against M4 Max bench progression.
 const HAMMING_MIN_LEN: usize = 512;
+const SINGLE_THREAD_THRESHOLD: usize = 500_000;
+
+static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> =
+    std::sync::LazyLock::new(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .thread_name(|i| format!("synapse-hamming-search-{i}"))
+            .build()
+            .expect("rayon hamming pool build")
+    });
 
 /// 1-bit Hamming-distance brute-force index.
 pub struct InMemoryHammingIndex {
@@ -72,12 +80,20 @@ impl InMemoryHammingIndex {
                 q_bits[j / 8] |= 1 << (j % 8);
             }
         }
-        let dists: Vec<u32> = self
-            .bits
-            .par_chunks(self.bpr)
-            .with_min_len(HAMMING_MIN_LEN)
-            .map(|row| hamming_u32(&q_bits, row))
-            .collect();
+        let dists: Vec<u32> = if self.bits.len() / self.bpr >= SINGLE_THREAD_THRESHOLD {
+            SEARCH_POOL.install(|| {
+                self.bits
+                    .par_chunks(self.bpr)
+                    .with_min_len(HAMMING_MIN_LEN)
+                    .map(|row| hamming_u32(&q_bits, row))
+                    .collect()
+            })
+        } else {
+            self.bits
+                .chunks(self.bpr)
+                .map(|row| hamming_u32(&q_bits, row))
+                .collect()
+        };
         let k = k.min(dists.len());
         let mut idx: Vec<usize> = (0..dists.len()).collect();
         idx.select_nth_unstable_by(k - 1, |a, b| dists[*a].cmp(&dists[*b]));

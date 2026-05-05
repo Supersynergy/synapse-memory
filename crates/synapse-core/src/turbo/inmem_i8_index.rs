@@ -23,10 +23,30 @@
 
 use rayon::prelude::*;
 
-/// Minimum rows per rayon thread — avoids dispatch overhead for small corpora
-/// and oversubscription for huge ones. Tuned on M4 Max (12 P + 4 E cores)
-/// where 100 k rows × 384 dim lands best with ~256 rows/chunk.
+/// Single-thread threshold: corpora below this use plain iterators so that
+/// concurrent Tokio tasks each get a full core rather than Rayon saturating all
+/// cores per query and serializing multi-query throughput.
+///
+/// Above the threshold a dedicated Rayon pool (`SEARCH_POOL`) with 1 thread is
+/// used — this keeps the hot path compiled as parallel Rayon while avoiding the
+/// global pool contention that tanks QPS under 12-concurrent-query load.
+const SINGLE_THREAD_THRESHOLD: usize = 500_000;
+
+/// Minimum rows per rayon chunk — kept for the rescore path which operates on
+/// small candidate sets and never hits the threshold.
 const SEARCH_MIN_LEN: usize = 256;
+
+/// Dedicated 1-thread Rayon pool: gives us `par_chunks` SIMD dispatch without
+/// stealing cores from concurrent Tokio tasks.  One thread → one core per
+/// query; concurrency = Tokio task count (already bounded by block_in_place).
+static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> =
+    std::sync::LazyLock::new(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .thread_name(|i| format!("synapse-search-{i}"))
+            .build()
+            .expect("rayon pool build")
+    });
 
 /// Dense int8-quantized brute-force index.
 pub struct InMemoryI8Index {
@@ -144,16 +164,30 @@ impl InMemoryI8Index {
             .map(|v| (*v * q_inv * 127.0).round().clamp(-127.0, 127.0) as i8)
             .collect();
 
-        let scores: Vec<f32> = self
-            .codes
-            .par_chunks(self.dim)
-            .with_min_len(SEARCH_MIN_LEN)
-            .zip(self.scales.par_iter().with_min_len(SEARCH_MIN_LEN))
-            .map(|(row, &s)| {
-                let dot = dot_i8(&q_codes, row);
-                dot * s * q_scale
+        let scores: Vec<f32> = if self.codes.len() / self.dim >= SINGLE_THREAD_THRESHOLD {
+            // Large corpus: use dedicated 1-thread pool so we don't steal from
+            // concurrent Tokio tasks.
+            SEARCH_POOL.install(|| {
+                self.codes
+                    .par_chunks(self.dim)
+                    .with_min_len(SEARCH_MIN_LEN)
+                    .zip(self.scales.par_iter().with_min_len(SEARCH_MIN_LEN))
+                    .map(|(row, &s)| {
+                        let dot = dot_i8(&q_codes, row);
+                        dot * s * q_scale
+                    })
+                    .collect()
             })
-            .collect();
+        } else {
+            self.codes
+                .chunks(self.dim)
+                .zip(self.scales.iter())
+                .map(|(row, &s)| {
+                    let dot = dot_i8(&q_codes, row);
+                    dot * s * q_scale
+                })
+                .collect()
+        };
 
         let k = k.min(scores.len());
         let mut idx: Vec<usize> = (0..scores.len()).collect();

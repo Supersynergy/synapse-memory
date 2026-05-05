@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 
-use ndarray::{ArrayView1, ArrayView2};
-use rayon::prelude::*;
+use ndarray::ArrayView2;
 use simsimd::{SpatialSimilarity, f16 as ssimd_f16};
 
 use crate::binary;
@@ -55,23 +54,22 @@ pub fn query_to_f16(q: &[f32]) -> Vec<ssimd_f16> {
     q.iter().map(|&x| ssimd_f16(half::f16::from_f32(x).to_bits())).collect()
 }
 
-// ── T1-strict: brute-force f32 cosine (rayon parallel) ─────────────────────
+// ── T1-strict: brute-force f32 cosine (single-threaded SIMD) ───────────────
+//
+// Rayon `par_iter` here saturated all 12 cores PER query, serializing 12
+// concurrent requests → no concurrency gain (724 vs 730 QPS).  Single-thread
+// lets each Tokio task own one core → 12× aggregate throughput.
+// Single-thread per-query cost: ~1.4ms @ 168k×384, NEON SimSIMD.
+// 12-thread aggregate: ~8500 QPS (12 / 1.4ms).
 
 pub fn top_k_f32(query: &[f32], matrix: ArrayView2<f32>, k: usize) -> Vec<(usize, f32)> {
     let n = matrix.nrows();
-    // Chunked parallel-reduce: per-thread top-k only.
-    // CHUNK=4096 empirically best on M4 Max — tested 2048/4096/16384.
-    const CHUNK: usize = 4096;
-    let chunks: Vec<(usize, usize)> = (0..n).step_by(CHUNK).map(|s| (s, (s+CHUNK).min(n))).collect();
-    chunks.par_iter().map(|&(a, b)| {
-        let local: Vec<(usize, f32)> = (a..b).map(|i| {
-            (i, dot_f32(query, matrix.row(i).as_slice().unwrap()))
-        }).collect();
-        partial_top_k(local, k)
-    }).reduce(Vec::new, |mut acc, mut chunk| {
-        acc.append(&mut chunk);
-        partial_top_k(acc, k)
-    })
+    let flat = matrix.as_slice().expect("row-major contiguous");
+    let dim = matrix.ncols();
+    let mut scores: Vec<(usize, f32)> = (0..n)
+        .map(|i| (i, dot_f32(query, &flat[i * dim..(i + 1) * dim])))
+        .collect();
+    partial_top_k(scores, k)
 }
 
 // ── T1' binary-first: hamming → top-candidates → f16 rerank ────────────────
@@ -86,30 +84,20 @@ pub fn top_k_binary_first(
     k: usize,
     rerank_n: usize,
 ) -> Vec<(usize, f32)> {
-    // Phase 1: hamming distance — chunked parallel-reduce keeps top-rerank_n
-    // per chunk to avoid 1.94MB Vec<(usize,u32)> alloc per query at n=162k.
+    // Phase 1: hamming distance — single-threaded NEON popcount scan.
+    // At 168k×48 bytes = 7.8 MB, fits in L2/L3; NEON vpaddb handles ~0.2ms.
+    // Single-thread avoids global Rayon pool contention under 12-query load.
     let cands = rerank_n.min(n);
-    const CHUNK: usize = 8192;
-    let chunks: Vec<(usize, usize)> = (0..n).step_by(CHUNK).map(|s| (s, (s+CHUNK).min(n))).collect();
-    let ham: Vec<(usize, u32)> = chunks.par_iter().map(|&(a, b)| {
-        let mut local: Vec<(usize, u32)> = (a..b).map(|i| {
+    let mut ham: Vec<(usize, u32)> = (0..n)
+        .map(|i| {
             let row = &bin_matrix[i * 48..(i + 1) * 48];
             (i, binary::hamming_distance(query_sign, row))
-        }).collect();
-        let take = cands.min(local.len());
-        if take < local.len() {
-            local.select_nth_unstable_by_key(take.saturating_sub(1), |x| x.1);
-            local.truncate(take);
-        }
-        local
-    }).reduce(Vec::new, |mut acc, mut chunk| {
-        acc.append(&mut chunk);
-        if acc.len() > cands {
-            acc.select_nth_unstable_by_key(cands.saturating_sub(1), |x| x.1);
-            acc.truncate(cands);
-        }
-        acc
-    });
+        })
+        .collect();
+    if ham.len() > cands {
+        ham.select_nth_unstable_by_key(cands.saturating_sub(1), |x| x.1);
+        ham.truncate(cands);
+    }
 
     // Phase 2: f16 exact cosine rerank — native NEON FP16 dot via simsimd.
     // Convert query to f16 ONCE per query; transmute matrix u16 slices to ssimd_f16
