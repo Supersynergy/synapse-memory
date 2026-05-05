@@ -103,12 +103,14 @@ impl Store {
                 store.rebuild_ann_from_docs_vec(&ann)?;
             }
             store.ann = Some(ann);
+            store.sota_migrate()?;
             store
         };
         #[cfg(not(feature = "ann-usearch"))]
         let s = {
             let store = Self::from_conn(conn);
             store.migrate()?;
+            store.sota_migrate()?;
             store
         };
         Ok(s)
