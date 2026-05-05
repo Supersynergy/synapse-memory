@@ -222,3 +222,25 @@ cargo build --release -p synapse-core -p synapsed -p synapse-ultra: SUCCESS (no 
 
 - Fix 4 alloc overhead: a pre-converted query buffer (once per search call) would eliminate per-row alloc. TODO for follow-up.
 - Embedder pool: blocked callers get `Error::Other("pool empty")` when all 6 slots busy. Consider `Condvar` wait for graceful backpressure.
+
+---
+
+## Phase H — All Wins Combined: End-to-End Concurrent HTTP Bench (2026-05-05)
+
+**Daemon**: synapse-ultra :9478 | **Corpus**: 168 438 × 384-dim | **Workers**: 12 | **Queries**: 1000 | **k=10**
+**Commits**: 54362ff (Accelerate GEMM) + b519652 (embedder unlock) + e4e0ef2 (SimSIMD f32 NEON) + 5e67a8c (SimSIMD f16)
+
+| Endpoint | Mode | Batch | agg QPS | p50 ms | R@10 | Notes |
+|----------|------|------:|--------:|-------:|-----:|-------|
+| `/vec_raw_batch` | strict | 64 | **473** | 26.4 | 0.9201 | HTTP path, R@10 < 0.99 target |
+| `/vec_raw_batch` | strict | 32 | **690** | 16.1 | 0.9201 | HTTP path |
+| `/vec_raw_batch` | binary_first | 64 | **4667** | 1.54 | 0.8870 | throughput mode, R@10 < 0.99 |
+| `/vec_raw_batch` | binary_first | 32 | **4652** | 1.65 | 0.8870 | throughput mode |
+| `/vec_raw` | strict | — | **654** | 17.5 | 0.9201 | single-query path |
+| `/vec_raw` | binary_first | — | **4345** | 2.45 | 0.8870 | single-query path |
+
+**Honest note**: HTTP strict mode achieves R@10=0.9201, not 0.99. The R@10≥0.99 target (binary_k=4096, 697 QPS in-process) is only hit on the in-process cascade path (no HTTP overhead). The 2188 QPS @ R@10=0.99 from commit 54362ff was a pre-measurement projection for the Accelerate GEMM batch path; live HTTP measurement differs due to TCP + JSON parse overhead (~1.5ms/req).
+
+**Embedder unlock (Fix 1+3)**: concurrent embed throughput improvement is only visible on `/text_search` paths with active re-embedding (not `/vec_raw` which takes pre-embedded vectors). Skipped separate embed bench — no text endpoint with ground truth in the bench suite.
+
+**Build**: `cargo build --release -p synapsed -p synapse-ultra` — 0 crates recompiled (fully up to date).

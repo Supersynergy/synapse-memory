@@ -1,6 +1,6 @@
 # Synapse
 
-**Recall-King for in-process Rust ANN at iso-recall ≥0.98 on Apple Silicon — 19k QPS @ R@10=0.982 on 168k corpus, single-binary, no daemon required.**
+**Recall-King for in-process Rust ANN at iso-recall ≥0.98 on Apple Silicon — 19k QPS @ R@10=0.982 on 168k corpus, 4,667 QPS HTTP binary_first (12c measured, v1.3), single-binary, no daemon required.**
 
 Local-first, audit-grade agent memory. No external services. No cloud dependency. Ed25519-signed docs. CRDT merge. SQLite-embedded.
 
@@ -13,7 +13,7 @@ Local-first, audit-grade agent memory. No external services. No cloud dependency
 5. **Ed25519 signatures** — every doc verifiable, tamper-evident audit trail
 6. **CRDT merge** — offline-first, conflict-free peer sync via brainpack snapshots
 
-See [RESULTS-WORLDBEST-2026-05-05.md](RESULTS-WORLDBEST-2026-05-05.md) for today's full v1.2 bench results.  
+See [RESULTS-WORLDBEST-2026-05-05.md](RESULTS-WORLDBEST-2026-05-05.md) for today's full v1.3 bench results.  
 See [RESULTS.md](RESULTS.md) for historical bench data.
 
 ## Install

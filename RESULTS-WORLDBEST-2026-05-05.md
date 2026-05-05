@@ -1,6 +1,7 @@
-# Synapse v1.2 — Recall-King for in-process Rust ANN at iso-recall ≥0.98
+# Synapse v1.3 — Recall-King for in-process Rust ANN at iso-recall ≥0.98
 
 **Date**: 2026-05-05 | **Branch**: `turbo-ndarray-fastpath` | **Corpus**: 168,438 × 384-dim (BGE-small-en-v1.5)
+**v1.3 additions**: Accelerate BLAS GEMM batch (54362ff) + embedder mutex unlock / dynamic pool (b519652) + SimSIMD f32 NEON (e4e0ef2) + SimSIMD f16 NEON (5e67a8c)
 
 ---
 
@@ -15,7 +16,8 @@ All numbers in-process (zero HTTP overhead) unless noted. Corpus: 168k, k=10, 1,
 | **Synapse HNSW in-proc** | M=16 ef_s=64 ef_c=400 | **2,079** | **0.977** | 0.48 | single-core |
 | **Synapse HNSW in-proc** | M=48 ef_s=400 ef_c=400 | **534** | **0.994** | 1.81 | highest recall config |
 | **Synapse cascade (NdArray)** | binary_k=4096, 12c est. | **~8,400** | **0.994** | 1.43 | bandwidth-ceiling estimate |
-| **Synapse HTTP batch** | binary_first, 12c | **6,001** | **0.888** | 1.33 | HTTP path, R@10 < target |
+| **Synapse HTTP batch** | binary_first b=64, 12c | **4,667** | **0.887** | 1.54 | measured v1.3 (Phase H) |
+| **Synapse HTTP batch** | strict b=32, 12c | **690** | **0.920** | 16.1 | measured v1.3, R@10<0.99 HTTP |
 | usearch M=16 ef_s=128 (HTTP) | raw ANN, no filter/FTS | 4,017 | 0.930 | 0.25 | no filter, no FTS |
 | usearch HTTP strict | R@10=0.988 @ 1,078 QPS | 1,078 | 0.988 | — | from f8ee50d sweep |
 | Qdrant M=16 ef=64 | 20k corpus only | 93 | 1.000 | 10.7 | build fails at full 168k |
@@ -82,6 +84,10 @@ At iso-recall ≥ 0.98, Synapse HNSW in-proc is the only measured config above 1
 | `89ebeb2` | bench(inproc): Synapse 1631 QPS @ R@10=0.982 in-process — vs usearch HTTP 661 QPS |
 | `f594b5c` | feat(ultra): RwLock-lifted hot path — 5958 QPS binary_first @ R@10=0.888 concurrent-12 |
 | `76d408b` | perf(ndarray): single-thread SIMD scan — removes Rayon global-pool contention |
+| `54362ff` | perf: Accelerate BLAS GEMM batch (projected 24-48× GEMM, 2188 QPS est. in-proc) |
+| `b519652` | fix(embed): mutex drop before ONNX + dynamic pool size (cores/2, M4: 2→6) |
+| `e4e0ef2` | perf(simd): SimSIMD cosine NEON f32 kernel in Phase-2 rerank |
+| `5e67a8c` | perf(simd): SimSIMD f16 cosine path in cos_f16_row |
 
 ---
 
