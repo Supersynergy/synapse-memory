@@ -172,11 +172,23 @@ pub struct VecRawBatchQuery {
 
 /// Batch raw-vector search — amortizes HTTP overhead across N queries.
 /// Returns Vec<Vec<HitResp>>, one inner vec per query.
+///
+/// Fast path: when mode == Strict and batch ≥ 8, routes through
+/// `search_batch_blas` which issues a single GEMM call (Accelerate/AMX on
+/// macOS, ndarray on Linux) instead of N sequential per-query scans.
 async fn vec_raw_batch(
     State(state): State<Arc<AppState>>,
     Json(body): Json<VecRawBatchQuery>,
 ) -> impl IntoResponse {
     let guard = state.index.load();
+
+    // BLAS GEMM fast path: Strict mode + batch ≥ 8.
+    if matches!(body.mode, SearchMode::Strict) && body.vecs.len() >= 8 {
+        let batch_hits = guard.search_batch_blas(&body.vecs, body.limit);
+        let results: Vec<Vec<HitResp>> = batch_hits.iter().map(|hits| hits_to_resp(hits)).collect();
+        return Json(results);
+    }
+
     let results: Vec<Vec<HitResp>> = body.vecs.iter().map(|vec| {
         let hits = match body.mode {
             SearchMode::BinaryFirst => guard.search_binary_first(vec, body.limit),

@@ -72,6 +72,21 @@ impl UltraIndex {
         raw.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect()
     }
 
+    /// Batch brute-force via GEMM (Accelerate on macOS, ndarray on Linux).
+    /// Returns one Vec<Hit> per query, sorted best-first.
+    /// Use when batch ≥ 8 and mode == Strict for maximum throughput.
+    pub fn search_batch_blas(&self, queries: &[Vec<f32>], k: usize) -> Vec<Vec<Hit>> {
+        if queries.is_empty() { return vec![]; }
+        let matrix_flat = self.matrix_f32.as_slice().expect("row-major contiguous");
+        let n = self.ids.len();
+        let dim = EMBED_DIM;
+        let q_refs: Vec<&[f32]> = queries.iter().map(|q| q.as_slice()).collect();
+        let raw = search::top_k_batch_gemm(&q_refs, matrix_flat, n, dim, k);
+        raw.into_iter()
+            .map(|row| row.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect())
+            .collect()
+    }
+
     /// T3-binary-only: pure hamming no rerank, recall ≥ 0.92, max throughput.
     pub fn search_binary_only(&self, query_f32: &[f32], k: usize) -> Vec<Hit> {
         debug_assert_eq!(query_f32.len(), EMBED_DIM);
