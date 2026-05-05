@@ -13,9 +13,6 @@ use ndarray::{arr1, Array1, Array2};
 use rusqlite::{params, Connection};
 use std::path::Path;
 
-/// Words per row in the binary matrix (384-dim → 6 u64s).
-const BINARY_WORDS: usize = 6; // ceil(384/64)
-
 /// In-memory vector search using ndarray
 pub struct NdArraySearch {
     /// Pre-normalized vectors [n_vectors, dim]
@@ -36,6 +33,24 @@ impl NdArraySearch {
     pub fn from_sqlite(path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(path)?;
         Self::from_connection(&conn)
+    }
+
+    /// Build from pre-loaded flat f32 data (bulk, O(n) — no per-row realloc).
+    /// `flat` must be row-major, len == n_vectors * dim.
+    pub fn from_vecs(ids: Vec<i64>, flat: Vec<f32>, dim: usize) -> Result<Self> {
+        let n_vectors = ids.len();
+        let matrix = Array2::from_shape_vec((n_vectors, dim), flat)
+            .map_err(|e| Error::Other(format!("ndarray shape: {e}")))?;
+        let mut s = Self {
+            matrix,
+            binary_matrix: Vec::new(),
+            ids,
+            n_vectors,
+            dim,
+        };
+        s.normalize_rows();
+        s.build_binary_matrix();
+        Ok(s)
     }
 
     /// Create an empty index with a fixed dim (used when DB has 0 vectors yet).

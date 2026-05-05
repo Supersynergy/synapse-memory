@@ -9,8 +9,13 @@ name = "inproc_recall"
 path = "src/bin/inproc_recall.rs"
 required-features = ["ann-usearch"]
 
+[[bin]]
+name = "cascade_bench"
+path = "src/bin/cascade_bench.rs"
+
 [dependencies]
 synapse-ann = { path = "../../crates/synapse-ann", features = ["ann-usearch"] }
+synapse-core = { path = "../../crates/synapse-core", features = ["turbo"] }
 usearch = { version = "2.25" }
 
 [features]

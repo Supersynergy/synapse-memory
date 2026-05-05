@@ -97,7 +97,7 @@ fn main() {
 
     eprintln!("Loading corpus...");
     let (n_corpus, dim, corpus_vecs) = load_f32_matrix(&corpus_vecs_path);
-    let _corpus_ids = load_i64_vec(&corpus_ids_path);
+    let corpus_ids = load_i64_vec(&corpus_ids_path);
     eprintln!("  {n_corpus} × {dim}");
 
     eprintln!("Loading queries + GT...");
@@ -137,7 +137,7 @@ fn main() {
 
         for i in 0..n_corpus {
             let v = &corpus_vecs[i * dim..(i + 1) * dim];
-            idx.add(i as u64, v).expect("add");
+            idx.add(corpus_ids[i] as u64, v).expect("add");
         }
         let build_ms = t0.elapsed().as_millis();
         eprintln!("  built in {build_ms}ms");
