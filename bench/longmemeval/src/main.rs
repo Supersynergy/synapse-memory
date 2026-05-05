@@ -106,6 +106,9 @@ struct Args {
     /// 0 disables. Default 20 = re-rank candidate pool, return top-k.
     #[arg(long, default_value_t = 20)]
     rerank_top: usize,
+    /// RRF k constant for fusion (default 60).
+    #[arg(long, default_value_t = 60.0)]
+    rrf_k: f64,
     /// Enable Personalized PageRank (HippoRAG-2) signal in recall fusion.
     #[arg(long, default_value_t = false)]
     ppr: bool,
@@ -232,6 +235,8 @@ fn run_question<H: PipelineHooks>(
     reranker: Option<&dyn synapse_rerank::Reranker>,
     ppr: bool,
     pre_extractor: Option<&dyn synapse_extract::Extractor>,
+    rrf_k: f64,
+    rerank_top: usize,
 ) -> Result<(bool, bool, u128, usize, Vec<String>, Vec<String>)> {
     // Fresh tempfile-backed store per question (Store::open requires a path).
     let tmp = tempfile_path(&q.question_id)?;
@@ -309,7 +314,8 @@ fn run_question<H: PipelineHooks>(
     params.heat = false;
     params.entity_expand = pre_extractor.is_some(); // only meaningful with extracted memories
     params.ppr = ppr && pre_extractor.is_some();    // PPR needs edges
-    params.rerank_top = if reranker.is_some() { 20 } else { 0 };
+    params.rrf_k = rrf_k;
+    params.rerank_top = if reranker.is_some() { rerank_top } else { 0 };
     let mut hits = pipeline_recall(
         &store,
         hooks,
@@ -462,21 +468,21 @@ fn main() -> Result<()> {
         #[cfg(feature = "minimax")]
         let res = if let Some(mh) = minimax_hooks.as_ref() {
             let san = SanHooks { inner: mh };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
         } else if args.use_mlx {
             let san = SanHooks { inner: &mlx_hooks };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
         } else {
             let san = SanHooks { inner: &rule };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
         };
         #[cfg(not(feature = "minimax"))]
         let res = if args.use_mlx {
             let san = SanHooks { inner: &mlx_hooks };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
         } else {
             let san = SanHooks { inner: &rule };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref)
+            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
         };
         match res {
             Ok((r5, r10, ms, nd, top5, top10)) => {

@@ -115,6 +115,8 @@ pub struct RecallParams {
     pub ppr_alpha: f64,
     /// PPR iterations (default 10).
     pub ppr_iters: usize,
+    /// RRF k constant (default 60 per best-practice).
+    pub rrf_k: f64,
 }
 
 impl Default for RecallParams {
@@ -132,6 +134,7 @@ impl Default for RecallParams {
             ppr: false,
             ppr_alpha: 0.5,
             ppr_iters: 10,
+            rrf_k: 60.0,
         }
     }
 }
@@ -695,7 +698,7 @@ impl Store {
         let limit = params.k.max(params.rerank_top);
         let fused = rrf_typed(
             lists,
-            60.0,
+            params.rrf_k,
             move |id| {
                 weight_map
                     .get(&id)
@@ -834,5 +837,129 @@ mod tests {
         enqueue_extraction(&c, 1).unwrap();
         let batch = pop_extraction_batch(&c, 10).unwrap();
         assert_eq!(batch, vec![1]);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Store::recall integration tests
+    // ---------------------------------------------------------------------------
+
+    fn open_store() -> (Store, tempfile::NamedTempFile) {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let s = Store::open(tmp.path()).unwrap();
+        (s, tmp)
+    }
+
+    #[test]
+    fn recall_empty_store_returns_empty() {
+        let (store, _tmp) = open_store();
+        let params = RecallParams {
+            query: "anything".into(),
+            k: 5,
+            ..RecallParams::default()
+        };
+        let hits = store.recall(&params, None).unwrap();
+        assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn recall_fuses_vec_and_fts() {
+        use crate::types::{PutRequest, EMBED_DIM};
+        let (mut store, _tmp) = open_store();
+        let fake_emb = |seed: u8| -> Vec<f32> {
+            (0..EMBED_DIM)
+                .map(|i| ((i as u8).wrapping_mul(seed) as f32) / 255.0)
+                .collect()
+        };
+        let texts = [
+            "rust sqlite fts5 memory recall",
+            "vector embedding search engine",
+            "agent memory typed fact lesson",
+            "rust async tokio runtime",
+            "unrelated document about baking",
+        ];
+        let mut doc_ids = Vec::new();
+        for (i, t) in texts.iter().enumerate() {
+            let id = store
+                .put(&PutRequest {
+                    text: (*t).into(),
+                    embedding: Some(fake_emb(i as u8 + 1)),
+                    ..Default::default()
+                })
+                .unwrap();
+            doc_ids.push(id);
+            put_memory(&store.conn, id, MemoryType::Fact, None, None, 1.0).unwrap();
+        }
+
+        let query_emb = fake_emb(1);
+        let params = RecallParams {
+            query: "memory recall".into(),
+            k: 5,
+            entity_expand: false,
+            heat: false,
+            ..RecallParams::default()
+        };
+        let hits = store.recall(&params, Some(&query_emb)).unwrap();
+        assert!(!hits.is_empty(), "recall must return at least 1 hit");
+        // Scores must be descending.
+        for w in hits.windows(2) {
+            assert!(w[0].hit.score >= w[1].hit.score);
+        }
+    }
+
+    #[test]
+    fn recall_entity_1hop_expands() {
+        use crate::types::{PutRequest, EMBED_DIM};
+        let (mut store, _tmp) = open_store();
+        let fake_emb = |seed: u8| -> Vec<f32> {
+            (0..EMBED_DIM)
+                .map(|i| ((i as u8).wrapping_mul(seed) as f32) / 255.0)
+                .collect()
+        };
+        // Insert two docs: A (target of query) and B (related via edge).
+        let id_a = store
+            .put(&PutRequest {
+                text: "zephyr protocol document alpha".into(),
+                embedding: Some(fake_emb(3)),
+                ..Default::default()
+            })
+            .unwrap();
+        let id_b = store
+            .put(&PutRequest {
+                text: "zephyr protocol document beta unrelated words".into(),
+                embedding: Some(fake_emb(4)),
+                ..Default::default()
+            })
+            .unwrap();
+        let mem_a = put_memory(&store.conn, id_a, MemoryType::Fact, None, None, 1.0).unwrap();
+        let mem_b = put_memory(&store.conn, id_b, MemoryType::Fact, None, None, 1.0).unwrap();
+        // Wire A → B via "about" edge so BFS from A surfaces B.
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        store
+            .conn
+            .execute(
+                "INSERT OR IGNORE INTO memory_edges (src_id, dst_id, edge_type, weight, created_ts)
+                 VALUES (?1, ?2, 'about', 1.0, ?3)",
+                rusqlite::params![mem_a, mem_b, ts],
+            )
+            .unwrap();
+
+        let query_emb = fake_emb(3);
+        let params = RecallParams {
+            query: "zephyr protocol alpha".into(),
+            k: 10,
+            entity_expand: true,
+            max_hops: 1,
+            heat: false,
+            ppr: false,
+            ..RecallParams::default()
+        };
+        let hits = store.recall(&params, Some(&query_emb)).unwrap();
+        // Both doc_a and doc_b should surface (direct hit + 1-hop).
+        let ids: Vec<i64> = hits.iter().map(|h| h.hit.id).collect();
+        assert!(ids.contains(&id_a), "doc_a must be in results");
+        assert!(ids.contains(&id_b), "doc_b must surface via 1-hop expansion");
     }
 }
