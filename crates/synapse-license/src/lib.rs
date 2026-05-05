@@ -56,11 +56,11 @@ static CACHE_PATH_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 #[doc(hidden)]
 pub fn _set_cache_path_for_test(p: Option<PathBuf>) {
-    *CACHE_PATH_OVERRIDE.write().unwrap() = p;
+    *CACHE_PATH_OVERRIDE.write().unwrap_or_else(|e| e.into_inner()) = p;
 }
 
 fn cache_path() -> PathBuf {
-    if let Some(p) = CACHE_PATH_OVERRIDE.read().unwrap().clone() {
+    if let Some(p) = CACHE_PATH_OVERRIDE.read().unwrap_or_else(|e| e.into_inner()).clone() {
         return p;
     }
     dirs::config_dir()
@@ -377,7 +377,7 @@ mod tests {
 
     #[test]
     fn valid_license_verifies() {
-        let _g = TEST_LOCK.lock().unwrap();
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = setup("hw-A");
         let kp = make_keypair();
         let exp = (Utc::now().timestamp() as u64) + 86400 * 365;
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn tampered_jwt_rejected() {
-        let _g = TEST_LOCK.lock().unwrap();
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = setup("hw-A");
         let kp = make_keypair();
         let exp = (Utc::now().timestamp() as u64) + 86400 * 365;
@@ -416,7 +416,7 @@ mod tests {
     /// Tampered cache bytes → decrypt fails → grace denied → fail closed.
     #[test]
     fn tampered_cache_grace_fails_closed() {
-        let _g = TEST_LOCK.lock().unwrap();
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = setup("hw-A");
         let kp = make_keypair();
 
@@ -445,7 +445,7 @@ mod tests {
     /// cache intact, jwt sig still valid → success.
     #[test]
     fn legitimate_offline_grace_works() {
-        let _g = TEST_LOCK.lock().unwrap();
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _d = setup("hw-A");
         let kp = make_keypair();
 
@@ -477,7 +477,7 @@ mod tests {
     /// Cross-machine replay: copy a valid cache to a different hw_fp → grace fails.
     #[test]
     fn cross_machine_replay_fails() {
-        let _g = TEST_LOCK.lock().unwrap();
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Step 1: machine A seeds cache with jwt bound to hw-A.
         let dir_a = setup("hw-A");
         let kp = make_keypair();
