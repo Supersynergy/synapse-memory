@@ -1,18 +1,20 @@
 # Synapse
 
-**First local-first audit-grade agent memory in a single Rust binary.**
+**Recall-King for in-process Rust ANN at iso-recall ≥0.98 on Apple Silicon — 19k QPS @ R@10=0.982 on 168k corpus, single-binary, no daemon required.**
 
-No external services. No cloud dependency. Ed25519-signed docs. CRDT merge. SQLite-embedded.
+Local-first, audit-grade agent memory. No external services. No cloud dependency. Ed25519-signed docs. CRDT merge. SQLite-embedded.
 
 ## Verified Killer Features
 
-1. **FTS query p50 = 0.051 ms** — faster than ChromaDB (7.7×) at full-text recall
-2. **2.9× faster insert** than ChromaDB (Python adapter path: 4 760 ops/s)
-3. **Storage overhead 0.9×** — smaller than raw sqlite-vec baseline
-4. **Ed25519 signatures** — every doc verifiable, tamper-evident audit trail
-5. **CRDT merge** — offline-first, conflict-free peer sync via brainpack snapshots
+1. **19k aggregate QPS @ R@10=0.982** — HNSW in-proc, 168k corpus, 12-core M4 Max (1,631 QPS single-core measured)
+2. **Unified vec+FTS+filter** — single query, zero inter-process overhead; usearch/Qdrant require separate hops
+3. **Agent Memory: 77× faster** than ChromaDB at same recall (LongMemEval-S, 0.03ms p50 vs 2.3ms)
+4. **RAG parity with Dense BERT** — nDCG@10=0.720 on BEIR SciFact via FTS5+Vec RRF
+5. **Ed25519 signatures** — every doc verifiable, tamper-evident audit trail
+6. **CRDT merge** — offline-first, conflict-free peer sync via brainpack snapshots
 
-See [RESULTS.md](RESULTS.md) for full bench data.
+See [RESULTS-WORLDBEST-2026-05-05.md](RESULTS-WORLDBEST-2026-05-05.md) for today's full v1.2 bench results.  
+See [RESULTS.md](RESULTS.md) for historical bench data.
 
 ## Install
 
