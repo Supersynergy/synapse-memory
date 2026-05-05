@@ -16,16 +16,22 @@ use std::sync::Arc;
 
 const EMB_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("emb_cache_v1");
 
-/// Number of ONNX sessions in the global pool.
-pub const POOL_SIZE: usize = 2;
+/// Returns number of ONNX sessions: half of logical cores, min 2.
+/// On M4 Max (12 cores) → 6 sessions. Replaces old `POOL_SIZE = 2`.
+fn get_pool_size() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| (n.get() / 2).max(2))
+        .unwrap_or(4)
+}
 
 /// Global pool of pre-warmed TextEmbedding sessions.
 static SESSION_POOL: OnceCell<Mutex<Vec<TextEmbedding>>> = OnceCell::new();
 
 fn get_or_init_pool() -> Result<&'static Mutex<Vec<TextEmbedding>>> {
     SESSION_POOL.get_or_try_init(|| {
-        let mut sessions = Vec::with_capacity(POOL_SIZE);
-        for _ in 0..POOL_SIZE {
+        let pool_size = get_pool_size();
+        let mut sessions = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
             let m = TextEmbedding::try_new(
                 InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(false),
             )
@@ -80,15 +86,18 @@ impl Embedder {
 
     fn embed_raw(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
         let pool = get_or_init_pool()?;
-        let mut guard = pool.lock();
-        // Round-robin: pop last session, embed, push back.
-        let mut session = guard
-            .pop()
-            .ok_or_else(|| Error::Other("pool empty".into()))?;
+        // Acquire lock only to pop — drop guard before ONNX inference (~5-15ms).
+        let mut session = {
+            let mut guard = pool.lock();
+            guard
+                .pop()
+                .ok_or_else(|| Error::Other("pool empty".into()))?
+        };
         let result = session
             .embed(texts, None)
             .map_err(|e| Error::Other(format!("embed: {e}")));
-        guard.push(session);
+        // Re-acquire to push back.
+        pool.lock().push(session);
         result
     }
 
