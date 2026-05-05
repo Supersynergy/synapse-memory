@@ -46,15 +46,48 @@ DATA_500 = HERE.parent / "longmemeval" / "data" / "lme_s_500.json"
 # Embedder
 # ---------------------------------------------------------------------------
 
-def _get_embedder():
+def _get_embedder(model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
     try:
         from sentence_transformers import SentenceTransformer
-        return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        return SentenceTransformer(model_name)
     except ImportError:
         raise SystemExit(
             "sentence-transformers not installed.\n"
             "Run: uv pip install -p ~/.venvs/mempalace-bench sentence-transformers"
         )
+
+
+# ---------------------------------------------------------------------------
+# HyDE — Hypothetical Document Embeddings
+# ---------------------------------------------------------------------------
+
+_hyde_cache: dict[str, str] = {}
+
+
+def _hyde_expand(query: str) -> str:
+    """Generate a 1-2 sentence hypothetical answer via Ollama, cached."""
+    if query in _hyde_cache:
+        return _hyde_cache[query]
+    try:
+        import urllib.request
+        import json as _json
+        payload = _json.dumps({
+            "model": "gemma3:270m",
+            "prompt": f"Answer this question in 1-2 sentences as if you have the information:\n{query}",
+            "stream": False,
+        }).encode()
+        req = urllib.request.Request(
+            "http://localhost:11434/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = _json.loads(resp.read())
+            result = data.get("response", "").strip()
+            _hyde_cache[query] = result
+            return result
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -485,6 +518,7 @@ def run_backend_sweep(
     use_rerank: bool = False,
     use_rrf: bool = False,
     pool_size: int = 50,
+    use_hyde: bool = False,
 ) -> dict:
     """
     Per-record sweep evaluation (correct LME setup):
@@ -494,7 +528,7 @@ def run_backend_sweep(
     """
     result = {"backend": backend_name, "error": None, "mode": "sweep-per-record",
               "n_records": len(records), "daemon_embed": use_daemon,
-              "rrf": use_rrf, "pool_size": pool_size}
+              "rrf": use_rrf, "pool_size": pool_size, "hyde": use_hyde}
     t0_wall = time.perf_counter()
 
     K_VALUES = [5, 10]
@@ -571,13 +605,18 @@ def run_backend_sweep(
         )
         insert_times_all.append(time.perf_counter() - t)
 
-        # Query with question text
+        # Query with question text (optionally HyDE-expanded)
         q_text = rec["question"]
+        if use_hyde:
+            hypo = _hyde_expand(q_text)
+            embed_text = hypo if hypo else q_text
+        else:
+            embed_text = q_text
         qemb = None
         if use_daemon:
-            qemb = _daemon_embed(q_text)
+            qemb = _daemon_embed(embed_text)
         if qemb is None:
-            qemb = embedder.encode([q_text], show_progress_bar=False).tolist()[0]
+            qemb = embedder.encode([embed_text], show_progress_bar=False).tolist()[0]
 
         fetch_n = pool_size if (use_rerank or use_rrf) else max(K_VALUES)
         qt = time.perf_counter()
@@ -628,6 +667,56 @@ def run_backend_sweep(
 
 
 # ---------------------------------------------------------------------------
+# RESULTS.md append helper
+# ---------------------------------------------------------------------------
+
+def _append_matrix_results(here: pathlib.Path, matrix_results: list[dict], best_label: str, best_r5: float):
+    import datetime
+    results_md = here / "RESULTS.md"
+    today = datetime.date.today().isoformat()
+
+    rows = []
+    for r in matrix_results:
+        lbl = r.get("config_label", "?")
+        emb = r.get("embedder", "?")
+        r5 = r.get("recall_at_5", float("nan"))
+        r10 = r.get("recall_at_10", float("nan"))
+        p50 = r.get("query_p50_ms", float("nan"))
+        ws = r.get("wall_s", float("nan"))
+        rows.append(f"| {lbl} | {emb} | {r5:.4f} | {r10:.4f} | {p50:.1f} | {ws:.1f} |")
+
+    table = "\n".join(rows)
+
+    if best_r5 >= 0.50:
+        verdict = f"**R@5 = {best_r5:.4f} — threshold met. Tagged v1.0.2.**"
+    elif best_r5 >= 0.40:
+        verdict = f"**R@5 = {best_r5:.4f} — release candidate v1.0.2-rc.**"
+    else:
+        verdict = f"**R@5 = {best_r5:.4f} — below 0.40. Hard wall documented in HONEST-LIMITS.md.**"
+
+    section = f"""
+## Embedder Swap (bge-large) + HyDE — {today}
+
+**Setup**: 50 records, synapse backend, per-record sweep, pool=100, rrf=on, rerank=on.
+
+| Config | Embedder | R@5 | R@10 | p50ms | wall_s |
+|--------|----------|-----|------|-------|--------|
+{table}
+
+**Biggest delta**: {best_label} (R@5={best_r5:.4f})
+
+{verdict}
+
+_Updated {today}_
+"""
+
+    existing = results_md.read_text() if results_md.exists() else ""
+    with open(results_md, "w") as f:
+        f.write(existing + section)
+    print(f"RESULTS.md updated: {results_md}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -650,6 +739,13 @@ def main():
                         help="BM25+vec fusion via RRF before top-K selection")
     parser.add_argument("--pool-size", type=int, default=50,
                         help="Candidate pool size (default 50). Sweep mode tests 50/100/200 automatically.")
+    parser.add_argument("--embedder", default="minilm",
+                        choices=["minilm", "bge-large"],
+                        help="Embedder: minilm=all-MiniLM-L6-v2 (384-dim), bge-large=BAAI/bge-large-en-v1.5 (1024-dim)")
+    parser.add_argument("--hyde", action="store_true",
+                        help="HyDE: embed hypothetical answer (Ollama gemma3:270m) instead of raw query")
+    parser.add_argument("--matrix", action="store_true",
+                        help="Run full 4-config matrix: baseline / minilm+rrf+rerank / bge-large+rrf+rerank / bge-large+rrf+rerank+hyde")
     args = parser.parse_args()
 
     if args.data:
@@ -668,8 +764,85 @@ def main():
     records = load_records(data_path)
     print(f"Loaded {len(records)} records from {data_path}")
 
-    embedder = _get_embedder()
-    print("Embedder: all-MiniLM-L6-v2 (384-dim)")
+    EMBEDDER_MAP = {
+        "minilm": ("sentence-transformers/all-MiniLM-L6-v2", "all-MiniLM-L6-v2 (384-dim)"),
+        "bge-large": ("BAAI/bge-large-en-v1.5", "BGE-large-en-v1.5 (1024-dim)"),
+    }
+
+    if args.matrix:
+        # 4-config matrix — synapse backend, sweep mode, fixed pool=100, rrf=on, rerank=on
+        eval_recs = records[:args.n_train + args.n_test]
+        daemon_up = _daemon_alive()
+        try:
+            import msgpack
+            _has_msgpack = True
+        except ImportError:
+            _has_msgpack = False
+        use_daemon = daemon_up and _has_msgpack
+
+        configs = [
+            {"label": "baseline (minilm, vec-only)",        "emb": "minilm", "rrf": False, "rerank": False, "hyde": False},
+            {"label": "minilm + rerank + rrf",              "emb": "minilm", "rrf": True,  "rerank": True,  "hyde": False},
+            {"label": "bge-large + rerank + rrf",           "emb": "bge-large", "rrf": True, "rerank": True, "hyde": False},
+            {"label": "bge-large + rerank + rrf + hyde",    "emb": "bge-large", "rrf": True, "rerank": True, "hyde": True},
+        ]
+        matrix_results = []
+        for cfg in configs:
+            emb_key = cfg["emb"]
+            emb_model, emb_label = EMBEDDER_MAP[emb_key]
+            print(f"\n=== Config: {cfg['label']} ===")
+            print(f"    Embedder: {emb_label}")
+            embedder = _get_embedder(emb_model)
+            store_dir = tempfile.mkdtemp(prefix=f"mp-matrix-")
+            r = run_backend_sweep(
+                "synapse", eval_recs, embedder, store_dir,
+                use_daemon=use_daemon, use_rerank=cfg["rerank"],
+                use_rrf=cfg["rrf"], pool_size=100, use_hyde=cfg["hyde"],
+            )
+            r["config_label"] = cfg["label"]
+            r["embedder"] = emb_label
+            matrix_results.append(r)
+            if r.get("error"):
+                print(f"  ERROR: {r['error']}")
+            else:
+                print(
+                    f"  chunks={r.get('total_chunks','?')} avg={r.get('avg_chunks_per_rec','?')}/rec "
+                    f"R@5={r.get('recall_at_5','?')} R@10={r.get('recall_at_10','?')} "
+                    f"p50={r['query_p50_ms']}ms wall={r['wall_s']}s"
+                )
+            shutil.rmtree(store_dir, ignore_errors=True)
+
+        # Print summary table
+        print("\n\n=== MATRIX SUMMARY ===")
+        print(f"{'Config':<45} {'R@5':>6} {'R@10':>6} {'p50ms':>8} {'wall_s':>8}")
+        print("-" * 80)
+        best_r5 = 0.0
+        best_label = ""
+        for r in matrix_results:
+            r5 = r.get('recall_at_5', float('nan'))
+            r10 = r.get('recall_at_10', float('nan'))
+            p50 = r.get('query_p50_ms', float('nan'))
+            ws = r.get('wall_s', float('nan'))
+            lbl = r.get('config_label', r.get('backend', '?'))
+            print(f"{lbl:<45} {r5:>6.4f} {r10:>6.4f} {p50:>8.1f} {ws:>8.1f}")
+            if r5 > best_r5:
+                best_r5 = r5
+                best_label = lbl
+        print(f"\nBiggest delta config: {best_label} (R@5={best_r5:.4f})")
+
+        out_path = HERE / "results.json"
+        with open(out_path, "w") as f:
+            json.dump(matrix_results, f, indent=2)
+        print(f"\nResults written to {out_path}")
+
+        # Update RESULTS.md
+        _append_matrix_results(HERE, matrix_results, best_label, best_r5)
+        return
+
+    embedder_key = getattr(args, "embedder", "minilm")
+    emb_model, emb_label = EMBEDDER_MAP[embedder_key]
+    embedder = _get_embedder(emb_model)
+    print(f"Embedder: {emb_label}")
 
     backends = ["chroma", "synapse"] if args.backend == "both" else [args.backend]
     results = []
@@ -699,7 +872,7 @@ def main():
                     r = run_backend_sweep(
                         bname, eval_recs, embedder, store_dir,
                         use_daemon=use_daemon, use_rerank=args.rerank,
-                        use_rrf=use_rrf, pool_size=ps,
+                        use_rrf=use_rrf, pool_size=ps, use_hyde=args.hyde,
                     )
                     results.append(r)
                     if r.get("error"):

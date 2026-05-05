@@ -17,6 +17,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
+use parking_lot::Mutex as PlMutex;
 use tracing::{error, info, warn};
 
 /// Idle timeout between requests on a kept-alive socket. Prevents fd leaks
@@ -59,7 +60,7 @@ struct Cli {
 }
 
 struct State {
-    store: Mutex<Store>,
+    store: PlMutex<Store>,
     embedder: Mutex<Option<Box<dyn TextEmbedder>>>,
     reranker: Box<dyn Reranker>,
     db_path: PathBuf,
@@ -200,7 +201,7 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(&snap_dir).ok();
     let reranker: Box<dyn Reranker> = build_reranker(&cli.rerank_model);
     let state = Arc::new(State {
-        store: Mutex::new(store),
+        store: PlMutex::new(store),
         embedder: Mutex::new(embedder),
         reranker,
         db_path: cli.file.clone(),
@@ -307,7 +308,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(e) => Response::Err(e.to_string()),
             }
         }
-        Request::Stats => match state.store.lock().await.stats() {
+        Request::Stats => match { state.store.lock().stats() } {
             Ok(s) => {
                 metrics::set_doc_count(s.docs);
                 Response::Stats {
@@ -334,12 +335,12 @@ async fn dispatch(state: &State, req: Request) -> Response {
         Request::Merge {
             id,
             state: crdt_state,
-        } => match state.store.lock().await.merge_crdt(id, &crdt_state) {
+        } => match { state.store.lock().merge_crdt(id, &crdt_state) } {
             Ok(()) => Response::Ok,
             Err(e) => Response::Err(e.to_string()),
         },
         Request::Timeline { limit, offset } => {
-            match state.store.lock().await.timeline(limit, offset) {
+            match { state.store.lock().timeline(limit, offset) } {
                 Ok(docs) => Response::Docs(docs),
                 Err(e) => Response::Err(e.to_string()),
             }
@@ -351,7 +352,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Ok(arr) => match ed25519_dalek::VerifyingKey::from_bytes(&arr) {
                     Err(e) => Response::Err(e.to_string()),
                     Ok(verifying_key) => {
-                        match state.store.lock().await.verify(id, &verifying_key) {
+                        match { state.store.lock().verify(id, &verifying_key) } {
                             Ok(()) => Response::Ok,
                             Err(e) => Response::Err(e.to_string()),
                         }
@@ -376,8 +377,11 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
         }
         Request::SearchVec { embedding, limit } => {
-            let store = state.store.lock().await;
-            match store.search("", SearchMode::Vec, Some(&embedding), limit) {
+            let result = tokio::task::block_in_place(|| {
+                let store = state.store.lock();
+                store.search("", SearchMode::Vec, Some(&embedding), limit)
+            });
+            match result {
                 Ok(hits) => Response::Hits(hits),
                 Err(e) => Response::Err(e.to_string()),
             }
@@ -434,8 +438,10 @@ async fn put_one(state: &State, p: PutReq) -> Result<i64> {
     };
     let mut req: PutRequest = p.into();
     req.embedding = embedding;
-    let mut store = state.store.lock().await;
-    Ok(store.put(&req)?)
+    tokio::task::block_in_place(|| {
+        let mut store = state.store.lock();
+        Ok(store.put(&req)?)
+    })
 }
 
 async fn put_batch(state: &State, batch: Vec<PutReq>) -> Result<Vec<i64>> {
@@ -471,8 +477,10 @@ async fn put_batch(state: &State, batch: Vec<PutReq>) -> Result<Vec<i64>> {
             r
         })
         .collect();
-    let mut store = state.store.lock().await;
-    Ok(store.put_batch(&reqs)?)
+    tokio::task::block_in_place(|| {
+        let mut store = state.store.lock();
+        Ok(store.put_batch(&reqs)?)
+    })
 }
 
 async fn search(
@@ -491,13 +499,21 @@ async fn search(
         None
     };
     let t0 = std::time::Instant::now();
-    let store = state.store.lock().await;
-    let hits = store.search(q, mode, emb.as_deref(), limit)?;
-    let latency_us = t0.elapsed().as_micros() as u64;
-    let hit_count = hits.len();
-    let top_score = hits.first().map(|h| h.score).unwrap_or(0.0);
-    if let Err(e) = store.log_query(q, mode, latency_us, hit_count, top_score) {
+    let q_owned = q.to_owned();
+    let emb_owned = emb;
+    let (hits, latency_us, hit_count, top_score, log_err) =
+        tokio::task::block_in_place(|| {
+            let store = state.store.lock();
+            let h = store.search(&q_owned, mode, emb_owned.as_deref(), limit)?;
+            let lat = t0.elapsed().as_micros() as u64;
+            let cnt = h.len();
+            let top = h.first().map(|x| x.score).unwrap_or(0.0);
+            let lerr = store.log_query(&q_owned, mode, lat, cnt, top).err();
+            Ok::<_, synapse_core::Error>((h, lat, cnt, top, lerr))
+        })?;
+    if let Some(e) = log_err {
         warn!("query_log insert failed (non-fatal): {e}");
     }
+    let _ = (latency_us, hit_count, top_score);
     Ok(hits)
 }

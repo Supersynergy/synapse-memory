@@ -23,6 +23,10 @@ members = [
     "crates/synapse-space",
     # Criterion bench: synapse-space insert+query vs ChromaDB
     "bench/space-vs-chroma",
+    # In-process ANN recall sweep (no HTTP overhead)
+    "bench/industry",
+    # High-throughput 4-tier vector search daemon (HNSW via usearch)
+    "synapsestore/crates/synapse-ultra",
 ]
 
 [workspace.package]

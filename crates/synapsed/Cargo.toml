@@ -17,7 +17,7 @@ rmp-serde.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-synapse-core = { path = "../synapse-core", features = ["embed", "turbo"] }
+synapse-core = { path = "../synapse-core", features = ["embed", "turbo", "ann-usearch"] }
 synapse-rerank = { path = "../synapse-rerank", features = [] }
 synapse-license = { path = "../synapse-license", optional = true }
 hex = { version = "0.4", optional = true }
@@ -26,6 +26,7 @@ ed25519-dalek.workspace = true
 axum.workspace = true
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
+parking_lot.workspace = true
 
 [features]
 default = ["embed-mlx"]

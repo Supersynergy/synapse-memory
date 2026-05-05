@@ -794,7 +794,14 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 let guard = self.ndarray_search.read().unwrap();
                 if let Some(ref idx) = *guard {
                     if !idx.is_empty() {
-                        let pairs = idx.search(emb, limit);
+                        // Binary cascade: Hamming pre-filter 164k→4096, then f32 rerank.
+                        // Falls back to full search when corpus < 4096 (binary_k clamped).
+                        let binary_k = (idx.len() / 4).max(limit * 16).min(idx.len());
+                        let pairs = if binary_k < idx.len() {
+                            idx.search_cascade(emb, limit, binary_k)
+                        } else {
+                            idx.search(emb, limit)
+                        };
                         if !pairs.is_empty() {
                             return self.hydrate_hits_by_id_dist(&pairs);
                         }
@@ -831,7 +838,12 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 }
                 if let Some(ref idx) = *guard {
                     if !idx.is_empty() {
-                        let pairs = idx.search(emb, limit);
+                        let binary_k = (idx.len() / 4).max(limit * 16).min(idx.len());
+                        let pairs = if binary_k < idx.len() {
+                            idx.search_cascade(emb, limit, binary_k)
+                        } else {
+                            idx.search(emb, limit)
+                        };
                         drop(guard);
                         if !pairs.is_empty() {
                             return self.hydrate_hits_by_id_dist(&pairs);

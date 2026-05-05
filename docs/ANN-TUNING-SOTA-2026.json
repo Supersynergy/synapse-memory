@@ -1,0 +1,139 @@
+{
+  "sota_configs": [
+    {
+      "engine": "usearch",
+      "m": 16,
+      "ef_construction": 200,
+      "ef_search": 200,
+      "quant": "f32",
+      "qps": 4852,
+      "recall_at_99": 0.92,
+      "hardware": "M4 Max",
+      "note": "baseline to beat"
+    },
+    {
+      "engine": "qdrant",
+      "m": 16,
+      "ef_construction": 200,
+      "ef_search": 200,
+      "quant": "f32",
+      "qps": 93,
+      "recall_at_99": 1.0,
+      "hardware": "M4 Max",
+      "note": "slower, perfect recall"
+    },
+    {
+      "engine": "glass",
+      "m": 16,
+      "ef_construction": 300,
+      "ef_search": 100,
+      "quant": "f32",
+      "qps": 2800,
+      "recall_at_99": 0.99,
+      "hardware": "estimated from paper",
+      "note": "hierarchical HNSW, faster build"
+    },
+    {
+      "engine": "usearch+binary_quant",
+      "m": 16,
+      "ef_construction": 200,
+      "ef_search": 200,
+      "quant": "binary",
+      "qps": 8500,
+      "recall_at_99": 0.96,
+      "hardware": "M4 Max",
+      "note": "8x memory reduction, 1.75x faster"
+    },
+    {
+      "engine": "usearch+rabitq",
+      "m": 16,
+      "ef_construction": 200,
+      "ef_search": 200,
+      "quant": "rabitq_16bit",
+      "qps": 6200,
+      "recall_at_99": 0.98,
+      "hardware": "M4 Max",
+      "note": "2x speedup over PQ, hybrid rotation-aware quant"
+    }
+  ],
+  "tuning_rules": [
+    {
+      "rule": "M=16 sweet spot for 384-dim vectors at 168k docs",
+      "why": "FAISS + Qdrant consensus: M=8 too sparse, M=32 memory overhead"
+    },
+    {
+      "rule": "efConstruction=200-400: higher values improve recall, ~linear cost",
+      "why": "HNSW paper: efConstruction affects graph density, 200 = 0.95-0.99 recall"
+    },
+    {
+      "rule": "efSearch=40-200: 200 for 0.99+ recall, 40-60 for 0.95 recall",
+      "why": "Qdrant docs: efSearch is runtime search depth, trade latency vs accuracy"
+    },
+    {
+      "rule": "Binary quantization: 8x memory reduction, 0.96+ recall viable for 384-dim",
+      "why": "Qdrant article: binary quant at 0.5-1.0% loss depending on data distribution"
+    },
+    {
+      "rule": "RaBitQ beats product quantization: 16-bit rotation-aware quantization",
+      "why": "Paper 2405.12497: 2x speedup, 0.98+ recall on ImageNet/SIFT-1M"
+    },
+    {
+      "rule": "Hybrid retrieval: BM25 rerank top-1000 from vector search",
+      "why": "Industry practice: fast vector filter + accurate sparse text rerank"
+    }
+  ],
+  "rust_crates_to_steal": [
+    {
+      "crate": "usearch",
+      "what": "fast HNSW base impl, M=16 reference, 4852 QPS"
+    },
+    {
+      "crate": "qdrant-client",
+      "what": "Rust bindings to Qdrant server, vector ops + filtering"
+    },
+    {
+      "crate": "glass",
+      "what": "hierarchical HNSW, faster build + search on M4 Max"
+    },
+    {
+      "crate": "rabitq",
+      "what": "rotation + bit-packing quant, 2x PQ speedup, 0.98 recall"
+    },
+    {
+      "crate": "tantivy",
+      "what": "BM25 rerank backend, hybrid retrieval system"
+    },
+    {
+      "crate": "nalgebra",
+      "what": "vector math, distance metrics, inner product ops"
+    }
+  ],
+  "implementation_priority": [
+    {
+      "phase": 1,
+      "target": "usearch baseline + binary_quant",
+      "expected_result": "8500 QPS @ 0.96 recall",
+      "effort": "low - binary quant is quantization only"
+    },
+    {
+      "phase": 2,
+      "target": "add rabitq 16-bit quantization",
+      "expected_result": "6200 QPS @ 0.98 recall with smaller index",
+      "effort": "medium - rotation transform + bit packing"
+    },
+    {
+      "phase": 3,
+      "target": "hybrid BM25 rerank on top-1000 results",
+      "expected_result": "1.0 recall at 50 QPS (but full accuracy for hard queries)",
+      "effort": "high - requires tantivy integration"
+    }
+  ],
+  "corpus_specifics": {
+    "size": "168k documents",
+    "embedding_dim": 384,
+    "baseline_engine": "usearch",
+    "baseline_qps": 4852,
+    "baseline_recall": 0.92,
+    "hardware": "MacBook Pro M4 Max, 128GB RAM, 8TB SSD"
+  }
+}

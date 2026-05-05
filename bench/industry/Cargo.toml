@@ -1,0 +1,17 @@
+[package]
+name = "synapse-industry-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "inproc_recall"
+path = "src/bin/inproc_recall.rs"
+required-features = ["ann-usearch"]
+
+[dependencies]
+synapse-ann = { path = "../../crates/synapse-ann", features = ["ann-usearch"] }
+usearch = { version = "2.25" }
+
+[features]
+ann-usearch = ["synapse-ann/ann-usearch"]
