@@ -1,5 +1,7 @@
 # MASTERPLAN V2 — Synapse als weltweit größter Database-Gamechanger
 
+> **KNOWN-ISSUES**: See [CORRECTIVE-ACTION-PLAN-2026-04-25.md](CORRECTIVE-ACTION-PLAN-2026-04-25.md) for overclaimed-numbers log and Day-13 corrections applied to this document.
+
 Date: 2026-04-25
 Author: Claude Code (ultrathink synthesis on top of v1)
 Source: 6 verified screenshots + repo @ commit 3b642b3 + ghgrep cross-checks against databend/greptimedb/cockroach/pathway/garage/refact/ironclaw
@@ -8,7 +10,7 @@ Source: 6 verified screenshots + repo @ commit 3b642b3 + ghgrep cross-checks aga
 
 ## EXECUTIVE SUMMARY (90 sec read)
 
-Synapse heute = weltbeste embedded vector-DB (0.28ms p95 @ 1M, recall 1.000, 26MB binary).
+Synapse heute = weltbeste embedded vector-DB (0.28ms p95 @ 1M, recall 1.000 dense / ≥0.95 quantized int8/binary, 26MB binary).
 Synapse in 90 Tagen = **weltbeste embedded SQL+Vector+FTS-DB** mit Mehrfach-Wire-Compat (MySQL+Postgres), 200k+ OPS @ 8 threads, drop-in WordPress backend, auto-replicated edge, AI-native built-ins.
 
 **Gamechanger-These:** Synapse positioniert sich NICHT als "MySQL but Rust". Sondern als **erste Generation AI-Native Embedded DB** — eine neue Kategorie. SQL+Vec+FTS+KG+Sign+CRDT+Replikation in einer einzigen 26MB Rust-Binary. Niemand kombiniert das. Niemand. Das ist der Burggraben.
@@ -75,7 +77,7 @@ Synapse in 90 Tagen = **weltbeste embedded SQL+Vector+FTS-DB** mit Mehrfach-Wire
 ### Welche Positionen Synapse alleine besetzt:
 1. **SQL + Vec + FTS in einer Binary** (alle anderen brauchen 2-4 Services)
 2. **MySQL + Postgres Wire gleichzeitig** (außer SaaS wie Cockroach)
-3. **Library-Mode 5µs reads** (kein anderes SQL DB hat das)
+3. **Library-mode <50µs reads at 100k+ docs** (daemon mode wins below 100k due to WAL+mmap warm cache)
 4. **Single .brainpack export** (signiert, CRDT-merged) — DoltDB ähnelt, aber kein vec
 5. **AI-Features as Built-Ins** — semantic search, related posts, embedding cache
 6. **DSGVO-default** (keine US data transfer, alle local) — Algolia/Pinecone-Killer
@@ -92,7 +94,7 @@ Synapse in 90 Tagen = **weltbeste embedded SQL+Vector+FTS-DB** mit Mehrfach-Wire
 - **Algolia tax:** $500/mo for 100k records (nur Search!)
 
 ### Synapse-WP Killer-Features (über drop-in MySQL hinaus):
-1. **Dedicated wp_options autoload Pfad** — Spalte `autoload` indexiert + cached, 100× schneller
+1. **Dedicated wp_options autoload Pfad** — Spalte `autoload` indexiert + cached (5-10× schneller WP overall; 30-100× WP search-only bei 50k+ posts)
 2. **Auto-related-posts** via vec similarity — kein YARPP plugin mehr nötig
 3. **Semantic search** ersetzt WP core search — `[synapse_search]` shortcode
 4. **WooCommerce semantic product** — "Sommerschuhe unter 50€" funktioniert
@@ -153,7 +155,7 @@ Apply to:
 **Deliverable:** hybrid p50 2ms → **0.3-0.5ms** at 137k
 
 ### Phase 4 — Days 43-56: WordPress Drop-in + WP-Bench
-**Ziel: 100× schneller als vanilla WP+MariaDB auf shared host**
+**Ziel: 5-10× schneller als vanilla WP+MariaDB gesamt; 30-100× bei Search-only bei 50k+ posts (50× LIKE→FTS5 + 8× FTS5→semantic + 1.2× Synapse overhead ≈ 480× compounded; bei <1k posts gewinnt vanilla LIKE)**
 
 - synapse-wp 0.2 mit synapse-mysql v6 backend
 - Dedicated wp_options autoload Pfad mit zstd-3 Wert-Kompression
@@ -200,7 +202,6 @@ HN/Reddit/Twitter launch.
 - npm `@synapse/sdk` v1.0 + `@synapse/wp-php` (PHP composer package)
 - Docker `supersynergy/synapsed:1.0` Hub
 - Helm chart for K8s
-- Cloudflare Worker WASM port (synapse-wasm)
 - Synapse Cloud (managed) on Fly.io
 - 10 paying design-partners @ €29-99/mo
 - WP Migration tool (mysqldump → synapse import)
@@ -217,7 +218,7 @@ HN/Reddit/Twitter launch.
 | 4 | Hybrid p50 @ 137k | 2.0ms | **0.3ms** | SimSIMD RRF + L3 cache |
 | 5 | Embed batch | 30/s | **2000/s** | MLX Metal backend live |
 | 6 | Cold start | 100ms | **<10ms** | mmap sidecar + lazy embedder |
-| 7 | Recall@10 | 1.000 🥇 | hold | binary + matry combo |
+| 7 | Recall@10 | 1.000 dense / ≥0.95 quant 🥇 | hold | binary + matry combo |
 | 8 | Write-mix 8t | 47k | **150k** | libsql + write-batch |
 | 9 | RAM @ 1M docs | 350MB | **80MB** | int8 quant + PQ |
 | 10 | TPC-C tps | n/a | **5k+** | BenchBase 4-conn run |
@@ -227,7 +228,7 @@ HN/Reddit/Twitter launch.
 ## 7. WHERE SYNAPSE IS WORLD-BEST NOW (verified screenshots, recap)
 
 ### Embedded vector DB recall@latency
-- **0.28ms p95 @ 1M docs, recall 1.000** — kein Konkurrent kombiniert das
+- **0.28ms p95 @ 1M docs, recall 1.000 dense / ≥0.95 quantized (int8/binary)** — kein Konkurrent kombiniert das
 - 970× faster than sqlite-vec @ 1M
 - 6164× faster than SurrealDB
 
@@ -340,7 +341,7 @@ Apply in `db.rs` search_hybrid → 4-20× speedup per call.
 71. Prometheus ✅ 72. Health 🎯 73. Graceful ✅ 74. Reload 🎯 75. Multi-tenant 🎯 76. Budget 🎯 77. Slow-log 🎯 78. OTLP 🎯 79. Trace 🎯 80. Circuit-break 🎯
 
 ### DX (10) — 9/10 today (strongest!)
-81. CLI ✅ 82. Lib mode ✅🥇 83. WASM 🎯 84. iOS/Android 🎯 85. Python ✅ 86. Node ✅ 87. PHP ✅ 88. Docs 🎯 89. Errors ✅ 90. Migration tool 🎯
+81. CLI ✅ 82. Lib mode ✅🥇 83. WASM 🔲(not shipped) 84. iOS/Android 🔲(not shipped) 85. Python ✅ 86. Node ✅ 87. PHP ✅ 88. Docs 🎯 89. Errors ✅ 90. Migration tool 🎯
 
 ### Scale (10) — 4/10 today, 9/10 target
 91. 1M @ 295MB ✅ 92. 100M (PQ) 🎯 93. 1B 🎯 94. Federation ✅ 95. Sharding 🎯 96. Hot/cold 🎯 97. Edge ✅ libSQL 🎯 98. Replicas 🎯 99. Quorum 🎯 100. RPO 🎯
@@ -356,7 +357,7 @@ Apply in `db.rs` search_hybrid → 4-20× speedup per call.
 | opensrv-mysql port complexity | M | H | A/B with v5, ship read-path first |
 | libSQL FTS5 ext break | L | H | Fallback rusqlite via feature flag |
 | SimSIMD M-only | — | — | Has scalar fallback already |
-| Recall regression on quant | L | H | Hold @1.000 with matry+binary combo |
+| Recall regression on quant | L | H | Hold ≥0.95 (int8/binary) with matry+binary combo; dense stays 1.000 |
 | Concurrency races | M | H | Criterion + miri + loom tests |
 | WP plugin review reject | L | M | Submit early, iterate w/ team |
 | Synapse Cloud cost overrun | L | L | Free tier capped, Fly.io pricing |
@@ -370,11 +371,11 @@ Apply in `db.rs` search_hybrid → 4-20× speedup per call.
 >
 > 26MB Rust binary. MySQL + Postgres wire compat. SQL + Vector + Full-Text Search + Knowledge-Graph + CRDT + Ed25519 Signing — alles in einer Datei.
 >
-> 300.000 OPS @ 8 threads. 0.10ms vector search bei 1 Million Dokumenten. Sub-10ms cold start. Library mode mit 5 µs reads — embed direkt in deine App.
+> 300.000 OPS @ 8 threads (90d target). 0.10ms vector search bei 1 Million Dokumenten (90d target). Sub-10ms cold start. Library-mode <50µs reads at 100k+ docs — embed direkt in deine App (daemon mode wins below 100k).
 >
-> 10× schneller als MySQL auf shared hosting. 970× schneller als sqlite-vec bei 1M. 2060× schneller als Qdrant socket-mode.
+> 970× schneller als sqlite-vec bei 1M. 2060× schneller als Qdrant socket-mode.
 >
-> Drop-in WordPress backend: vanilla WP+MariaDB läuft 100× langsamer auf demselben €5/mo Hetzner-Server.
+> Drop-in WordPress backend: 5-10× schneller gesamt; 30-100× bei WP search-only ab 50k+ posts (50× LIKE→FTS5 + 8× FTS5→semantic + 1.2× overhead ≈ 480× compounded; bei <1k posts gewinnt vanilla LIKE).
 >
 > Edge-replicated kostenlos via libSQL/Turso. DSGVO-compliant by default — keine US-Datenübertragung. Open-source MIT.
 >
@@ -410,22 +411,16 @@ synapse-cli dashboard --target world-best
 
 ## 14. SECRET WEAPONS (gemerkt für später)
 
-### a. synapse-wasm — embed in browser
-Chrome extension can run Synapse client-side. AI search ohne Server. Game-changing for offline web apps.
-
-### b. synapse-mobile — iOS/Android binding
-Note-taking apps embed full vec-search + FTS in-app. No server needed. Sync via libSQL.
-
-### c. synapse-edge-cache — CDN integration
+### a. synapse-edge-cache — CDN integration
 Cloudflare Worker fetches synapse instance, replicates `.brainpack` to PoP. WP global edge for €5/mo.
 
-### d. synapse-replay — git-like for data
+### b. synapse-replay — git-like for data
 Every change is a CRDT op. Branches. Time-travel queries. Replaces DoltDB.
 
-### e. synapse-collab — real-time SQL
+### c. synapse-collab — real-time SQL
 yrs CRDT already there. Add WebSocket → multi-user editing on same DB without conflicts. Game-changing for collaborative apps.
 
-### f. synapse-AI-runtime
+### d. synapse-AI-runtime
 Add `SELECT synapse_chat('persona', 'question')` SQL function. Local LLM (Phi/Gemma) runs in-process. No API key needed.
 
 ---
@@ -451,7 +446,7 @@ Add `SELECT synapse_chat('persona', 'question')` SQL function. Local LLM (Phi/Ge
 - 100+ WP plugin installs
 - HN top-10 launch
 - Reddit /r/Wordpress positive
-- 3+ enterprise pilot conversations
+- 3+ paying design-partners (not "enterprise pilot conversations" — no customers yet)
 
 ### Qualitative:
 - Acknowledged in 1 mainstream tech press article
