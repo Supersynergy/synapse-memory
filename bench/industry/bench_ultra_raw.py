@@ -3,10 +3,12 @@
 Phase A fix: synapse-ultra via /vec_raw (stored query vectors, no re-embedding).
 Phase B: ef_search sweep via usearch.
 Phase C: binary cascade via ultra binary modes.
+Phase D: /vec_raw_batch — amortizes HTTP overhead, persistent connection.
 
 All recall computed vs brute-force GT (same basis as usearch/lance).
 """
 import json, os, time, sys
+import http.client
 import urllib.request
 from pathlib import Path
 import numpy as np
@@ -18,6 +20,25 @@ ULTRA_URL = os.environ.get("ULTRA_URL", "http://127.0.0.1:9478")
 K10 = 10
 K100 = 100
 WARMUP = 20
+# Queries per HTTP POST for batch mode — amortizes ~0.5ms TCP+parse overhead
+BATCH_SIZE = int(os.environ.get("ULTRA_BATCH_SIZE", "32"))
+
+_host, _port = None, None
+def _parse_host_port():
+    global _host, _port
+    url = ULTRA_URL.removeprefix("http://").removeprefix("https://")
+    if ":" in url:
+        h, p = url.rsplit(":", 1)
+        _host, _port = h, int(p)
+    else:
+        _host, _port = url, 80
+
+_parse_host_port()
+
+
+def _make_conn() -> http.client.HTTPConnection:
+    conn = http.client.HTTPConnection(_host, _port, timeout=10)
+    return conn
 
 
 def ultra_ping():
@@ -28,18 +49,23 @@ def ultra_ping():
         return False
 
 
-def ultra_raw_search(vec: list, k: int, mode: str) -> tuple[list, float]:
+def ultra_raw_search(vec: list, k: int, mode: str, conn: http.client.HTTPConnection | None = None) -> tuple[list, float]:
     body = json.dumps({"vec": vec, "limit": k, "mode": mode}).encode()
-    req = urllib.request.Request(
-        f"{ULTRA_URL}/vec_raw",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     t0 = time.perf_counter()
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            hits = json.loads(r.read())
+        if conn is None:
+            req = urllib.request.Request(
+                f"{ULTRA_URL}/vec_raw",
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as r:
+                hits = json.loads(r.read())
+        else:
+            conn.request("POST", "/vec_raw", body, {"Content-Type": "application/json"})
+            resp = conn.getresponse()
+            hits = json.loads(resp.read())
         ms = (time.perf_counter() - t0) * 1000
         ids = [h.get("id") or h.get("doc_id") for h in hits]
         return ids, ms
@@ -47,22 +73,40 @@ def ultra_raw_search(vec: list, k: int, mode: str) -> tuple[list, float]:
         return [], (time.perf_counter() - t0) * 1000
 
 
-# ── Phase A: ultra /vec_raw modes ─────────────────────────────────────────────
+def ultra_raw_batch(vecs: list, k: int, mode: str, conn: http.client.HTTPConnection) -> tuple[list[list], float]:
+    """Send N queries in one POST, return (list_of_id_lists, total_ms)."""
+    body = json.dumps({"vecs": vecs, "limit": k, "mode": mode}).encode()
+    t0 = time.perf_counter()
+    try:
+        conn.request("POST", "/vec_raw_batch", body, {"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        results = json.loads(resp.read())
+        ms = (time.perf_counter() - t0) * 1000
+        id_lists = [[h.get("id") or h.get("doc_id") for h in hits] for hits in results]
+        return id_lists, ms
+    except Exception as e:
+        return [[] for _ in vecs], (time.perf_counter() - t0) * 1000
+
+
+# ── Phase A: ultra /vec_raw modes (single-query, keepalive) ───────────────────
 def bench_ultra_raw(q_vecs_n: np.ndarray, gt_ids: list, mode: str) -> dict:
     label = f"ultra_raw ({mode})"
     if not ultra_ping():
         return {"engine": label, "available": False, "reason": f"ultra not at {ULTRA_URL}"}
 
     n = len(q_vecs_n)
+    conn = _make_conn()
+    # warmup
     for i in range(min(WARMUP, n)):
-        ultra_raw_search(q_vecs_n[i].tolist(), K10, mode)
+        ultra_raw_search(q_vecs_n[i].tolist(), K10, mode, conn)
 
     latencies, res10, res100 = [], [], []
     for i in range(n):
-        ids100, ms = ultra_raw_search(q_vecs_n[i].tolist(), K100, mode)
+        ids100, ms = ultra_raw_search(q_vecs_n[i].tolist(), K100, mode, conn)
         latencies.append(ms)
         res10.append(ids100[:K10])
         res100.append(ids100)
+    conn.close()
 
     st = pstats(latencies)
     return {
@@ -73,7 +117,45 @@ def bench_ultra_raw(q_vecs_n: np.ndarray, gt_ids: list, mode: str) -> dict:
         **st,
         "recall_at_10": compute_recall(res10, gt_ids, K10),
         "recall_at_100": compute_recall(res100, gt_ids, K100),
-        "note": "stored query vecs → /vec_raw (no re-embed). Fair comparison vs GT.",
+        "note": "stored query vecs → /vec_raw keepalive (no re-embed).",
+    }
+
+
+# ── Phase D: ultra /vec_raw_batch (batch=32, keepalive) ───────────────────────
+def bench_ultra_raw_batch(q_vecs_n: np.ndarray, gt_ids: list, mode: str, batch_size: int = BATCH_SIZE) -> dict:
+    label = f"ultra_raw_batch_b{batch_size} ({mode})"
+    if not ultra_ping():
+        return {"engine": label, "available": False, "reason": f"ultra not at {ULTRA_URL}"}
+
+    n = len(q_vecs_n)
+    conn = _make_conn()
+    # warmup (one batch)
+    warmup_vecs = [q_vecs_n[i].tolist() for i in range(min(batch_size, n))]
+    ultra_raw_batch(warmup_vecs, K10, mode, conn)
+
+    latencies_per_q, res10, res100 = [], [], []
+    for start in range(0, n, batch_size):
+        chunk = q_vecs_n[start:start + batch_size]
+        vecs_list = [v.tolist() for v in chunk]
+        id_lists, batch_ms = ultra_raw_batch(vecs_list, K100, mode, conn)
+        per_q_ms = batch_ms / len(chunk)
+        for ids100 in id_lists:
+            latencies_per_q.append(per_q_ms)
+            res10.append(ids100[:K10])
+            res100.append(ids100)
+    conn.close()
+
+    st = pstats(latencies_per_q)
+    return {
+        "engine": label,
+        "available": True,
+        "mode": mode,
+        "batch_size": batch_size,
+        "n_queries": n,
+        **st,
+        "recall_at_10": compute_recall(res10, gt_ids, K10),
+        "recall_at_100": compute_recall(res100, gt_ids, K100),
+        "note": f"batch={batch_size} queries/POST, keepalive. Amortizes HTTP overhead.",
     }
 
 
@@ -154,6 +236,18 @@ def main():
         print("  SKIP: synapse-ultra not running at", ULTRA_URL)
         for mode in ["strict", "binary_first", "binary_only"]:
             all_results.append({"engine": f"ultra_raw ({mode})", "available": False, "reason": "server down"})
+
+    # Phase D: ultra batch (new — amortizes HTTP overhead)
+    print(f"\n=== Phase D: ultra /vec_raw_batch (batch={BATCH_SIZE}, keepalive) ===")
+    if ultra_ping():
+        for mode in ["strict", "binary_first"]:
+            print(f"  mode={mode} batch={BATCH_SIZE}...", flush=True)
+            r = bench_ultra_raw_batch(q_vecs_n, gt_ids, mode, BATCH_SIZE)
+            all_results.append(r)
+            if r["available"]:
+                print(f"    p50={r['p50_ms']:.3f}ms QPS={r['qps_1c']:.0f} R@10={r['recall_at_10']:.4f} R@100={r['recall_at_100']:.4f}")
+    else:
+        print("  SKIP: synapse-ultra not running at", ULTRA_URL)
 
     # Phase B: usearch sweep
     print("\n=== Phase B: usearch ef_search sweep ===")

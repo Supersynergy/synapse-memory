@@ -70,6 +70,7 @@ pub async fn build_router(state: Arc<AppState>) -> Router {
         .route("/hybrid", get(vec_search))
         .route("/vec_batch", post(vec_batch))
         .route("/vec_raw", post(vec_raw))
+        .route("/vec_raw_batch", post(vec_raw_batch))
         .route("/stats", get(stats))
         .with_state(state)
 }
@@ -158,6 +159,35 @@ async fn vec_raw(
         SearchMode::Hnsw => guard.search_hnsw(&body.vec, body.limit),
     };
     Json(hits_to_resp(&hits))
+}
+
+#[derive(Deserialize)]
+pub struct VecRawBatchQuery {
+    pub vecs: Vec<Vec<f32>>,
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub mode: SearchMode,
+}
+
+/// Batch raw-vector search — amortizes HTTP overhead across N queries.
+/// Returns Vec<Vec<HitResp>>, one inner vec per query.
+async fn vec_raw_batch(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<VecRawBatchQuery>,
+) -> impl IntoResponse {
+    let guard = state.index.load();
+    let results: Vec<Vec<HitResp>> = body.vecs.iter().map(|vec| {
+        let hits = match body.mode {
+            SearchMode::BinaryFirst => guard.search_binary_first(vec, body.limit),
+            SearchMode::Strict => guard.search_strict(vec, body.limit),
+            SearchMode::BinaryOnly => guard.search_binary_only(vec, body.limit),
+            #[cfg(feature = "hnsw")]
+            SearchMode::Hnsw => guard.search_hnsw(vec, body.limit),
+        };
+        hits_to_resp(&hits)
+    }).collect();
+    Json(results)
 }
 
 async fn stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
