@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use synapse_core::{embed::Embedder, embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
+use synapse_core::turbo::ndarray_search::NdArraySearch;
 use synapse_rerank::{IdentityReranker, Reranker};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
@@ -61,6 +62,10 @@ struct Cli {
 
 struct State {
     store: PlMutex<Store>,
+    /// Hot ANN index lifted out of store mutex — lock-free reads via RwLock.
+    /// Writes (put/put_batch) update both store and this index under store mutex,
+    /// then also update this index under write lock (rare, no perf concern).
+    ndarray_idx: Arc<parking_lot::RwLock<Option<NdArraySearch>>>,
     embedder: Mutex<Option<Box<dyn TextEmbedder>>>,
     reranker: Box<dyn Reranker>,
     db_path: PathBuf,
@@ -172,11 +177,16 @@ async fn main() -> Result<()> {
     let metrics_addr = cli.metrics_addr;
     tokio::spawn(metrics::serve(metrics_handle.handle.clone(), metrics_addr));
 
-    let store = open_store(&cli.file, &cli.license_jwt, &cli.license_pubkey)?;
+    let mut store = open_store(&cli.file, &cli.license_jwt, &cli.license_pubkey)?;
     // Pre-warm the turbo ndarray search engine (loads 164K vectors, ~1.7s).
     // Must happen BEFORE the server starts accepting requests, otherwise the
     // first search blocks the tokio async runtime for ~2 seconds.
     store.warm_turbo();
+    // Lift the warmed NdArraySearch out of the Store mutex into a top-level
+    // Arc<RwLock<>> so concurrent vec searches bypass the Store mutex entirely.
+    // Reads acquire a shared read-lock (non-exclusive); writes still go through
+    // the store mutex (rare) and also update this index under write-lock.
+    let ndarray_idx = Arc::new(parking_lot::RwLock::new(store.take_ndarray_search()));
     let cache_path = cli.emb_cache.clone().unwrap_or_else(|| {
         let mut p = cli.file.clone();
         let name = p
@@ -202,6 +212,7 @@ async fn main() -> Result<()> {
     let reranker: Box<dyn Reranker> = build_reranker(&cli.rerank_model);
     let state = Arc::new(State {
         store: PlMutex::new(store),
+        ndarray_idx,
         embedder: Mutex::new(embedder),
         reranker,
         db_path: cli.file.clone(),
@@ -377,13 +388,45 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
         }
         Request::SearchVec { embedding, limit } => {
-            let result = tokio::task::block_in_place(|| {
-                let store = state.store.lock();
-                store.search("", SearchMode::Vec, Some(&embedding), limit)
-            });
-            match result {
-                Ok(hits) => Response::Hits(hits),
-                Err(e) => Response::Err(e.to_string()),
+            // Hot path: ANN search on the lifted RwLock index (no Store mutex).
+            // Multiple concurrent readers proceed in parallel on the 12-core M4 Max.
+            let ann_pairs = {
+                let guard = state.ndarray_idx.read();
+                if let Some(ref idx) = *guard {
+                    if !idx.is_empty() {
+                        let binary_k = 4096usize.max(limit * 64).min(idx.len());
+                        if binary_k < idx.len() {
+                            Some(idx.search_cascade(&embedding, limit, binary_k))
+                        } else {
+                            Some(idx.search(&embedding, limit))
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+            if let Some(pairs) = ann_pairs {
+                // Hydrate id→text under Store lock (brief SQL round-trip).
+                let result = tokio::task::block_in_place(|| {
+                    let store = state.store.lock();
+                    store.hydrate_hits_by_id_dist(&pairs)
+                });
+                match result {
+                    Ok(hits) => Response::Hits(hits),
+                    Err(e) => Response::Err(e.to_string()),
+                }
+            } else {
+                // Fallback: full store search (index cold or empty).
+                let result = tokio::task::block_in_place(|| {
+                    let store = state.store.lock();
+                    store.search("", SearchMode::Vec, Some(&embedding), limit)
+                });
+                match result {
+                    Ok(hits) => Response::Hits(hits),
+                    Err(e) => Response::Err(e.to_string()),
+                }
             }
         }
         Request::Rerank { query, candidates, top_k } => {

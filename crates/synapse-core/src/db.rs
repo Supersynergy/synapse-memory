@@ -673,6 +673,16 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         }
     }
 
+    /// Take the warmed NdArraySearch out of the store's internal RwLock.
+    /// Used by the daemon to lift the hot ANN index into a top-level Arc<RwLock<>>
+    /// so concurrent reads bypass the Store mutex entirely.
+    /// After this call the store's internal cache is empty — put/put_batch will
+    /// lazily rebuild it on next write if the turbo feature is active.
+    #[cfg(feature = "turbo")]
+    pub fn take_ndarray_search(&mut self) -> Option<crate::turbo::ndarray_search::NdArraySearch> {
+        self.ndarray_search.write().unwrap().take()
+    }
+
     /// PR-A1-wire internal: rebuild the ANN index from `docs_vec` rows.
     /// Called from `Store::open` when the sidecar is missing, corrupt, or
     /// out-of-sync (len < row count).
@@ -933,7 +943,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     /// fetch full `Hit` records (uri/title/text) from SQL in one round-trip.
     /// Preserves input order. Used by the turbo fast-path in `search_vec`.
     #[cfg(feature = "turbo")]
-    fn hydrate_hits_by_id_dist(&self, pairs: &[(i64, f32)]) -> Result<Vec<Hit>> {
+    pub fn hydrate_hits_by_id_dist(&self, pairs: &[(i64, f32)]) -> Result<Vec<Hit>> {
         if pairs.is_empty() {
             return Ok(Vec::new());
         }

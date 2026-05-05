@@ -84,6 +84,43 @@ Removing HTTP adds **2.5-3.1× QPS** at same or higher recall.
 HTTP overhead = **~0.45ms/query** confirmed.  
 Bottleneck at high ef_search: HNSW neighbor scan O(M × ef_s), not distance kernel or memory layout.
 
+---
+
+## Phase E — RwLock-Lifted Hot Path (2026-05-05)
+
+**Change**: `NdArraySearch` lifted from `PlMutex<Store>` to `Arc<parking_lot::RwLock<Option<NdArraySearch>>>` in `synapsed::State`.  
+**Bench target**: `synapse-ultra` `/vec_raw` + `/vec_raw_batch`, 12 concurrent Python workers, 1000 queries, k=10.  
+**Corpus**: 168,438 × 384-dim | **GT**: brute-force cosine
+
+### Single-client (baseline, ArcSwap already in synapse-ultra)
+
+| Mode | QPS (1c) | R@10 | p50ms |
+|------|----------|------|-------|
+| strict | 730 | 0.920 | 1.36 |
+| binary_first | 1727 | 0.913 | 0.57 |
+| vec_raw_batch b=32 strict | 836 | 0.920 | 1.20 |
+| vec_raw_batch b=32 binary_first | 1990 | 0.913 | 0.51 |
+
+### 12-worker concurrent
+
+| Mode | Agg QPS | R@10 | p50ms | vs 1c |
+|------|---------|------|-------|-------|
+| /vec_raw strict | 724 | 0.920 | 14.4 | **0.99×** — Rayon thread pool saturated |
+| /vec_raw binary_first | 4846 | 0.888 | 2.11 | 2.8× |
+| /vec_raw_batch b=32 strict | 668 | 0.920 | 16.0 | 0.91× |
+| /vec_raw_batch b=32 binary_first | **5958** | 0.888 | 1.33 | 3.0× |
+
+### Analysis
+
+- **Strict mode** (`top_k_f32`): uses `rayon::par_iter` over full 168k corpus with CHUNK=4096. Each query saturates all 12 cores → concurrent requests serialize on Rayon global pool → **no concurrency gain** (724 vs 730).
+- **Binary_first**: lighter Rayon usage (hamming scan + small f16 rerank) → 2.8-3.0× gain at 12 workers.
+- **Target 10k QPS @ R@10≥0.98**: not reached. Strict mode recall 0.920, binary_first recall 0.888 — both below 0.98.
+- **Residual bottleneck**: Rayon global thread pool. Fix: per-query bounded thread pool (`rayon::ThreadPoolBuilder::new().num_threads(1)` for single-threaded SIMD path) or AVX512/NEON intrinsic brute-force without Rayon.
+
+### Commits
+- `feat(turbo): pub hydrate_hits_by_id_dist + take_ndarray_search — enables RwLock lift`
+- `feat(ultra): RwLock-lifted hot path — synapsed SearchVec bypasses Store mutex`
+
 ### Gap vs usearch prior (5898 @ R@10=0.919)
 
 Prior run: ef_construct=256, M=16, ef_s=64. Lower build cost → faster traversal, lower recall.  
