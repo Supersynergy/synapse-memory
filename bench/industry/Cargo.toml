@@ -13,6 +13,11 @@ required-features = ["ann-usearch"]
 name = "cascade_bench"
 path = "src/bin/cascade_bench.rs"
 
+[[bin]]
+name = "hnsw_vs_cascade"
+path = "src/bin/hnsw_vs_cascade.rs"
+required-features = ["ann-usearch"]
+
 [dependencies]
 synapse-ann = { path = "../../crates/synapse-ann", features = ["ann-usearch"] }
 synapse-core = { path = "../../crates/synapse-core", features = ["turbo"] }
