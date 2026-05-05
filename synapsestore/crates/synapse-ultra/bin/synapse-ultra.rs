@@ -28,9 +28,13 @@ struct Args {
     #[arg(long, default_value = "127.0.0.1:9477")]
     bind: String,
 
-    /// Unix socket path
+    /// Unix socket path (msgpack, text queries)
     #[arg(long, default_value = "/tmp/synapse-ultra.sock")]
     sock: String,
+
+    /// Vec UDS path (bincode, pre-computed f32 vectors)
+    #[arg(long, default_value = "/tmp/synapse-ultra-vec.sock")]
+    vec_sock: String,
 
     /// Pre-warm embedder at startup (downloads model if needed)
     #[arg(long, default_value_t = false)]
@@ -86,6 +90,14 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         if let Err(e) = synapse_ultra::socket::serve(&sock_path, sock_index, sock_cache, sock_emb).await {
             tracing::error!("socket server error: {}", e);
+        }
+    });
+
+    let vec_sock_path = args.vec_sock.clone();
+    let vec_sock_index = Arc::clone(&index);
+    tokio::spawn(async move {
+        if let Err(e) = synapse_ultra::vec_socket::serve(&vec_sock_path, vec_sock_index).await {
+            tracing::error!("vec socket server error: {}", e);
         }
     });
 

@@ -36,12 +36,17 @@ simsimd = "6.5"
 rayon = "1"
 bitvec = "1"
 half = "2"
+bincode = "1"
 usearch = { version = "2.25", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
+
+[lib]
+name = "synapse_ultra"
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "synapse-ultra"
