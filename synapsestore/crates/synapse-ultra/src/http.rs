@@ -143,15 +143,38 @@ pub struct VecRawQuery {
     pub limit: usize,
     #[serde(default)]
     pub mode: SearchMode,
+    /// Auto-route to optimal backend by target recall.
+    /// ≥0.98 → Strict (cascade, R=0.994, 697 QPS)
+    /// 0.94-0.97 → Hnsw  (R=0.982, 1631 QPS)
+    /// <0.94 → BinaryFirst (R=0.888, 4845 QPS)
+    /// When set, overrides `mode`.
+    pub target_recall: Option<f32>,
+}
+
+fn recall_to_mode(target_recall: f32) -> SearchMode {
+    if target_recall >= 0.98 {
+        SearchMode::Strict
+    } else if target_recall >= 0.94 {
+        #[cfg(feature = "hnsw")]
+        return SearchMode::Hnsw;
+        #[cfg(not(feature = "hnsw"))]
+        return SearchMode::Strict;
+    } else {
+        SearchMode::BinaryFirst
+    }
 }
 
 /// Raw-vector search — bypasses embedder. For benchmarks + bring-your-own-embedding.
+/// Supports `target_recall` param to auto-select backend (overrides `mode`).
 async fn vec_raw(
     State(state): State<Arc<AppState>>,
     Json(body): Json<VecRawQuery>,
 ) -> impl IntoResponse {
+    let effective_mode = body.target_recall
+        .map(recall_to_mode)
+        .unwrap_or(body.mode);
     let guard = state.index.load();
-    let hits = match body.mode {
+    let hits = match effective_mode {
         SearchMode::BinaryFirst => guard.search_binary_first(&body.vec, body.limit),
         SearchMode::Strict => guard.search_strict(&body.vec, body.limit),
         SearchMode::BinaryOnly => guard.search_binary_only(&body.vec, body.limit),

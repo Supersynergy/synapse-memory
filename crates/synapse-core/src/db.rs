@@ -1,6 +1,7 @@
 #[cfg(feature = "turbo")]
 use crate::turbo::rrf_simd::distance_to_score;
 use crate::error::{Error, Result};
+use crate::sota::SearchBackend;
 use crate::types::{Doc, Hit, PutRequest, SearchMode, EMBED_DIM};
 #[cfg(feature = "encryption")]
 use base64::Engine as _;
@@ -883,6 +884,72 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Vector search with explicit backend selection (auto-routed by `target_recall`).
+    ///
+    /// | Backend       | binary_k | QPS   | R@10  |
+    /// |---------------|----------|-------|-------|
+    /// | Cascade       | 4096     | 697   | 0.994 |
+    /// | UsearchHnsw   | —        | 1631  | 0.982 |
+    /// | BinaryFirst   | small    | 4845  | 0.888 |
+    ///
+    /// Falls back to `search_vec` (Cascade) when turbo is disabled or the
+    /// index is not loaded yet.
+    pub fn search_vec_with_backend(&self, emb: &[f32], limit: usize, backend: SearchBackend) -> Result<Vec<Hit>> {
+        #[cfg(feature = "turbo")]
+        {
+            let guard = self.ndarray_search.read().unwrap();
+            if let Some(ref idx) = *guard {
+                if !idx.is_empty() {
+                    let pairs = match backend {
+                        SearchBackend::Cascade => {
+                            let binary_k = 4096usize.max(limit * 64).min(idx.len());
+                            if binary_k < idx.len() {
+                                idx.search_cascade(emb, limit, binary_k)
+                            } else {
+                                idx.search(emb, limit)
+                            }
+                        }
+                        SearchBackend::BinaryFirst => {
+                            // Small binary_k → high throughput, lower recall.
+                            let binary_k = (limit * 16).max(64).min(idx.len());
+                            if binary_k < idx.len() {
+                                idx.search_cascade(emb, limit, binary_k)
+                            } else {
+                                idx.search(emb, limit)
+                            }
+                        }
+                        SearchBackend::UsearchHnsw => {
+                            // Attempt usearch if feature enabled; otherwise cascade at M=48 ef=64 equivalent.
+                            #[cfg(feature = "ann-usearch")]
+                            if let Some(ref ann) = self.ann {
+                                if ann.len() > 0 {
+                                    match ann.search(emb, limit) {
+                                        Ok(hits) if !hits.is_empty() => {
+                                            drop(guard);
+                                            return self.hydrate_hits_from_ann(&hits);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            // Fallback: cascade with moderate binary_k (R≈0.98).
+                            let binary_k = 2048usize.max(limit * 32).min(idx.len());
+                            if binary_k < idx.len() {
+                                idx.search_cascade(emb, limit, binary_k)
+                            } else {
+                                idx.search(emb, limit)
+                            }
+                        }
+                    };
+                    if !pairs.is_empty() {
+                        return self.hydrate_hits_by_id_dist(&pairs);
+                    }
+                }
+            }
+        }
+        self.search_vec(emb, limit)
     }
 
     /// PR-A1-wire helper: given `(id, distance)` from the ANN, fetch full

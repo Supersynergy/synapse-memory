@@ -91,6 +91,38 @@ pub struct MemoryEdge {
     pub weight: f64,
 }
 
+/// Vector search backend selector.
+///
+/// Routing table (Phase D-H bench, Sift-1M):
+///   Cascade      — binary_k=4096 → 697 QPS @ R=0.994  (target_recall ≥0.98)
+///   UsearchHnsw  — M=48, ef_s=64 → 1631 QPS @ R=0.982 (target_recall 0.94-0.97)
+///   BinaryFirst  — binary pre-filter only → 4845 QPS @ R=0.888 (target_recall <0.94)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SearchBackend {
+    Cascade,
+    UsearchHnsw,
+    BinaryFirst,
+}
+
+/// Route a `target_recall` value to the optimal backend.
+///
+/// ```
+/// use synapse_core::sota::{auto_route, SearchBackend};
+/// assert_eq!(auto_route(0.99), SearchBackend::Cascade);
+/// assert_eq!(auto_route(0.95), SearchBackend::UsearchHnsw);
+/// assert_eq!(auto_route(0.80), SearchBackend::BinaryFirst);
+/// ```
+pub fn auto_route(target_recall: f32) -> SearchBackend {
+    if target_recall >= 0.98 {
+        SearchBackend::Cascade
+    } else if target_recall >= 0.94 {
+        SearchBackend::UsearchHnsw
+    } else {
+        SearchBackend::BinaryFirst
+    }
+}
+
 /// Recall request — single entrypoint for SOTA pipeline.
 #[derive(Debug, Clone)]
 pub struct RecallParams {
@@ -117,6 +149,9 @@ pub struct RecallParams {
     pub ppr_iters: usize,
     /// RRF k constant (default 60 per best-practice).
     pub rrf_k: f64,
+    /// Target recall threshold — drives backend auto-routing.
+    /// None defaults to 0.98 (Cascade path).
+    pub target_recall: Option<f32>,
 }
 
 impl Default for RecallParams {
@@ -135,6 +170,7 @@ impl Default for RecallParams {
             ppr_alpha: 0.5,
             ppr_iters: 10,
             rrf_k: 60.0,
+            target_recall: None,
         }
     }
 }
@@ -552,14 +588,35 @@ impl Store {
         params: &RecallParams,
         query_emb: Option<&[f32]>,
     ) -> Result<Vec<RecallHit>> {
-        let mode = if query_emb.is_some() {
-            SearchMode::Hybrid
-        } else {
-            SearchMode::Lex
-        };
+        let backend = auto_route(params.target_recall.unwrap_or(0.98));
         // Pull a wide candidate pool — RRF will narrow to k.
         let pool = (params.k.max(params.rerank_top) * 4).max(40);
-        let base_hits = self.search(&params.query, mode, query_emb, pool)?;
+        let base_hits = if let Some(emb) = query_emb {
+            let vec_hits = self.search_vec_with_backend(emb, pool, backend)?;
+            let lex_hits = self.search(&params.query, SearchMode::Lex, None, pool)
+                .unwrap_or_default();
+            // Fuse lex + vec via RRF (same as search_hybrid but with backend control).
+            let rrf_k = params.rrf_k;
+            let mut scores: std::collections::HashMap<i64, (f64, crate::types::Hit)> =
+                std::collections::HashMap::new();
+            for (i, h) in lex_hits.into_iter().enumerate() {
+                let s = 1.0 / (rrf_k + (i + 1) as f64);
+                scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+            }
+            for (i, h) in vec_hits.into_iter().enumerate() {
+                let s = 1.0 / (rrf_k + (i + 1) as f64);
+                scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+            }
+            let mut merged: Vec<crate::types::Hit> = scores
+                .into_values()
+                .map(|(s, mut h)| { h.score = s; h })
+                .collect();
+            merged.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+            merged.truncate(pool);
+            merged
+        } else {
+            self.search(&params.query, SearchMode::Lex, None, pool)?
+        };
 
         // Build (memory_id, doc_id, memory_type) lookup for hits that have memories.
         let mut id_csv = String::new();
@@ -961,5 +1018,26 @@ mod tests {
         let ids: Vec<i64> = hits.iter().map(|h| h.hit.id).collect();
         assert!(ids.contains(&id_a), "doc_a must be in results");
         assert!(ids.contains(&id_b), "doc_b must surface via 1-hop expansion");
+    }
+
+    // --- auto_route / SearchBackend tests ---
+
+    #[test]
+    fn auto_route_high_recall_gives_cascade() {
+        assert_eq!(auto_route(0.99), SearchBackend::Cascade);
+        assert_eq!(auto_route(0.98), SearchBackend::Cascade);
+    }
+
+    #[test]
+    fn auto_route_mid_recall_gives_usearch_hnsw() {
+        assert_eq!(auto_route(0.97), SearchBackend::UsearchHnsw);
+        assert_eq!(auto_route(0.94), SearchBackend::UsearchHnsw);
+    }
+
+    #[test]
+    fn auto_route_low_recall_gives_binary_first() {
+        assert_eq!(auto_route(0.93), SearchBackend::BinaryFirst);
+        assert_eq!(auto_route(0.80), SearchBackend::BinaryFirst);
+        assert_eq!(auto_route(0.00), SearchBackend::BinaryFirst);
     }
 }

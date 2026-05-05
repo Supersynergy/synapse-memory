@@ -49,4 +49,5 @@ pub mod ann;
 
 pub use db::Store;
 pub use error::{Error, Result};
+pub use sota::{auto_route, SearchBackend};
 pub use types::{Doc, Hit, PutRequest, SearchMode};
