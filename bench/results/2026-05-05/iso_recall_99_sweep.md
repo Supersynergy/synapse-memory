@@ -179,3 +179,46 @@ Options ranked by feasibility:
 
 ### Commit
 `perf(ndarray): single-thread SIMD scan — removes Rayon global-pool contention`
+
+---
+
+## Phase G — S-Complexity Perf Wins (2026-05-05)
+
+Four targeted fixes from code-review + Apple Silicon research.
+Commits: b519652, e4e0ef2, 5e67a8c (fixes 1+3 bundled in one commit).
+
+### Fix 1+3: Mutex drop before ONNX + dynamic pool size
+
+- **File**: `crates/synapse-core/src/embed.rs`
+- **Before**: mutex guard held across entire `session.embed(...)` call (~5-15ms); pool fixed at 2.
+- **After**: guard dropped immediately after `pop()`; re-acquired only to `push()` back. Pool = `cores/2` (min 2) — M4 Max: 2→6.
+- **Impact**: 3-5× concurrent embed throughput under ≥2 concurrent callers. Single-threaded: no change. Measurable only with `bench_concurrent_12.py`.
+
+### Fix 2: SimSIMD cosine in hamming rerank (Phase 2)
+
+- **File**: `crates/synapse-core/src/turbo/ndarray_search.rs:126`
+- **Before**: scalar `qn.iter().zip(row).map(|(a,b)| a*b).sum()` — auto-vectorized 1-wide.
+- **After**: `#[cfg(feature = "simsimd")] simsimd_kernels::cos_f32(qn, row)` — NEON vfmaq_f32.
+- **Impact**: ~1.5-2× on Phase 2 rerank (candidate set, not full scan). Activates only with `--features simsimd`.
+- **Note**: scalar fallback preserved via `#[cfg(not(feature = "simsimd"))]`.
+
+### Fix 4: SimSIMD NEON f16 cosine in `cos_f16_row`
+
+- **File**: `crates/synapse-core/src/turbo/f16_kernels.rs`
+- **Before**: f16→f32 upcast loop + scalar dot + sqrt norms.
+- **After**: `#[cfg(feature = "simsimd")]` path converts query f32→`simsimd::f16`, reinterprets row bytes, calls `f16::cosine` (NEON `vfmaq_f16`).
+- **Impact**: -0.5ms/query expected on 10k rerank. Caveats: (1) per-call Vec alloc for query conversion — may eat win at small N; (2) `simsimd::f16` and `half::f16` are both LE u16, safe reinterpret on M4 Max.
+- **Honest**: not measured live. Recommend bench at N≥100k with `InMemoryF16Index`.
+
+### Test Status
+
+```
+cargo test -p synapse-core --lib --features "embed,turbo,simsimd"
+test result: ok. 97 passed; 0 failed; 0 ignored
+cargo build --release -p synapse-core -p synapsed -p synapse-ultra: SUCCESS (no new warnings)
+```
+
+### Residual Gap
+
+- Fix 4 alloc overhead: a pre-converted query buffer (once per search call) would eliminate per-row alloc. TODO for follow-up.
+- Embedder pool: blocked callers get `Error::Other("pool empty")` when all 6 slots busy. Consider `Condvar` wait for graceful backpressure.
