@@ -99,6 +99,11 @@ clap = { version = "4", features = ["derive"] }
 sha2 = "0.11"
 
 [[example]]
+name = "libsql_fts5_abi_check"
+path = "examples/libsql_fts5_abi_check.rs"
+required-features = ["backend-libsql"]
+
+[[example]]
 name = "synapse_scale_bench"
 path = "examples/synapse_scale_bench.rs"
 

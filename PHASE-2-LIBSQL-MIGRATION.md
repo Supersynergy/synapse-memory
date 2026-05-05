@@ -1,7 +1,7 @@
 # PHASE-2: libSQL Backend Migration
 
 Date: 2026-04-25 · Owner: Team Delta δ1/δ2/δ3
-Source: subagent a181e241067da2cd3 · Verdict: ✅ GO
+Source: subagent a181e241067da2cd3 · Verdict: ⚠️ PAUSE (see Day-1-2 corrective sprint below)
 
 ## Goal
 Replace rusqlite with libSQL backend for async WAL + concurrent writers + free Turso edge replication.
@@ -17,14 +17,42 @@ Replace rusqlite with libSQL backend for async WAL + concurrent writers + free T
 - p99 <50ms held
 - Recall 1.000 held (HNSW path unchanged)
 
-## ABI Compat Test — RESULT: ✅ PASS (2026-04-24)
+## ABI Compat Test — RESULT: ❌ FAIL (2026-05-05, libsql 0.9.30)
 
-**Verdict: GO**
+**Verdict: PAUSE**
 
-Critical finding: `sqlite3_auto_extension` must be called **before** opening the connection that uses the extension. The extension registration fires on `db.connect()`, not on DB open.
+Prior GO verdict (2026-04-24) was from a `/tmp/libsql-abi-test/` ad-hoc run using libsql = **0.6.0**.
+Committed example binary using libsql = **0.9.30** (current workspace dep) **fails**.
 
+### Root Cause
+
+`libsql 0.9.x` introduces `libsql-rusqlite` as an internal dependency of `libsql-sys`.
+`libsql-rusqlite` calls `sqlite3_config(SQLITE_CONFIG_MULTITHREAD)` + `sqlite3_initialize()`
+on the shared `libsql-ffi` bundled SQLite during its own init.
+
+When `libsql::local::Database::new()` then calls `sqlite3_config(SQLITE_CONFIG_SERIALIZED)`,
+SQLite is already initialized → returns `SQLITE_MISUSE (21)` → panic.
+
+Both sub-crates share the **same** bundled SQLite instance. Threading config cannot be set
+after `sqlite3_initialize()`. This is an upstream conflict within libsql 0.9.x itself.
+
+### What Works
+- libsql **0.6.0** (no `libsql-rusqlite` dep): FTS5 + sqlite-vec PASS ✅
+- libsql **0.9.30** (current): threading init conflict, panics before any SQL runs ❌
+
+### Example Binary
+`crates/synapse-core/examples/libsql_fts5_abi_check.rs`
+Run: `cargo run --example libsql_fts5_abi_check -p synapse-core --features backend-libsql`
+
+### Resolution Options
+1. **Downgrade to libsql 0.6.x** — loses async API improvements, but ABI-stable
+2. **Wait for upstream fix** — track https://github.com/libsql/libsql/issues
+3. **Out-of-process libsql** — run libsql in a sidecar process, IPC via stdio/unix socket
+4. **Stay on rusqlite** — default path unaffected; `backend-libsql` feature stays gated
+
+### Prior PASS test (libsql 0.6.0, still valid for that version)
 ```rust
-// CORRECT pattern — register THEN open new connection
+// libsql 0.6.0 — CORRECT pattern
 unsafe {
     libsql::ffi::sqlite3_auto_extension(Some(
         std::mem::transmute::<*const (), unsafe extern "C" fn(*mut libsql::ffi::sqlite3, *mut *const i8, *const libsql::ffi::sqlite3_api_routines) -> i32>(
@@ -33,13 +61,11 @@ unsafe {
     ));
 }
 let db = libsql::Builder::new_local("/tmp/test.db").build().await?;
-let conn = db.connect()?; // extension fires here
+let conn = db.connect()?;
 conn.execute("CREATE VIRTUAL TABLE v USING vec0(id INTEGER PRIMARY KEY, e FLOAT[384])", ()).await?;
 conn.execute("CREATE VIRTUAL TABLE f USING fts5(content)", ()).await?;
-println!("PASS: FTS5 + vec0 both work on libsql");
+println!("PASS: FTS5 + vec0 both work on libsql 0.6.0");
 ```
-
-Test crate: `/tmp/libsql-abi-test/` · libsql = 0.6.0 · sqlite-vec = 0.1.9
 
 ## Architecture — Backend Trait
 
@@ -101,6 +127,8 @@ Synapse Cloud uses this for geo-distribution. Customer self-host gets replicatio
 - [ ] Day 27: Stress test + miri/loom
 - [ ] Day 28: Merge + docs
 
-## Recommendation: ✅ GO
+## Recommendation: ⚠️ PAUSE
 
-BEGIN CONCURRENT gain (5.7× projected) exceeds Phase 2 target (4×). All 5 risks have mitigations. Phase 2 starts Day 15 with backend trait sprint.
+libsql 0.9.x threading conflict blocks backend switch. Default `backend-rusqlite` is stable and unaffected.
+Next action: choose resolution option above (downgrade / out-of-process / stay-on-rusqlite).
+BEGIN CONCURRENT projected gain (5.7×) is still the target if resolved.
