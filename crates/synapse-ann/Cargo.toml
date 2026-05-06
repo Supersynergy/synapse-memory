@@ -15,6 +15,7 @@ usearch = { version = "2.25", optional = true }
 criterion = { version = "0.8", default-features = false }
 tempfile = "3"
 proptest = "1"
+rand = "0.8"
 
 [features]
 default = []
@@ -25,5 +26,10 @@ ann-ivfpq = []
 
 [[bench]]
 name = "ann_usearch"
+harness = false
+required-features = ["ann-usearch"]
+
+[[bench]]
+name = "ann_hnsw_sweep"
 harness = false
 required-features = ["ann-usearch"]

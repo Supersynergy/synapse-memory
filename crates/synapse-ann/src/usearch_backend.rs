@@ -64,6 +64,30 @@ impl UsearchIndex {
         }
     }
 
+    /// Build a new empty HNSW index with explicit HNSW tuning params.
+    pub fn new_tuned(
+        dim: usize,
+        capacity: usize,
+        connectivity: usize,
+        expansion_add: usize,
+        expansion_search: usize,
+    ) -> Result<Self, AnnError> {
+        let opts = IndexOptions {
+            dimensions: dim,
+            metric: MetricKind::Cos,
+            quantization: ScalarKind::F16,
+            connectivity,
+            expansion_add,
+            expansion_search,
+            multi: false,
+        };
+        let idx =
+            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        idx.reserve(capacity.max(1024))
+            .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
+        Ok(Self { idx, dim, len: 0 })
+    }
+
     /// Build a new empty HNSW index with F32 quantization (fallback).
     pub fn new_f32(dim: usize, expected_capacity: usize) -> Result<Self, AnnError> {
         let opts = IndexOptions {
