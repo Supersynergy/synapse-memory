@@ -28,9 +28,11 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 parking_lot.workspace = true
 rusqlite.workspace = true
+mimalloc = { version = "0.1", default-features = false }
 
 [features]
-default = ["embed-mlx"]
+default = ["embed-mlx", "ann-usearch"]
 embed-mlx = ["synapse-core/embed-mlx"]
+ann-usearch = ["synapse-core/ann-usearch"]
 licensed = ["dep:synapse-license", "dep:hex", "dep:dirs", "synapse-core/encryption"]
 onnx = ["synapse-rerank/onnx"]

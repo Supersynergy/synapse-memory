@@ -635,6 +635,18 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         Ok(())
     }
 
+    /// True if ANN index loaded.
+    #[cfg(feature = "ann-usearch")]
+    pub fn has_ann(&self) -> bool {
+        self.ann.is_some()
+    }
+
+    /// ANN index entry count (0 if no ann).
+    #[cfg(feature = "ann-usearch")]
+    pub fn ann_len(&self) -> usize {
+        self.ann.as_ref().map(|a| a.len()).unwrap_or(0)
+    }
+
     /// Pre-warm the turbo ndarray search engine.
     /// Call this at startup (before accepting requests) to avoid blocking
     /// the async runtime on the first search request.

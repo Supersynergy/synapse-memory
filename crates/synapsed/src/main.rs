@@ -1,5 +1,9 @@
 //! synapsed — persistent daemon. Unix socket + length-prefixed msgpack.
 
+// mimalloc — 5-15% faster than system malloc for many small allocs (msgpack, vec ops).
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod metrics;
 mod proto;
 
@@ -235,6 +239,30 @@ async fn main() -> Result<()> {
         cli.file.display()
     );
 
+    // SIGTERM/SIGINT handler — persist ANN sidecar before exit.
+    // Saves 5min HNSW rebuild on next start.
+    let sig_state = state.clone();
+    tokio::spawn(async move {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigterm = signal(SignalKind::terminate()).expect("install SIGTERM");
+        let mut sigint = signal(SignalKind::interrupt()).expect("install SIGINT");
+        tokio::select! {
+            _ = sigterm.recv() => info!("SIGTERM received"),
+            _ = sigint.recv() => info!("SIGINT received"),
+        }
+        info!("persisting ANN sidecar before exit…");
+        #[cfg(feature = "ann-usearch")]
+        {
+            let store = sig_state.store.lock();
+            if let Err(e) = store.flush_ann() {
+                tracing::warn!("flush_ann on signal failed: {e}");
+            } else {
+                info!("ANN sidecar persisted");
+            }
+        }
+        std::process::exit(0);
+    });
+
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(p) => p,
@@ -345,7 +373,19 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
         }
         Request::Shutdown => {
-            info!("shutdown requested");
+            info!("shutdown requested — persisting ANN sidecar");
+            #[cfg(feature = "ann-usearch")]
+            {
+                let store = state.store.lock();
+                let has_ann = store.has_ann();
+                let ann_len = store.ann_len();
+                info!("has_ann={} ann_len={}", has_ann, ann_len);
+                match store.flush_ann() {
+                    Ok(()) => info!("flush_ann OK"),
+                    Err(e) => tracing::warn!("flush_ann on shutdown failed: {e}"),
+                }
+            }
+            info!("exit 0");
             std::process::exit(0);
         }
         Request::Merge {
