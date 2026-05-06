@@ -60,6 +60,26 @@ pub enum Request {
         out_path: String,
         level: i32,
     },
+    /// Batched search — multiple queries in one socket roundtrip.
+    /// Daemon executes them sequentially and returns results in same order.
+    BatchSearch {
+        queries: Vec<BatchSearchItem>,
+    },
+    /// Read-only raw SQL on brain.db. Read-only mode enforced.
+    /// Returns rows as msgpack array of arrays.
+    Sql {
+        query: String,
+        #[serde(default)]
+        params: Vec<serde_json::Value>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchSearchItem {
+    pub mode: SearchMode,
+    pub q: String,
+    pub limit: usize,
+    pub embed_query: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,4 +119,11 @@ pub enum Response {
     Err(String),
     /// Response to `Request::Embed`. Contains the raw embedding vector.
     Embed { vec: Vec<f32> },
+    /// Response to `Request::BatchSearch`. One Hit-list per query, same order.
+    BatchHits(Vec<Vec<Hit>>),
+    /// Response to `Request::Sql`. Rows as msgpack arrays.
+    Rows {
+        cols: Vec<String>,
+        rows: Vec<Vec<serde_json::Value>>,
+    },
 }

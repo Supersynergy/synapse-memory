@@ -27,6 +27,7 @@ axum.workspace = true
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 parking_lot.workspace = true
+rusqlite.workspace = true
 
 [features]
 default = ["embed-mlx"]

@@ -23,7 +23,7 @@ PROJ  = Path.home() / ".claude/projects"
 POLL  = float(os.environ.get("TELEPATHY_POLL", "4.0"))
 MAX_LINE_SCAN = int(os.environ.get("TELEPATHY_MAX_LINES", "500"))
 IDLE_CUTOFF   = int(os.environ.get("TELEPATHY_IDLE_CUTOFF", "1800"))
-SYN_BIN       = os.environ.get("SYN_BIN", "syn")
+SYN_BIN       = os.environ.get("SYN_BIN", "synx")
 
 
 def log(msg: str) -> None:

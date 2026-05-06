@@ -440,6 +440,64 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(e) => Response::Err(e.to_string()),
             }
         }
+        Request::BatchSearch { queries } => {
+            // Sequential per-query, single roundtrip — saves N socket cycles.
+            let mut all = Vec::with_capacity(queries.len());
+            for item in queries {
+                match search(state, item.mode, &item.q, item.limit, item.embed_query).await {
+                    Ok(hits) => all.push(hits),
+                    Err(_) => all.push(Vec::new()),
+                }
+            }
+            Response::BatchHits(all)
+        }
+        Request::Sql { query, params } => {
+            // Read-only raw SQL on brain.db. Hard-block writes via SQLite open mode.
+            let db_path = state.db_path.clone();
+            let result: Result<(Vec<String>, Vec<Vec<serde_json::Value>>), String> = tokio::task::block_in_place(|| {
+                use rusqlite::{Connection, OpenFlags, types::ValueRef};
+                let conn = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI)
+                    .map_err(|e| e.to_string())?;
+                let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+                let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
+                let n_cols = cols.len();
+                let rusq_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
+                    match v {
+                        serde_json::Value::Null => rusqlite::types::Value::Null,
+                        serde_json::Value::Bool(b) => rusqlite::types::Value::Integer(*b as i64),
+                        serde_json::Value::Number(n) => {
+                            if let Some(i) = n.as_i64() { rusqlite::types::Value::Integer(i) }
+                            else if let Some(f) = n.as_f64() { rusqlite::types::Value::Real(f) }
+                            else { rusqlite::types::Value::Null }
+                        }
+                        serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                        _ => rusqlite::types::Value::Text(v.to_string()),
+                    }
+                }).collect();
+                let param_refs: Vec<&dyn rusqlite::ToSql> = rusq_params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+                let mut rows_out = Vec::new();
+                let mut rows_iter = stmt.query(rusqlite::params_from_iter(&param_refs)).map_err(|e| e.to_string())?;
+                while let Some(row) = rows_iter.next().map_err(|e| e.to_string())? {
+                    let mut row_vals = Vec::with_capacity(n_cols);
+                    for i in 0..n_cols {
+                        let v = row.get_ref(i).map_err(|e| e.to_string())?;
+                        row_vals.push(match v {
+                            ValueRef::Null => serde_json::Value::Null,
+                            ValueRef::Integer(i) => serde_json::Value::from(i),
+                            ValueRef::Real(f) => serde_json::Value::from(f),
+                            ValueRef::Text(t) => serde_json::Value::String(String::from_utf8_lossy(t).into_owned()),
+                            ValueRef::Blob(b) => serde_json::Value::String(format!("<blob:{}b>", b.len())),
+                        });
+                    }
+                    rows_out.push(row_vals);
+                }
+                Ok((cols, rows_out))
+            });
+            match result {
+                Ok((cols, rows)) => Response::Rows { cols, rows },
+                Err(e) => Response::Err(e),
+            }
+        }
     }
 }
 
