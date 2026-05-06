@@ -15,10 +15,15 @@ serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 synapse-core = { path = "../synapse-core" }
+rusqlite = { workspace = true }
 # fastembed gated behind feature so default workspace build stays light.
 fastembed = { workspace = true, optional = true }
+# LightGBM via FFI — requires: brew install lightgbm (sets LIGHTGBM_LIB_DIR=/opt/homebrew/lib)
+lightgbm3 = { version = "1.0", optional = true }
 
 [features]
 default = []
 # Enable real ONNX cross-encoder (downloads model on first use).
 onnx = ["dep:fastembed"]
+# Enable LightGBM LambdaMART reranker.
+lightgbm = ["dep:lightgbm3"]

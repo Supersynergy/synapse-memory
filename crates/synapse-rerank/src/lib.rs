@@ -14,6 +14,11 @@ use synapse_core::Hit;
 pub mod cascade;
 pub use cascade::CascadeReranker;
 
+pub mod clicklog;
+
+#[cfg(feature = "lightgbm")]
+pub mod lightgbm;
+
 pub trait Reranker: Send + Sync {
     fn rerank(&self, query: &str, candidates: Vec<Hit>, top_k: usize) -> Result<Vec<Hit>>;
 }
