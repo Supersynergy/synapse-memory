@@ -432,9 +432,19 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 },
             }
         }
-        Request::Embed { text } => {
+        Request::Embed { text, dim } => {
             match embed_one(state, &text).await {
-                Ok(vec) => Response::Embed { vec },
+                Ok(mut vec) => {
+                    // Matryoshka truncation: if dim provided and < native, truncate + L2-renorm.
+                    if let Some(d) = dim {
+                        if d < vec.len() && d > 0 {
+                            vec.truncate(d);
+                            let n: f32 = vec.iter().map(|x| x*x).sum::<f32>().sqrt();
+                            if n > 1e-10 { for x in vec.iter_mut() { *x /= n; } }
+                        }
+                    }
+                    Response::Embed { vec }
+                }
                 Err(e) => Response::Err(e.to_string()),
             }
         }
@@ -506,6 +516,18 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 }
             }
             Response::BatchHits(all)
+        }
+        Request::Transaction { ops } => {
+            // Atomic batch via put_batch (single SQL transaction in store).
+            let put_reqs: Vec<PutRequest> = ops.into_iter().map(|p| p.into()).collect();
+            let result = tokio::task::block_in_place(|| {
+                let mut store = state.store.lock();
+                store.put_batch(&put_reqs)
+            });
+            match result {
+                Ok(ids) => Response::Ids(ids),
+                Err(e) => Response::Err(e.to_string()),
+            }
         }
         Request::Sql { query, params } => {
             // Read-only raw SQL via pooled PRAGMA-tuned conn (avoid per-call open + PRAGMA cost).

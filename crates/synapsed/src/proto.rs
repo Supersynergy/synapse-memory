@@ -39,8 +39,12 @@ pub enum Request {
     },
     /// Embed a single text string server-side. Returns the raw float vector.
     /// Does NOT store the document — pure compute, no side effects.
+    /// Optional `dim` truncates via Matryoshka MRL (BGE-small trained for it).
+    /// `dim < native_dim` returns L2-renormalized truncated vec.
     Embed {
         text: String,
+        #[serde(default)]
+        dim: Option<usize>,
     },
     /// Vector search with a raw client-supplied embedding (no server-side embed needed).
     SearchVec {
@@ -71,6 +75,11 @@ pub enum Request {
         query: String,
         #[serde(default)]
         params: Vec<serde_json::Value>,
+    },
+    /// Atomic transaction: multiple writes all-or-nothing.
+    /// Currently supports Put-batch semantics; extensible to mixed ops later.
+    Transaction {
+        ops: Vec<PutReq>,
     },
 }
 

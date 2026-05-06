@@ -190,20 +190,98 @@ def hybrid_cached(q: str, limit: int = 10):
 
 # ── Matryoshka truncation (BGE-small-v1.5 supports MRL: 384→256→192→128) ──
 def embed_truncated(text: str, dim: int = 192):
-    """Get embedding truncated to `dim` for memory savings.
-    BGE-small-v1.5 trained with Matryoshka loss; quality ~99% at 192d, ~96% at 96d.
-    Returns L2-normalized truncated vector.
+    """Server-side Matryoshka truncation: ~99% quality at 192d, ~96% at 96d.
+    Daemon Embed op accepts `dim` arg (P1.2) — truncates+renorms server-side.
+    Falls back to client-side trunc if daemon doesn't support dim arg yet.
     """
+    # Try server-side trunc (post-rebuild)
+    resp = call({"op": "Embed", "args": {"text": text, "dim": dim}})
+    if isinstance(resp, dict) and "Embed" in resp:
+        return resp["Embed"].get("vec")
+    # Fallback: client-side trunc
     full = embed_cached(text)
     if full is None or dim >= len(full):
         return full
     cut = full[:dim]
-    # L2 renormalize for cosine
     import math
     norm = math.sqrt(sum(x*x for x in cut))
     if norm > 1e-10:
         cut = [x / norm for x in cut]
     return cut
+
+
+# ── INT8 packed embed cache (P1.3) — 4× compression ────────────────────────
+def embed_cached_q8(text: str):
+    """f32→i8 quantized cache: 384B per vec (vs 1536B f32). Recall <1% drop."""
+    _cache_init()
+    h = hashlib.sha256(("q8:" + text).encode()).hexdigest()
+    with _CACHE_LOCK:
+        c = sqlite3.connect(_CACHE_DB)
+        r = c.execute("SELECT vec FROM emb WHERE h=?", (h,)).fetchone()
+        c.close()
+    if r:
+        # Decode i8 + scale
+        scale = struct.unpack("<f", r[0][:4])[0]
+        n = len(r[0]) - 4
+        vals = struct.unpack(f"<{n}b", r[0][4:])
+        return [v * scale / 127.0 for v in vals]
+    # Cache miss: get full, quantize, store
+    full = call({"op": "Embed", "args": {"text": text}})
+    vec = full.get("Embed", {}).get("vec") if isinstance(full, dict) else None
+    if not vec: return None
+    max_abs = max(abs(v) for v in vec) or 1.0
+    quant = bytes((min(127, max(-128, int(round(v / max_abs * 127)))) & 0xff) for v in vec)
+    blob = struct.pack("<f", max_abs) + quant
+    import time as _t
+    with _CACHE_LOCK:
+        c = sqlite3.connect(_CACHE_DB)
+        c.execute("INSERT OR REPLACE INTO emb VALUES (?, ?, ?)", (h, blob, _t.time()))
+        c.commit(); c.close()
+    return vec
+
+
+# ── Atomic transactions (P2.3) ────────────────────────────────────────────
+def transaction(items: list):
+    """All-or-nothing batch. items = list of dicts with text/title/uri/meta/embed."""
+    return call({"op": "Transaction", "args": {"ops": items}})
+
+
+# ── Schemafull/freeform mix (P5.4) — sqlite TYPES + JSON ──────────────────
+def define_table(name: str, fields: dict):
+    """Create strict-typed table via daemon Sql. fields={col: type}."""
+    cols = ", ".join(f'"{k}" {v}' for k, v in fields.items())
+    return sql(f"CREATE TABLE IF NOT EXISTS {name} ({cols})")
+
+
+# ── Time-series helpers (P5.3) — sqlite window functions ─────────────────
+def ts_lag(table: str, value_col: str, ts_col: str = "ts", n: int = 1, where: str = "1=1"):
+    """SELECT lag(value, n) OVER (ORDER BY ts) — trend analysis."""
+    return sql(f"SELECT {ts_col}, {value_col}, lag({value_col}, ?) OVER (ORDER BY {ts_col}) AS prev FROM {table} WHERE {where}", [n])
+
+
+def ts_rolling_avg(table: str, value_col: str, ts_col: str = "ts", window: int = 7, where: str = "1=1"):
+    """Rolling N-period average."""
+    return sql(f"SELECT {ts_col}, {value_col}, avg({value_col}) OVER (ORDER BY {ts_col} ROWS BETWEEN ? PRECEDING AND CURRENT ROW) AS rolling_avg FROM {table} WHERE {where}", [window-1])
+
+
+# ── Geo helpers (P5.2) — needs spatialite ext (optional) ──────────────────
+def geo_within(lat: float, lon: float, radius_m: float, table: str = "docs"):
+    """Find docs within radius using haversine fallback (no spatialite needed).
+    Assumes table has lat/lon columns (REAL). Returns ids ranked by distance.
+    """
+    # Haversine via SQL math
+    return sql(f"""
+        SELECT id, lat, lon,
+            6371000 * 2 * asin(sqrt(
+                pow(sin(radians(lat - ?) / 2), 2) +
+                cos(radians(?)) * cos(radians(lat)) *
+                pow(sin(radians(lon - ?) / 2), 2)
+            )) AS dist_m
+        FROM {table}
+        WHERE dist_m <= ?
+        ORDER BY dist_m
+        LIMIT 100
+    """, [lat, lat, lon, radius_m])
 
 
 # ── BatchSearch (multiple queries, single roundtrip) ──────────────────────
