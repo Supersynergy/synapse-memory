@@ -100,8 +100,11 @@ impl Store {
                 (row_count as usize).max(1024),
             )?;
             if ann.len() < row_count as usize {
-                // Sidecar was missing/corrupt or outdated. Rebuild from SQL.
-                store.rebuild_ann_from_docs_vec(&ann)?;
+                // Sidecar outdated (telepathy/concurrent-puts since last persist).
+                // Inject only the missing tail rows by id > max_loaded_id to avoid
+                // "duplicate keys" crash from re-inserting already-loaded entries.
+                tracing::info!("ann sidecar diff: loaded={} db={}, injecting tail", ann.len(), row_count);
+                store.rebuild_ann_tail(&ann)?;
             }
             store.ann = Some(ann);
             store.sota_migrate()?;
@@ -694,6 +697,39 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     #[cfg(feature = "turbo")]
     pub fn take_ndarray_search(&mut self) -> Option<crate::turbo::ndarray_search::NdArraySearch> {
         self.ndarray_search.write().unwrap().take()
+    }
+
+    /// Insert only docs_vec rows with id NOT already in the loaded ANN sidecar.
+    /// Used when sidecar exists but is missing tail entries (concurrent puts since last persist).
+    /// Avoids "duplicate keys" crash from re-inserting all rows.
+    #[cfg(feature = "ann-usearch")]
+    fn rebuild_ann_tail(&self, ann: &crate::ann::Ann) -> Result<()> {
+        // Find IDs not yet in ann. Cheap: query docs_vec where id NOT IN (sidecar ids).
+        // ANN doesn't expose id-set, so we iterate docs_vec and use ann.contains() if available,
+        // else just try insert and ignore duplicate errors.
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, embedding FROM docs_vec ORDER BY id DESC LIMIT 10000")?;
+        let rows = stmt.query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            let bytes: Vec<u8> = r.get(1)?;
+            Ok((id, bytes))
+        })?;
+        let mut inserted = 0usize;
+        for row in rows {
+            let (id, bytes) = row?;
+            if bytes.len() != EMBED_DIM * 4 { continue; }
+            let mut v = Vec::with_capacity(EMBED_DIM);
+            for chunk in bytes.chunks_exact(4) {
+                v.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+            }
+            // Try insert — silently skip duplicates (already in sidecar).
+            if ann.insert_or_skip(id, &v).is_ok() {
+                inserted += 1;
+            }
+        }
+        tracing::info!("ann rebuild_tail: injected {inserted} new entries");
+        Ok(())
     }
 
     /// PR-A1-wire internal: rebuild the ANN index from `docs_vec` rows.

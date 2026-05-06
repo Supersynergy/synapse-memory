@@ -20,7 +20,8 @@ from pathlib import Path
 STATE = Path.home() / ".claude/telepathy/offsets.json"
 LOGF  = Path.home() / ".claude/telepathy/daemon.log"
 PROJ  = Path.home() / ".claude/projects"
-POLL  = float(os.environ.get("TELEPATHY_POLL", "4.0"))
+POLL  = float(os.environ.get("TELEPATHY_POLL", "30.0"))  # was 4s — too aggressive, blocked reads
+BATCH_MAX = int(os.environ.get("TELEPATHY_BATCH", "200"))
 MAX_LINE_SCAN = int(os.environ.get("TELEPATHY_MAX_LINES", "500"))
 IDLE_CUTOFF   = int(os.environ.get("TELEPATHY_IDLE_CUTOFF", "1800"))
 SYN_BIN       = os.environ.get("SYN_BIN", "synx")
@@ -87,16 +88,28 @@ def extract(ev: dict) -> str | None:
 
 
 def push(text: str) -> None:
+    """Single put — kept for compatibility but prefer push_batch."""
     try:
         subprocess.run([SYN_BIN, "put", text], timeout=8, capture_output=True)
     except Exception as e:
         log(f"push_err {e}")
 
 
+def push_batch(texts: list) -> None:
+    """Batch put via stdin newline-separated to avoid N socket roundtrips."""
+    if not texts:
+        return
+    payload = "\n".join(texts).encode()[:1_000_000]  # 1MB cap
+    try:
+        subprocess.run([SYN_BIN, "put-batch"], input=payload, timeout=15, capture_output=True)
+    except Exception as e:
+        log(f"push_batch_err {e}")
+
+
 def tick(state: dict) -> None:
     now = time.time()
     files = glob.glob(str(PROJ / "**/*.jsonl"), recursive=True)
-    emitted = 0
+    batch = []
     for fp in files:
         try:
             st = os.stat(fp)
@@ -122,12 +135,15 @@ def tick(state: dict) -> None:
                     continue
                 msg = extract(ev)
                 if msg:
-                    push(msg)
-                    emitted += 1
+                    batch.append(msg)
+                    if len(batch) >= BATCH_MAX:
+                        push_batch(batch); batch = []
         except Exception as e:
             log(f"tick_err {fp} {e}")
-    if emitted:
-        log(f"emitted {emitted}")
+    if batch:
+        push_batch(batch)
+    if batch or len(state) > 0:
+        log(f"emitted {len(batch)} (batched)")
 
 
 def main() -> None:

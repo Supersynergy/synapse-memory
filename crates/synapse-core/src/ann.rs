@@ -83,6 +83,24 @@ impl Ann {
             .map_err(|e| Error::Other(format!("usearch insert: {e}")))
     }
 
+    /// Insert if not already present. Used during sidecar tail-rebuild after
+    /// load when concurrent puts may have added rows after last persist.
+    /// Errors with "duplicate" or "already exists" are swallowed silently.
+    pub fn insert_or_skip(&self, id: i64, vec: &[f32]) -> Result<()> {
+        let mut g = self.inner.write();
+        match g.insert(id as u64, vec) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let msg = format!("{e:?}");
+                if msg.contains("Duplicate") || msg.contains("already exists") {
+                    Ok(())  // already present, safe to skip
+                } else {
+                    Err(Error::Other(format!("usearch insert_or_skip: {e}")))
+                }
+            }
+        }
+    }
+
     /// Remove `id`. Idempotent.
     pub fn remove(&self, id: i64) -> Result<usize> {
         self.inner

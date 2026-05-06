@@ -76,6 +76,8 @@ struct State {
     cache_path: PathBuf,
     snap_dir: PathBuf,
     max_put_bytes: usize,
+    /// Read-only PRAGMA-tuned connection for Sql op. Avoid per-call open/PRAGMA overhead.
+    sql_conn: PlMutex<Option<rusqlite::Connection>>,
 }
 
 impl State {
@@ -219,6 +221,19 @@ async fn main() -> Result<()> {
     });
     std::fs::create_dir_all(&snap_dir).ok();
     let reranker: Box<dyn Reranker> = build_reranker(&cli.rerank_model);
+    // Pre-open PRAGMA-tuned read-only Sql conn for analytics ops.
+    let sql_conn = {
+        use rusqlite::{Connection, OpenFlags};
+        match Connection::open_with_flags(&cli.file, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI) {
+            Ok(c) => {
+                let _ = c.pragma_update(None, "mmap_size", 1_073_741_824_i64);
+                let _ = c.pragma_update(None, "cache_size", -262_144_i64);
+                let _ = c.pragma_update(None, "temp_store", 2_i64);
+                Some(c)
+            }
+            Err(e) => { tracing::warn!("sql_conn pre-open failed: {e}"); None }
+        }
+    };
     let state = Arc::new(State {
         store: PlMutex::new(store),
         ndarray_idx,
@@ -228,6 +243,7 @@ async fn main() -> Result<()> {
         cache_path,
         snap_dir,
         max_put_bytes: cli.max_put_bytes,
+        sql_conn: PlMutex::new(sql_conn),
     });
 
     let _ = std::fs::remove_file(&cli.sock);
@@ -492,16 +508,11 @@ async fn dispatch(state: &State, req: Request) -> Response {
             Response::BatchHits(all)
         }
         Request::Sql { query, params } => {
-            // Read-only raw SQL on brain.db. Hard-block writes via SQLite open mode.
-            let db_path = state.db_path.clone();
+            // Read-only raw SQL via pooled PRAGMA-tuned conn (avoid per-call open + PRAGMA cost).
             let result: Result<(Vec<String>, Vec<Vec<serde_json::Value>>), String> = tokio::task::block_in_place(|| {
-                use rusqlite::{Connection, OpenFlags, types::ValueRef};
-                let conn = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI)
-                    .map_err(|e| e.to_string())?;
-                // Apply same hot-cache PRAGMAs as Store::open for fast analytics queries.
-                let _ = conn.pragma_update(None, "mmap_size", 1_073_741_824_i64);
-                let _ = conn.pragma_update(None, "cache_size", -262_144_i64); // 256MB
-                let _ = conn.pragma_update(None, "temp_store", 2_i64); // MEMORY
+                use rusqlite::types::ValueRef;
+                let guard = state.sql_conn.lock();
+                let conn = guard.as_ref().ok_or_else(|| "sql_conn unavailable".to_string())?;
                 let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
                 let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
                 let n_cols = cols.len();
