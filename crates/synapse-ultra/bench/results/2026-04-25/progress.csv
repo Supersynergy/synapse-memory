@@ -1,8 +1,0 @@
-lever,corpus,qps_1c,p50_ms,p95_ms,recall@10,ram_mb,notes
-t0_cache_hit,n/a,47619047,0.000021,0.000022,1.00,,ahash sharded 16-shard; 21ns p50
-t1_strict_f32,10k,2169,0.461,0.502,1.00,,brute f32 rayon dot release
-t1_strict_f32,162k,312,3.201,3.399,1.00,,brute f32 rayon dot release; bandwidth wall
-t1_binary_first_rn200,10k,2825,0.354,0.367,0.36*,,hamming+f16rerank rn=200; *synthetic uniform
-t1_binary_first_rn500,10k,,0.620,,0.67*,,hamming+f16rerank rn=500; *synthetic uniform
-t1_binary_first_rn200,162k,1061,0.942,0.984,unknown,,real-corpus recall not verified yet
-HONESTY_NOTE,n/a,,,,,,binary-first recall on quasi-uniform synthetic vectors 0.36@rn200/0.67@rn500. Real BGE semantic recall expected higher (clustered). Verify on brain.db before claiming >=0.95
