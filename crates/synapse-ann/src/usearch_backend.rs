@@ -52,15 +52,34 @@ impl UsearchIndex {
         // cosine. Measured via tests/ann_recall_parity.rs: expansion_search=64
         // gave 0.79 recall (fail), 256 gives ≥0.95. Build time rises ~1.5x
         // but still << 1s/100k at 10k vectors.
+        // F16 halves memory → better cache hit rate → faster search.
         IndexOptions {
             dimensions: dim,
             metric: MetricKind::Cos,
-            quantization: ScalarKind::F32,
+            quantization: ScalarKind::F16,
             connectivity: 16, // HNSW M; usearch default
             expansion_add: 256,
             expansion_search: 256,
             multi: false,
         }
+    }
+
+    /// Build a new empty HNSW index with F32 quantization (fallback).
+    pub fn new_f32(dim: usize, expected_capacity: usize) -> Result<Self, AnnError> {
+        let opts = IndexOptions {
+            dimensions: dim,
+            metric: MetricKind::Cos,
+            quantization: ScalarKind::F32,
+            connectivity: 16,
+            expansion_add: 256,
+            expansion_search: 256,
+            multi: false,
+        };
+        let idx =
+            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        idx.reserve(expected_capacity.max(1024))
+            .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
+        Ok(Self { idx, dim, len: 0 })
     }
 
     /// Load a previously-saved sidecar from `path`. The caller supplies `dim`
