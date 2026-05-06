@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use synapse_core::{embed::Embedder, embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
 use synapse_core::turbo::ndarray_search::NdArraySearch;
-use synapse_rerank::{IdentityReranker, Reranker};
+use synapse_rerank::{build_reranker_from_env, IdentityReranker, Reranker};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
@@ -91,6 +91,11 @@ impl State {
 }
 
 fn build_reranker(_model_path: &Option<PathBuf>) -> Box<dyn Reranker> {
+    // Check SYNAPSE_RERANKER env first (supports identity / lightgbm:PATH / onnx).
+    if std::env::var("SYNAPSE_RERANKER").is_ok() {
+        return build_reranker_from_env();
+    }
+    // Legacy: feature-flag driven fallback (no env set).
     #[cfg(feature = "onnx")]
     {
         info!("onnx feature active — loading OnnxCrossEncoder (BGE-reranker-v2-m3)…");
