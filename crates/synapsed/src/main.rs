@@ -6,6 +6,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod metrics;
 mod proto;
+mod livequery;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -57,6 +58,9 @@ struct Cli {
     /// Prometheus metrics endpoint. Default: 127.0.0.1:9090. Env: SYNAPSE_METRICS_ADDR.
     #[arg(long, env = "SYNAPSE_METRICS_ADDR", default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+    /// LiveQuery WebSocket endpoint. Default: 127.0.0.1:9091. Env: SYNAPSE_LIVE_ADDR.
+    #[arg(long, env = "SYNAPSE_LIVE_ADDR", default_value = "127.0.0.1:9091")]
+    live_addr: SocketAddr,
     /// Path to ONNX cross-encoder model for reranking (requires --features onnx).
     /// Default: ~/.synapse/models/ms-marco-MiniLM-L-6-v2.onnx (auto-download via fastembed).
     /// If not set and onnx feature is active, BGE-reranker-v2-m3 is auto-downloaded on first use.
@@ -78,6 +82,8 @@ struct State {
     max_put_bytes: usize,
     /// Read-only PRAGMA-tuned connection for Sql op. Avoid per-call open/PRAGMA overhead.
     sql_conn: PlMutex<Option<rusqlite::Connection>>,
+    /// LiveQuery broadcast broker (P2.2). Emits on Put/PutBatch/Merge.
+    live_broker: livequery::LiveBroker,
 }
 
 impl State {
@@ -244,6 +250,14 @@ async fn main() -> Result<()> {
         snap_dir,
         max_put_bytes: cli.max_put_bytes,
         sql_conn: PlMutex::new(sql_conn),
+        live_broker: livequery::LiveBroker::new(256),
+    });
+
+    // Spawn LiveQuery WebSocket server (P2.2).
+    let live_broker_clone = state.live_broker.clone();
+    let live_addr = cli.live_addr;
+    tokio::spawn(async move {
+        livequery::serve(live_broker_clone, live_addr).await;
     });
 
     let _ = std::fs::remove_file(&cli.sock);
@@ -333,19 +347,37 @@ async fn dispatch(state: &State, req: Request) -> Response {
         Request::Ping => Response::Pong,
         Request::Put(p) => {
             let t0 = Instant::now();
+            let title = p.title.clone();
+            let uri = p.uri.clone();
             let result = put_one(state, p).await;
             metrics::record_put(t0.elapsed());
             match result {
-                Ok(id) => Response::Id(id),
+                Ok(id) => {
+                    // P2.2 LiveQuery emit
+                    state.live_broker.emit(livequery::LiveEvent {
+                        op: "Put".into(), id, title, uri,
+                        ts: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0),
+                    });
+                    Response::Id(id)
+                }
                 Err(e) => Response::Err(e.to_string()),
             }
         }
         Request::PutBatch(batch) => {
             let t0 = Instant::now();
+            let titles: Vec<_> = batch.iter().map(|p| (p.title.clone(), p.uri.clone())).collect();
             let result = put_batch(state, batch).await;
             metrics::record_put(t0.elapsed());
             match result {
-                Ok(ids) => Response::Ids(ids),
+                Ok(ids) => {
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                    for (id, (title, uri)) in ids.iter().zip(titles.iter()) {
+                        state.live_broker.emit(livequery::LiveEvent {
+                            op: "PutBatch".into(), id: *id, title: title.clone(), uri: uri.clone(), ts: now,
+                        });
+                    }
+                    Response::Ids(ids)
+                }
                 Err(e) => Response::Err(e.to_string()),
             }
         }
