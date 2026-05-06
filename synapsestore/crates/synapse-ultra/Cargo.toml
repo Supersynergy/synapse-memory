@@ -66,3 +66,4 @@ harness = false
 default = []
 binary-rerank = []
 hnsw = ["dep:usearch"]
+rabitq = []

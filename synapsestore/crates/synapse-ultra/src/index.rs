@@ -17,6 +17,9 @@ pub struct UltraIndex {
     pub matrix_f16: Vec<u16>,
     /// packed-sign binary matrix, len = n*48
     pub bin_matrix: Vec<u8>,
+    /// RaBitQ rotated binary matrix, len = n*48 (feature-gated)
+    #[cfg(feature = "rabitq")]
+    pub bin_matrix_rotated: Option<Vec<u8>>,
     /// HNSW index (feature-gated)
     #[cfg(feature = "hnsw")]
     pub hnsw: Option<usearch::Index>,
@@ -25,11 +28,15 @@ pub struct UltraIndex {
 impl UltraIndex {
     pub fn from_snapshot(snap: Snapshot) -> Self {
         let bin_matrix = binary::build_binary_matrix(&snap.matrix_f32);
+        #[cfg(feature = "rabitq")]
+        let bin_matrix_rotated = Some(binary::build_binary_matrix_rotated(&snap.matrix_f32));
         UltraIndex {
             ids: snap.ids,
             matrix_f32: snap.matrix_f32,
             matrix_f16: snap.matrix_f16,
             bin_matrix,
+            #[cfg(feature = "rabitq")]
+            bin_matrix_rotated,
             #[cfg(feature = "hnsw")]
             hnsw: None,
         }
@@ -104,6 +111,28 @@ impl UltraIndex {
             id: self.ids[idx],
             score: 1.0 - (dist as f32 / 384.0),
         }).collect()
+    }
+
+    /// RaBitQ binary search: rotate query → hamming → top-rerank_n candidates → f16 cosine → top-k.
+    #[cfg(feature = "rabitq")]
+    pub fn search_rabitq(&self, query_f32: &[f32], k: usize) -> Vec<Hit> {
+        debug_assert_eq!(query_f32.len(), EMBED_DIM);
+        let query_sign = binary::pack_signs_rotated(query_f32);
+        let bin_mat = match &self.bin_matrix_rotated {
+            Some(m) => m,
+            None => return self.search_binary_first(query_f32, k),
+        };
+        let rerank_n = search::DEFAULT_BINARY_RERANK.max(k * 16);
+        let raw = search::top_k_binary_first(
+            query_f32,
+            &query_sign,
+            bin_mat,
+            &self.matrix_f16,
+            self.ids.len(),
+            k,
+            rerank_n,
+        );
+        raw.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect()
     }
 
     /// HNSW approximate search. ef tunable via ULTRA_HNSW_EF (default 64).
