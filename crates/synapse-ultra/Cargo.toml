@@ -1,0 +1,69 @@
+[package]
+name = "synapse-ultra"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "High-throughput 4-tier vector search daemon replacing synapse-turbo.py"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rmp-serde.workspace = true
+blake3.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+axum.workspace = true
+ndarray.workspace = true
+# fastbloom removed — sharded ahash cache handles it
+once_cell.workspace = true
+parking_lot.workspace = true
+fastembed.workspace = true
+rusqlite = { workspace = true }
+sqlite-vec.workspace = true
+thiserror = "2"
+
+# not in workspace yet — add inline
+lru = "0.18"
+arc-swap = "1"
+ahash = "0.8"
+memmap2 = "0.9"
+simsimd = "6.5"
+rayon = "1"
+bitvec = "1"
+half = "2"
+bincode = "1"
+usearch = { version = "2.25", optional = true }
+synapse-ann = { path = "../synapse-ann", optional = true, features = ["ann-usearch"] }
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+
+[lib]
+name = "synapse_ultra"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "synapse-ultra"
+path = "bin/synapse-ultra.rs"
+
+[[bench]]
+name = "bench_search"
+path = "benches/bench_search.rs"
+harness = false
+
+[[bench]]
+name = "bench_recall"
+path = "benches/bench_recall.rs"
+harness = false
+
+[features]
+default = []
+binary-rerank = []
+hnsw = ["dep:synapse-ann"]
