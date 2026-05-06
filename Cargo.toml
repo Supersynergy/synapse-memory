@@ -19,6 +19,7 @@ members = [
     "crates/synapse-rerank",
     "crates/synapse-extract",
     "crates/synapse-temporal",
+    "crates/synapse-graph",
     # End-to-end LongMemEval benchmark runner (rule + optional MLX hooks)
     "bench/longmemeval",
     # Space concept hierarchy: Space → Wing → Room → Drawer
