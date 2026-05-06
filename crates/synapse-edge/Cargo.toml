@@ -1,0 +1,23 @@
+[package]
+name = "synapse-edge"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "synapse-edge"
+path = "src/main.rs"
+
+[dependencies]
+pingora-core = { version = "0.8", features = ["rustls"] }
+pingora-proxy = "0.8"
+pingora-http = "0.8"
+async-trait = "0.1"
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+bytes = "1"
+http = "1"
+rustls = { version = "0.23", features = ["ring"] }

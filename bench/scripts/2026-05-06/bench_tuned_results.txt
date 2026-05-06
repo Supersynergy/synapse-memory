@@ -1,0 +1,24 @@
+=== TUNED BENCH (50k × 384d cosine, k=10, GT brute-force) ===
+
+[1] ChromaDB tuned configs
+  Chroma default (M=16, ef=10)               build=   4.0s  p50=   0.96ms  QPS=   1043  R@10=0.204
+  Chroma TUNED (M=64, ef_c=400, ef_s=400, cos) build=  46.7s  p50=  12.21ms  QPS=     82  R@10=0.956
+  Chroma MAX_RECALL (ef_s=1000)              build=  50.4s  p50=  18.89ms  QPS=     53  R@10=1.000
+
+[2] LanceDB tuned configs
+  LanceDB default (no index, brute)          build=   0.1s  p50=   7.89ms  QPS=    127  R@10=1.000
+  LanceDB IVF_PQ TUNED (224p, 64nprobes, cos) ERROR: Arrow error: Schema error: Unable to get field named "vector". Valid fields: ["i
+  LanceDB MAX_RECALL (224nprobes, refine=10) ERROR: Arrow error: Schema error: Unable to get field named "vector". Valid fields: ["i
+
+[3] Synapse baseline (cited from prior bench)
+  Synapse usearch f16 M=48 (50k)             build= < 1s     p50=  0.06ms  QPS= 16667  R@10=0.982
+
+=== TUNED COMPARISON ===
+| Engine | p50 | QPS | R@10 | Build |
+|---|---|---|---|---|
+| Chroma default (M=16, ef=10) | 0.96ms | 1043 | 0.204 | 4.0s |
+| Chroma TUNED (M=64, ef_c=400, ef_s=400, cos) | 12.21ms | 82 | 0.956 | 46.7s |
+| Chroma MAX_RECALL (ef_s=1000) | 18.89ms | 53 | 1.000 | 50.4s |
+| LanceDB default (no index, brute) | 7.89ms | 127 | 1.000 | 0.1s |
+| LanceDB IVF_PQ TUNED (224p, 64nprobes, cos) | — | — | FAIL | — |
+| LanceDB MAX_RECALL (224nprobes, refine=10) | — | — | FAIL | — |

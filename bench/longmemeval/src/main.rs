@@ -226,6 +226,30 @@ fn answer_in_any(answer: &str, docs: &[&str]) -> bool {
     false
 }
 
+/// Fuzzy fallback: token-set-recall (answer-tokens ∩ doc-tokens / answer-tokens) ≥ thr.
+/// Catches paraphrases that strict substring misses.
+/// `min_tok` enforces ≥3-char content tokens. `thr` typical 0.6-0.8.
+fn answer_in_any_fuzzy(answer: &str, docs: &[&str], thr: f64) -> bool {
+    let na = normalize(answer);
+    let a_toks: std::collections::HashSet<&str> = na
+        .split_whitespace()
+        .filter(|t| t.len() >= 3)
+        .collect();
+    if a_toks.is_empty() {
+        return false;
+    }
+    let need = ((a_toks.len() as f64) * thr).ceil() as usize;
+    for d in docs {
+        let nd = normalize(d);
+        let d_toks: std::collections::HashSet<&str> = nd.split_whitespace().collect();
+        let hit = a_toks.iter().filter(|t| d_toks.contains(*t)).count();
+        if hit >= need.max(1) {
+            return true;
+        }
+    }
+    false
+}
+
 fn run_question<H: PipelineHooks>(
     q: &Question,
     hooks: &H,
@@ -237,7 +261,7 @@ fn run_question<H: PipelineHooks>(
     pre_extractor: Option<&dyn synapse_extract::Extractor>,
     rrf_k: f64,
     rerank_top: usize,
-) -> Result<(bool, bool, u128, usize, Vec<String>, Vec<String>)> {
+) -> Result<(bool, bool, bool, bool, u128, usize, Vec<String>, Vec<String>)> {
     // Fresh tempfile-backed store per question (Store::open requires a path).
     let tmp = tempfile_path(&q.question_id)?;
     // Make sure no leftover.
@@ -340,6 +364,8 @@ fn run_question<H: PipelineHooks>(
     let top10: Vec<&str> = hits.iter().take(10).map(|h| h.hit.text.as_str()).collect();
     let r5 = answer_in_any(&q.answer, &top5);
     let r10 = answer_in_any(&q.answer, &top10);
+    let f5 = answer_in_any_fuzzy(&q.answer, &top5, 0.6);
+    let f10 = answer_in_any_fuzzy(&q.answer, &top10, 0.6);
     let top5_owned: Vec<String> = top5.iter().map(|s| s.to_string()).collect();
     let top10_owned: Vec<String> = top10.iter().map(|s| s.to_string()).collect();
     if std::env::var("LME_DEBUG_TOP5").ok().as_deref() == Some("1") {
@@ -353,7 +379,7 @@ fn run_question<H: PipelineHooks>(
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_file(format!("{}-wal", tmp.display()));
     let _ = std::fs::remove_file(format!("{}-shm", tmp.display()));
-    Ok((r5, r10, elapsed, n_docs, top5_owned, top10_owned))
+    Ok((r5, r10, f5, f10, elapsed, n_docs, top5_owned, top10_owned))
 }
 
 fn tempfile_path(qid: &str) -> Result<PathBuf> {
@@ -395,7 +421,7 @@ fn main() -> Result<()> {
     #[cfg(feature = "rerank")]
     let reranker_box: Option<Box<dyn synapse_rerank::Reranker>> = if args.rerank_top > 0 {
         match synapse_rerank::onnx::OnnxCrossEncoder::new() {
-            Ok(r) => { println!("Reranker: JINA-rerank-v2-base-multilingual (ONNX, top={})", args.rerank_top); Some(Box::new(r)) }
+            Ok(r) => { println!("Reranker: BGE-reranker-v2-m3 (568M ONNX cross-encoder, top={})", args.rerank_top); Some(Box::new(r)) }
             Err(e) => { eprintln!("WARN: reranker init failed: {} — running rerank-off", e); None }
         }
     } else { None };
@@ -446,6 +472,8 @@ fn main() -> Result<()> {
 
     let mut r5_hits = 0usize;
     let mut r10_hits = 0usize;
+    let mut f5_hits = 0usize;
+    let mut f10_hits = 0usize;
     let mut judge_r5_hits = 0usize;
     let mut judge_r5_evaluated = 0usize;
     let mut judge_r10_hits = 0usize;
@@ -485,12 +513,18 @@ fn main() -> Result<()> {
             run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
         };
         match res {
-            Ok((r5, r10, ms, nd, top5, top10)) => {
+            Ok((r5, r10, f5, f10, ms, nd, top5, top10)) => {
                 if r5 {
                     r5_hits += 1;
                 }
                 if r10 {
                     r10_hits += 1;
+                }
+                if f5 {
+                    f5_hits += 1;
+                }
+                if f10 {
+                    f10_hits += 1;
                 }
                 total_ms += ms;
                 total_docs += nd;
@@ -552,8 +586,12 @@ fn main() -> Result<()> {
     println!("--- Results ---");
     println!("N            : {}", qs.len());
     println!("Errors       : {}", errs.len());
+    let f5 = f5_hits as f64 / n;
+    let f10 = f10_hits as f64 / n;
     println!("Recall@5     : {:.3}  ({}/{})", r5, r5_hits, qs.len());
     println!("Recall@10    : {:.3}  ({}/{})", r10, r10_hits, qs.len());
+    println!("Fuzzy-R@5    : {:.3}  ({}/{})  [token-set 0.6]", f5, f5_hits, qs.len());
+    println!("Fuzzy-R@10   : {:.3}  ({}/{})  [token-set 0.6]", f10, f10_hits, qs.len());
     if args.judge {
         let denom = qs.len() as f64;
         let jr5 = if denom > 0.0 { judge_r5_hits as f64 / denom } else { 0.0 };
