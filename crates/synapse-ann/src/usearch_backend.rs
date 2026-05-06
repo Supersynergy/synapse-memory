@@ -106,6 +106,25 @@ impl UsearchIndex {
         Ok(Self { idx, dim, len: 0 })
     }
 
+    /// Build a new empty HNSW index with INT8 scalar quantization (4× memory vs F32, 2× vs F16).
+    /// Recall typically 0.95-0.99 vs F32 baseline. Use when memory-bound at 50M+ scale.
+    pub fn new_i8(dim: usize, expected_capacity: usize) -> Result<Self, AnnError> {
+        let opts = IndexOptions {
+            dimensions: dim,
+            metric: MetricKind::Cos,
+            quantization: ScalarKind::I8,
+            connectivity: 16,
+            expansion_add: 256,
+            expansion_search: 256,
+            multi: false,
+        };
+        let idx =
+            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        idx.reserve(expected_capacity.max(1024))
+            .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
+        Ok(Self { idx, dim, len: 0 })
+    }
+
     /// Load a previously-saved sidecar from `path`. The caller supplies `dim`
     /// so we can rebuild the index options deterministically (usearch's file
     /// format encodes dim internally, but re-deriving avoids surprises).
