@@ -458,6 +458,10 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 use rusqlite::{Connection, OpenFlags, types::ValueRef};
                 let conn = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI)
                     .map_err(|e| e.to_string())?;
+                // Apply same hot-cache PRAGMAs as Store::open for fast analytics queries.
+                let _ = conn.pragma_update(None, "mmap_size", 1_073_741_824_i64);
+                let _ = conn.pragma_update(None, "cache_size", -262_144_i64); // 256MB
+                let _ = conn.pragma_update(None, "temp_store", 2_i64); // MEMORY
                 let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
                 let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
                 let n_cols = cols.len();

@@ -12,6 +12,8 @@ members = [
     "synapsestore/crates/synapse-wal",
     "synapsestore/crates/synapse-seg",
     "crates/synapse-engine",
+    # Pingora HTTP frontend (benchmark: axum vs pingora)
+    "crates/synapse-edge",
     "crates/synapse-license",
     # SOTA agent-memory layer (2026-04-29)
     "crates/synapse-rerank",
@@ -83,3 +85,17 @@ strip = "symbols"
 overflow-checks = false
 debug = false
 incremental = false
+
+# Speed-optimized profile: max inlining, fat LTO, abort. Slow build (~5min).
+[profile.release-fast]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+overflow-checks = false
+debug = false
+incremental = false
+
+# Use this for production daemon binary: `cargo build --profile release-fast -p synapsed`
