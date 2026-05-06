@@ -62,6 +62,11 @@ name = "bench_recall"
 path = "benches/bench_recall.rs"
 harness = false
 
+[[bench]]
+name = "bench_cascade_f16"
+path = "benches/bench_cascade_f16.rs"
+harness = false
+
 [features]
 default = []
 binary-rerank = []
