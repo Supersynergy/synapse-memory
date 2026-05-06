@@ -37,7 +37,7 @@ rayon = "1"
 bitvec = "1"
 half = "2"
 bincode = "1"
-usearch = { version = "2.25", optional = true }
+synapse-ann = { path = "../../../crates/synapse-ann", optional = true, features = ["ann-usearch"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
@@ -65,5 +65,5 @@ harness = false
 [features]
 default = []
 binary-rerank = []
-hnsw = ["dep:usearch"]
+hnsw = ["dep:synapse-ann"]
 rabitq = []

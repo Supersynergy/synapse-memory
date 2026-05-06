@@ -22,7 +22,7 @@ pub struct UltraIndex {
     pub bin_matrix_rotated: Option<Vec<u8>>,
     /// HNSW index (feature-gated)
     #[cfg(feature = "hnsw")]
-    pub hnsw: Option<usearch::Index>,
+    pub hnsw: Option<synapse_ann::UsearchIndex>,
 }
 
 impl UltraIndex {
@@ -44,9 +44,26 @@ impl UltraIndex {
 
     /// Build or load HNSW index from disk. Call once after from_snapshot.
     #[cfg(feature = "hnsw")]
-    pub fn with_hnsw(mut self, hnsw_path: &Path, snap_mtime: u64) -> Result<Self> {
-        let index = crate::hnsw::build(&self.matrix_f32, &self.ids, hnsw_path, snap_mtime)?;
-        self.hnsw = Some(index);
+    pub fn with_hnsw(mut self, hnsw_path: &Path, _snap_mtime: u64) -> Result<Self> {
+        use synapse_ann::{AnnIndex, UsearchIndex};
+        let n = self.ids.len();
+        let dim = EMBED_DIM;
+
+        let idx = match UsearchIndex::load(hnsw_path, dim) {
+            Ok(loaded) => loaded,
+            Err(_) => {
+                let mut fresh = UsearchIndex::new(dim, n.max(1024))
+                    .map_err(|e| crate::error::UltraError::Anyhow(anyhow::anyhow!("{e}")))?;
+                for (i, row) in self.matrix_f32.rows().into_iter().enumerate() {
+                    let slice: &[f32] = row.as_slice().expect("contiguous row");
+                    fresh.insert(i as u64, slice)
+                        .map_err(|e| crate::error::UltraError::Anyhow(anyhow::anyhow!("{e}")))?;
+                }
+                let _ = fresh.save(hnsw_path);
+                fresh
+            }
+        };
+        self.hnsw = Some(idx);
         Ok(self)
     }
 
@@ -135,24 +152,32 @@ impl UltraIndex {
         raw.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect()
     }
 
-    /// HNSW approximate search. ef tunable via ULTRA_HNSW_EF (default 64).
-    /// Candidates: 2*k from HNSW → f32 cosine rerank → top-k.
+    /// HNSW approximate search. Candidates: 2*k from UsearchIndex → f32 cosine rerank → top-k.
     #[cfg(feature = "hnsw")]
     pub fn search_hnsw(&self, query_f32: &[f32], k: usize) -> Vec<Hit> {
+        use synapse_ann::AnnIndex;
         debug_assert_eq!(query_f32.len(), EMBED_DIM);
-        let ef: usize = std::env::var("ULTRA_HNSW_EF")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(64);
 
         let Some(ref index) = self.hnsw else {
             tracing::warn!("HNSW index not built, falling back to binary_first");
             return self.search_binary_first(query_f32, k);
         };
 
-        let mut candidates = crate::hnsw::search(index, &self.ids, query_f32, k, ef);
+        let raw = match index.search(query_f32, k * 2) {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::error!("hnsw search: {e}");
+                return self.search_binary_first(query_f32, k);
+            }
+        };
 
-        // rerank top-2k candidates with f32 cosine
+        let n = self.ids.len();
+        let mut candidates: Vec<(usize, f32)> = raw
+            .into_iter()
+            .filter(|&(key, _)| (key as usize) < n)
+            .map(|(key, dist)| (key as usize, 1.0 - dist))
+            .collect();
+
         candidates.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         candidates.truncate(k);
 

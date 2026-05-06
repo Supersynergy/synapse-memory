@@ -8,7 +8,6 @@ members = [
     "crates/synapse-learn",
     # scale-100M scaffolding (PR-0, empty stubs, TODO markers)
     "crates/synapse-ann",
-    "crates/synapse-ultra",
     "crates/synapse-quant",
     "synapsestore/crates/synapse-wal",
     "synapsestore/crates/synapse-seg",
