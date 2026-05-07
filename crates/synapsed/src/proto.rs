@@ -86,6 +86,11 @@ pub enum Request {
     Auth {
         token: String,
     },
+    /// Switch active tenant — ATTACH per-tenant brain-{name}.db read-only as alias.
+    /// Daemon must have read access to the tenant DB file.
+    UseTenant {
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

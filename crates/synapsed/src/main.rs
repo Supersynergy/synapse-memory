@@ -565,6 +565,30 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
             Response::BatchHits(all)
         }
+        Request::UseTenant { name } => {
+            // P4.1 simple multi-tenant: validate name + ATTACH read-only.
+            // Tenant DBs at ~/.synapse/tenants/{name}.db.
+            if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                return Response::Err("invalid tenant name (alnum/_/- only)".into());
+            }
+            let path = format!("{}/.synapse/tenants/{}.db", std::env::var("HOME").unwrap_or_default(), name);
+            if !std::path::Path::new(&path).exists() {
+                return Response::Err(format!("tenant db not found: {path}"));
+            }
+            let result: std::result::Result<(), String> = tokio::task::block_in_place(|| {
+                let mut g = state.sql_conn.lock();
+                if let Some(conn) = g.as_mut() {
+                    conn.execute(&format!("DETACH DATABASE tenant"), []).ok();
+                    conn.execute(&format!("ATTACH DATABASE 'file:{}?mode=ro' AS tenant", path), [])
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(())
+            });
+            match result {
+                Ok(()) => Response::Ok,
+                Err(e) => Response::Err(e),
+            }
+        }
         Request::Auth { token } => {
             // Constant-time compare to thwart timing attacks (basic).
             match std::env::var("SYNAPSE_API_KEY") {
