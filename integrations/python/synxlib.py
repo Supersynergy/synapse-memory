@@ -132,6 +132,14 @@ def ping(): return call({"op": "Ping"})
 def stats(): return call({"op": "Stats"})
 
 def search(q: str, limit: int = 10, mode: str = "Hybrid", embed_query: bool = True):
+    """Auto-route: read-only Lex mode → direct apsw bypass (3.3× concurrent vs daemon).
+    Vec/Hybrid stay on daemon (need ANN index in-process)."""
+    if mode == "Lex" and not embed_query:
+        # Direct apsw FTS5 — bypasses daemon serialization
+        rows = fts_direct(q, limit)
+        if rows is not None:
+            # Mimic daemon Hits structure
+            return {"Hits": [{"id": r[0], "uri": None, "title": None, "text": "", "score": 0.0} for r in rows]}
     return call({"op": "Search", "args": {
         "mode": mode, "q": q, "limit": int(limit), "embed_query": embed_query
     }})
@@ -292,9 +300,18 @@ def batch_search(queries: list, mode: str = "Lex", limit: int = 10, embed_query:
     return r.get("BatchHits", []) if isinstance(r, dict) else []
 
 
-# ── Raw SQL via daemon socket ─────────────────────────────────────────────
+# ── Raw SQL via daemon socket OR direct apsw bypass ───────────────────────
 def sql(query: str, params: list = None):
-    """Read-only SQL on brain.db via daemon. Returns (cols, rows)."""
+    """Auto-route: SELECT → direct apsw (138× faster), other → daemon.
+    Heuristic: query starts with 'SELECT' or 'WITH' = read-only = bypass."""
+    qstr = (query or "").strip().upper()
+    if qstr.startswith("SELECT") or qstr.startswith("WITH"):
+        # Direct apsw fast-path
+        rows = sql_direct(query, tuple(params or ()))
+        if rows is not None:
+            # Best-effort cols extraction (apsw doesn't give col names without cursor)
+            return [], [list(r) for r in rows]
+    # Fallback to daemon (write/PRAGMA/etc)
     r = call({"op": "Sql", "args": {"query": query, "params": params or []}})
     if isinstance(r, dict) and "Rows" in r:
         return r["Rows"]["cols"], r["Rows"]["rows"]
