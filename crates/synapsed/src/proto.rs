@@ -81,6 +81,11 @@ pub enum Request {
     Transaction {
         ops: Vec<PutReq>,
     },
+    /// Authenticate session with API key. If `SYNAPSE_API_KEY` env is set on
+    /// the daemon, all ops except Auth/Ping/Stats require valid auth token.
+    Auth {
+        token: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

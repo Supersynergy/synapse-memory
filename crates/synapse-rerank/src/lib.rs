@@ -14,6 +14,9 @@ use synapse_core::Hit;
 pub mod cascade;
 pub use cascade::CascadeReranker;
 
+pub mod colbert;
+pub use colbert::ColbertReranker;
+
 pub mod factory;
 pub use factory::build_reranker_from_env;
 

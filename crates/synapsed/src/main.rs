@@ -311,19 +311,15 @@ async fn main() -> Result<()> {
 }
 
 async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
+    let api_key = std::env::var("SYNAPSE_API_KEY").ok();
+    let auth_required = api_key.is_some();
+    let mut authed = !auth_required;  // session-scoped auth state
     loop {
         let mut lenbuf = [0u8; 4];
-        // Idle timeout: if no new request frame arrives within IDLE_TIMEOUT,
-        // close the connection to free the fd. This keeps the socket alive
-        // across back-to-back PHP calls (typical gap < 1ms) while bounding
-        // resource usage.
         match timeout(IDLE_TIMEOUT, stream.read_exact(&mut lenbuf)).await {
             Ok(Ok(_)) => {}
-            Ok(Err(_)) => return Ok(()), // EOF or read error → client gone
-            Err(_) => {
-                // Idle timeout elapsed
-                return Ok(());
-            }
+            Ok(Err(_)) => return Ok(()),
+            Err(_) => return Ok(()),
         }
         let len = u32::from_le_bytes(lenbuf) as usize;
         if len == 0 || len > 256 * 1024 * 1024 {
@@ -332,11 +328,31 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
         let mut buf = vec![0u8; len];
         stream.read_exact(&mut buf).await?;
         let req: Request = rmp_serde::from_slice(&buf).context("decode request")?;
-        let resp = dispatch(&state, req).await;
+        // P2.4 auth gate: require Auth before any op except Ping/Stats/Auth itself.
+        let resp = if !authed {
+            match &req {
+                Request::Ping | Request::Stats | Request::Auth { .. } => {}
+                _ => {
+                    let r = Response::Err("auth required: send Auth{token}".into());
+                    let encoded = rmp_serde::to_vec_named(&r)?;
+                    stream.write_all(&(encoded.len() as u32).to_le_bytes()).await?;
+                    stream.write_all(&encoded).await?;
+                    stream.flush().await?;
+                    continue;
+                }
+            }
+            // Process as normal — may include Auth which sets authed=true below.
+            let r = dispatch(&state, req).await;
+            // If just authed successfully, flip flag.
+            if let Response::Ok = r {
+                authed = true;
+            }
+            r
+        } else {
+            dispatch(&state, req).await
+        };
         let encoded = rmp_serde::to_vec_named(&resp)?;
-        stream
-            .write_all(&(encoded.len() as u32).to_le_bytes())
-            .await?;
+        stream.write_all(&(encoded.len() as u32).to_le_bytes()).await?;
         stream.write_all(&encoded).await?;
         stream.flush().await?;
     }
@@ -549,6 +565,15 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
             Response::BatchHits(all)
         }
+        Request::Auth { token } => {
+            // Constant-time compare to thwart timing attacks (basic).
+            match std::env::var("SYNAPSE_API_KEY") {
+                Ok(k) if !k.is_empty() => {
+                    if subtle_eq(&token, &k) { Response::Ok } else { Response::Err("invalid token".into()) }
+                }
+                _ => Response::Ok,  // no key configured — auth always passes
+            }
+        }
         Request::Transaction { ops } => {
             // Atomic batch via put_batch (single SQL transaction in store).
             let put_reqs: Vec<PutRequest> = ops.into_iter().map(|p| p.into()).collect();
@@ -608,6 +633,16 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
         }
     }
+}
+
+/// Constant-time equality compare — prevents timing attacks on token check.
+fn subtle_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() { return false; }
+    let mut acc: u8 = 0;
+    for (x, y) in a.as_bytes().iter().zip(b.as_bytes().iter()) {
+        acc |= x ^ y;
+    }
+    acc == 0
 }
 
 async fn embed_one(state: &State, text: &str) -> Result<Vec<f32>> {
