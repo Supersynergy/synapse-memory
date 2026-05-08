@@ -8,9 +8,12 @@ description = "libSQL async-WAL backend for Synapse Store. Cluster-B of synapse-
 [dependencies]
 async-trait = "0.1"
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt"] }
-# libsql = { version = "0.6", optional = true }  # TODO: enable for full backend
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+libsql = { version = "0.9", optional = true, default-features = false, features = ["core"] }
 
 [features]
 default = []
-libsql-backend = []  # TODO: gate `libsql` dep + Connection wiring
+libsql-backend = ["dep:libsql"]
+
+[dev-dependencies]
+tempfile = "3"

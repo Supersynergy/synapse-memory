@@ -42,9 +42,66 @@ impl AsyncWalBackend for StubBackend {
     }
 }
 
+#[cfg(feature = "libsql-backend")]
+pub mod libsql_backend {
+    //! Real `libsql` async-WAL backend.
+    use super::*;
+    use libsql::{Builder, Connection};
+
+    pub struct LibsqlBackend {
+        conn: Connection,
+    }
+
+    impl LibsqlBackend {
+        pub async fn open_local(path: &str) -> Result<Self, LibsqlError> {
+            let db = Builder::new_local(path)
+                .build()
+                .await
+                .map_err(|e| LibsqlError::Other(e.to_string()))?;
+            let conn = db
+                .connect()
+                .map_err(|e| LibsqlError::Other(e.to_string()))?;
+            Ok(Self { conn })
+        }
+    }
+
+    #[async_trait]
+    impl AsyncWalBackend for LibsqlBackend {
+        async fn execute(&self, sql: &str) -> Result<u64, LibsqlError> {
+            self.conn
+                .execute(sql, ())
+                .await
+                .map_err(|e| LibsqlError::Other(e.to_string()))
+        }
+        async fn checkpoint(&self) -> Result<(), LibsqlError> {
+            self.conn
+                .execute("PRAGMA wal_checkpoint(TRUNCATE)", ())
+                .await
+                .map(|_| ())
+                .map_err(|e| LibsqlError::Other(e.to_string()))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "libsql-backend")]
+    #[tokio::test]
+    async fn libsql_local_create_and_insert() {
+        use crate::libsql_backend::LibsqlBackend;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let b = LibsqlBackend::open_local(path.to_str().unwrap())
+            .await
+            .unwrap();
+        b.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+            .await
+            .unwrap();
+        let n = b.execute("INSERT INTO t (v) VALUES ('hello')").await.unwrap();
+        assert_eq!(n, 1);
+    }
 
     #[tokio::test]
     async fn stub_returns_not_enabled() {
