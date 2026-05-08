@@ -1,0 +1,16 @@
+[package]
+name = "synapse-embed-gpu"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "GPU embedding backend (ort cascade: CUDA → CoreML → CPU). Cluster-F of synapse-gap-sprint."
+
+[dependencies]
+async-trait = "0.1"
+thiserror = "2"
+# ort = { version = "2.0", default-features = false, features = ["load-dynamic"], optional = true }
+
+[features]
+default = []
+gpu-cuda = []  # TODO: enable ort + CUDAExecutionProvider
+gpu-coreml = []  # TODO: enable ort + CoreMLExecutionProvider

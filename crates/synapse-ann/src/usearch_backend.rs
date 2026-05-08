@@ -125,6 +125,30 @@ impl UsearchIndex {
         Ok(Self { idx, dim, len: 0 })
     }
 
+    /// Mutate the runtime `expansion_search` (HNSW ef-search). Higher = more
+    /// recall, more latency. Default 256. Call before `search` to tune the
+    /// next batch of queries. Not thread-safe — wrap in a lock for concurrent use.
+    pub fn set_expansion_search(&self, ef: usize) {
+        self.idx.change_expansion_search(ef);
+    }
+
+    /// Current runtime expansion_search.
+    pub fn expansion_search(&self) -> usize {
+        self.idx.expansion_search()
+    }
+
+    /// Search with a temporary `ef` boost: save current ef → set boosted →
+    /// search → restore. Trades latency for recall on the hot path while
+    /// leaving build-time ef untouched. Not thread-safe with concurrent calls
+    /// to `search` from other threads.
+    pub fn search_with_ef(&self, query: &[f32], k: usize, ef: usize) -> Result<Vec<(u64, f32)>, AnnError> {
+        let prev = self.expansion_search();
+        self.idx.change_expansion_search(ef.max(k));
+        let r = AnnIndex::search(self, query, k);
+        self.idx.change_expansion_search(prev);
+        r
+    }
+
     /// Load a previously-saved sidecar from `path`. The caller supplies `dim`
     /// so we can rebuild the index options deterministically (usearch's file
     /// format encodes dim internally, but re-deriving avoids surprises).
@@ -206,6 +230,23 @@ impl AnnIndex for UsearchIndex {
             .collect())
     }
 
+    /// usearch override: use runtime `change_expansion_search` to actually
+    /// expand HNSW exploration, instead of pure oversample-and-truncate which
+    /// gives no recall lift once ef saturates at small k.
+    fn search_with_rerank(
+        &self,
+        query: &[f32],
+        k: usize,
+        mult: usize,
+    ) -> Result<Vec<(u64, f32)>, AnnError> {
+        let m = mult.clamp(2, 16);
+        let cur = self.expansion_search();
+        // Aggressive boost: multiply current ef by mult so rerank actually
+        // explores more of the graph. Capped at 4096 to avoid pathological cost.
+        let boosted_ef = cur.saturating_mul(m).min(4096).max(k * m);
+        UsearchIndex::search_with_ef(self, query, k, boosted_ef)
+    }
+
     fn len(&self) -> usize {
         self.len
     }
@@ -255,6 +296,23 @@ mod tests {
                 (raw as f32) / (u32::MAX as f32) - 0.5
             })
             .collect()
+    }
+
+    #[test]
+    fn search_with_rerank_returns_top_k_sorted() {
+        let mut idx = UsearchIndex::new(64, 256).unwrap();
+        for i in 0..200u64 {
+            idx.insert(i, &v(i, 64)).unwrap();
+        }
+        let q = v(42, 64);
+        let hits = idx.search_with_rerank(&q, 5, 4).unwrap();
+        assert_eq!(hits.len(), 5);
+        // ascending by distance
+        for w in hits.windows(2) {
+            assert!(w[0].1 <= w[1].1);
+        }
+        // top-1 is the inserted query vector
+        assert_eq!(hits[0].0, 42);
     }
 
     #[test]

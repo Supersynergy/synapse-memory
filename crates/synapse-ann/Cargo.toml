@@ -33,3 +33,8 @@ required-features = ["ann-usearch"]
 name = "ann_hnsw_sweep"
 harness = false
 required-features = ["ann-usearch"]
+
+[[bench]]
+name = "recall_cascade"
+harness = false
+required-features = ["ann-usearch"]

@@ -1,0 +1,19 @@
+[package]
+name = "synapse-tier"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Cold-tier blob storage via object_store (S3/GCS/Azure). Cluster-E of synapse-gap-sprint."
+
+[dependencies]
+async-trait = "0.1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "io-util", "sync"] }
+bytes = "1"
+# object_store = { version = "0.11", optional = true }  # TODO cluster-E wiring
+
+[features]
+default = []
+s3-backend = []  # TODO: enable object_store + S3 impl
+gcs-backend = []
+azure-backend = []

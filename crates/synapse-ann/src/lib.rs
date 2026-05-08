@@ -22,6 +22,26 @@ pub trait AnnIndex: Send + Sync {
     #[allow(clippy::type_complexity)]
     fn search(&self, query: &[f32], k: usize) -> Result<Vec<(u64, f32)>, AnnError>;
 
+    /// Cascade rerank: oversample `k * mult`, sort, truncate to `k`.
+    /// Default impl works for any backend whose `search` returns true distances.
+    /// **Note**: pure oversampling only helps if the backend explores more
+    /// candidates as `k` grows. usearch HNSW saturates ef_search at moderate `k`,
+    /// so true recall lift requires bumping `expansion_search` at index level
+    /// (see `UsearchIndex::new_tuned`). Override this method in backends that
+    /// expose a runtime-tunable search-effort param. `mult` clamped 2..=16.
+    fn search_with_rerank(
+        &self,
+        query: &[f32],
+        k: usize,
+        mult: usize,
+    ) -> Result<Vec<(u64, f32)>, AnnError> {
+        let m = mult.clamp(2, 16);
+        let mut hits = self.search(query, k.saturating_mul(m))?;
+        hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        hits.truncate(k);
+        Ok(hits)
+    }
+
     /// Current number of inserted vectors.
     fn len(&self) -> usize;
 

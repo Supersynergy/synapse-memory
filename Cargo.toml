@@ -8,6 +8,12 @@ members = [
     "crates/synapse-learn",
     # scale-100M scaffolding (PR-0, empty stubs, TODO markers)
     "crates/synapse-ann",
+    "crates/synapse-mysql",
+    "crates/synapse-pg",
+    "crates/synapse-embed-gpu",
+    "crates/synapse-libsql",
+    "crates/synapse-raft",
+    "crates/synapse-tier",
     "crates/synapse-quant",
     "synapsestore/crates/synapse-wal",
     "synapsestore/crates/synapse-seg",
