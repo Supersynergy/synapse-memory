@@ -10,7 +10,7 @@ members = [
     "crates/synapse-ann",
     "crates/synapse-mysql",
     "crates/synapse-pg",
-    "crates/synapse-embed-gpu",
+    # synapse-embed-gpu = standalone workspace (fastembed feature conflict)
     "crates/synapse-libsql",
     "crates/synapse-raft",
     "crates/synapse-tier",

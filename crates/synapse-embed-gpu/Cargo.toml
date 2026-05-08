@@ -1,3 +1,7 @@
+[workspace]
+# Standalone workspace — avoids workspace-level fastembed feature conflict
+# from synapse-core (uses old `ort-download-binaries-rustls-tls` name).
+
 [package]
 name = "synapse-embed-gpu"
 version = "0.1.0"
@@ -8,9 +12,11 @@ description = "GPU embedding backend (ort cascade: CUDA → CoreML → CPU). Clu
 [dependencies]
 async-trait = "0.1"
 thiserror = "2"
-# ort = { version = "2.0", default-features = false, features = ["load-dynamic"], optional = true }
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["load-dynamic"], optional = true }
+ndarray = { version = "0.16", optional = true }
 
 [features]
 default = []
-gpu-cuda = []  # TODO: enable ort + CUDAExecutionProvider
-gpu-coreml = []  # TODO: enable ort + CoreMLExecutionProvider
+gpu-cuda = ["dep:ort", "dep:ndarray", "ort/cuda"]
+gpu-coreml = ["dep:ort", "dep:ndarray", "ort/coreml"]
+cpu = ["dep:ort", "dep:ndarray"]

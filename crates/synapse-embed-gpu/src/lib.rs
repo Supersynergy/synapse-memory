@@ -51,6 +51,38 @@ pub fn auto_select() -> ExecutionProvider {
     ExecutionProvider::Cpu
 }
 
+#[cfg(any(feature = "gpu-cuda", feature = "gpu-coreml", feature = "cpu"))]
+pub mod ort_backend {
+    //! Real `ort` 2.0 ExecutionProvider cascade.
+    //! Pattern: try CUDA → CoreML → CPU.
+    use super::*;
+    use ort::execution_providers::ExecutionProviderDispatch;
+
+    /// Build the EP dispatch list ordered by preference, falling back to CPU.
+    pub fn build_ep_cascade() -> Vec<ExecutionProviderDispatch> {
+        let mut eps: Vec<ExecutionProviderDispatch> = Vec::new();
+        #[cfg(feature = "gpu-cuda")]
+        {
+            eps.push(ort::execution_providers::CUDAExecutionProvider::default().build());
+        }
+        #[cfg(feature = "gpu-coreml")]
+        {
+            eps.push(ort::execution_providers::CoreMLExecutionProvider::default().build());
+        }
+        eps.push(ort::execution_providers::CPUExecutionProvider::default().build());
+        eps
+    }
+
+    /// Initialize ort with the EP cascade. Call once at startup.
+    pub fn init() -> Result<(), EmbedError> {
+        ort::init()
+            .with_execution_providers(build_ep_cascade())
+            .commit()
+            .map(|_| ())
+            .map_err(|e| EmbedError::ModelLoad(e.to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
