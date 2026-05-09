@@ -10,7 +10,7 @@ use mysql::{OptsBuilder, Pool};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use synapse_libsql::Store;
-use synapse_libsql::{PoolTurboLibsqlStore, RealPoolStore};
+use synapse_libsql::RealPoolStore;
 
 const TASKS: usize = 8;
 const READS_PER_TASK: usize = 5;
@@ -34,7 +34,7 @@ fn bench_pool_turbo_mixed(c: &mut Criterion) {
                 let path = format!("/tmp/synapse-bench/sysbench_{}.db", now_id());
                 std::fs::remove_file(&path).ok();
                 std::fs::remove_file(format!("{path}-wal")).ok();
-                let store = Arc::new(PoolTurboLibsqlStore::open_local(&path).await.unwrap());
+                let store = Arc::new(RealPoolStore::open_local(&path, 8).await.unwrap());
                 store.exec("CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, k TEXT, v TEXT)").await.unwrap();
                 // Warmup
                 for i in 0..WARMUP_ROWS {

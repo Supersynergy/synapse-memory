@@ -71,6 +71,46 @@ pub use turbo::TurboLibsqlStore;
 #[cfg(feature = "libsql-backend")]
 pub use pool_real::RealPoolStore;
 
+/// Minimal naive LibsqlStore — Mutex<Connection>, no pragmas, no batching.
+/// Used as baseline for benches.
+#[cfg(feature = "libsql-backend")]
+pub struct LibsqlStore {
+    conn: tokio::sync::Mutex<libsql::Connection>,
+}
+
+#[cfg(feature = "libsql-backend")]
+impl LibsqlStore {
+    pub async fn open_local(path: &str) -> Result<Self, Error> {
+        let db = libsql::Builder::new_local(path).build().await
+            .map_err(|e| Error::Backend(e.to_string()))?;
+        let conn = db.connect().map_err(|e| Error::Backend(e.to_string()))?;
+        Ok(Self { conn: tokio::sync::Mutex::new(conn) })
+    }
+}
+
+#[cfg(feature = "libsql-backend")]
+#[async_trait]
+impl Store for LibsqlStore {
+    async fn query(&self, sql: &str) -> Result<QueryResult, Error> {
+        let conn = self.conn.lock().await;
+        let s = sql.trim_start();
+        if s.len() >= 6 && s.as_bytes()[..6].eq_ignore_ascii_case(b"SELECT") {
+            let mut rows = conn.query(sql, ()).await
+                .map_err(|e| Error::Backend(e.to_string()))?;
+            let mut count = 0u64;
+            while let Some(_) = rows.next().await.map_err(|e| Error::Backend(e.to_string()))? { count += 1; }
+            Ok(QueryResult { affected: count, rows: vec![] })
+        } else {
+            let n = conn.execute(sql, ()).await.map_err(|e| Error::Backend(e.to_string()))?;
+            Ok(QueryResult { affected: n, rows: vec![] })
+        }
+    }
+    async fn exec(&self, sql: &str) -> Result<u64, Error> {
+        let conn = self.conn.lock().await;
+        conn.execute(sql, ()).await.map_err(|e| Error::Backend(e.to_string()))
+    }
+}
+
 #[cfg(feature = "libsql-backend")]
 pub mod libsql_backend {
     //! Real `libsql` async-WAL backend.
