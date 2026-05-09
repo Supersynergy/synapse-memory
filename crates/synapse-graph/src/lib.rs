@@ -24,6 +24,18 @@
 //! CREATE INDEX idx_edges_from ON edges(from_id, weight DESC);
 //! ```
 
+pub mod algorithms;
+pub mod sql_funcs;
+pub mod cypher;
+pub mod live;
+pub mod csr;
+
+pub use algorithms::{pagerank, top_pagerank, label_propagation, communities, materialize_pagerank};
+pub use sql_funcs::helpers as graph_helpers;
+pub use cypher::{parse_cypher, CypherQuery, CypherOp};
+pub use live::{LiveRelate, RelateEvent};
+pub use csr::{CsrGraph, CsrCache};
+
 use rusqlite::{params, Connection, Result as SqlResult};
 use std::collections::{BinaryHeap, HashSet};
 use std::cmp::Ordering;
@@ -34,6 +46,8 @@ pub enum GraphError {
     Sql(#[from] rusqlite::Error),
     #[error("path not found")]
     NoPath,
+    #[error("cypher parse: {0}")]
+    CypherParse(String),
 }
 
 pub type Result<T> = std::result::Result<T, GraphError>;

@@ -26,10 +26,16 @@ synapse-pg = { path = "../synapse-pg" }
 synapse-ops = { path = "../synapse-ops" }
 synapse-auth = { path = "../synapse-auth" }
 synapse-tune = { path = "../synapse-tune" }
+synapse-graph = { path = "../synapse-graph" }
+rusqlite = { workspace = true }
+parking_lot = "0.12"
+futures = "0.3"
+async-stream = "0.3"
 
 [features]
-default = ["mysql-wire", "pg-wire", "ops"]
+default = ["mysql-wire", "pg-wire", "ops", "graph"]
 mysql-wire = []
 pg-wire = []
 ops = []
-all = ["mysql-wire", "pg-wire", "ops"]
+graph = []
+all = ["mysql-wire", "pg-wire", "ops", "graph"]
