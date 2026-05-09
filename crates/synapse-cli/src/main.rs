@@ -137,6 +137,89 @@ enum Cmd {
         #[arg(long, default_value = "default")]
         shard_id: String,
     },
+    /// Graph operations (PageRank, communities, traversal, Cypher)
+    Graph {
+        #[command(subcommand)]
+        action: GraphCmd,
+    },
+    /// One-shot grounding: hybrid seeds → PageRank → traverse → JSON bundle
+    Ground {
+        query: String,
+        #[arg(long, default_value_t = 20)]
+        k: usize,
+        #[arg(long, default_value_t = 2)]
+        depth: usize,
+        #[arg(long, default_value_t = 0.5)]
+        alpha: f64,
+        #[arg(long, default_value_t = 10)]
+        iters: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum GraphCmd {
+    /// Insert/replace edge: from -[rel:weight]-> to
+    Relate {
+        from: i64,
+        to: i64,
+        rel: String,
+        #[arg(long, default_value_t = 1.0)]
+        weight: f64,
+    },
+    /// Top-N nodes by PageRank
+    Pagerank {
+        #[arg(long, default_value_t = 20)]
+        n: usize,
+        #[arg(long, default_value_t = 0.85)]
+        damping: f64,
+        #[arg(long, default_value_t = 20)]
+        iters: usize,
+    },
+    /// Personalized PageRank seeded by JSON map {id: weight}
+    Ppr {
+        /// JSON dict of seed_id → score, e.g. '{"42":1.0,"7":0.5}'
+        seeds_json: String,
+        #[arg(long, default_value_t = 0.5)]
+        alpha: f64,
+        #[arg(long, default_value_t = 10)]
+        iters: usize,
+        #[arg(long, default_value_t = 30)]
+        limit: usize,
+    },
+    /// Detect communities via label-propagation
+    Communities {
+        #[arg(long, default_value_t = 20)]
+        max_iters: usize,
+        #[arg(long, default_value_t = 20)]
+        top_n: usize,
+    },
+    /// Direct neighbors of a node
+    Neighbors {
+        node_id: i64,
+        #[arg(long, default_value_t = 50)]
+        top_k: usize,
+        #[arg(long)]
+        rel: Option<String>,
+    },
+    /// Traverse outward from start node
+    Traverse {
+        start_id: i64,
+        #[arg(long, default_value_t = 3)]
+        depth: usize,
+        #[arg(long, default_value_t = 10)]
+        top_k_per_hop: usize,
+        #[arg(long, default_value_t = 0.7)]
+        decay: f64,
+    },
+    /// Shortest path (Dijkstra) between two nodes
+    Path {
+        from: i64,
+        to: i64,
+        #[arg(long, default_value_t = 5)]
+        max_depth: usize,
+    },
+    /// Edge count
+    Count,
 }
 
 #[derive(Subcommand)]
@@ -438,6 +521,98 @@ fn main() -> Result<()> {
                 "ok feedback recorded doc_id={} shard={}",
                 accepted_doc_id, shard_id
             );
+        }
+        Cmd::Graph { action } => {
+            let conn = rusqlite::Connection::open(&cli.file)?;
+            synapse_graph::ensure_schema(&conn)?;
+            match action {
+                GraphCmd::Relate { from, to, rel, weight } => {
+                    synapse_graph::relate(&conn, from, to, &rel, weight, None)?;
+                    println!("{{\"ok\":true,\"from\":{from},\"to\":{to},\"rel\":\"{rel}\",\"weight\":{weight}}}");
+                }
+                GraphCmd::Pagerank { n, damping, iters } => {
+                    let top = synapse_graph::algorithms::top_pagerank(&conn, n, damping, iters)?;
+                    println!("{}", serde_json::to_string_pretty(&top)?);
+                }
+                GraphCmd::Ppr { seeds_json, alpha, iters, limit } => {
+                    let seeds: std::collections::HashMap<String, f64> = serde_json::from_str(&seeds_json)
+                        .context("parse seeds JSON")?;
+                    let seeds_i: std::collections::HashMap<i64, f64> = seeds.into_iter()
+                        .filter_map(|(k, v)| k.parse::<i64>().ok().map(|i| (i, v)))
+                        .collect();
+                    let ranked = synapse_core::ppr::personalized_pagerank(
+                        &conn, &seeds_i, alpha, iters,
+                        synapse_core::ppr::DEFAULT_NEIGHBOR_CAP, limit)?;
+                    println!("{}", serde_json::to_string_pretty(&ranked)?);
+                }
+                GraphCmd::Communities { max_iters, top_n } => {
+                    let comms = synapse_graph::algorithms::communities(&conn, max_iters)?;
+                    let top: Vec<_> = comms.into_iter().take(top_n)
+                        .map(|(id, members)| serde_json::json!({"community_id": id, "size": members.len(), "members": members}))
+                        .collect();
+                    println!("{}", serde_json::to_string_pretty(&top)?);
+                }
+                GraphCmd::Neighbors { node_id, top_k, rel } => {
+                    let n = synapse_graph::neighbors(&conn, node_id, rel.as_deref(), top_k)?;
+                    println!("{}", serde_json::to_string_pretty(&n)?);
+                }
+                GraphCmd::Traverse { start_id, depth, top_k_per_hop, decay } => {
+                    let t = synapse_graph::traverse(&conn, start_id, depth, top_k_per_hop, decay, None)?;
+                    println!("{}", serde_json::to_string_pretty(&t)?);
+                }
+                GraphCmd::Path { from, to, max_depth } => {
+                    let p = synapse_graph::shortest_path(&conn, from, to, max_depth)?;
+                    println!("{}", serde_json::to_string_pretty(&p)?);
+                }
+                GraphCmd::Count => {
+                    let n = synapse_graph::edge_count(&conn)?;
+                    println!("{{\"edges\":{n}}}");
+                }
+            }
+        }
+        Cmd::Ground { query, k, depth, alpha, iters } => {
+            // Pipeline: hybrid → seeds → PPR → traverse → JSON bundle
+            let store = Store::open(&cli.file)?;
+            let e = Embedder::new_with_cache::<std::path::PathBuf>(
+                cli.file.parent().map(|p| p.join(".emb-cache")),
+            )?;
+            let q = e.embed_one(&query)?;
+            let hits = store.search(&query, SearchMode::Hybrid, Some(&q), k)?;
+
+            let mut seeds: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+            for h in &hits {
+                seeds.insert(h.id, h.score as f64);
+            }
+
+            let conn = rusqlite::Connection::open(&cli.file)?;
+            synapse_graph::ensure_schema(&conn)?;
+
+            let ppr_ranked = synapse_core::ppr::personalized_pagerank(
+                &conn, &seeds, alpha, iters,
+                synapse_core::ppr::DEFAULT_NEIGHBOR_CAP, 30,
+            ).unwrap_or_default();
+
+            let mut expansions: Vec<serde_json::Value> = Vec::new();
+            for (sid, _) in seeds.iter().take(8) {
+                if let Ok(traverse_hits) = synapse_graph::traverse(&conn, *sid, depth, 6, 0.7, None) {
+                    for (to_id, gscore, hop_depth, chain) in traverse_hits {
+                        expansions.push(serde_json::json!({
+                            "seed_id": sid, "to_id": to_id,
+                            "score": gscore, "depth": hop_depth, "chain": chain
+                        }));
+                    }
+                }
+            }
+
+            let bundle = serde_json::json!({
+                "query": query,
+                "version": 1,
+                "hybrid_seeds": hits.iter().map(|h| serde_json::json!({"id": h.id, "score": h.score, "text": h.text.chars().take(120).collect::<String>()})).collect::<Vec<_>>(),
+                "ppr_ranked": ppr_ranked,
+                "graph_expansions": expansions,
+                "params": {"k": k, "depth": depth, "alpha": alpha, "iters": iters},
+            });
+            println!("{}", serde_json::to_string_pretty(&bundle)?);
         }
     }
     Ok(())
