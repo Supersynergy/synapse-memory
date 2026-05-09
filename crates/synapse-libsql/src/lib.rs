@@ -14,12 +14,28 @@
 
 use async_trait::async_trait;
 
+pub use LibsqlError as Error;
+
+#[derive(Debug, Default, Clone)]
+pub struct QueryResult {
+    pub affected: u64,
+    pub rows: Vec<Vec<u8>>,
+}
+
+#[async_trait]
+pub trait Store: Send + Sync + 'static {
+    async fn query(&self, sql: &str) -> Result<QueryResult, Error>;
+    async fn exec(&self, sql: &str) -> Result<u64, Error>;
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum LibsqlError {
     #[error("not enabled — build with --features libsql-backend")]
     NotEnabled,
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
+    #[error("backend: {0}")]
+    Backend(String),
     #[error("backend: {0}")]
     Other(String),
 }
@@ -41,6 +57,19 @@ impl AsyncWalBackend for StubBackend {
         Err(LibsqlError::NotEnabled)
     }
 }
+
+#[cfg(feature = "libsql-backend")]
+pub mod batched;
+#[cfg(feature = "libsql-backend")]
+pub mod turbo;
+#[cfg(feature = "libsql-backend")]
+pub mod pool_real;
+#[cfg(feature = "libsql-backend")]
+pub use batched::BatchedLibsqlStore;
+#[cfg(feature = "libsql-backend")]
+pub use turbo::TurboLibsqlStore;
+#[cfg(feature = "libsql-backend")]
+pub use pool_real::RealPoolStore;
 
 #[cfg(feature = "libsql-backend")]
 pub mod libsql_backend {

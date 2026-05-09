@@ -1,0 +1,15 @@
+[package]
+name = "synapse-wp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "synapse: WordPress-aware query optimizer (Layer 1 of 100×WP plan)"
+
+[dependencies]
+thiserror.workspace = true
+async-trait = "0.1"
+synapse-core = { path = "../synapse-core" }
+regex = "1"
+once_cell = "1"

@@ -1,0 +1,46 @@
+[package]
+name = "synapse-wp-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+synapse-libsql = { path = "../../crates/synapse-libsql", features = ["libsql-backend"] }
+synapse-wp = { path = "../../crates/synapse-wp" }
+mysql = { version = "26", default-features = false, features = ["minimal"] }
+tokio = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+
+[[bench]]
+name = "autoload_cache_vs_sql"
+harness = false
+
+[[bench]]
+name = "vs_mariadb"
+harness = false
+
+[[bench]]
+name = "wp_full_workloads"
+harness = false
+
+[[bench]]
+name = "libsql_vs_mariadb"
+harness = false
+
+[[bench]]
+name = "batched_inserts"
+harness = false
+
+[[bench]]
+name = "turbo_vs_mariadb"
+harness = false
+
+[[bench]]
+name = "concurrent_load"
+harness = false
+
+[[bench]]
+name = "sysbench_mixed"
+harness = false
