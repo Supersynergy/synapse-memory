@@ -6,7 +6,7 @@
     <string>com.synapse.turbo</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/opt/homebrew/opt/python@3.12/bin/python3.12</string>
+        <string>/opt/homebrew/opt/python-freethreading/bin/python3.14t</string>
         <string>-W</string>
         <string>ignore</string>
         <string>/Users/master/.claude/synapse-turbo.py</string>
