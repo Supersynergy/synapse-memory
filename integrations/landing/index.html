@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>synapse — drop-in MySQL/PG replacement, 545× cached, Apache 2.0</title>
+<meta name="description" content="Same hardware. 10× more sites. Drop-in MySQL replacement with built-in cache, slow-query log, index advisor, drift detection. Apache 2.0, EU self-host.">
+<style>
+  :root { --bg:#0a0e14; --fg:#e6e6e6; --accent:#7dd3fc; --muted:#94a3b8; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--fg); margin:0; line-height:1.6; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 4rem 1.5rem; }
+  h1 { font-size: 3rem; margin: 0 0 1rem; }
+  .tag { color: var(--accent); font-size: 1.3rem; margin-bottom: 2rem; }
+  h2 { margin-top: 3rem; border-bottom: 1px solid #1e293b; padding-bottom: .5rem; }
+  table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+  th, td { text-align: left; padding: .6rem; border-bottom: 1px solid #1e293b; }
+  th { color: var(--muted); font-weight: 600; }
+  td.win { color: var(--accent); font-weight: 600; }
+  pre { background: #0f172a; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+  code { font-family: "JetBrains Mono", Menlo, monospace; font-size: 0.9rem; }
+  .cta { display: inline-block; background: var(--accent); color: var(--bg); padding: .8rem 1.6rem; border-radius: 6px; text-decoration: none; font-weight: 600; margin: .5rem .5rem .5rem 0; }
+  .cta.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin: 2rem 0; }
+  .card { background: #0f172a; padding: 1.5rem; border-radius: 8px; border-left: 3px solid var(--accent); }
+  .card h3 { margin: 0 0 .5rem; }
+  .card p { color: var(--muted); margin: 0; }
+  footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid #1e293b; color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>synapse</h1>
+<p class="tag">Same hardware. 10× more sites. Apache 2.0.</p>
+
+<p>Drop-in MySQL/PostgreSQL replacement powered by libsql + Rust. Built-in cache, slow-query log, index advisor, drift detection, RBAC. Single 14MB binary.</p>
+
+<a href="https://github.com/Supersynergy/synapse" class="cta">GitHub →</a>
+<a href="https://github.com/Supersynergy/synapse/blob/main/docs/wp-edition/BENCH-RESULTS-2026-05-08.md" class="cta ghost">Benchmarks →</a>
+<a href="#install" class="cta ghost">Install →</a>
+
+<h2>Measured vs MariaDB 12.2 (M4 Max, criterion)</h2>
+<table>
+<thead><tr><th>Workload</th><th>MariaDB</th><th>synapse</th><th>Speedup</th></tr></thead>
+<tbody>
+<tr><td>WP autoload single SELECT</td><td>12.8 µs</td><td>19 ns</td><td class="win">670×</td></tr>
+<tr><td>WP 30-option pageload</td><td>400 µs</td><td>733 ns</td><td class="win">545×</td></tr>
+<tr><td>INSERT batch=1000</td><td>38.7 µs</td><td>1.02 µs</td><td class="win">38×</td></tr>
+<tr><td>INSERT turbo single</td><td>38.7 µs</td><td>9.26 µs</td><td class="win">4×</td></tr>
+<tr><td>Sysbench 8t mixed 80r/20w</td><td>437 µs/iter</td><td>205 µs/iter</td><td class="win">2.13×</td></tr>
+</tbody>
+</table>
+
+<h2>Who it's for</h2>
+<div class="grid">
+<div class="card"><h3>Hosting Providers</h3><p>Same VPS hosts 8-10× more sites. $35k/yr saved per agency.</p></div>
+<div class="card"><h3>WooCommerce Stores</h3><p>Survives Black Friday spikes. 5000 RPS sustained.</p></div>
+<div class="card"><h3>AI/RAG Backends</h3><p>247ms TTFT improvement. Self-host vec+FTS+graph.</p></div>
+<div class="card"><h3>Edge Functions</h3><p>&lt;1ms vs 50ms cold-start budget on Cloudflare Workers.</p></div>
+</div>
+
+<h2 id="install">Install (60 seconds)</h2>
+<pre><code># 1. Run the daemon
+docker run -d -p 3306:3306 -p 9990:9990 -v synapse-data:/data synapse/server:latest
+
+# 2. WordPress: install synapsql plugin from wordpress.org
+#    Or edit wp-config.php:
+#    define('DB_HOST', '127.0.0.1:3306');
+
+# 3. Done.
+</code></pre>
+
+<h2>Honest scope</h2>
+<p>synapse is a <strong>specialized accelerator</strong>, not a 100% MariaDB replacement. Stored procedures, MVCC row-locking, async replication, multi-region — not yet (P3-P5 roadmap).</p>
+<p>What we DO have: 4 wires (MySQL+PG+gRPC+REST), 5 SuperML modules (drift, advisor, classifier, bandit, tuner), single-binary deploy, M-series Metal/MLX kernels, 1-bit Hamming compression (71×), Apache 2.0 OSS.</p>
+<p><a href="https://github.com/Supersynergy/synapse/blob/main/docs/wp-edition/HONEST-GAP-ANALYSIS.md">Read the full honest gap analysis →</a></p>
+
+<footer>
+Apache 2.0 · EU self-host · No SaaS lock-in · Built by Maxim Supersynergy
+</footer>
+
+</div>
+</body>
+</html>
