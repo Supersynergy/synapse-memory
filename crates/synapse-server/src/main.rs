@@ -15,7 +15,8 @@ use synapse_libsql::Store;
 use synapse_libsql::{BatchedLibsqlStore, TurboLibsqlStore, RealPoolStore};
 use synapse_ops::SlowQueryLog;
 use synapse_auth::{AuthStore, Role};
-use synapse_tune::TuneProfile;
+use synapse_tune::{TuneProfile, BotClassifier, DriftDetector, IndexAdvisor, TtlBandit, HeuristicTuner, Tuner, WorkloadStats};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Parser)]
 #[command(name = "synapse-server", version, about = "Generic MySQL+PG drop-in daemon")]
@@ -75,9 +76,19 @@ async fn main() -> anyhow::Result<()> {
         let _profile = TuneProfile::turbo_cache();
         eprintln!("turbo profile: synchronous=OFF + WAL + mmap=256MB + cache=256MB + EXCLUSIVE");
     }
-    if cli.autolearn {
-        eprintln!("autolearn: TTL bandit + workload classifier (P3 wiring pending)");
-    }
+    let autolearn_state: Option<Arc<AutolearnState>> = if cli.autolearn {
+        let s = Arc::new(AutolearnState {
+            bandit: TtlBandit::default_buckets(),
+            bot_classifier: BotClassifier::default(),
+            drift: DriftDetector::default(),
+            advisor: tokio::sync::RwLock::new(IndexAdvisor::new()),
+            tuner: HeuristicTuner,
+            reads: AtomicU64::new(0),
+            writes: AtomicU64::new(0),
+        });
+        eprintln!("autolearn: TtlBandit + BotClassifier + DriftDetector + IndexAdvisor + HeuristicTuner LIVE");
+        Some(s)
+    } else { None };
 
     let inner: Arc<dyn Store> = match cli.backend.as_str() {
         "batched" => {
@@ -93,6 +104,32 @@ async fn main() -> anyhow::Result<()> {
             Arc::new(RealPoolStore::open_local(&cli.db, cli.pool_size).await?)
         }
     };
+
+    // Wrap store with drift detection + advisor observation if autolearn enabled
+    let inner = if let Some(al) = autolearn_state.clone() {
+        struct AutoWrap { inner: Arc<dyn Store>, al: Arc<AutolearnState> }
+        #[async_trait::async_trait]
+        impl Store for AutoWrap {
+            async fn query(&self, sql: &str) -> Result<synapse_libsql::QueryResult, synapse_libsql::Error> {
+                let t = std::time::Instant::now();
+                let r = self.inner.query(sql).await;
+                let elapsed_us = t.elapsed().as_micros() as f64;
+                self.al.drift.check(elapsed_us);
+                self.al.reads.fetch_add(1, Ordering::Relaxed);
+                if let Ok(mut a) = self.al.advisor.try_write() { a.observe(sql); }
+                r
+            }
+            async fn exec(&self, sql: &str) -> Result<u64, synapse_libsql::Error> {
+                let t = std::time::Instant::now();
+                let r = self.inner.exec(sql).await;
+                let elapsed_us = t.elapsed().as_micros() as f64;
+                self.al.drift.check(elapsed_us);
+                self.al.writes.fetch_add(1, Ordering::Relaxed);
+                r
+            }
+        }
+        Arc::new(AutoWrap { inner, al }) as Arc<dyn Store>
+    } else { inner };
 
     let store: Arc<dyn Store> = if let Some(l) = slowlog.clone() {
         struct Wrap { inner: Arc<dyn Store>, log: Arc<SlowQueryLog> }
@@ -153,6 +190,16 @@ async fn main() -> anyhow::Result<()> {
     let _ = auth;
     for h in handles { let _ = h.await; }
     Ok(())
+}
+
+struct AutolearnState {
+    bandit: TtlBandit,
+    bot_classifier: BotClassifier,
+    drift: DriftDetector,
+    advisor: tokio::sync::RwLock<IndexAdvisor>,
+    tuner: HeuristicTuner,
+    reads: AtomicU64,
+    writes: AtomicU64,
 }
 
 #[derive(Clone)]

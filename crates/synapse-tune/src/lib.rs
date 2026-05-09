@@ -5,7 +5,15 @@
 //! gives best p50 latency for the observed workload mix.
 
 pub mod bandit;
+pub mod tabpfn;
+pub mod advisor;
+pub mod classifier;
+pub mod drift;
 pub use bandit::{TtlBandit, BetaArm};
+pub use tabpfn::{Tuner, HeuristicTuner, TabPfnTuner};
+pub use advisor::{IndexAdvisor, IndexCandidate, IndexKind, Recommendation};
+pub use classifier::{BotClassifier, Classification};
+pub use drift::{DriftDetector, OnlineStats, AnomalyVerdict};
 
 use serde::{Deserialize, Serialize};
 
