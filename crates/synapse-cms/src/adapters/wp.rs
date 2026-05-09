@@ -4,8 +4,8 @@
 //! Recognizes top-50 `WP_Query` patterns + `wp_options` autoload + meta-query joins,
 //! rewrites to fast-path execution.
 
-pub mod optimizer;
-pub use optimizer::AutoloadCache;
+// AutoloadCache lives in adapters::wp_optimizer
+
 
 use once_cell::sync::Lazy;
 use regex::Regex;

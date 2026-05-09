@@ -8,7 +8,7 @@
 //! exec ~1ms (3 orders of magnitude).
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use synapse_wp::AutoloadCache;
+use synapse_cms::AutoloadCache;
 
 fn populate_cache(n: usize) -> AutoloadCache {
     let c = AutoloadCache::new();

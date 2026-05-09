@@ -11,7 +11,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mysql::prelude::*;
 use mysql::{OptsBuilder, Pool};
-use synapse_wp::AutoloadCache;
+use synapse_cms::AutoloadCache;
 
 const N: usize = 2000;
 const PAGELOAD_KEYS: usize = 30;

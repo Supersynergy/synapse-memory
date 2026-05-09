@@ -1,12 +1,12 @@
 [package]
-name = "synapse-wp-bench"
+name = "synapse-cms-bench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 synapse-libsql = { path = "../../crates/synapse-libsql", features = ["libsql-backend"] }
-synapse-wp = { path = "../../crates/synapse-wp" }
+synapse-cms = { path = "../../crates/synapse-cms" }
 mysql = { version = "26", default-features = false, features = ["minimal"] }
 tokio = { workspace = true }
 

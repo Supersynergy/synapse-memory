@@ -4,6 +4,9 @@
 //! configuration profile (combo of pragmas + batch_size + connection_pool_size)
 //! gives best p50 latency for the observed workload mix.
 
+pub mod bandit;
+pub use bandit::{TtlBandit, BetaArm};
+
 use serde::{Deserialize, Serialize};
 
 /// Tunable knobs.

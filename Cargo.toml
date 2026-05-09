@@ -16,7 +16,7 @@ members = [
     "crates/synapse-tier",
     "crates/synapse-quant",
     # Merged from synapsql 2026-05-09 — WP+ops+auth+tune
-    "crates/synapse-wp",
+    "crates/synapse-cms",
     "crates/synapse-ops",
     "crates/synapse-auth",
     "crates/synapse-tune",
