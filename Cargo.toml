@@ -20,6 +20,7 @@ members = [
     "crates/synapse-ops",
     "crates/synapse-auth",
     "crates/synapse-tune",
+    "crates/synapse-server",
     "bench/wp",
     "synapsestore/crates/synapse-wal",
     "synapsestore/crates/synapse-seg",
