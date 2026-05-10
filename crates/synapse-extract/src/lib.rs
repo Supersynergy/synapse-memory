@@ -32,6 +32,22 @@ pub struct ExtractedMemory {
     /// Distinct from `created_ts` (when the memory row was inserted).
     #[serde(default)]
     pub event_date: Option<String>,
+    /// Subject-verb-object triples extracted from the text. Auto-relate hook
+    /// converts these into `synapse_graph::edges` rows for traversal/PPR.
+    /// Subject and object are upserted as entities; the edge weight defaults
+    /// to the memory's `confidence` (clamped to [0.1, 1.0]).
+    #[serde(default)]
+    pub relations: Vec<ExtractedRelation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractedRelation {
+    pub subject: String,
+    pub verb: String,
+    pub object: String,
+    /// Optional override for edge weight (else inherits memory confidence).
+    #[serde(default)]
+    pub weight: Option<f64>,
 }
 
 pub trait Extractor: Send + Sync {
@@ -132,6 +148,7 @@ impl Extractor for RuleExtractor {
                 fact: text.trim().to_string(),
                 confidence: 0.6,
                 event_date: None,
+                relations: Vec::new(),
             });
         } else if lower.contains("learned")
             || lower.contains("turns out")
@@ -143,6 +160,7 @@ impl Extractor for RuleExtractor {
                 fact: text.trim().to_string(),
                 confidence: 0.6,
                 event_date: None,
+                relations: Vec::new(),
             });
         } else if lower.contains("prefer") || lower.contains("likes") || lower.contains("hates") {
             out.push(ExtractedMemory {
@@ -151,6 +169,7 @@ impl Extractor for RuleExtractor {
                 fact: text.trim().to_string(),
                 confidence: 0.55,
                 event_date: None,
+                relations: Vec::new(),
             });
         } else {
             out.push(ExtractedMemory {
@@ -159,6 +178,7 @@ impl Extractor for RuleExtractor {
                 fact: text.trim().to_string(),
                 confidence: 0.5,
                 event_date: None,
+                relations: Vec::new(),
             });
         }
         Ok(out)
@@ -193,6 +213,45 @@ impl Extractor for MlxExtractor {
         // Until then, fall back to rule extractor so dev builds keep working.
         RuleExtractor.extract(text)
     }
+}
+
+/// Auto-relate hook: convert ExtractedRelation triples into edges.
+///
+/// For each (s,v,o) triple, upserts subject + object as entities, then writes
+/// a row into `synapse_graph::edges`. Edge weight defaults to memory confidence,
+/// clamped to [0.1, 1.0]. Idempotent: INSERT OR REPLACE keyed on (from,to,rel).
+///
+/// Failure to ensure edges schema or insert is logged but does NOT fail the
+/// surrounding extraction — graph layer is best-effort overlay on memories.
+pub fn relate_extracted(
+    conn: &Connection,
+    relations: &[ExtractedRelation],
+    fallback_confidence: f64,
+) -> Result<usize> {
+    if relations.is_empty() {
+        return Ok(0);
+    }
+    if let Err(e) = synapse_graph::ensure_schema(conn) {
+        tracing::warn!("graph schema ensure failed (skipping auto-relate): {e}");
+        return Ok(0);
+    }
+    let mut count = 0usize;
+    for r in relations {
+        let s_id = match upsert_entity(conn, r.subject.trim(), None) {
+            Ok(i) => i,
+            Err(e) => { tracing::warn!("upsert subject failed: {e}"); continue; }
+        };
+        let o_id = match upsert_entity(conn, r.object.trim(), None) {
+            Ok(i) => i,
+            Err(e) => { tracing::warn!("upsert object failed: {e}"); continue; }
+        };
+        let w = r.weight.unwrap_or(fallback_confidence).clamp(0.1, 1.0);
+        match synapse_graph::relate(conn, s_id, o_id, r.verb.trim(), w, None) {
+            Ok(_) => count += 1,
+            Err(e) => tracing::warn!("relate failed: {e}"),
+        }
+    }
+    Ok(count)
 }
 
 /// Find-or-create entity by canonical name. Returns its id.
@@ -259,6 +318,8 @@ pub fn run_once(conn: &Connection, extractor: &dyn Extractor, batch: usize) -> R
                             it.confidence,
                         )?;
                     }
+                    // Auto-relate: write extracted triples into edges.
+                    let _ = relate_extracted(conn, &it.relations, it.confidence);
                     produced += 1;
                 }
                 mark_status(conn, doc_id, "done", None)?;
@@ -306,6 +367,8 @@ pub fn enqueue_extraction_helper(
         } else {
             put_memory(conn, doc_id, it.memory_type, entity_id, None, it.confidence)?;
         }
+        // Auto-relate: write extracted triples into edges.
+        let _ = relate_extracted(conn, &it.relations, it.confidence);
         produced += 1;
     }
     Ok(produced)
@@ -372,5 +435,43 @@ mod tests {
         let a = upsert_entity(&c, "Alice", Some("person")).unwrap();
         let b = upsert_entity(&c, "Alice", Some("person")).unwrap();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn auto_relate_writes_edges() {
+        let c = fresh();
+        let rels = vec![
+            ExtractedRelation {
+                subject: "Alice".into(),
+                verb: "works_at".into(),
+                object: "Acme".into(),
+                weight: None,
+            },
+            ExtractedRelation {
+                subject: "Acme".into(),
+                verb: "located_in".into(),
+                object: "Berlin".into(),
+                weight: Some(0.9),
+            },
+        ];
+        let n = relate_extracted(&c, &rels, 0.7).unwrap();
+        assert_eq!(n, 2);
+        let edges: i64 = c.query_row("SELECT COUNT(*) FROM edges", [], |r| r.get(0)).unwrap();
+        assert_eq!(edges, 2);
+        let weight_acme: f64 = c.query_row(
+            "SELECT weight FROM edges WHERE rel='located_in'", [], |r| r.get(0)).unwrap();
+        assert!((weight_acme - 0.9).abs() < 1e-9);
+    }
+
+    #[test]
+    fn auto_relate_clamps_weight() {
+        let c = fresh();
+        let rels = vec![ExtractedRelation {
+            subject: "X".into(), verb: "rel".into(), object: "Y".into(),
+            weight: Some(2.5),
+        }];
+        relate_extracted(&c, &rels, 0.5).unwrap();
+        let w: f64 = c.query_row("SELECT weight FROM edges", [], |r| r.get(0)).unwrap();
+        assert!(w <= 1.0 && w >= 0.1);
     }
 }
