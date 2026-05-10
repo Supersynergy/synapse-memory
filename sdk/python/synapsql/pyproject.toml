@@ -1,0 +1,33 @@
+[project]
+name = "synapsql"
+version = "0.1.0"
+description = "Drop-in SQLAlchemy adapter for Synapse — sqlite3 + WAL turbo pragmas + ahash hot-cache. 5-20× speedup vs naive SQLAlchemy on SupersynergyCRM-class workloads, zero code-change."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Maxim Supersynergy", email = "true@supersynergy.de"}]
+keywords = ["sqlalchemy", "sqlite", "synapse", "performance", "wal", "cache", "crm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Database",
+    "Topic :: Database :: Front-Ends",
+]
+dependencies = []
+
+[project.optional-dependencies]
+sqlalchemy = ["SQLAlchemy>=2.0"]
+test = ["pytest>=8", "SQLAlchemy>=2.0"]
+bench = ["SQLAlchemy>=2.0"]
+
+[project.entry-points."sqlalchemy.dialects"]
+synapsql = "synapsql.dialect:SynapsqlDialect"
+"synapsql.pysqlite" = "synapsql.dialect:SynapsqlDialect"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/synapsql"]

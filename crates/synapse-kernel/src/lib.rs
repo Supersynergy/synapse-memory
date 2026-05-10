@@ -1,0 +1,20 @@
+//! synapse-kernel — ns-tier hot-path distance kernels.
+//!
+//! Goal: per-vec dist <2 ns @ L1 (memcpy-parity).
+//! Stages: branchless → prefetch → cache-align → unroll-FMA → NEON FMLAL2 → AMX → cascade.
+//!
+//! See `bench/ns_microbench/README.md` for targets & harness plan.
+
+pub mod kernels;
+pub mod layouts;
+pub mod workloads;
+
+#[inline(always)]
+pub fn prefetch<T>(p: *const T) {
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!("prfm pldl1keep, [{0}]", in(reg) p, options(nostack, preserves_flags));
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    let _ = p;
+}

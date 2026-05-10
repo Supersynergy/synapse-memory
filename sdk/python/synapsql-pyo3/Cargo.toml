@@ -1,0 +1,19 @@
+[workspace]
+
+[package]
+name = "synapsql-pyo3"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "synapsql_pyo3"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.24", features = ["extension-module", "abi3-py39"] }
+ahash = "0.8"
+parking_lot = "0.12"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
