@@ -469,10 +469,16 @@ def cmd_daemon(port=None):
 
 def cmd_query_daemon(query, mode="hybrid", limit=5):
     import urllib.request, urllib.parse
-    url = f"http://127.0.0.1:{DAEMON_PORT}/{mode}?q={urllib.parse.quote(query)}&limit={limit}"
+    if mode not in ("hybrid", "vec", "lex", "find"):
+        raise ValueError(f"unsupported mode: {mode}")
+    url = f"http://127.0.0.1:{DAEMON_PORT}/{mode}?q={urllib.parse.quote(query)}&limit={int(limit)}"
+    # nosec B310: scheme/host hard-coded http://127.0.0.1, no user-controlled url
+    req = urllib.request.Request(url)
+    if req.type != "http" or not req.host.startswith("127.0.0.1"):
+        raise ValueError("daemon URL must be http://127.0.0.1")
     try:
         t0 = time.perf_counter()
-        raw = urllib.request.urlopen(url, timeout=2).read()
+        raw = urllib.request.urlopen(req, timeout=2).read()  # noqa: S310
         resp = json_loads(raw)
         total = (time.perf_counter()-t0)*1000
         print(f"{resp['mode'].upper()} [{resp['elapsed_ms']}ms server, {total:.1f}ms e2e] {resp['count']} results")

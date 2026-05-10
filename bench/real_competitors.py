@@ -183,7 +183,7 @@ def bench_qdrant_inmem() -> Result:
     qs = [_vec(f"agent memory doc {i * 5}") for i in range(N_QUERIES)]
     t = time.perf_counter()
     for q in qs:
-        client.search(collection_name="agent_memory", query_vector=q, limit=10)
+        client.query_points(collection_name="agent_memory", query=q, limit=10)
     total = (time.perf_counter() - t) * 1000
     return Result("Qdrant (in-mem)", insert_ms, total, total / N_QUERIES, 0,
                   "in-memory only · no disk size measured")

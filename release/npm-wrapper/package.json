@@ -1,0 +1,12 @@
+{
+  "name": "@supersynergy/synapse",
+  "version": "1.0.1",
+  "description": "Single-binary vector+lex+graph+CRDT DB. 107x–892x faster than LanceDB/Qdrant.",
+  "bin": { "synx": "./bin/synx.js" },
+  "scripts": { "postinstall": "node scripts/install-binary.js" },
+  "repository": "github:supersynergy/synapse",
+  "license": "Apache-2.0",
+  "keywords": ["vector-db", "embedding", "rag", "agent-memory", "rust", "simsimd", "single-binary"],
+  "engines": { "node": ">=18" },
+  "files": ["bin/", "scripts/", "README.md"]
+}

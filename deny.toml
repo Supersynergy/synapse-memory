@@ -9,6 +9,17 @@ ignore = [
     "RUSTSEC-2025-0119",
     "RUSTSEC-2024-0436",
     "RUSTSEC-2024-0370",
+    # Added 2026-05-10:
+    # rsa 0.9.10 Marvin Attack — pulled by jsonwebtoken via synapse-license.
+    # Reach: license-token verify only (HS512), not user crypto. Track: bump jsonwebtoken when rsa>=0.10 path lands.
+    "RUSTSEC-2023-0071",
+    # rustls-webpki 0.102.8 CRL bug — transitive duplicate; live rustls 0.23 already on 0.103.13.
+    # Reach: Synapse doesn't fetch CRL distribution-points. Track: drop on next dep bump.
+    "RUSTSEC-2025-0009",
+    # bincode 1.3.3 unmaintained — migration to bincode 2.x scheduled 2026-Q3.
+    "RUSTSEC-2025-0141",
+    # chrono-english 0.1.8 unmaintained — replacement (dateparser/parse_datetime) eval in progress.
+    "RUSTSEC-2024-0395",
 ]
 
 [licenses]
