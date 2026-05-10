@@ -66,7 +66,7 @@ pub fn top_k_f32(query: &[f32], matrix: ArrayView2<f32>, k: usize) -> Vec<(usize
     let n = matrix.nrows();
     let flat = matrix.as_slice().expect("row-major contiguous");
     let dim = matrix.ncols();
-    let mut scores: Vec<(usize, f32)> = (0..n)
+    let scores: Vec<(usize, f32)> = (0..n)
         .map(|i| (i, dot_f32(query, &flat[i * dim..(i + 1) * dim])))
         .collect();
     partial_top_k(scores, k)
@@ -198,7 +198,7 @@ pub fn top_k_batch_gemm(
 
     // Top-k per row using a min-heap.
     scores.chunks_exact(n).map(|row| {
-        let mut out = partial_top_k(
+        let out = partial_top_k(
             row.iter().enumerate().map(|(i, &s)| (i, s)).collect(),
             k,
         );

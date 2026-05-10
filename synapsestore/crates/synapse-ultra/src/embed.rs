@@ -76,7 +76,7 @@ impl Embedder {
                 );
                 if let Ok(blob) = result {
                     if blob.len() == EMBED_DIM * 4 {
-                        let mut v: Vec<f32> = blob
+                        let v: Vec<f32> = blob
                             .chunks_exact(4)
                             .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
                             .collect();
@@ -88,7 +88,7 @@ impl Embedder {
         }
 
         // T2: MLX Metal (Apple Silicon, fast path)
-        let mut v = if mlx_enabled() {
+        let v = if mlx_enabled() {
             match self.mlx.as_ref().map(|m| m.embed_one(text)).unwrap_or_else(|| Err(UltraError::Embed("mlx unavailable".into()))) {
                 Ok(vec) => vec,
                 Err(e) => {

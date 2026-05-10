@@ -7,7 +7,7 @@
 //! Bench-validated against measured workloads. Replace mit TabPFN inference
 //! sobald Python sidecar exists.
 
-use crate::{TuneProfile, WorkloadStats, Synchronous, JournalMode, LockingMode};
+use crate::{TuneProfile, WorkloadStats, Synchronous, LockingMode};
 
 /// Tuner trait — different impls (heuristic, TabPFN, Optuna).
 pub trait Tuner: Send + Sync {

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use synapse_core::{embed::Embedder, embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
+use synapse_core::{embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
 use synapse_core::turbo::ndarray_search::NdArraySearch;
 use synapse_rerank::{build_reranker_from_env, IdentityReranker, Reranker};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
