@@ -8,7 +8,7 @@
 //!   --bench simsimd_vs_ndarray
 //! ```
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 
 const N: usize = 100_000;
 const DIM: usize = 384;

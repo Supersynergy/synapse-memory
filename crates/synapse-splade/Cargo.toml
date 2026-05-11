@@ -1,0 +1,26 @@
+[package]
+name = "synapse-splade"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SPLADE-v3 neural-sparse scaffold for Synapse — inverted-index BM25-style scoring"
+
+[features]
+default = []
+# Enable when candle-core / ONNX model loader wired for real naver/splade-v3 inference
+splade = []
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+name = "synapse_splade"
+path = "src/lib.rs"
+doctest = false

@@ -61,13 +61,21 @@ aho-corasick = "1"
 regex = "1"
 # embed-mlx feature: msgpack codec for the Python sidecar IPC.
 rmpv = { version = "1", optional = true }
+# tantivy-fts: route keyword search through synapse-fts (BM25 via tantivy).
+# Default OFF — FTS5 path unchanged when this feature is absent.
+synapse-fts = { path = "../synapse-fts", optional = true }
+# Production observability (OTel + Prometheus). Default OFF.
+synapse-obs = { path = "../synapse-obs", optional = true }
 
 [dependencies.libsql]
 version = "0.9"
 optional = true
 
 [features]
-default = ["backend-rusqlite"]
+# 2026-05-10: simsimd enabled by default — 1.5× NEON cosine on M4 Max,
+# AVX2 on x86_64. Apple Silicon + Linux aarch64 / x86_64 supported.
+# Pure-Rust default lost; build with --no-default-features --features backend-rusqlite for pure-Rust.
+default = ["backend-rusqlite", "turbo", "simsimd"]
 backend-rusqlite = []
 backend-libsql = ["dep:libsql"]
 embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
@@ -89,6 +97,17 @@ ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot"]
 # Phase 5 MLX Metal embedder (Apple Silicon only). IPC sidecar to mlx-embeddings.
 # Implies `turbo` (needed for embedder_trait module).
 embed-mlx = ["turbo", "dep:rmpv"]
+# Route keyword/hybrid BM25 leg through tantivy instead of SQLite FTS5.
+tantivy-fts = ["dep:synapse-fts", "dep:parking_lot"]
+# Split-conformal recall prediction — statistical recall guarantee, default OFF.
+conformal = []
+# Production observability: OTel traces + Prometheus metrics on :9478/metrics.
+observability = ["dep:synapse-obs", "synapse-obs/observability"]
+# Embedding dimension compile-time selection. Default = 384 (BGE-small / Arctic-XS/S).
+# embed-768:  Arctic-M / Nomic-1.5  (MTEB ≤62.5)
+# embed-1024: Mxbai-large / Arctic-L (MTEB ≤64.7)
+embed-768 = []
+embed-1024 = []
 
 [dev-dependencies]
 tempfile = "3"
@@ -137,3 +156,15 @@ required-features = ["turbo", "simsimd"]
 name = "simsimd_vs_ndarray"
 harness = false
 required-features = ["turbo", "simsimd"]
+
+[[bench]]
+name = "rrf_simd"
+harness = false
+
+[[bench]]
+name = "dist_score"
+harness = false
+
+[[bench]]
+name = "rrf_neon"
+harness = false

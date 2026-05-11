@@ -236,7 +236,7 @@ impl NdArraySearch {
             .collect();
         // Broadcast-divide: each row divided by its norm, all at once.
         let norms_col = norms
-            .into_shape((self.n_vectors, 1))
+            .into_shape_with_order((self.n_vectors, 1))
             .expect("shape matches");
         Zip::from(&mut self.matrix)
             .and_broadcast(&norms_col)

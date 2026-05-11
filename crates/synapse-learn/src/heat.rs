@@ -70,7 +70,7 @@ pub fn rerank(hits: Vec<Hit>, conn: &rusqlite::Connection) -> Result<Vec<Hit>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    
 
     #[test]
     fn heat_score_increases_with_access() {

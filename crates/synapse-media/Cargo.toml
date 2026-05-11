@@ -1,0 +1,46 @@
+[package]
+name = "synapse-media"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Synapse multimodal asset-DB: index images/video/audio, cross-modal hybrid retrieval, ComfyUI/Remotion/ffmpeg integration."
+keywords = ["media", "multimodal", "clip", "video", "retrieval"]
+categories = ["multimedia", "database"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+blake3.workspace = true
+tracing.workspace = true
+synapse-core = { path = "../synapse-core", default-features = false, features = ["backend-rusqlite"] }
+
+# Magic-bytes MIME detection (always on)
+infer = "0.16"
+
+# Image decode for thumbnail + dims (always on)
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "bmp", "gif"] }
+
+# HTTP client for ComfyUI / Remotion (always on, minimal)
+reqwest = { workspace = true }
+tokio = { workspace = true }
+
+# video feature: ffmpeg-next bindings (requires system libavcodec)
+[dependencies.ffmpeg-next]
+version = "7"
+optional = true
+
+[features]
+default = []
+# video: ffmpeg-next bindings for native frame extraction (requires libavcodec headers)
+video = ["dep:ffmpeg-next"]
+# clip-local: candle-based local CLIP embedding (heavy, Apple Silicon only)
+clip-local = []
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true }

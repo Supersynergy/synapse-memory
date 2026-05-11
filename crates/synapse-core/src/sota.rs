@@ -152,6 +152,10 @@ pub struct RecallParams {
     /// Target recall threshold — drives backend auto-routing.
     /// None defaults to 0.98 (Cascade path).
     pub target_recall: Option<f32>,
+    /// HyDE: expand vague queries via a hypothetical document before embedding.
+    /// None = disabled (default). Requires feature `ollama`.
+    #[cfg(feature = "ollama")]
+    pub hyde: Option<crate::turbo::hyde::HydeConfig>,
 }
 
 impl Default for RecallParams {
@@ -171,6 +175,8 @@ impl Default for RecallParams {
             ppr_iters: 10,
             rrf_k: 60.0,
             target_recall: None,
+            #[cfg(feature = "ollama")]
+            hyde: None,
         }
     }
 }
@@ -589,11 +595,21 @@ impl Store {
         query_emb: Option<&[f32]>,
     ) -> Result<Vec<RecallHit>> {
         let backend = auto_route(params.target_recall.unwrap_or(0.98));
+        // HyDE: expand vague queries to a hypothetical document for better lex recall.
+        #[cfg(feature = "ollama")]
+        let effective_query: std::borrow::Cow<str> = if let Some(ref cfg) = params.hyde {
+            std::borrow::Cow::Owned(crate::turbo::hyde::expand(cfg, &params.query))
+        } else {
+            std::borrow::Cow::Borrowed(&params.query)
+        };
+        #[cfg(not(feature = "ollama"))]
+        let effective_query: std::borrow::Cow<str> = std::borrow::Cow::Borrowed(&params.query);
+
         // Pull a wide candidate pool — RRF will narrow to k.
         let pool = (params.k.max(params.rerank_top) * 4).max(40);
         let base_hits = if let Some(emb) = query_emb {
             let vec_hits = self.search_vec_with_backend(emb, pool, backend)?;
-            let lex_hits = self.search(&params.query, SearchMode::Lex, None, pool)
+            let lex_hits = self.search(&effective_query, SearchMode::Lex, None, pool)
                 .unwrap_or_default();
             // Fuse lex + vec via RRF (same as search_hybrid but with backend control).
             let rrf_k = params.rrf_k;
@@ -615,7 +631,7 @@ impl Store {
             merged.truncate(pool);
             merged
         } else {
-            self.search(&params.query, SearchMode::Lex, None, pool)?
+            self.search(&effective_query, SearchMode::Lex, None, pool)?
         };
 
         // Build (memory_id, doc_id, memory_type) lookup for hits that have memories.

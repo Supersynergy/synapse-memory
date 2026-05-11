@@ -68,24 +68,12 @@ pub fn cos_f16_row(query_f32: &[f32], row_f16: &[u8]) -> Option<f32> {
 
     #[cfg(feature = "simsimd")]
     {
-        use simsimd::SpatialSimilarity;
-        // Reinterpret row packed bytes as &[simsimd::f16] (LE u16, same layout).
-        // SAFETY: row_f16 is aligned to 1 byte; simsimd::f16 is repr(transparent) u16 (2 bytes).
-        // We use a slice of u16 reinterpret via bytemuck-free cast: simsimd::f16(u16).
-        let n = query_f32.len();
-        // Convert query f32 → simsimd::f16 (one-time per call).
-        let q_f16: Vec<simsimd::f16> = query_f32
-            .iter()
-            .map(|&x| simsimd::f16::from_f32(x))
-            .collect();
-        // Reinterpret row bytes as simsimd::f16 via safe u16 reads (LE).
-        let r_f16: Vec<simsimd::f16> = row_f16
-            .chunks_exact(2)
-            .map(|c| simsimd::f16(u16::from_le_bytes([c[0], c[1]])))
-            .collect();
-        if q_f16.len() != n || r_f16.len() != n { return None; }
-        // simsimd cosine returns distance (1 - similarity); we return similarity.
-        simsimd::f16::cosine(&q_f16, &r_f16).map(|d| 1.0 - d as f32)
+        // Bottleneck fix 2026-05-10: this fn was allocating 2 Vecs per call.
+        // For top-K=100 search → 200 mallocs/query on hot path.
+        // For zero-alloc per-query, callers should pre-convert query via
+        // `prepare_query_f16` and use `cos_f16_row_prepared`. Kept here for
+        // back-compat; allocates query once (acceptable), row is zero-copy.
+        cos_f16_row_prepared(&prepare_query_f16(query_f32), row_f16)
     }
     #[cfg(not(feature = "simsimd"))]
     {
@@ -97,6 +85,49 @@ pub fn cos_f16_row(query_f32: &[f32], row_f16: &[u8]) -> Option<f32> {
             dot += qi * r;
             q_norm += qi * qi;
             r_norm += r * r;
+        }
+        let denom = (q_norm.sqrt() * r_norm.sqrt()).max(1e-12);
+        Some(dot / denom)
+    }
+}
+
+/// Pre-convert an fp32 query to simsimd::f16 once. Reuse across all rows in a
+/// top-K loop to eliminate per-call malloc. Caller owns the buffer.
+#[cfg(feature = "simsimd")]
+#[must_use]
+pub fn prepare_query_f16(query_f32: &[f32]) -> Vec<simsimd::f16> {
+    query_f32.iter().map(|&x| simsimd::f16::from_f32(x)).collect()
+}
+
+/// Zero-alloc per-row cosine. `query_f16` from `prepare_query_f16`,
+/// `row_f16` is the packed bytes (LE u16, same layout as simsimd::f16).
+#[cfg(feature = "simsimd")]
+#[must_use]
+pub fn cos_f16_row_prepared(query_f16: &[simsimd::f16], row_f16: &[u8]) -> Option<f32> {
+    use simsimd::SpatialSimilarity;
+    if query_f16.len() * 2 != row_f16.len() { return None; }
+    // SAFETY: simsimd::f16 = repr(transparent) u16. Packed bytes are LE u16
+    // with the same layout. We only need len == query_f16.len(), which is
+    // checked above. Alignment of u8 buffer is 1; simsimd::f16 requires 2.
+    // We therefore use chunks_exact with from_le_bytes — still zero per-call
+    // malloc since simsimd accepts &[f16] only, we build via reinterpret only
+    // if alignment holds. Conservative path: a tiny ArrayVec-style stack
+    // buffer is awkward in stable Rust without const-generics on the slice
+    // length, so we accept the read-side cost (one cache line per row) but
+    // skip the Vec heap-alloc by using `align_to` on the row bytes.
+    let (head, mid, tail) = unsafe { row_f16.align_to::<simsimd::f16>() };
+    if head.is_empty() && tail.is_empty() && mid.len() == query_f16.len() {
+        // Aligned fast path — true zero-copy.
+        simsimd::f16::cosine(query_f16, mid).map(|d| 1.0 - d as f32)
+    } else {
+        // Unaligned fallback — manual scalar loop, still no heap alloc.
+        let mut dot = 0.0_f32;
+        let mut q_norm = 0.0_f32;
+        let mut r_norm = 0.0_f32;
+        for (q, rc) in query_f16.iter().zip(row_f16.chunks_exact(2)) {
+            let qf = q.to_f32();
+            let rf = half::f16::from_le_bytes([rc[0], rc[1]]).to_f32();
+            dot += qf * rf; q_norm += qf * qf; r_norm += rf * rf;
         }
         let denom = (q_norm.sqrt() * r_norm.sqrt()).max(1e-12);
         Some(dot / denom)

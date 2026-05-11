@@ -117,6 +117,14 @@ struct Args {
     /// Requires --use-minimax. Adds ~3s per session (one LLM call per doc).
     #[arg(long, default_value_t = false)]
     pre_extract: bool,
+    /// Enable HyDE (Hypothetical Document Embedding): expand query via Ollama
+    /// before embedding the vec-query. BM25/FTS5 leg still uses original query.
+    /// Requires feature `hyde` + `--embed`. Skipped when OLLAMA_AVAILABLE unset.
+    #[arg(long, default_value_t = false)]
+    hyde: bool,
+    /// Ollama model for HyDE expansion (default: phi4-mini).
+    #[arg(long, default_value = "phi4-mini")]
+    hyde_model: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -261,7 +269,9 @@ fn run_question<H: PipelineHooks>(
     pre_extractor: Option<&dyn synapse_extract::Extractor>,
     rrf_k: f64,
     rerank_top: usize,
-) -> Result<(bool, bool, bool, bool, u128, usize, Vec<String>, Vec<String>)> {
+    #[cfg(feature = "hyde")]
+    hyde_cfg: Option<&synapse_core::turbo::hyde::HydeConfig>,
+) -> Result<(bool, bool, bool, bool, u128, usize, Vec<String>, Vec<String>, u128)> {
     // Fresh tempfile-backed store per question (Store::open requires a path).
     let tmp = tempfile_path(&q.question_id)?;
     // Make sure no leftover.
@@ -323,10 +333,26 @@ fn run_question<H: PipelineHooks>(
             let _ = enqueue_extraction_helper(&store.conn, doc_id, &items);
         }
     }
-    let q_emb: Option<Vec<f32>> = if let Some(emb) = embedder {
-        Some(emb.embed_one(&q.question)?)
+    // HyDE: expand query via Ollama before embedding the vec leg.
+    // BM25/FTS5 still uses original sanitized query (set later via params.query).
+    #[cfg(feature = "hyde")]
+    let (q_emb, hyde_latency_us): (Option<Vec<f32>>, u128) = if let Some(emb) = embedder {
+        if let Some(hcfg) = hyde_cfg {
+            let t_hyde = Instant::now();
+            let expanded = synapse_core::turbo::hyde::expand(hcfg, &q.question);
+            let hyde_us = t_hyde.elapsed().as_micros();
+            (Some(emb.embed_one(&expanded)?), hyde_us)
+        } else {
+            (Some(emb.embed_one(&q.question)?), 0)
+        }
     } else {
-        None
+        (None, 0)
+    };
+    #[cfg(not(feature = "hyde"))]
+    let (q_emb, hyde_latency_us): (Option<Vec<f32>>, u128) = if let Some(emb) = embedder {
+        (Some(emb.embed_one(&q.question)?), 0)
+    } else {
+        (None, 0)
     };
     let t = Instant::now();
     let mut params = RecallParams::default();
@@ -379,7 +405,7 @@ fn run_question<H: PipelineHooks>(
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_file(format!("{}-wal", tmp.display()));
     let _ = std::fs::remove_file(format!("{}-shm", tmp.display()));
-    Ok((r5, r10, f5, f10, elapsed, n_docs, top5_owned, top10_owned))
+    Ok((r5, r10, f5, f10, elapsed, n_docs, top5_owned, top10_owned, hyde_latency_us))
 }
 
 fn tempfile_path(qid: &str) -> Result<PathBuf> {
@@ -454,10 +480,28 @@ fn main() -> Result<()> {
     } else { None };
     let pre_extractor_ref: Option<&dyn synapse_extract::Extractor> = pre_extractor_box.as_deref();
 
+    // When both embed-768 and rerank features are active, default to arctic-m
+    // (768-dim, MTEB 62.5, +4pp R@5 over BGE-small baseline).
+    // Respect explicit SYNAPSE_EMBED_MODEL override.
+    #[cfg(all(feature = "embed-768", feature = "rerank"))]
+    if args.embed && std::env::var("SYNAPSE_EMBED_MODEL").is_err() {
+        std::env::set_var("SYNAPSE_EMBED_MODEL", "arctic-m");
+    }
+
     let embedder = if args.embed {
+        let model_name = std::env::var("SYNAPSE_EMBED_MODEL").unwrap_or_else(|_| "bge-small".into());
+        let desc = match model_name.to_lowercase().as_str() {
+            "arctic-m" => "Snowflake Arctic Embed M (768-dim, MTEB 62.5)",
+            "arctic-s" => "Snowflake Arctic Embed S (384-dim, MTEB 60.0)",
+            "arctic-xs" => "Snowflake Arctic Embed XS (384-dim, MTEB 56.6)",
+            "arctic-l" => "Snowflake Arctic Embed L (1024-dim, MTEB 63.0)",
+            "mxbai-large" => "MxbAI Embed Large v1 (1024-dim, MTEB 64.7)",
+            "nomic-1.5" => "Nomic Embed Text v1.5 (768-dim, MTEB 62.4)",
+            _ => "fastembed BGE-small-en-v1.5 (384-dim, MTEB 53.0)",
+        };
         match Embedder::new() {
             Ok(e) => {
-                println!("Embedder: fastembed BGE-small-en-v1.5 (384-dim)");
+                println!("Embedder: {}", desc);
                 Some(e)
             }
             Err(e) => {
@@ -470,6 +514,26 @@ fn main() -> Result<()> {
     };
     let embedder_ref = embedder.as_ref();
 
+    // HyDE config: only active when feature `hyde` compiled in + --hyde flag + OLLAMA_AVAILABLE.
+    #[cfg(feature = "hyde")]
+    let hyde_config: Option<synapse_core::turbo::hyde::HydeConfig> = if args.hyde {
+        if std::env::var("OLLAMA_AVAILABLE").is_err() {
+            eprintln!("WARN: --hyde passed but OLLAMA_AVAILABLE not set — skipping HyDE");
+            None
+        } else {
+            let cfg = synapse_core::turbo::hyde::HydeConfig {
+                model: args.hyde_model.clone(),
+                ..Default::default()
+            };
+            println!("HyDE: Ollama model={} max_tokens={}", cfg.model, cfg.max_tokens);
+            Some(cfg)
+        }
+    } else {
+        None
+    };
+    #[cfg(feature = "hyde")]
+    let hyde_cfg_ref: Option<&synapse_core::turbo::hyde::HydeConfig> = hyde_config.as_ref();
+
     let mut r5_hits = 0usize;
     let mut r10_hits = 0usize;
     let mut f5_hits = 0usize;
@@ -479,6 +543,7 @@ fn main() -> Result<()> {
     let mut judge_r10_hits = 0usize;
     let mut total_ms: u128 = 0;
     let mut total_docs: usize = 0;
+    let mut total_hyde_us: u128 = 0;
     let mut errs: Vec<(String, String)> = Vec::new();
     let judge = if args.judge {
         let j = judge::Judge::new(args.judge_model.clone(), args.judge_timeout_ms);
@@ -493,27 +558,36 @@ fn main() -> Result<()> {
     };
 
     for (i, q) in qs.iter().enumerate() {
+        // Helper macro to call run_question with the right extra arg under `hyde` feature.
+        macro_rules! rq {
+            ($hooks:expr) => {{
+                #[cfg(feature = "hyde")]
+                { run_question(q, $hooks, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top, hyde_cfg_ref) }
+                #[cfg(not(feature = "hyde"))]
+                { run_question(q, $hooks, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top) }
+            }};
+        }
         #[cfg(feature = "minimax")]
         let res = if let Some(mh) = minimax_hooks.as_ref() {
             let san = SanHooks { inner: mh };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
+            rq!(&san)
         } else if args.use_mlx {
             let san = SanHooks { inner: &mlx_hooks };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
+            rq!(&san)
         } else {
             let san = SanHooks { inner: &rule };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
+            rq!(&san)
         };
         #[cfg(not(feature = "minimax"))]
         let res = if args.use_mlx {
             let san = SanHooks { inner: &mlx_hooks };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
+            rq!(&san)
         } else {
             let san = SanHooks { inner: &rule };
-            run_question(q, &san, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top)
+            rq!(&san)
         };
         match res {
-            Ok((r5, r10, f5, f10, ms, nd, top5, top10)) => {
+            Ok((r5, r10, f5, f10, ms, nd, top5, top10, hyde_us)) => {
                 if r5 {
                     r5_hits += 1;
                 }
@@ -528,6 +602,7 @@ fn main() -> Result<()> {
                 }
                 total_ms += ms;
                 total_docs += nd;
+                total_hyde_us += hyde_us;
                 let mut judge_verdict: Option<bool> = None;
                 if let Some(j) = judge.as_ref() {
                     let refs5: Vec<&str> = top5.iter().map(|s| s.as_str()).collect();
@@ -610,5 +685,10 @@ fn main() -> Result<()> {
     }
     println!("Latency avg  : {:.2} ms (recall only, ingest excluded)", avg_ms / 1000.0);
     println!("Avg docs/Q   : {:.1}", avg_docs);
+    #[cfg(feature = "hyde")]
+    if total_hyde_us > 0 {
+        let avg_hyde_ms = total_hyde_us as f64 / (qs.len() as f64) / 1000.0;
+        println!("HyDE overhead: {:.1} ms avg per query (Ollama expand only)", avg_hyde_ms);
+    }
     Ok(())
 }

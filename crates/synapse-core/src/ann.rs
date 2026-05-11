@@ -109,6 +109,27 @@ impl Ann {
             .map_err(|e| Error::Other(format!("usearch remove: {e}")))
     }
 
+    /// Current runtime ef_search (expansion_search).
+    pub fn expansion_search(&self) -> usize {
+        self.inner.read().expansion_search()
+    }
+
+    /// kNN search with a temporary ef boost (higher recall, higher latency).
+    /// ef is clamped to [k, 4096]. Returns `(id, distance)` pairs.
+    pub fn search_with_ef(&self, query: &[f32], k: usize, ef: usize) -> Result<Vec<(i64, f32)>> {
+        if query.len() != self.dim {
+            return Err(Error::DimMismatch {
+                expected: self.dim,
+                got: query.len(),
+            });
+        }
+        let g = self.inner.read();
+        let out = g
+            .search_with_ef(query, k, ef)
+            .map_err(|e| Error::Other(format!("usearch search_with_ef: {e}")))?;
+        Ok(out.into_iter().map(|(id, d)| (id as i64, d)).collect())
+    }
+
     /// kNN search. Returns `(id, distance)` pairs. Callers join against
     /// `docs` for full hit records.
     pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<(i64, f32)>> {

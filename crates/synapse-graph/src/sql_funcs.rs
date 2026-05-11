@@ -15,7 +15,6 @@
 use rusqlite::{functions::FunctionFlags, Connection};
 
 use crate::{neighbors, edge_count, shortest_path};
-use crate::algorithms::pagerank;
 
 /// Register all graph SQL functions on a connection.
 pub fn register(conn: &Connection) -> rusqlite::Result<()> {

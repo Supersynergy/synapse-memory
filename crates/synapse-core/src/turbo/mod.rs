@@ -43,3 +43,17 @@ pub mod inmem_i8_index;
 
 /// In-memory 1-bit Hamming brute-force index (SimSIMD-accelerated).
 pub mod inmem_hamming_index;
+
+/// RaBitQ rerank cascade — closes f16 recall ceiling 0.95→0.99+ via
+/// scalar-quantized randomized-bit codes (Gao & Long, SIGMOD 2024).
+pub mod rabitq_rerank;
+
+/// RaBitQ cascade index — Hamming sweep → RaBitQ rerank.
+pub mod rabitq_index;
+
+/// Filtered-ANN wrapper — metadata pre/post-filter (ACORN-lite).
+pub mod filtered_ann;
+
+/// HyDE (Hypothetical Document Embedding) query augmentation via Ollama.
+#[cfg(feature = "ollama")]
+pub mod hyde;

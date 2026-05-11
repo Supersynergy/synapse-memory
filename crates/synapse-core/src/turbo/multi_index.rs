@@ -21,6 +21,7 @@ use crate::turbo::adaptive_router::{AdaptiveRouter, QueryHints, Strategy};
 use crate::turbo::inmem_f16_index::InMemoryF16Index;
 use crate::turbo::inmem_hamming_index::InMemoryHammingIndex;
 use crate::turbo::inmem_i8_index::InMemoryI8Index;
+use crate::turbo::rabitq_index::RaBitQIndex;
 
 /// Per-query hints forwarded to [`AdaptiveRouter`].
 #[derive(Debug, Clone, Copy, Default)]
@@ -38,6 +39,7 @@ pub struct MultiIndex {
     i8_idx: InMemoryI8Index,
     f16_idx: InMemoryF16Index,
     ham_idx: InMemoryHammingIndex,
+    rabitq_idx: RaBitQIndex,
     router: Mutex<AdaptiveRouter>,
     n: usize,
 }
@@ -55,10 +57,11 @@ impl MultiIndex {
     pub fn build(rows: Vec<(i64, Vec<f32>)>) -> Self {
         let n = rows.len();
         Self {
-            i8_idx:  InMemoryI8Index::build(rows.clone()),
-            f16_idx: InMemoryF16Index::build(rows.clone()),
-            ham_idx: InMemoryHammingIndex::build(rows),
-            router:  Mutex::new(AdaptiveRouter::new()),
+            i8_idx:     InMemoryI8Index::build(rows.clone()),
+            f16_idx:    InMemoryF16Index::build(rows.clone()),
+            ham_idx:    InMemoryHammingIndex::build(rows.clone()),
+            rabitq_idx: RaBitQIndex::build(rows, 0xBA1B_175E_EDu64),
+            router:     Mutex::new(AdaptiveRouter::new()),
             n,
         }
     }
@@ -94,6 +97,7 @@ impl MultiIndex {
                 self.f16_idx.search(query, k)
             }
             Strategy::SimSimdI8 => self.i8_idx.search(query, k),
+            Strategy::RaBitQCascade => self.rabitq_idx.search(query, k, None),
         }
     }
 

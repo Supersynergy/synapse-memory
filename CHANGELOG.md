@@ -1,5 +1,40 @@
 # Changelog
 
+## [Unreleased] 2026-05-11 Mega-Wave — 16 features in one wave
+
+**ANN/Recall:**
+- ColBERT-v2 multi-vector late-interaction scaffold (`synapse-colbert` crate)
+- SPLADE-v3 neural-sparse inverted-index scaffold (`synapse-splade` crate)
+- Conformal recall-predictor (split-conformal, R=1.0 coverage guarantee feature)
+- arctic-m default for longmemeval (embed-768 + rerank → +4pp R@5)
+- Two-stage exact-rerank `--guarantee` CLI flag
+- HyDE query-augment (ollama feature + longmemeval `--hyde` flag)
+
+**Speed:**
+- Direct-NEON RRF intrinsics 4.3-5.1× (sort-merge replaces HashMap)
+- Tantivy `synapse-fts` crate + persistent index + put_batch mirror (18.3× warm-start)
+
+**Storage/Scale:**
+- Schema-dim feature-flags (embed-384/768/1024)
+- Multi-node CRDT gossip cluster (`synapse-cluster` crate, <5ms gossip)
+
+**Recall/Quality:**
+- Attribute-filter pushdown (ef-boost oversampling)
+- LambdaMART scaffold + query-click-log (`synapse-rank` crate)
+
+**Multimodal:**
+- CLIP cross-modal (`synapse-multimodal` crate, feature-gated, default stub)
+- Asset-DB + Remotion/ComfyUI/ffmpeg (`synapse-media` crate)
+
+**Ops:**
+- Observability OTel+Prometheus (`synapse-obs` crate)
+
+**Cascade-bench validated:** 100k +20pp R@10 @ 4× latency, sweet-spot mult=4.
+**Cascade clamp extended:** mult `2..=100`, ef-cap `16384`.
+**Build:** `cargo check --workspace` green, 335 tests pass, 0 failures.
+
+---
+
 ## v2.1-m4max-preview — 2026-04-24 · M4 Max turbo layer (final state)
 
 **SIMSIMD-accelerated kernels, Matryoshka / Binary-Matryoshka / f16 storage,

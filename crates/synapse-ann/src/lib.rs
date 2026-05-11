@@ -28,14 +28,14 @@ pub trait AnnIndex: Send + Sync {
     /// candidates as `k` grows. usearch HNSW saturates ef_search at moderate `k`,
     /// so true recall lift requires bumping `expansion_search` at index level
     /// (see `UsearchIndex::new_tuned`). Override this method in backends that
-    /// expose a runtime-tunable search-effort param. `mult` clamped 2..=16.
+    /// expose a runtime-tunable search-effort param. `mult` clamped 2..=100.
     fn search_with_rerank(
         &self,
         query: &[f32],
         k: usize,
         mult: usize,
     ) -> Result<Vec<(u64, f32)>, AnnError> {
-        let m = mult.clamp(2, 16);
+        let m = mult.clamp(2, 100);
         let mut hits = self.search(query, k.saturating_mul(m))?;
         hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         hits.truncate(k);

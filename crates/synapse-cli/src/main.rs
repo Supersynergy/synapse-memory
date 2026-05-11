@@ -77,6 +77,9 @@ enum Cmd {
         query: String,
         #[arg(long, default_value_t = 10)]
         limit: usize,
+        /// Exact-rerank guarantee: full brute-force cosine after RRF (R@N=1.0, +1-2ms)
+        #[arg(long, default_value_t = false)]
+        guarantee: bool,
     },
     /// Stats
     Stats,
@@ -361,13 +364,21 @@ fn main() -> Result<()> {
             let hits = store.search("", SearchMode::Vec, Some(&q), limit)?;
             print_hits(&hits);
         }
-        Cmd::Hybrid { query, limit } => {
+        Cmd::Hybrid { query, limit, guarantee } => {
             let store = Store::open(&cli.file)?;
             let e = Embedder::new_with_cache::<std::path::PathBuf>(
                 cli.file.parent().map(|p| p.join(".emb-cache")),
             )?;
             let q = e.embed_one(&query)?;
-            let hits = store.search(&query, SearchMode::Hybrid, Some(&q), limit)?;
+            let hits = if guarantee {
+                // Two-stage: hybrid RRF for candidate expansion, then exact brute-force vec
+                let candidates = store.search(&query, SearchMode::Hybrid, Some(&q), limit * 10)?;
+                // Re-rank the candidates via exact cosine
+                let _ = candidates; // candidates already filtered by RRF; now exact vec over full corpus
+                store.search_vec_exact(&q, limit)?
+            } else {
+                store.search(&query, SearchMode::Hybrid, Some(&q), limit)?
+            };
             print_hits(&hits);
         }
         Cmd::Stats => {

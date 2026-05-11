@@ -18,8 +18,23 @@ from .cache import T0Cache, CacheKey
 from .connection import connect, Connection, Cursor
 from .pool import ConnectionPool
 from .bulk import BulkWriter
+from . import aio
+from .aio_pool import AsyncConnectionPool
+aio.AsyncConnectionPool = AsyncConnectionPool  # convenience alias
 
-__version__ = "0.2.0"
+# CRM domain helpers (multi-tenant, audit, GDPR, webhooks)
+from .crm import TenantRouter, AuditLogger, GdprHelper, WebhookHooks
+# v0.6 CRM v2 — soft-delete, time-travel, encryption, migration, export, RBAC, backup, webhook-worker, saved-views, activity-feed
+from .crm_v2 import (
+    SoftDelete, TimeTravel, FieldEncryption, SchemaMigrator, DataExport,
+    Rbac, BackupRestore, WebhookWorker, SavedView, ActivityFeed,
+)
+# v0.7 Intelligence — AI-native CRM features
+from .intelligence import VectorSearch, SmartDedup, NextAction, AnomalyDetect, NLQuery
+# v0.8 LiveQuery
+from .live import LiveQuery
+
+__version__ = "0.8.0"
 __all__ = ["connect", "Connection", "Cursor", "T0Cache", "CacheKey",
            "ConnectionPool", "BulkWriter"]
 

@@ -209,7 +209,7 @@ mod tests {
         relate(&c, 1, 3, "k", 0.5, None).unwrap();  // direct but weaker
         let p = shortest_path(&c, 1, 3, 5).unwrap();
         assert!(p.is_some());
-        let (cost, path) = p.unwrap();
+        let (cost, _path) = p.unwrap();
         // path 1->2->3 = (1-0.9)+(1-0.8) = 0.3 vs direct 1->3 = 0.5
         assert!(cost <= 0.4);
     }

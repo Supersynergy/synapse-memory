@@ -72,6 +72,22 @@ weighted_speedup = 0.8 × 3.55 + 0.15 × 1.35 + 0.05 × 0.64
 - Python:      203ns/call
 - Speedup: **2.18×** (PyObject zero-copy refcount, no pickle)
 
+### v0.3 — async DBAPI for FastAPI
+
+Async path uses `asyncio.to_thread` (sqlite3 is blocking, no true async-IO).
+
+| Workload | sync | async (single-conn) |
+|---|---|---|
+| 100 cached dashboard queries | 0.1ms | 46ms |
+| Per-request overhead (cached) | 0.9µs | 460µs |
+
+**Verdict**: async is **NOT for raw throughput** on cached ops — it's for **event-loop concurrency** in FastAPI. Use async when:
+- Mixing DB queries with awaitable I/O (HTTP, network)
+- Multiple concurrent FastAPI requests must all yield control
+- Connection-pool with N async-conns (to be benched)
+
+For pure cache-hit dashboard endpoints, sync via thread-pool worker is faster. Use async only where event-loop yielding matters.
+
 **Key insight**: 140ms aggregation queries (typical CRM "show stats by source/status/city") are CATASTROPHIC under raw sqlite3 — but synapsql cache makes them effectively free on repeat. Real CRM dashboards hit these queries on every page-load → user perceives **page-load 50-200× faster**.
 
 Where MariaDB-overhaul-bench reported 700× on hot SELECT (18.5ns vs 13µs), this Python adapter realizes ~3.5× because:

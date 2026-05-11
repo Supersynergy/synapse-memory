@@ -15,11 +15,11 @@ use synapse_libsql::Store;
 use synapse_libsql::{BatchedLibsqlStore, TurboLibsqlStore, RealPoolStore};
 use synapse_ops::SlowQueryLog;
 use synapse_auth::{AuthStore, Role};
-use synapse_tune::{TuneProfile, BotClassifier, DriftDetector, IndexAdvisor, TtlBandit, HeuristicTuner, Tuner, WorkloadStats};
+use synapse_tune::{TuneProfile, BotClassifier, DriftDetector, IndexAdvisor, TtlBandit, HeuristicTuner};
 use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::Mutex;
 use rusqlite::Connection;
-use synapse_graph::{LiveRelate, RelateEvent};
+use synapse_graph::LiveRelate;
 use synapse_graph::live::EventOp;
 
 #[derive(Parser)]
@@ -403,7 +403,7 @@ async fn serve_ops(
     }
     async fn graph_live_sse(State(s): State<OpsState>) -> axum::response::Response {
         use axum::response::sse::{Event, Sse, KeepAlive};
-        use futures::stream::{self, Stream};
+        
         use std::convert::Infallible;
         let g = match &s.graph {
             Some(g) => g.clone(),

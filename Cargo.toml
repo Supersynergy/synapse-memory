@@ -48,7 +48,22 @@ members = [
     # In-process ANN recall sweep (no HTTP overhead)
     "bench/industry",
     # High-throughput 4-tier vector search daemon (HNSW via usearch)
-    "synapsestore/crates/synapse-ultra",
+    "synapsestore/crates/synapse-ultra", "crates/synapse-fts",
+    # LambdaMART learning-to-rank scaffold
+    "crates/synapse-rank",
+    # ColBERT-v2 multi-vector late-interaction scaffold
+    "crates/synapse-colbert",
+    # SPLADE-v3 neural-sparse inverted-index scaffold
+    "crates/synapse-splade",
+    # Multimodal CLIP-style image+text shared embedding space (feature-gated)
+    # Default features=[] → no ort dep. Real CLIP: --features multimodal-dummy or multimodal
+    "crates/synapse-multimodal",
+    # Multi-node CRDT gossip cluster (AP, eventually consistent)
+    "crates/synapse-cluster",
+    # Production observability: OTel traces + Prometheus metrics
+    "crates/synapse-obs",
+    # Multimodal asset-DB + retrieval (images/video/audio, ComfyUI/Remotion/ffmpeg)
+    "crates/synapse-media",
 ]
 
 [workspace.package]

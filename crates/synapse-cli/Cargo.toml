@@ -34,3 +34,5 @@ static-ort = ["synapse-core/embed"]
 #          --no-default-features --features cross-linux --bin synapse
 # Ship libonnxruntime.so alongside the binary (see release/README.md for download URL).
 cross-linux = ["synapse-core/embed-dynamic"]
+embed-768 = ["synapse-core/embed-768"]
+embed-1024 = ["synapse-core/embed-1024"]

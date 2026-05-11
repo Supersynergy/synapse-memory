@@ -165,31 +165,24 @@ impl InMemoryI8Index {
             .collect();
 
         let scores: Vec<f32> = if self.codes.len() / self.dim >= SINGLE_THREAD_THRESHOLD {
-            // Large corpus: use dedicated 1-thread pool so we don't steal from
-            // concurrent Tokio tasks.
             SEARCH_POOL.install(|| {
                 self.codes
                     .par_chunks(self.dim)
                     .with_min_len(SEARCH_MIN_LEN)
                     .zip(self.scales.par_iter().with_min_len(SEARCH_MIN_LEN))
-                    .map(|(row, &s)| {
-                        let dot = dot_i8(&q_codes, row);
-                        dot * s * q_scale
-                    })
+                    .map(|(row, &s)| dot_i8(&q_codes, row) * s * q_scale)
                     .collect()
             })
         } else {
             self.codes
                 .chunks(self.dim)
                 .zip(self.scales.iter())
-                .map(|(row, &s)| {
-                    let dot = dot_i8(&q_codes, row);
-                    dot * s * q_scale
-                })
+                .map(|(row, &s)| dot_i8(&q_codes, row) * s * q_scale)
                 .collect()
         };
 
         let k = k.min(scores.len());
+        if k == 0 { return Vec::new(); }
         let mut idx: Vec<usize> = (0..scores.len()).collect();
         idx.select_nth_unstable_by(k - 1, |a, b| {
             scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal)

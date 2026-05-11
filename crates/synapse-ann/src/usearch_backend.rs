@@ -239,11 +239,11 @@ impl AnnIndex for UsearchIndex {
         k: usize,
         mult: usize,
     ) -> Result<Vec<(u64, f32)>, AnnError> {
-        let m = mult.clamp(2, 16);
+        let m = mult.clamp(2, 100);
         let cur = self.expansion_search();
         // Aggressive boost: multiply current ef by mult so rerank actually
-        // explores more of the graph. Capped at 4096 to avoid pathological cost.
-        let boosted_ef = cur.saturating_mul(m).min(4096).max(k * m);
+        // explores more of the graph. Capped at 16384 to avoid pathological cost.
+        let boosted_ef = cur.saturating_mul(m).min(16384).max(k * m);
         UsearchIndex::search_with_ef(self, query, k, boosted_ef)
     }
 

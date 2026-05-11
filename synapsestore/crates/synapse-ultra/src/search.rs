@@ -34,13 +34,6 @@ pub fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
     f32::dot(a, b).map(|v| v as f32).unwrap_or_else(|| a.iter().zip(b).map(|(x, y)| x * y).sum())
 }
 
-/// Dot on f16 stored as u16 LE, decoded to f32 on-the-fly.
-/// Falls back to scalar if NEON FP16 path unavailable.
-#[inline(always)]
-pub fn dot_f16_row(query_f32: &[f32], row_f16: &[u16]) -> f32 {
-    query_f32.iter().zip(row_f16).map(|(q, &h)| q * half::f16::from_bits(h).to_f32()).sum()
-}
-
 /// Native NEON FP16 dot — query AND row both f16. ~4-8× faster than scalar decode.
 /// Caller must convert query to f16 once per query (cheap vs n×k decode).
 #[inline(always)]
