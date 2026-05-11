@@ -1,16 +1,18 @@
-//! Minimal Raft consensus for synapse-cluster.
+//! Raft consensus for synapse-cluster.
 //!
-//! Scope: leader election + log replication + commit on majority.
-//! No snapshots (next-wave). No membership changes (static peer set).
-//! Wire: same TCP transport (length-prefix JSON) as CRDT gossip,
-//! multiplexed via `RaftMsg` envelope.
+//! Scope: leader election + log replication + commit on majority +
+//! snapshot / log-compaction + InstallSnapshot RPC.
+//! No membership changes (static peer set).
+//! Wire: length-prefix JSON TCP, `RaftMsg` envelope.
 //!
-//! State machine: ordered `Op` log applied to shared `Vec<Op>`.
-//! Log persistence: in-memory for scaffold; SQLite `raft_log` table is
-//! next-wave (see TODO markers).
+//! State machine: ordered `Op` log applied to `Vec<Op>`.
+//! Snapshot storage: `.synapse-raft-snapshots/snap-<index>.bin`
+//!   format: blake3(payload)[32] ++ serde_json(SnapshotData)
+//! Compaction trigger: log > COMPACTION_THRESHOLD entries (configurable).
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -22,6 +24,74 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use synapse_core::sync::Op;
+
+/// Number of log entries that triggers compaction.
+pub const COMPACTION_THRESHOLD: usize = 1000;
+
+/// Snapshot data: full state-machine + metadata.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotData {
+    /// Index of the last log entry included in this snapshot.
+    pub last_included_index: LogIndex,
+    /// Term of that entry.
+    pub last_included_term: Term,
+    /// Full applied state machine at that point.
+    pub applied_ops: Vec<Op>,
+}
+
+impl SnapshotData {
+    fn dir() -> PathBuf {
+        PathBuf::from(".synapse-raft-snapshots")
+    }
+
+    fn path(index: LogIndex) -> PathBuf {
+        Self::dir().join(format!("snap-{index}.bin"))
+    }
+
+    /// Persist to disk with blake3 checksum prefix.
+    pub async fn save(&self, index: LogIndex) -> Result<PathBuf> {
+        let payload = serde_json::to_vec(self)?;
+        let hash = blake3::hash(&payload);
+        let path = Self::path(index);
+        tokio::fs::create_dir_all(Self::dir()).await?;
+        let mut data = Vec::with_capacity(32 + payload.len());
+        data.extend_from_slice(hash.as_bytes());
+        data.extend_from_slice(&payload);
+        tokio::fs::write(&path, &data).await?;
+        Ok(path)
+    }
+
+    /// Load + verify checksum from disk.
+    pub async fn load(index: LogIndex) -> Result<Self> {
+        let data = tokio::fs::read(Self::path(index)).await?;
+        if data.len() < 32 {
+            bail!("snapshot file too short");
+        }
+        let stored_hash: [u8; 32] = data[..32].try_into().unwrap();
+        let payload = &data[32..];
+        let computed = blake3::hash(payload);
+        if computed.as_bytes() != &stored_hash {
+            bail!("snapshot checksum mismatch at index {index}");
+        }
+        Ok(serde_json::from_slice(payload)?)
+    }
+
+    /// Find the latest snapshot index on disk (0 = none).
+    pub async fn latest_index(dir: &Path) -> LogIndex {
+        let Ok(mut rd) = tokio::fs::read_dir(dir).await else { return 0 };
+        let mut best: LogIndex = 0;
+        while let Ok(Some(entry)) = rd.next_entry().await {
+            let name = entry.file_name();
+            let s = name.to_string_lossy();
+            if let Some(rest) = s.strip_prefix("snap-").and_then(|r| r.strip_suffix(".bin")) {
+                if let Ok(idx) = rest.parse::<LogIndex>() {
+                    best = best.max(idx);
+                }
+            }
+        }
+        best
+    }
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -69,6 +139,18 @@ pub enum RaftMsg {
     Propose { op: Op },
     /// Reply to Propose: Ok(committed_index) or Err.
     ProposeReply { index: Result<LogIndex, String> },
+    /// Leader → follower: install a full snapshot (follower too far behind).
+    InstallSnapshot {
+        term: Term,
+        leader_id: NodeId,
+        snapshot: SnapshotData,
+    },
+    /// Follower reply to InstallSnapshot.
+    InstallSnapshotReply {
+        term: Term,
+        follower_id: NodeId,
+        last_included_index: LogIndex,
+    },
 }
 
 // ─── Role ───────────────────────────────────────────────────────────────────
@@ -104,6 +186,12 @@ struct RaftState {
 
     // Votes received in current election
     votes_received: usize,
+
+    // Snapshot state
+    last_snapshot_index: LogIndex,
+    last_snapshot_term: Term,
+    /// Configurable compaction threshold (default COMPACTION_THRESHOLD).
+    compaction_threshold: usize,
 }
 
 impl RaftState {
@@ -127,6 +215,9 @@ impl RaftState {
             match_index,
             applied_ops: Vec::new(),
             votes_received: 0,
+            last_snapshot_index: 0,
+            last_snapshot_term: 0,
+            compaction_threshold: COMPACTION_THRESHOLD,
         }
     }
 
@@ -145,6 +236,49 @@ impl RaftState {
                 self.applied_ops.push(entry.op.clone());
             }
         }
+    }
+
+    /// Build a snapshot from current state.
+    pub fn snapshot(&self) -> SnapshotData {
+        SnapshotData {
+            last_included_index: self.last_applied,
+            last_included_term: self
+                .log
+                .iter()
+                .find(|e| e.index == self.last_applied)
+                .map(|e| e.term)
+                .unwrap_or(self.last_snapshot_term),
+            applied_ops: self.applied_ops.clone(),
+        }
+    }
+
+    /// Restore state from snapshot, drop log entries covered by it.
+    pub fn apply_snapshot(&mut self, snap: SnapshotData) {
+        if snap.last_included_index <= self.last_snapshot_index {
+            return; // stale
+        }
+        self.applied_ops = snap.applied_ops;
+        self.last_applied = snap.last_included_index;
+        self.commit_index = self.commit_index.max(snap.last_included_index);
+        // Keep sentinel + entries after snapshot
+        let keep_from = snap.last_included_index;
+        self.log.retain(|e| e.index > keep_from);
+        // Ensure sentinel covers snapshot boundary
+        let sentinel = LogEntry {
+            term: snap.last_included_term,
+            index: snap.last_included_index,
+            op: Op::Delete { doc_id: "__snap__".into(), ts: 0 },
+        };
+        self.log.insert(0, sentinel);
+        self.last_snapshot_index = snap.last_included_index;
+        self.last_snapshot_term = snap.last_included_term;
+    }
+
+    /// Returns true if compaction should run now.
+    pub fn needs_compaction(&self) -> bool {
+        // Count log entries above snapshot boundary
+        let live = self.log.iter().filter(|e| e.index > self.last_snapshot_index).count();
+        live >= self.compaction_threshold
     }
 }
 
@@ -238,6 +372,55 @@ impl RaftNode {
         self.state.read().await.applied_ops.clone()
     }
 
+    /// Take a snapshot of current state-machine and persist to disk.
+    pub async fn snapshot(&self) -> Result<SnapshotData> {
+        let snap = self.state.read().await.snapshot();
+        snap.save(snap.last_included_index).await?;
+        info!(id = self.id, index = snap.last_included_index, "snapshot saved");
+        Ok(snap)
+    }
+
+    /// Apply a snapshot (called by follower receiving InstallSnapshot).
+    pub async fn apply_snapshot(&self, snap: SnapshotData) {
+        let mut st = self.state.write().await;
+        st.apply_snapshot(snap);
+    }
+
+    /// Trigger compaction if threshold exceeded: snapshot + truncate log.
+    pub async fn maybe_compact(&self) -> Result<bool> {
+        let needs = self.state.read().await.needs_compaction();
+        if !needs {
+            return Ok(false);
+        }
+        let snap = {
+            let st = self.state.read().await;
+            st.snapshot()
+        };
+        let index = snap.last_included_index;
+        snap.save(index).await?;
+        {
+            let mut st = self.state.write().await;
+            // Truncate log entries covered by snapshot
+            st.log.retain(|e| e.index > index);
+            // Re-insert sentinel
+            let sentinel = LogEntry {
+                term: snap.last_included_term,
+                index,
+                op: Op::Delete { doc_id: "__snap__".into(), ts: 0 },
+            };
+            st.log.insert(0, sentinel);
+            st.last_snapshot_index = index;
+            st.last_snapshot_term = snap.last_included_term;
+        }
+        info!(id = self.id, index, "log compacted");
+        Ok(true)
+    }
+
+    /// Set compaction threshold (entries above snapshot before compact runs).
+    pub async fn set_compaction_threshold(&self, threshold: usize) {
+        self.state.write().await.compaction_threshold = threshold;
+    }
+
     // ── Internal RPC helpers ─────────────────────────────────────────────────
 
     async fn replicate_to_peers(self: &Arc<Self>) {
@@ -253,6 +436,34 @@ impl RaftNode {
     }
 
     async fn send_append_entries(self: &Arc<Self>, peer: &RaftPeer) -> Result<()> {
+        // If peer is behind snapshot, send full snapshot instead
+        {
+            let st = self.state.read().await;
+            let next = st.next_index.get(&peer.id).copied().unwrap_or(1);
+            if next <= st.last_snapshot_index {
+                let snap = st.snapshot();
+                let msg = RaftMsg::InstallSnapshot {
+                    term: st.current_term,
+                    leader_id: self.id,
+                    snapshot: snap,
+                };
+                drop(st);
+                let reply = send_raft_msg(peer.addr, msg).await?;
+                if let RaftMsg::InstallSnapshotReply { term, last_included_index, .. } = reply {
+                    let mut st = self.state.write().await;
+                    if term > st.current_term {
+                        st.current_term = term;
+                        st.role = Role::Follower;
+                        st.voted_for = None;
+                    } else {
+                        st.match_index.insert(peer.id, last_included_index);
+                        st.next_index.insert(peer.id, last_included_index + 1);
+                    }
+                }
+                return Ok(());
+            }
+        }
+
         let msg = {
             let st = self.state.read().await;
             let next = st.next_index.get(&peer.id).copied().unwrap_or(1);
@@ -294,6 +505,18 @@ impl RaftNode {
                             st.commit_index = median;
                             st.apply_committed();
                             let _ = self.proposal_tx.send(median);
+                            // Trigger compaction check after commit
+                            let do_compact = st.needs_compaction();
+                            drop(st);
+                            if do_compact {
+                                let node = self.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = node.maybe_compact().await {
+                                        warn!("compaction error: {e}");
+                                    }
+                                });
+                            }
+                            return Ok(());
                         }
                     }
                 }
@@ -501,6 +724,23 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
             match node.propose(op).await {
                 Ok(idx) => RaftMsg::ProposeReply { index: Ok(idx) },
                 Err(e) => RaftMsg::ProposeReply { index: Err(e.to_string()) },
+            }
+        }
+        RaftMsg::InstallSnapshot { term, leader_id, snapshot } => {
+            let last_index = snapshot.last_included_index;
+            let mut st = node.state.write().await;
+            if term >= st.current_term {
+                st.current_term = term;
+                st.role = Role::Follower;
+                st.current_leader = Some(leader_id);
+                st.election_deadline = new_election_deadline();
+                st.apply_snapshot(snapshot);
+                info!(id = node.id, index = last_index, "installed snapshot from leader");
+            }
+            RaftMsg::InstallSnapshotReply {
+                term: st.current_term,
+                follower_id: node.id,
+                last_included_index: last_index,
             }
         }
         _ => RaftMsg::ProposeReply { index: Err("unexpected msg".into()) },

@@ -20,6 +20,7 @@
 //! ```
 
 use half::f16;
+use synapse_kernel::kernels::f16_dot::dot_f16;
 
 /// Convert an fp32 slice to packed f16 bytes (little-endian).
 #[must_use]
@@ -77,17 +78,30 @@ pub fn cos_f16_row(query_f32: &[f32], row_f16: &[u8]) -> Option<f32> {
     }
     #[cfg(not(feature = "simsimd"))]
     {
-        let mut dot = 0.0_f32;
-        let mut q_norm = 0.0_f32;
-        let mut r_norm = 0.0_f32;
-        for (qi, rc) in query_f32.iter().zip(row_f16.chunks_exact(2)) {
-            let r = f16::from_le_bytes([rc[0], rc[1]]).to_f32();
-            dot += qi * r;
-            q_norm += qi * qi;
-            r_norm += r * r;
+        // Use synapse-kernel NEON dot_f16 for 3.9× speedup on aarch64.
+        // Convert query f32→f16 once, then use dot_f16 for dot + both norms.
+        let q_f16: Vec<f16> = query_f32.iter().map(|&x| f16::from_f32(x)).collect();
+        let (head, row_f16_slice, tail) = unsafe { row_f16.align_to::<f16>() };
+        if head.is_empty() && tail.is_empty() && row_f16_slice.len() == q_f16.len() {
+            let dot = dot_f16(&q_f16, row_f16_slice);
+            let q_norm = dot_f16(&q_f16, &q_f16).sqrt();
+            let r_norm = dot_f16(row_f16_slice, row_f16_slice).sqrt();
+            let denom = (q_norm * r_norm).max(1e-12);
+            Some(dot / denom)
+        } else {
+            // Unaligned fallback — scalar loop
+            let mut dot = 0.0_f32;
+            let mut q_norm = 0.0_f32;
+            let mut r_norm = 0.0_f32;
+            for (qi, rc) in query_f32.iter().zip(row_f16.chunks_exact(2)) {
+                let r = f16::from_le_bytes([rc[0], rc[1]]).to_f32();
+                dot += qi * r;
+                q_norm += qi * qi;
+                r_norm += r * r;
+            }
+            let denom = (q_norm.sqrt() * r_norm.sqrt()).max(1e-12);
+            Some(dot / denom)
         }
-        let denom = (q_norm.sqrt() * r_norm.sqrt()).max(1e-12);
-        Some(dot / denom)
     }
 }
 

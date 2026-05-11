@@ -55,6 +55,8 @@ half = "2.7"
 tikv-jemallocator = { version = "0.6", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
 synapse-ann = { path = "../synapse-ann", optional = true }
+# NEON f16/i8 dot-product kernels (3.9× over scalar on M4 Max).
+synapse-kernel = { path = "../synapse-kernel" }
 synapse-engine = { path = "../synapse-engine" }
 async-trait = "0.1"
 tokio = { workspace = true }
@@ -170,3 +172,8 @@ harness = false
 [[bench]]
 name = "rrf_neon"
 harness = false
+
+[[bench]]
+name = "f16_hnsw"
+harness = false
+required-features = ["turbo"]

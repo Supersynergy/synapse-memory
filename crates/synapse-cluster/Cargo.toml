@@ -12,9 +12,10 @@ anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["fs", "io-util"] }
 tracing.workspace = true
 synapse-core = { path = "../synapse-core", default-features = false }
+blake3.workspace = true
 
 [features]
 default = []

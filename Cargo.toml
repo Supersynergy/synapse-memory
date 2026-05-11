@@ -68,6 +68,8 @@ members = [
     "crates/synapse-fusion",
     # Migration tool: import Qdrant/LanceDB/Chroma into .synx
     "crates/synapse-migrate",
+    # Disk-tier SPANN: in-memory centroids + mmap posting-lists (unlimited corpus)
+    "crates/synapse-spann",
 ]
 
 [workspace.package]

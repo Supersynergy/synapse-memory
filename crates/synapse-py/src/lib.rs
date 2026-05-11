@@ -235,6 +235,7 @@ const fn strategy_name(s: Strategy) -> &'static str {
         Strategy::SimSimdI8      => "simsimd_i8",
         Strategy::SimSimdHamming => "simsimd_hamming",
         Strategy::MrlSimSimd     => "mrl_simsimd",
+        Strategy::RaBitQCascade  => "rabitq_cascade",
     }
 }
 
@@ -375,6 +376,80 @@ impl PyBrain {
     }
 }
 
+/// High-level convenience wrapper — `from synapse_rs import Synapse`.
+///
+/// ```python
+/// from synapse_rs import Synapse
+/// s = Synapse(path="./brain.db")
+/// doc_id = s.put("doc-1", "text content", metadata={"source": "test"})
+/// results = s.search("query", k=10)          # [(id, text, score), ...]
+/// results = s.search_hybrid("query", embedding=[...], k=5)
+/// s.close()
+/// ```
+#[pyclass(name = "Synapse")]
+pub struct PySynapse {
+    inner: Mutex<Option<Store>>,
+}
+
+#[pymethods]
+impl PySynapse {
+    #[new]
+    #[pyo3(signature = (path="./brain.db"))]
+    fn new(path: &str) -> PyResult<Self> {
+        let store = Store::open(path)
+            .map_err(|e| PyRuntimeError::new_err(format!("store open: {e}")))?;
+        Ok(Self { inner: Mutex::new(Some(store)) })
+    }
+
+    /// Insert or update a document. `doc_id` used as URI. Returns internal row id.
+    #[pyo3(signature = (doc_id, text, metadata=None))]
+    fn put(&self, doc_id: String, text: String, metadata: Option<pyo3::Bound<'_, pyo3::types::PyDict>>) -> PyResult<i64> {
+        let meta_val: Option<serde_json::Value> = metadata.map(|d| {
+            serde_json::from_str(&d.str().map(|s| s.to_string()).unwrap_or_default())
+                .unwrap_or(serde_json::Value::Null)
+        });
+        let req = PutRequest {
+            uri: Some(doc_id),
+            title: None,
+            text,
+            meta: meta_val,
+            embedding: None,
+        };
+        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let store = g.as_mut().ok_or_else(|| PyRuntimeError::new_err("store is closed"))?;
+        store.put(&req).map_err(|e| PyRuntimeError::new_err(format!("put: {e}")))
+    }
+
+    /// Lexical BM25 search. Returns `[(id, text, score)]`.
+    #[pyo3(signature = (query, k=10))]
+    fn search(&self, query: &str, k: usize) -> PyResult<Vec<(i64, String, f64)>> {
+        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let store = g.as_ref().ok_or_else(|| PyRuntimeError::new_err("store is closed"))?;
+        let hits = store
+            .search(query, SearchMode::Lex, None, k)
+            .map_err(|e| PyRuntimeError::new_err(format!("search: {e}")))?;
+        Ok(hits.into_iter().map(|h| (h.id, h.text, h.score)).collect())
+    }
+
+    /// Hybrid BM25 + vector search. Caller must supply query embedding.
+    #[pyo3(signature = (query, embedding, k=10))]
+    fn search_hybrid(&self, query: &str, embedding: Vec<f32>, k: usize) -> PyResult<Vec<(i64, String, f64)>> {
+        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let store = g.as_ref().ok_or_else(|| PyRuntimeError::new_err("store is closed"))?;
+        let hits = store
+            .search(query, SearchMode::Hybrid, Some(&embedding), k)
+            .map_err(|e| PyRuntimeError::new_err(format!("search_hybrid: {e}")))?;
+        Ok(hits.into_iter().map(|h| (h.id, h.text, h.score)).collect())
+    }
+
+    /// Release the store handle. Subsequent calls will raise RuntimeError.
+    fn close(&self) -> PyResult<()> {
+        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        *g = None;
+        Ok(())
+    }
+}
+
 /// Module entry point. Exposed to Python as `synapse`.
 #[pymodule]
 fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -392,6 +467,7 @@ fn synapse_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMultiIndex>()?;
     m.add_class::<PyHammingIndex>()?;
     m.add_function(wrap_pyfunction!(rerank, m)?)?;
+    m.add_class::<PySynapse>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

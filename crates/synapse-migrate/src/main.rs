@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use synapse_core::{PutRequest, Store};
 
 #[derive(Parser)]
-#[command(name = "synapse-migrate", version, about = "Import Qdrant/LanceDB/Chroma into .synx")]
+#[command(name = "synapse-migrate", version, about = "Import Qdrant/LanceDB/Chroma/Pinecone/Weaviate into .synx")]
 struct Cli {
     /// Source URI: qdrant://host:port/collection | lancedb:///path/table | chroma:///path/collection
     #[arg(long)]
@@ -44,8 +44,12 @@ fn main() -> Result<()> {
         migrate_lancedb(src, &mut store, cli.batch, cli.offset)?
     } else if src.starts_with("chroma://") {
         migrate_chroma(src, &mut store, cli.batch, cli.offset)?
+    } else if src.starts_with("pinecone://") {
+        migrate_pinecone(src, &mut store, cli.batch, cli.offset)?
+    } else if src.starts_with("weaviate://") {
+        migrate_weaviate(src, &mut store, cli.batch, cli.offset)?
     } else {
-        bail!("unknown source scheme — expected qdrant:// | lancedb:// | chroma://");
+        bail!("unknown source scheme — expected qdrant:// | lancedb:// | chroma:// | pinecone:// | weaviate://");
     };
 
     println!("migrate done: {} docs inserted into {}", total, cli.to.display());
@@ -383,6 +387,292 @@ fn migrate_lancedb(src: &str, store: &mut Store, _batch: usize, offset: u64) -> 
     Ok(imported)
 }
 
+// ── Pinecone (HTTP REST — curl subprocess) ────────────────────────────────
+//
+// URI: pinecone://<index>-<project>.svc.<env>.pinecone.io/<namespace>
+//   or pinecone://<host>/<namespace>  (namespace optional, defaults to "")
+//
+// Env: PINECONE_API_KEY
+//
+// Flow: POST /vectors/list → get ids → POST /vectors/fetch in batches.
+// Pinecone list returns up to 100 ids per page with a pagination_token.
+fn migrate_pinecone(src: &str, store: &mut Store, batch: usize, offset: u64) -> Result<u64> {
+    let stripped = src.strip_prefix("pinecone://").unwrap();
+    let (host, namespace) = if let Some(slash) = stripped.find('/') {
+        (&stripped[..slash], &stripped[slash + 1..])
+    } else {
+        (stripped, "")
+    };
+
+    let api_key = std::env::var("PINECONE_API_KEY")
+        .context("PINECONE_API_KEY env var required for pinecone:// source")?;
+
+    let base_url = format!("https://{}", host);
+
+    let pb = ProgressBar::new_spinner();
+    pb.set_message("listing Pinecone vectors...");
+
+    let mut imported: u64 = 0;
+    let mut skipped: u64 = 0;
+    let mut pagination_token: Option<String> = None;
+    let mut id_buf: Vec<String> = Vec::new();
+
+    // Collect all IDs first (list endpoint), then fetch in batches
+    loop {
+        let mut list_url = format!("{}/vectors/list?namespace={}&limit=100", base_url, namespace);
+        if let Some(ref tok) = pagination_token {
+            list_url.push_str(&format!("&paginationToken={}", tok));
+        }
+
+        let resp = http_get_json_with_key(&list_url, &api_key)
+            .context("pinecone list request failed")?;
+
+        let ids = resp
+            .pointer("/vectors")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.get("id").and_then(|i| i.as_str()).map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        id_buf.extend(ids);
+
+        pagination_token = resp
+            .pointer("/pagination/next")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        if pagination_token.is_none() {
+            break;
+        }
+    }
+
+    pb.finish_with_message(format!("listed {} Pinecone vector ids", id_buf.len()));
+
+    let total = id_buf.len() as u64;
+    let pb = progress_bar(total.saturating_sub(offset));
+
+    for chunk in id_buf.chunks(batch) {
+        if skipped + chunk.len() as u64 <= offset {
+            skipped += chunk.len() as u64;
+            continue;
+        }
+
+        // Build fetch URL with ids as query params
+        let ids_qs: String = chunk
+            .iter()
+            .map(|id| format!("ids={}", urlencod(id)))
+            .collect::<Vec<_>>()
+            .join("&");
+        let fetch_url = format!("{}/vectors/fetch?namespace={}&{}", base_url, namespace, ids_qs);
+
+        let resp = http_get_json_with_key(&fetch_url, &api_key)
+            .context("pinecone fetch request failed")?;
+
+        let vectors_obj = resp
+            .pointer("/vectors")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+
+        let chunk_len = vectors_obj.len() as u64;
+
+        for (vec_id, vec_val) in &vectors_obj {
+            let metadata = vec_val.get("metadata");
+            let text = metadata
+                .and_then(|m| m.get("text").or_else(|| m.get("content")))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let uri = metadata
+                .and_then(|m| m.get("uri").or_else(|| m.get("url")))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let title = metadata
+                .and_then(|m| m.get("title"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let embedding: Option<Vec<f32>> = vec_val
+                .get("values")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect());
+
+            let mut meta = metadata.cloned().unwrap_or(serde_json::Value::Object(Default::default()));
+            if let Some(obj) = meta.as_object_mut() {
+                obj.insert("pinecone_id".into(), serde_json::Value::String(vec_id.clone()));
+                obj.insert("pinecone_namespace".into(), serde_json::Value::String(namespace.to_string()));
+            }
+
+            let req = PutRequest { uri, title, text, meta: Some(meta), embedding };
+            store.put(&req)?;
+        }
+
+        imported += chunk_len;
+        pb.inc(chunk_len);
+    }
+
+    pb.finish_with_message("pinecone import complete");
+    Ok(imported)
+}
+
+/// Percent-encode a string (minimal — spaces and special chars only).
+fn urlencod(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char);
+            }
+            b => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+// ── Weaviate (GraphQL) ────────────────────────────────────────────────────
+//
+// URI: weaviate://<host:port>/<ClassName>
+//   default host: localhost:8080
+//
+// Optional: WEAVIATE_API_KEY env (for authenticated instances)
+//
+// Uses GraphQL { Get { <ClassName>(limit: N, offset: M) { _additional { id vector } ... } } }
+fn migrate_weaviate(src: &str, store: &mut Store, batch: usize, offset: u64) -> Result<u64> {
+    let stripped = src.strip_prefix("weaviate://").unwrap();
+    let (host_port, class_name) = if let Some(slash) = stripped.find('/') {
+        (&stripped[..slash], &stripped[slash + 1..])
+    } else {
+        bail!("missing class name in weaviate:// URI — expected weaviate://host:port/ClassName");
+    };
+
+    if class_name.is_empty() {
+        bail!("empty class name in weaviate:// URI");
+    }
+
+    let base_url = format!("http://{}/v1/graphql", host_port);
+    let api_key = std::env::var("WEAVIATE_API_KEY").ok();
+
+    // Probe: GET /v1/meta to verify connectivity
+    let meta_url = format!("http://{}/v1/meta", host_port);
+    http_get_json_opt_key(&meta_url, api_key.as_deref())
+        .with_context(|| format!("cannot reach Weaviate at {}", meta_url))?;
+
+    // Count total via aggregate
+    let count_query = serde_json::json!({
+        "query": format!(
+            "{{ Aggregate {{ {} {{ meta {{ count }} }} }} }}",
+            class_name
+        )
+    });
+    let count_resp = http_post_json_opt_key(&base_url, &count_query, api_key.as_deref())
+        .context("weaviate aggregate count failed")?;
+    let total_count = count_resp
+        .pointer(&format!("/data/Aggregate/{}/0/meta/count", class_name))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    let pb = progress_bar(total_count.saturating_sub(offset));
+
+    let mut imported: u64 = 0;
+    let mut page_offset = offset;
+
+    loop {
+        // GraphQL query: fetch id, vector, and all scalar properties
+        // We request _additional { id vector } plus a generic properties block.
+        // Weaviate returns unknown property names in a catch-all; we use
+        // `properties { ... }` omitted so only _additional is fetched for the
+        // skeleton — callers can extend via custom GraphQL.
+        let gql = format!(
+            r#"{{ Get {{ {class}(limit: {limit}, offset: {offset}) {{
+                _additional {{ id vector }}
+                text content body title uri url
+            }} }} }}"#,
+            class = class_name,
+            limit = batch,
+            offset = page_offset,
+        );
+        let query_body = serde_json::json!({ "query": gql });
+
+        let resp = http_post_json_opt_key(&base_url, &query_body, api_key.as_deref())
+            .context("weaviate graphql request failed")?;
+
+        let objects = resp
+            .pointer(&format!("/data/Get/{}", class_name))
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        if objects.is_empty() {
+            break;
+        }
+
+        let chunk_len = objects.len() as u64;
+
+        for obj in &objects {
+            let additional = obj.get("_additional");
+            let weaviate_id = additional
+                .and_then(|a| a.get("id"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            let embedding: Option<Vec<f32>> = additional
+                .and_then(|a| a.get("vector"))
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect());
+
+            let text = obj
+                .get("text")
+                .or_else(|| obj.get("content"))
+                .or_else(|| obj.get("body"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let title = obj
+                .get("title")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let uri = obj
+                .get("uri")
+                .or_else(|| obj.get("url"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            // Build meta: all fields except _additional
+            let mut meta_map = serde_json::Map::new();
+            meta_map.insert("weaviate_id".into(), serde_json::Value::String(weaviate_id));
+            meta_map.insert("weaviate_class".into(), serde_json::Value::String(class_name.to_string()));
+            for (k, v) in obj.as_object().into_iter().flatten() {
+                if k != "_additional" {
+                    meta_map.insert(k.clone(), v.clone());
+                }
+            }
+
+            let req = PutRequest {
+                uri,
+                title,
+                text,
+                meta: Some(serde_json::Value::Object(meta_map)),
+                embedding,
+            };
+            store.put(&req)?;
+        }
+
+        imported += chunk_len;
+        pb.inc(chunk_len);
+        page_offset += chunk_len;
+
+        if chunk_len < batch as u64 {
+            break;
+        }
+    }
+
+    pb.finish_with_message("weaviate import complete");
+    Ok(imported)
+}
+
 // ── HTTP helpers (no reqwest — keep deps minimal) ─────────────────────────
 
 fn http_get_json(url: &str) -> Result<serde_json::Value> {
@@ -421,6 +711,50 @@ fn http_post_json(url: &str, body: &serde_json::Value) -> Result<serde_json::Val
     let v: serde_json::Value = serde_json::from_slice(&output.stdout)
         .context("parse JSON response")?;
     Ok(v)
+}
+
+fn http_get_json_with_key(url: &str, api_key: &str) -> Result<serde_json::Value> {
+    let output = std::process::Command::new("curl")
+        .args([
+            "-sf", "--max-time", "30",
+            "-H", &format!("Api-Key: {}", api_key),
+            url,
+        ])
+        .output()
+        .context("curl not found")?;
+    if !output.status.success() {
+        bail!("curl GET {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
+    }
+    serde_json::from_slice(&output.stdout).context("parse JSON response")
+}
+
+fn http_get_json_opt_key(url: &str, api_key: Option<&str>) -> Result<serde_json::Value> {
+    let mut cmd = std::process::Command::new("curl");
+    cmd.args(["-sf", "--max-time", "30"]);
+    if let Some(k) = api_key {
+        cmd.args(["-H", &format!("Authorization: Bearer {}", k)]);
+    }
+    cmd.arg(url);
+    let output = cmd.output().context("curl not found")?;
+    if !output.status.success() {
+        bail!("curl GET {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
+    }
+    serde_json::from_slice(&output.stdout).context("parse JSON response")
+}
+
+fn http_post_json_opt_key(url: &str, body: &serde_json::Value, api_key: Option<&str>) -> Result<serde_json::Value> {
+    let body_str = body.to_string();
+    let mut cmd = std::process::Command::new("curl");
+    cmd.args(["-sf", "--max-time", "30", "-X", "POST", "-H", "Content-Type: application/json"]);
+    if let Some(k) = api_key {
+        cmd.args(["-H", &format!("Authorization: Bearer {}", k)]);
+    }
+    cmd.args(["-d", &body_str, url]);
+    let output = cmd.output().context("curl not found")?;
+    if !output.status.success() {
+        bail!("curl POST {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
+    }
+    serde_json::from_slice(&output.stdout).context("parse JSON response")
 }
 
 fn progress_bar(total: u64) -> ProgressBar {
@@ -539,6 +873,63 @@ mod tests {
         let mut store = make_store(&tmp);
         let count = migrate_lancedb(&src, &mut store, 32, 0).unwrap();
         assert_eq!(count, 5);
+    }
+
+    /// Pinecone: no live server — verify missing API key errors cleanly.
+    #[test]
+    fn test_pinecone_missing_key() {
+        let tmp = TempDir::new().unwrap();
+        let mut store = make_store(&tmp);
+        // Unset key for this test
+        std::env::remove_var("PINECONE_API_KEY");
+        let err = migrate_pinecone("pinecone://my-index-abc123.svc.us-east1-gcp.pinecone.io/default", &mut store, 32, 0);
+        assert!(err.is_err());
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("PINECONE_API_KEY"), "expected key error, got: {}", msg);
+    }
+
+    /// Pinecone: verify URI without namespace errors cleanly (host-only).
+    #[test]
+    fn test_pinecone_no_namespace_still_ok() {
+        let tmp = TempDir::new().unwrap();
+        let mut store = make_store(&tmp);
+        std::env::remove_var("PINECONE_API_KEY");
+        // No slash → no collection, but should fail on API key first
+        let err = migrate_pinecone("pinecone://myhost.svc.pinecone.io", &mut store, 32, 0);
+        assert!(err.is_err());
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("PINECONE_API_KEY"), "got: {}", msg);
+    }
+
+    /// Weaviate: missing class name in URI errors cleanly.
+    #[test]
+    fn test_weaviate_bad_uri() {
+        let tmp = TempDir::new().unwrap();
+        let mut store = make_store(&tmp);
+        let err = migrate_weaviate("weaviate://localhost:8080", &mut store, 32, 0);
+        assert!(err.is_err());
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("class name"), "got: {}", msg);
+    }
+
+    /// Weaviate: empty class name in URI errors cleanly.
+    #[test]
+    fn test_weaviate_empty_class() {
+        let tmp = TempDir::new().unwrap();
+        let mut store = make_store(&tmp);
+        let err = migrate_weaviate("weaviate://localhost:8080/", &mut store, 32, 0);
+        assert!(err.is_err());
+        let msg = format!("{}", err.unwrap_err());
+        assert!(msg.contains("empty class"), "got: {}", msg);
+    }
+
+    /// Weaviate: unreachable host errors cleanly (curl exits non-zero).
+    #[test]
+    fn test_weaviate_unreachable() {
+        let tmp = TempDir::new().unwrap();
+        let mut store = make_store(&tmp);
+        let err = migrate_weaviate("weaviate://127.0.0.1:19999/Article", &mut store, 32, 0);
+        assert!(err.is_err());
     }
 
     #[test]

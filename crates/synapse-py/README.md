@@ -1,6 +1,24 @@
-# synapse-py
+# synapse-rs
 
-PyO3 bindings for [`synapse-core`](../synapse-core).
+PyO3 bindings for [`synapse-core`](../synapse-core) — single-file AI agent memory with SIMSIMD-accelerated hybrid search, exposed to Python.
+
+## Install
+
+```bash
+pip install synapse-rs
+```
+
+## Quick start
+
+```python
+from synapse_py import Synapse
+
+s = Synapse(path="./brain.db")
+s.put("doc-1", "the quick brown fox", metadata={"source": "wiki"})
+results = s.search("fox", k=10)            # [(id, text, score), ...]
+results = s.search_hybrid("fox", embedding=[0.1]*384, k=5)
+s.close()
+```
 
 ## Install (dev)
 
