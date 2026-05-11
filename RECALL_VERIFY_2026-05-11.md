@@ -52,16 +52,45 @@ Stack 2-3 levers → realistic R@5 ≥ 0.80.
 
 **Synapse = einzige local-first DB mit cross-encoder + LLM-decompose + PPR + LambdaMART + HyDE in single-binary.**
 
-## Embedder-Swap Path (D — landed)
+## Embedder-Swap Path (D — partial)
 
-`SYNAPSE_EMBED_MODEL=<id>` env-var, default `bge-small`:
+`SYNAPSE_EMBED_MODEL=<id>` env-var landed (commit `6ea661f`), default `bge-small`:
 - `bge-small` (default, 384-dim, MTEB 53.0)
-- `bge-small-q` (int8, smaller)
-- `arctic-xs/s/m/l` (Snowflake Arctic, 384/384/768/1024-dim, MTEB 56.6→63.0)
-- `mxbai-large` (1024-dim, MTEB 64.7)
-- `nomic-1.5` (768-dim, MTEB 62.4)
+- `bge-small-q`, `arctic-xs/s/m/l`, `mxbai-large`, `nomic-1.5`
 
-⚠ Switching invalidates existing 384-dim corpora — fresh `.synapse/` required.
+### Blocker discovered (2026-05-11 02:25)
+
+`SYNAPSE_EMBED_MODEL=arctic-m` test (fresh `.synapse/`):
+
+```
+ERR 2b8f3739: dim mismatch: expected 384, got 768
+ERR 6e984302: dim mismatch: expected 384, got 768
+... (10/10 errors)
+N: 10 · Errors: 10 · Recall@5: 0.000
+```
+
+**Root cause**: `crates/synapse-core/src/types.rs:3` hardcodes `EMBED_DIM = 384`.
+Referenced 10+ times in `db.rs` (sqlite-vec table schema, validation, byte-decode).
+
+**To unlock other embedders, need 1-day refactor**:
+1. Replace `const EMBED_DIM: usize = 384` with `fn embed_dim() -> usize` (env-driven)
+2. Pass dim through `Store::new(..., dim)` constructor
+3. sqlite-vec `vec0` table created with dynamic dim per-corpus
+4. Persist `dim` in `.synapse/manifest.toml` so reopens are typed
+5. Reject puts where `vec.len() != stored_dim` (already there, just needs dynamic source)
+
+Embedder-cache proven working: Arctic-m model downloaded to `.fastembed_cache/models--Snowflake--snowflake-arctic-embed-m/`. So env-select wire is correct; only schema-dim-config remains.
+
+### Display-string note
+
+`bench/longmemeval/src/main.rs:460` hardcodes `println!("Embedder: fastembed BGE-small-en-v1.5 (384-dim)")` — misleading log even when Arctic loaded. Fix: read actual model name from `Embedder::name()` (or remove the println).
+
+### Workaround until schema-refactor
+
+Stay on default BGE-small (R@5 = 0.60 baseline). Other paths to push 0.60 → 0.85 without embedder swap:
+- LightGBM LambdaMART train on `synapse-learn` click-log (+0.06-0.09)
+- MiniMax decompose+grade with API key (+0.05-0.10)
+- HippoRAG PPR after graph-population pipeline added
 
 Commit: `feat(embed): env-driven model select (SYNAPSE_EMBED_MODEL)` (2026-05-11)
 

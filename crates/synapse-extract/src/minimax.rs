@@ -332,6 +332,8 @@ impl Extractor for MinimaxExtractor {
                 fact: it.fact,
                 confidence: it.confidence.clamp(0.0, 1.0),
                 event_date: it.event_date,
+                // Auto-relate hook fills these elsewhere; legacy `extract` returns none.
+                relations: Vec::new(),
             })
             .collect())
     }
