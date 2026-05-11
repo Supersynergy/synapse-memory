@@ -1,0 +1,22 @@
+[package]
+name = "synapse-fuzz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[[bin]]
+name = "synx_deserialize"
+path = "fuzz_targets/synx_deserialize.rs"
+test = false
+doc = false
+
+[dependencies]
+libfuzzer-sys = "0.4"
+synapse-core = { path = "../crates/synapse-core" }
+
+[profile.release]
+debug = 1
+opt-level = 3

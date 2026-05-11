@@ -12,12 +12,17 @@ amx = []
 mlx = []
 
 [dependencies]
+half = "2"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bench]]
 name = "ns_microbench"
+harness = false
+
+[[bench]]
+name = "f16_dot"
 harness = false
 
 [profile.release]

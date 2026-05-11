@@ -66,7 +66,7 @@ fn main() {
         let build_ms = t_build.elapsed().as_millis();
         println!("build: {}ms", build_ms);
 
-        let mults: &[usize] = &[0, 4, 10, 50]; // 0 = ANN-only
+        let mults: &[usize] = &[0, 4, 10, 50, 100]; // 0 = ANN-only
 
         for &mult in mults {
             let label = if mult == 0 {
@@ -129,6 +129,8 @@ fn main() {
     run_bench(n100k, None, &vectors_100k, &queries, &truth_100k);
     // low ef_search=32 to force recall gap
     run_bench(n100k, Some(32), &vectors_100k, &queries, &truth_100k);
+    // ef=256
+    run_bench(n100k, Some(256), &vectors_100k, &queries, &truth_100k);
 
     // ---- 1M bench ----
     let n1m: usize = 1_000_000;
@@ -150,7 +152,7 @@ fn main() {
         // Use approximate truth: build a high-ef index and use that as proxy.
         println!("Computing approx-truth for 1M (high-ef HNSW)...");
         let mut idx_truth = UsearchIndex::new(DIM, n1m).unwrap();
-        idx_truth.set_expansion_search(128);
+        idx_truth.set_expansion_search(16384);
         for (i, v) in vectors_1m.iter().enumerate() {
             idx_truth.insert(i as u64, v).unwrap();
         }
@@ -172,8 +174,16 @@ fn main() {
             // default ef
             run_bench(n1m, None, &vectors_1m, &queries, &truth_1m);
             if t_start_1m.elapsed() < deadline {
-                // low ef=32
+                // low ef=32 (force gap)
                 run_bench(n1m, Some(32), &vectors_1m, &queries, &truth_1m);
+            }
+            if t_start_1m.elapsed() < deadline {
+                // ef=256
+                run_bench(n1m, Some(256), &vectors_1m, &queries, &truth_1m);
+            }
+            if t_start_1m.elapsed() < deadline {
+                // ef=16384
+                run_bench(n1m, Some(16384), &vectors_1m, &queries, &truth_1m);
             }
         }
     }

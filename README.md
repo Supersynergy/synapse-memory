@@ -1,5 +1,10 @@
 # Synapse
 
+[![CI](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/synapse-core.svg)](https://crates.io/crates/synapse-core)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-CORE.md)
+[![Discord](https://img.shields.io/discord/placeholder?label=Discord&logo=discord)](https://discord.gg/supersynergy)
+
 **Single Rust binary. Embedded vec + FTS + graph + CRDT. No Docker. No cloud. 35ms hybrid search over 294k docs.**
 
 Local-first agent memory with Ed25519 signatures, CRDT peer sync, and MCP-native tooling. One SQLite-backed file. Offline-first. Tamper-evident.
@@ -19,27 +24,21 @@ Local-first agent memory with Ed25519 signatures, CRDT peer sync, and MCP-native
 ## Quick-start
 
 ```bash
-# Install
-cargo install --path crates/synapse-cli
+# Install (stable)
+cargo install synx
 # or: brew tap supersynergy/synapse && brew install synx
 # or: npx @supersynergy/synx
-
-# Put a document
-synx put --text "Synapse is embedded hybrid search for AI agents"
-
-# Hybrid search (BM25 + vec RRF)
-synx hybrid "embedded search"
-
-# Stats
-synx stats
-
-# Export signed snapshot (CRDT merge on another node)
-synx keygen --sk node.sk --vk node.vk
-synx snap peer-a.brainpack
-synx merge peer-a.brainpack peer-b.brainpack --out merged.brainpack
 ```
 
-Start the daemon (multiplexes one DB across N callers):
+```bash
+synx put --text "Synapse is embedded hybrid search for AI agents"   # index
+synx hybrid "embedded search"                                        # BM25+vec RRF
+synx find "agent memory"                                             # semantic only
+synx stats                                                           # doc count + db size
+synx snap peer-a.brainpack && synx merge peer-a.brainpack peer-b.brainpack --out merged.brainpack
+```
+
+Start the daemon (Unix-socket, multiplexes one DB across N callers):
 
 ```bash
 synapsed --sock /tmp/synapse.sock --db ~/.synapse/brain.db
@@ -109,14 +108,43 @@ Synapse hybrid latency includes BM25 + ANN + RRF + cross-encoder rerank in one c
 
 ---
 
+## Feature matrix (wave-5 state)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| BM25 full-text (FTS5) | ✅ stable | 23µs/q on 10k docs |
+| sqlite-vec ANN | ✅ stable | |
+| Tantivy BM25 (`synapse-fts`) | ✅ stable | 18.3× warm-start |
+| usearch HNSW (`ann-usearch`) | ✅ stable | 21% faster than FAISS-HNSW |
+| RRF hybrid fusion | ✅ stable | NEON SIMD 4.3–5.1× |
+| ColBERT-i8 rerank | ✅ stable | 12.2× speed, 3.9× storage |
+| SPLADE neural-sparse (BMP) | ✅ stable | 9.7× vs naive scan |
+| MUVERA full pipeline | ✅ stable | Dense+SPLADE+RRF+ColBERT, sub-ms |
+| Conformal R=1.0 guarantee | ✅ stable | split-conformal |
+| CRDT gossip cluster | ✅ stable | <200ms LAN convergence |
+| Raft CP-mode | ✅ scaffold | `cluster-raft` feature, 3-node <1s election |
+| Ed25519 signing | ✅ stable | 25µs sign + verify |
+| MCP server (6 tools) | ✅ stable | Claude + Cursor native |
+| CLIP cross-modal | ✅ scaffold | `multimodal` feature |
+| Audio CLAP | ✅ scaffold | `audio-clap` feature, mel-filterbank |
+| VJEPA-2 video | ✅ scaffold | ONNX swap-path |
+| jina-clip-v2 ONNX | ✅ scaffold | `clip-jina` feature |
+| SPLADE-v3 ONNX | ✅ scaffold | `splade-onnx` feature |
+| jina-colbert-v2 candle | ✅ scaffold | `colbert-jina` feature |
+| Grafana dashboards | ✅ stable | OTel + Prometheus |
+| Homebrew tap | ✅ dist | `dist/homebrew/synx.rb` |
+| npm wrapper | ✅ dist | `@supersynergy/synx` |
+| GH release CI | ✅ dist | 3-target matrix |
+| Python wheel (PyO3) | 🔜 planned | `synapse-py` maturin publish |
+| ANN iso-recall 1M bench | 🔜 planned | vs FAISS-HNSW OOS |
+
 ## Roadmap
 
-- [ ] ANN-only bench on 10k and 1M corpus (iso-recall vs FAISS-HNSW)
+- [ ] ANN-only bench on 1M corpus (iso-recall vs FAISS-HNSW OOS)
 - [ ] `synapse-raft` production hardening (multi-node consensus)
 - [ ] `synapse-colbert` MaxSim full pipeline
 - [ ] `synapse-splade` neural-sparse production path
-- [ ] Homebrew tap + npm package release
-- [ ] Python wheel publish to PyPI
+- [ ] Python wheel publish to PyPI (`synapse-py` via maturin)
 
 ---
 

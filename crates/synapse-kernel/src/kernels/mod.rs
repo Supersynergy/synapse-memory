@@ -1,3 +1,4 @@
+pub mod f16_dot;
 pub mod f32_l2;
 pub mod f16_neon;
 pub mod bin_hamming;

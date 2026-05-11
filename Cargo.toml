@@ -66,6 +66,8 @@ members = [
     "crates/synapse-media",
     # MUVERA RRF fusion: dense + ColBERT reciprocal-rank-fusion
     "crates/synapse-fusion",
+    # Migration tool: import Qdrant/LanceDB/Chroma into .synx
+    "crates/synapse-migrate",
 ]
 
 [workspace.package]

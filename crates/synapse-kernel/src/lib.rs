@@ -13,6 +13,10 @@ pub mod workloads;
 pub use kernels::i8_dot::dot_i8;
 pub use kernels::i8_dot::dot_i8_scalar;
 
+/// Public re-export: NEON-dispatched f16 dot product.
+pub use kernels::f16_dot::dot_f16;
+pub use kernels::f16_dot::dot_f16_scalar;
+
 #[inline(always)]
 pub fn prefetch<T>(p: *const T) {
     #[cfg(target_arch = "aarch64")]

@@ -25,6 +25,8 @@ pub mod embedder_trait;
 pub mod matryoshka;
 
 pub mod sql_fns;
+pub mod synx;
+pub mod brainpack;
 pub mod obs;
 
 /// SOTA agent-memory layer: typed memories, entity graph, multi-signal recall.
