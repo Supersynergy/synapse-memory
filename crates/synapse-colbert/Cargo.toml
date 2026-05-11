@@ -11,6 +11,8 @@ default = []
 colbert = []
 # Real jina-colbert-v2 inference via candle (BertModel + linear projection 768→128)
 colbert-jina = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
+# MUVERA: ColBERT→fixed-dim FDE encoding (Google 2024) — no extra deps
+muvera = []
 
 [dependencies]
 synapse-kernel = { path = "../synapse-kernel" }

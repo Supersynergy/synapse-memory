@@ -1685,6 +1685,68 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         Ok(rrf_merge_neon(lex, vec, limit))
     }
 
+    /// HippoRAG-2 hybrid search: vec/lex hybrid + graph PPR, RRF-merged.
+    ///
+    /// `alpha_graph` in [0,1]: 0 = pure vec-hybrid, 1 = pure graph signal.
+    /// Typical sweet-spot: 0.3–0.5 (+20-30% recall on entity-centric queries).
+    ///
+    /// Requires feature `hippo` on the synapse-graph crate AND the SOTA schema
+    /// (entities / memories / memory_edges) to be migrated on this connection.
+    #[cfg(feature = "hippo")]
+    pub fn search_hybrid_hippo(
+        &self,
+        q: &str,
+        emb: &[f32],
+        limit: usize,
+        alpha_graph: f32,
+    ) -> Result<Vec<Hit>> {
+        use synapse_graph::hippo::{hippo_retrieve, rrf_hippo};
+
+        let k = limit * 3;
+
+        // 1. Standard vec-hybrid.
+        let lex = self.search_lex(q, k).unwrap_or_default();
+        let vec = self.search_vec(emb, k).unwrap_or_default();
+        let hybrid: Vec<(i64, f64)> = rrf_merge_neon(lex, vec, k)
+            .into_iter()
+            .map(|h| (h.id, h.score))
+            .collect();
+
+        // 2. Graph PPR over KG.
+        let hippo = hippo_retrieve(&self.conn, q, k, alpha_graph, 10)
+            .unwrap_or_default();
+
+        // 3. RRF merge.
+        let merged = rrf_hippo(&hybrid, &hippo, alpha_graph, limit);
+
+        // 4. Fetch Hit payloads for merged doc_ids.
+        let ids: Vec<i64> = merged.iter().map(|(id, _)| *id).collect();
+        let score_map: std::collections::HashMap<i64, f64> =
+            merged.into_iter().collect();
+
+        let mut out: Vec<Hit> = Vec::with_capacity(ids.len());
+        for id in &ids {
+            if let Ok(row) = self.conn.query_row(
+                "SELECT id, uri, title, text FROM docs WHERE id = ?1",
+                rusqlite::params![id],
+                |r| {
+                    Ok(Hit {
+                        id: r.get(0)?,
+                        uri: r.get(1)?,
+                        title: r.get(2)?,
+                        text: r.get(3)?,
+                        score: 0.0,
+                    })
+                },
+            ) {
+                let score = score_map.get(&row.id).copied().unwrap_or(0.0);
+                out.push(Hit { score, ..row });
+            }
+        }
+        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(out)
+    }
+
     /// Open or create an encrypted (SQLCipher) database using a raw 32-byte key
     /// derived by the caller via `derive_brain_key`. The key is passed directly
     /// as `PRAGMA key="x'<hex>'"` before any other SQL; no KDF is applied here.

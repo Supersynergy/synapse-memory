@@ -29,6 +29,8 @@ pub mod sql_funcs;
 pub mod cypher;
 pub mod live;
 pub mod csr;
+#[cfg(feature = "hippo")]
+pub mod hippo;
 
 pub use algorithms::{pagerank, top_pagerank, label_propagation, communities, materialize_pagerank};
 pub use sql_funcs::helpers as graph_helpers;

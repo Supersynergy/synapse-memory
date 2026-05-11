@@ -68,8 +68,17 @@ rmpv = { version = "1", optional = true }
 # tantivy-fts: route keyword search through synapse-fts (BM25 via tantivy).
 # Default OFF — FTS5 path unchanged when this feature is absent.
 synapse-fts = { path = "../synapse-fts", optional = true }
+# HippoRAG-2 / GraphRAG graph-retrieval (PPR over KG). Default OFF.
+synapse-graph = { path = "../synapse-graph", optional = true, features = ["hippo"] }
 # Production observability (OTel + Prometheus). Default OFF.
 synapse-obs = { path = "../synapse-obs", optional = true }
+# embed-metal: Candle + Metal backend for BGE-small on Apple Silicon.
+# Feature-gated to avoid 200MB+ deps in default builds.
+candle-core = { version = "0.9", optional = true, features = ["metal"] }
+candle-nn = { version = "0.9", optional = true }
+candle-transformers = { version = "0.9", optional = true }
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["http", "progressbar", "fancy-regex"] }
+hf-hub = { version = "0.4", optional = true, features = ["tokio"] }
 
 [dependencies.libsql]
 version = "0.9"
@@ -101,12 +110,17 @@ ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot"]
 # Phase 5 MLX Metal embedder (Apple Silicon only). IPC sidecar to mlx-embeddings.
 # Implies `turbo` (needed for embedder_trait module).
 embed-mlx = ["turbo", "dep:rmpv"]
+# Phase 5b Candle-Metal: native Rust BERT on Metal GPU, no Python sidecar.
+# Only builds on macOS aarch64. ~200MB deps (candle-transformers + tokenizers).
+embed-metal = ["turbo", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
 # Route keyword/hybrid BM25 leg through tantivy instead of SQLite FTS5.
 tantivy-fts = ["dep:synapse-fts", "dep:parking_lot"]
 # Split-conformal recall prediction — statistical recall guarantee, default OFF.
 conformal = []
 # Production observability: OTel traces + Prometheus metrics on :9478/metrics.
 observability = ["dep:synapse-obs", "synapse-obs/observability"]
+# HippoRAG-2 / GraphRAG: graph-PPR retrieval layer, +20-30% recall on entity queries.
+hippo = ["dep:synapse-graph"]
 # Embedding dimension compile-time selection. Default = 384 (BGE-small / Arctic-XS/S).
 # embed-768:  Arctic-M / Nomic-1.5  (MTEB ≤62.5)
 # embed-1024: Mxbai-large / Arctic-L (MTEB ≤64.7)
@@ -139,6 +153,11 @@ required-features = ["turbo", "simsimd"]
 name = "bench_embed_mlx"
 path = "examples/bench_embed_mlx.rs"
 required-features = ["embed-mlx", "embed"]
+
+[[example]]
+name = "bench_embed_metal"
+path = "examples/bench_embed_metal.rs"
+required-features = ["embed-metal"]
 
 [lib]
 doctest = false
