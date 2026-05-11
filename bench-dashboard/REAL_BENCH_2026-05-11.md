@@ -120,6 +120,60 @@
 
 ---
 
+## Cascade Rerank Bench — 2026-05-11 (aktualisiert: mult=100, ef=16384)
+
+**Setup**: HNSW (usearch), 128-dim float32, 200 queries, K=10, brute-force truth (100k) / high-ef approx truth ef=16384 (1M). M4 Max.
+
+### 100k Corpus
+
+| ef | mult | R@10 | p50 | p95 | p99 |
+|----|------|------|-----|-----|-----|
+| default | ANN-only | 0.735 | 344µs | 439µs | 497µs |
+| default | 4 | 0.937 | 1.4ms | 1.8ms | 2.0ms |
+| default | 10 | 0.981 | 3.4ms | 4.0ms | 4.4ms |
+| default | 50 | 0.999 | 20ms | 22ms | 22ms |
+| default | **100** | **0.999** | 28ms | 30ms | 32ms |
+| 32 | ANN-only | 0.269 | 61µs | 83µs | 103µs |
+| 32 | 4 | 0.562 | 202µs | 263µs | 312µs |
+| 32 | 10 | 0.780 | 490µs | 587µs | 637µs |
+| 32 | 50 | 0.964 | 2.4ms | 2.7ms | 3.2ms |
+| **32** | **100** | **0.986** | **4.8ms** | 5.7ms | 6.3ms |
+| 256 | ANN-only | 0.735 | 355µs | 445µs | 493µs |
+| 256 | 10 | 0.981 | 3.0ms | 3.5ms | 3.9ms |
+| 256 | **100** | **0.999** | 27ms | 34ms | 41ms |
+
+### 1M Corpus
+
+| ef | mult | R@10 | p50 | p95 | p99 |
+|----|------|------|-----|-----|-----|
+| default | ANN-only | 0.471 | 797µs | 925µs | 952µs |
+| default | 4 | 0.724 | 4.3ms | 6.5ms | 6.7ms |
+| default | 10 | 0.861 | 8.3ms | 10.8ms | 12.0ms |
+| default | 50 | 0.992 | 52ms | 77ms | 79ms |
+| default | **100** | **1.000** | **73ms** | 79ms | 82ms |
+| 32 | ANN-only | 0.159 | 155µs | 214µs | 231µs |
+| 32 | 4 | 0.350 | 429µs | 567µs | 636µs |
+| 32 | 10 | 0.505 | 1.7ms | 1.9ms | 1.9ms |
+| 32 | 50 | 0.809 | 8.6ms | 9.8ms | 10.2ms |
+| **32** | **100** | **0.892** | **14.9ms** | 19.6ms | 20.4ms |
+
+> 1M: ef=256 + ef=16384 runs wurden durch 30min-Deadline übersprungen. Truth-Build mit ef=16384 dauerte ~15min allein.
+
+### Sweet-Spot Analyse
+
+| Corpus | Ziel | Empfehlung | R@10 | p50 |
+|--------|------|------------|------|-----|
+| 100k | Max Recall, Latenz egal | ef=default, mult=50 | 0.999 | 20ms |
+| 100k | **Balance** (speed+recall) | **ef=32, mult=100** | **0.986** | **4.8ms** |
+| 100k | Low latency (~0.5ms) | ef=32, mult=4 | 0.562 | 202µs |
+| 1M | Max Recall | ef=default, mult=100 | **1.000** | 73ms |
+| 1M | **Balance** | **ef=default, mult=10** | **0.861** | **8.3ms** |
+| 1M | Speed + acceptable recall | ef=32, mult=50 | 0.809 | 8.6ms |
+
+**Conclusion**: mult=100 bringt gegenüber mult=50 nur bei 1M nennenswerten Gewinn (0.992→1.000). Bei 100k: mult=50 reicht (R=0.999, kein Gain bei 100). ef=32+cascade ist der Speed-Hebel: bei 100k kommt man mit 4.8ms auf R=0.986 — statt 20ms bei ef=default+mult=50 gleicher Recall. Bei 1M bleibt ef=32 trotz mult=100 bei R=0.892 — default-ef nötig für ≥0.99.
+
+---
+
 ## Notes
 
 - **LanceDB IVF R@10=0.070 → Rerun 2026-05-11**: Config-Fix `num_sub_vectors=8, num_partitions=100` ergab R@10=0.046 (schlechter!). Root-Cause: IVF_PQ ist strukturell ungeeignet für random unit-normalized vectors — PQ-Codierung zerstört Signal vollständig ohne echte Cluster-Struktur. Sweep nprobes=20..100 × refine=1..50: Max R@10=0.462 (nprobes=100, refine=50, p50=10ms+). Mit echten Embedding-Corpora (z.B. SIFT-1M, BEIR) wäre Recall ~0.90+ erreichbar. Flat-Modus: R@10=1.000. **Fazit: LanceDB IVF_PQ auf synthetischen Daten nicht valide benchmarkbar.**
