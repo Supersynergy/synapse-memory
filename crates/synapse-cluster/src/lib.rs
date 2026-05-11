@@ -13,6 +13,8 @@
 
 pub mod proto;
 pub mod transport;
+#[cfg(feature = "cluster-raft")]
+pub mod raft;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -28,6 +30,21 @@ use tracing::{debug, info, warn};
 use synapse_core::sync::{merge_lww, Op, OpId};
 
 pub type NodeId = String;
+
+/// Consensus mode for a cluster node.
+///
+/// `Crdt` (default) — AP gossip, eventually consistent.
+/// `Raft` — CP consensus, strongly consistent writes via majority quorum.
+/// Requires `cluster-raft` feature.
+#[derive(Debug, Clone)]
+pub enum ConsensusMode {
+    /// AP: CRDT gossip, partition-tolerant, eventually consistent.
+    Crdt,
+    /// CP: Raft consensus, linearisable writes, requires majority quorum.
+    /// `peers` — list of `(node_id, addr)` for all cluster members.
+    #[cfg(feature = "cluster-raft")]
+    Raft { peers: Vec<(u64, std::net::SocketAddr)> },
+}
 
 /// Information about a remote peer.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -76,6 +93,25 @@ impl Node {
             state,
             listen_addr,
         }
+    }
+
+    /// Create a node with explicit consensus mode selection.
+    ///
+    /// `ConsensusMode::Crdt` — identical to `Node::new` (AP gossip).
+    /// `ConsensusMode::Raft` — returns CRDT node; call
+    /// `raft::RaftNode::new` separately for the CP layer (feature `cluster-raft`).
+    ///
+    /// The Raft layer and CRDT gossip layer are independent by design:
+    /// in Raft mode the application uses `raft::RaftNode::propose` for
+    /// strongly-consistent writes and reads `raft::RaftNode::applied_ops` for
+    /// the committed state.
+    pub fn new_with_consensus(
+        id: impl Into<String>,
+        listen_addr: std::net::SocketAddr,
+        mode: ConsensusMode,
+    ) -> (Self, ConsensusMode) {
+        let node = Self::new(id, listen_addr);
+        (node, mode)
     }
 
     pub fn add_peer(&mut self, peer: PeerInfo) {
@@ -250,6 +286,97 @@ mod tests {
 
         let final_ops = node.local_ops().await;
         assert_eq!(final_ops.len(), 1);
+    }
+}
+
+/// 3-node Raft smoke test (feature-gated).
+#[cfg(all(test, feature = "cluster-raft"))]
+mod raft_tests {
+    use crate::raft::{RaftNode, RaftPeer};
+    use std::time::Duration;
+    use synapse_core::sync::Op;
+
+    #[tokio::test]
+    async fn three_node_raft_smoke() {
+        let addr1: std::net::SocketAddr = "127.0.0.1:19911".parse().unwrap();
+        let addr2: std::net::SocketAddr = "127.0.0.1:19912".parse().unwrap();
+        let addr3: std::net::SocketAddr = "127.0.0.1:19913".parse().unwrap();
+
+        let peers1 = vec![
+            RaftPeer { id: 2, addr: addr2 },
+            RaftPeer { id: 3, addr: addr3 },
+        ];
+        let peers2 = vec![
+            RaftPeer { id: 1, addr: addr1 },
+            RaftPeer { id: 3, addr: addr3 },
+        ];
+        let peers3 = vec![
+            RaftPeer { id: 1, addr: addr1 },
+            RaftPeer { id: 2, addr: addr2 },
+        ];
+
+        let n1 = RaftNode::new(1, addr1, peers1);
+        let n2 = RaftNode::new(2, addr2, peers2);
+        let n3 = RaftNode::new(3, addr3, peers3);
+
+        let _s1 = RaftNode::start_server(n1.clone()).await.unwrap();
+        let _s2 = RaftNode::start_server(n2.clone()).await.unwrap();
+        let _s3 = RaftNode::start_server(n3.clone()).await.unwrap();
+
+        // Start election loops
+        let e1 = n1.clone();
+        let e2 = n2.clone();
+        let e3 = n3.clone();
+        tokio::spawn(async move { RaftNode::run_election_loop(e1).await });
+        tokio::spawn(async move { RaftNode::run_election_loop(e2).await });
+        tokio::spawn(async move { RaftNode::run_election_loop(e3).await });
+
+        // Wait for leader election (max 1s)
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(1);
+        let nodes = [n1.clone(), n2.clone(), n3.clone()];
+        let leader = loop {
+            for n in &nodes {
+                if n.is_leader().await {
+                    break;
+                }
+            }
+            if tokio::time::Instant::now() > deadline {
+                panic!("no leader elected within 1s");
+            }
+            // find leader
+            let mut found = None;
+            for n in &nodes {
+                if n.is_leader().await {
+                    found = Some(n.clone());
+                    break;
+                }
+            }
+            if let Some(l) = found { break l; }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        };
+
+        // Propose an op on the leader
+        let op = Op::Put {
+            doc_id: "raft-smoke".into(),
+            blob_hash: [7u8; 32],
+            ts: 42,
+        };
+        let idx = leader.propose(op).await.expect("propose must succeed");
+        assert_eq!(idx, 1, "first committed entry at index 1");
+
+        // All nodes must have applied the op
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        for n in &nodes {
+            let ops = n.applied_ops().await;
+            assert!(!ops.is_empty(), "node {} must have applied ops", n.id);
+            match &ops[0] {
+                Op::Put { doc_id, blob_hash, .. } => {
+                    assert_eq!(doc_id, "raft-smoke");
+                    assert_eq!(blob_hash, &[7u8; 32]);
+                }
+                _ => panic!("unexpected op"),
+            }
+        }
     }
 }
 

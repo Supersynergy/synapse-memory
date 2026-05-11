@@ -34,7 +34,7 @@ pub enum SearchMode {
     Hybrid,
 }
 
-/// Comparison operator for metadata predicate.
+/// Comparison operator for metadata predicate (kept for backward-compat flat construction).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PredicateOp {
     Eq,
@@ -42,56 +42,98 @@ pub enum PredicateOp {
     In,
 }
 
-/// Simple metadata filter: `meta->>key op value`.
-/// `value` must be a JSON scalar (string / number / bool / null).
-/// For `In`, `value` must be a JSON array.
+/// Compound metadata filter supporting Eq/Ne/Lt/Gt/Lte/Gte/In and AND/OR/NOT.
+///
+/// Backward-compat: callers using the old flat struct can migrate to `MetadataPredicate::Eq`,
+/// `MetadataPredicate::Ne`, or `MetadataPredicate::In` variants directly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MetadataPredicate {
-    pub key: String,
-    pub op: PredicateOp,
-    pub value: Value,
+pub enum MetadataPredicate {
+    /// key == value
+    Eq { key: String, value: Value },
+    /// key != value
+    Ne { key: String, value: Value },
+    /// key < numeric threshold
+    Lt { key: String, value: f64 },
+    /// key > numeric threshold
+    Gt { key: String, value: f64 },
+    /// key <= numeric threshold
+    Lte { key: String, value: f64 },
+    /// key >= numeric threshold
+    Gte { key: String, value: f64 },
+    /// key is one of values
+    In { key: String, values: Vec<Value> },
+    /// all sub-predicates must match
+    And(Vec<MetadataPredicate>),
+    /// at least one sub-predicate must match
+    Or(Vec<MetadataPredicate>),
+    /// sub-predicate must not match
+    Not(Box<MetadataPredicate>),
 }
 
 impl MetadataPredicate {
     /// Evaluate the predicate against a parsed `meta` JSON object.
-    /// Returns `false` if `meta` is None or the key is absent.
     pub fn matches(&self, meta: Option<&Value>) -> bool {
-        let obj = match meta {
-            Some(v) => v,
-            None => return false,
-        };
-        let field = match obj.get(&self.key) {
-            Some(f) => f,
-            None => return false,
-        };
-        match self.op {
-            PredicateOp::Eq => field == &self.value,
-            PredicateOp::Ne => field != &self.value,
-            PredicateOp::In => {
-                if let Value::Array(arr) = &self.value {
-                    arr.iter().any(|v| v == field)
-                } else {
-                    false
-                }
+        match self {
+            MetadataPredicate::And(preds) => preds.iter().all(|p| p.matches(meta)),
+            MetadataPredicate::Or(preds) => preds.iter().any(|p| p.matches(meta)),
+            MetadataPredicate::Not(pred) => !pred.matches(meta),
+            _ => {
+                let obj = match meta {
+                    Some(v) => v,
+                    None => return false,
+                };
+                self.matches_field(obj)
+            }
+        }
+    }
+
+    fn matches_field(&self, obj: &Value) -> bool {
+        match self {
+            MetadataPredicate::Eq { key, value } => {
+                obj.get(key).map_or(false, |f| f == value)
+            }
+            MetadataPredicate::Ne { key, value } => {
+                obj.get(key).map_or(false, |f| f != value)
+            }
+            MetadataPredicate::Lt { key, value } => {
+                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n < *value)
+            }
+            MetadataPredicate::Gt { key, value } => {
+                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n > *value)
+            }
+            MetadataPredicate::Lte { key, value } => {
+                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n <= *value)
+            }
+            MetadataPredicate::Gte { key, value } => {
+                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n >= *value)
+            }
+            MetadataPredicate::In { key, values } => {
+                obj.get(key).map_or(false, |f| values.iter().any(|v| v == f))
+            }
+            MetadataPredicate::And(_) | MetadataPredicate::Or(_) | MetadataPredicate::Not(_) => {
+                unreachable!("compound handled in matches()")
             }
         }
     }
 
     /// Estimate filter selectivity (fraction of docs expected to pass).
-    /// Used to compute ef-boost multiplier.
-    /// Without per-key stats we use a conservative default per op:
-    /// Eq → 0.5, Ne → 0.9, In(n) → min(n*0.2, 0.9).
+    /// Compound predicates multiply sub-selectivities (product rule).
     pub fn estimated_selectivity(&self) -> f64 {
-        match self.op {
-            PredicateOp::Eq => 0.5,
-            PredicateOp::Ne => 0.9,
-            PredicateOp::In => {
-                if let Value::Array(arr) = &self.value {
-                    (arr.len() as f64 * 0.2).min(0.9)
-                } else {
-                    0.5
-                }
+        match self {
+            MetadataPredicate::Eq { .. } => 0.5,
+            MetadataPredicate::Ne { .. } => 0.9,
+            MetadataPredicate::Lt { .. } | MetadataPredicate::Gt { .. } => 0.3,
+            MetadataPredicate::Lte { .. } | MetadataPredicate::Gte { .. } => 0.35,
+            MetadataPredicate::In { values, .. } => (values.len() as f64 * 0.2).min(0.9),
+            MetadataPredicate::And(preds) => {
+                preds.iter().map(|p| p.estimated_selectivity()).product::<f64>().max(0.01)
             }
+            MetadataPredicate::Or(preds) => {
+                // P(A∪B) ≈ 1 - ∏(1 - sᵢ)
+                let miss: f64 = preds.iter().map(|p| 1.0 - p.estimated_selectivity()).product();
+                (1.0 - miss).min(0.99)
+            }
+            MetadataPredicate::Not(pred) => (1.0 - pred.estimated_selectivity()).max(0.01),
         }
     }
 }

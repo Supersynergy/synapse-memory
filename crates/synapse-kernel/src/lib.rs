@@ -9,6 +9,10 @@ pub mod kernels;
 pub mod layouts;
 pub mod workloads;
 
+/// Public re-export: NEON-dispatched i8 dot product.
+pub use kernels::i8_dot::dot_i8;
+pub use kernels::i8_dot::dot_i8_scalar;
+
 #[inline(always)]
 pub fn prefetch<T>(p: *const T) {
     #[cfg(target_arch = "aarch64")]

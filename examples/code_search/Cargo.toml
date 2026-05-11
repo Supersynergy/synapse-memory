@@ -1,0 +1,12 @@
+[package]
+name = "code-search"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+synapse-core = { path = "../../crates/synapse-core" }
+synapse-colbert = { path = "../../crates/synapse-colbert" }
+anyhow = "1"
+serde_json = "1"

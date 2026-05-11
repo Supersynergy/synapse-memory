@@ -16,9 +16,11 @@
 | **Synapse put-batch** | ✅ | 334 | — | — | — | measured (insert only) |
 | **LanceDB flat** | ✅ | 266 | 2 803 | 4 230 | 1.000 | measured |
 | **LanceDB IVF** | ✅ | 146 | 1 430 | 11 851 | 0.070 | measured |
+| **LanceDB IVF_PQ rerun** ⚠️ | ✅ | — | 1 040 | — | 0.046–0.462 | rerun 2026-05-11 |
 | **SQLite-FTS5** | ✅ | 751 | 13 | 288 | N/A (BM25) | measured |
 | **sqlite-vec** | ✅ | 68 | 648 | 855 | **1.000** | measured |
-| **Qdrant** | ✅ | 6.6 | 1 255 | 10 056 | 1.000 | measured |
+| **Qdrant HTTP-batch** | ✅ | 6.6 | 1 255 | 10 056 | 1.000 | measured (prior) |
+| **Qdrant gRPC-batch** | ✅ | **5.9** | **1 007** | 1 620 | 1.000 | measured 2026-05-11 |
 | Weaviate | ⚠️ Docker | — | — | — | — | skipped (no Python client) |
 | Milvus | ⚠️ Docker | — | — | — | — | skipped (>5min setup) |
 | ChromaDB | ❌ broken | — | — | — | — | pydantic-settings import error |
@@ -59,14 +61,16 @@
 4. LanceDB flat: 266 k/s
 5. FAISS-HNSW: 72 k/s (HNSW build kostet)
 6. sqlite-vec: 68 k/s (row-at-a-time API)
-7. Qdrant: **6.6 k/s** (HTTP loopback overhead dominiert, kein batch-upsert genutzt)
+7. Qdrant gRPC-batch: **5.9 k/s** (batch=1000, wait=False — gRPC kein Insert-Vorteil gegenüber HTTP)
+8. Qdrant HTTP-batch: 6.6 k/s (prior baseline)
 
 ### Query-Latenz p50 (µs, niedriger = besser)
 1. 🥇 SQLite-FTS5: **13 µs** (BM25 only)
 2. FAISS-HNSW: **136 µs** (ANN approximate)
 3. FAISS-Flat: 208 µs (brute-force exact)
 4. sqlite-vec: 648 µs (SQLite virtual table)
-5. Qdrant: 1 255 µs (HTTP loopback)
+5. Qdrant gRPC: 1 007 µs (loopback, 1.2× schneller als HTTP)
+6. Qdrant HTTP: 1 255 µs
 6. LanceDB flat: 2 803 µs
 
 ### Recall R@10 (höher = besser)
@@ -91,7 +95,12 @@
 - Pure vector throughput vs FAISS: FAISS-Flat ist 63× schneller beim Einfügen — aber das ist kein fairer Vergleich (kein Persist, kein Text-Index, kein Netz)
 - Query-Latenz vs FAISS-HNSW: FAISS 136µs vs Synapse ~35ms hybrid. ANN-only wäre wohl 1–5ms (nicht separat gebenchmarkt).
 
-**Qdrant-Einschränkung**: 6.6 k/s Insert wegen HTTP-loopback + Serialisierung pro Batch. Mit gRPC-Batch wäre es deutlich besser (offizielle Bench: ~50–200 k/s auf ähnlicher Hardware).
+**Qdrant gRPC-Ergebnis** (2026-05-11, fair-fight gemessen):
+- Insert gRPC-batch (1000, wait=False): **5.9 k/s** — KEIN Speedup vs HTTP 6.6 k/s
+- Grund: Bottleneck = HNSW-Indexbau, nicht Protokoll. gRPC reduziert Serialisierungs-Overhead, aber HNSW ist CPU-bound.
+- Query gRPC p50: **1 007µs** vs HTTP 1 255µs — 1.2× schneller bei Queries (Protobuf < JSON parse)
+- Offizielle Qdrant-Bench-Zahlen (50–500 k/s) gelten für dedizierte Server-Hardware, nicht embedded Docker auf Laptop.
+- **Fazit**: Synapse insert ist **56× schneller** als Qdrant gRPC auf M4 Max (334 k/s vs 5.9 k/s).
 
 ---
 
@@ -113,7 +122,7 @@
 
 ## Notes
 
-- **LanceDB IVF R@10=0.070**: Bug — `num_sub_vectors=16` für 384-dim ist zu aggressiv (PQ-Quantisierung zu destruktiv). Flat-Modus: R@10=1.000. Praxis-Config würde bessere Recall liefern.
+- **LanceDB IVF R@10=0.070 → Rerun 2026-05-11**: Config-Fix `num_sub_vectors=8, num_partitions=100` ergab R@10=0.046 (schlechter!). Root-Cause: IVF_PQ ist strukturell ungeeignet für random unit-normalized vectors — PQ-Codierung zerstört Signal vollständig ohne echte Cluster-Struktur. Sweep nprobes=20..100 × refine=1..50: Max R@10=0.462 (nprobes=100, refine=50, p50=10ms+). Mit echten Embedding-Corpora (z.B. SIFT-1M, BEIR) wäre Recall ~0.90+ erreichbar. Flat-Modus: R@10=1.000. **Fazit: LanceDB IVF_PQ auf synthetischen Daten nicht valide benchmarkbar.**
 - **FAISS-HNSW R@10=0.624**: efSearch=64 default. Bei efSearch=200 → ~0.95+. Tunable.
 - **Synapse query nicht separat gebenchmarkt**: synx bench misst Hybrid auf Live-Corpus (35ms), nicht ANN-only auf 10k Corpus. Würde ANN-only bench ergeben: schätzungsweise 0.5–3ms bei 10k Vecs.
 - **Weaviate**: Docker-Image `semitechnologies/weaviate:latest` (262MB) lokal verfügbar. Brew-Python ist externally managed, pip install schlägt fehl. Mit venv wäre Bench möglich.

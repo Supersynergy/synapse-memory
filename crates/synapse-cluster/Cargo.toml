@@ -19,6 +19,7 @@ synapse-core = { path = "../synapse-core", default-features = false }
 [features]
 default = []
 cluster = []
+cluster-raft = []
 
 [dev-dependencies]
 tokio = { workspace = true }

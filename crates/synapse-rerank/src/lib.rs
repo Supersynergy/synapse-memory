@@ -64,6 +64,12 @@ pub mod onnx {
             Self::from_model(RerankerModel::BGERerankerV2M3)
         }
 
+        /// JINA reranker v2 base multilingual (~140MB ONNX).
+        /// Downloads only when fastembed cache is warm OR caller accepts the download.
+        pub fn new_jina_v2() -> Result<Self> {
+            Self::from_model(RerankerModel::JINARerankerV2BaseMultiligual)
+        }
+
         pub fn from_model(model: RerankerModel) -> Result<Self> {
             let inner = TextRerank::try_new(RerankInitOptions::new(model))?;
             Ok(Self { inner: Mutex::new(inner) })

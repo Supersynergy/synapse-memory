@@ -53,6 +53,23 @@ impl<'a, H: PipelineHooks> PipelineHooks for SanHooks<'a, H> {
     }
 }
 
+#[derive(Debug, Clone, clap::ValueEnum)]
+enum RerankModelArg {
+    Baseline,
+    JinaColbert,
+    JinaCrossEncoder,
+}
+
+impl std::fmt::Display for RerankModelArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Baseline => write!(f, "baseline"),
+            Self::JinaColbert => write!(f, "jina-colbert"),
+            Self::JinaCrossEncoder => write!(f, "jina-cross-encoder"),
+        }
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(about = "LongMemEval-S benchmark runner for Synapse SOTA pipeline")]
 struct Args {
@@ -106,6 +123,13 @@ struct Args {
     /// 0 disables. Default 20 = re-rank candidate pool, return top-k.
     #[arg(long, default_value_t = 20)]
     rerank_top: usize,
+    /// Reranker model selection.
+    ///   baseline          — BGE-reranker-v2-m3 ONNX (default, ~568M, cached by fastembed)
+    ///   jina-colbert      — ColBERT MaxSim scaffold (requires colbert-jina model in HF cache)
+    ///   jina-cross-encoder — JINA reranker v2 multilingual cross-encoder (~140MB)
+    /// Jina models only load when ALLOW_BIG_DOWNLOAD=1 or already cached.
+    #[arg(long, default_value = "baseline")]
+    rerank_model: RerankModelArg,
     /// RRF k constant for fusion (default 60).
     #[arg(long, default_value_t = 60.0)]
     rrf_k: f64,
@@ -443,12 +467,49 @@ fn main() -> Result<()> {
     #[cfg(not(feature = "minimax"))]
     let minimax_hooks: Option<()> = None;
 
-    // Reranker init (lazy, prints model on first load).
+    // Reranker init. Jina models require ALLOW_BIG_DOWNLOAD=1 or cached HF model.
     #[cfg(feature = "rerank")]
     let reranker_box: Option<Box<dyn synapse_rerank::Reranker>> = if args.rerank_top > 0 {
-        match synapse_rerank::onnx::OnnxCrossEncoder::new() {
-            Ok(r) => { println!("Reranker: BGE-reranker-v2-m3 (568M ONNX cross-encoder, top={})", args.rerank_top); Some(Box::new(r)) }
-            Err(e) => { eprintln!("WARN: reranker init failed: {} — running rerank-off", e); None }
+        match &args.rerank_model {
+            RerankModelArg::JinaColbert => {
+                // ColBERT scaffold — logs warning when no model path provided
+                let r = synapse_rerank::ColbertReranker::new(None);
+                if r.is_loaded() {
+                    println!("Reranker: jina-colbert (ColBERT MaxSim, top={})", args.rerank_top);
+                } else {
+                    eprintln!("WARN: jina-colbert model not cached — ColbertReranker scaffold (identity-rerank, order preserved). Set HF model path or ALLOW_BIG_DOWNLOAD=1 to download.");
+                }
+                Some(Box::new(r) as Box<dyn synapse_rerank::Reranker>)
+            }
+            RerankModelArg::JinaCrossEncoder => {
+                // JINA reranker-v2-multilingual via fastembed ONNX (~140MB).
+                // fastembed will download on first use — only proceed with ALLOW_BIG_DOWNLOAD=1.
+                let allow_dl = std::env::var("ALLOW_BIG_DOWNLOAD").map(|v| v == "1").unwrap_or(false);
+                if allow_dl {
+                    match synapse_rerank::onnx::OnnxCrossEncoder::new_jina_v2() {
+                        Ok(r) => { println!("Reranker: JINA-reranker-v2-base-multilingual (ONNX cross-encoder, top={})", args.rerank_top); Some(Box::new(r)) }
+                        Err(e) => {
+                            eprintln!("WARN: jina-cross-encoder init failed: {} — falling back to BGE baseline", e);
+                            match synapse_rerank::onnx::OnnxCrossEncoder::new() {
+                                Ok(r) => { println!("Reranker (fallback): BGE-reranker-v2-m3 (top={})", args.rerank_top); Some(Box::new(r)) }
+                                Err(e2) => { eprintln!("WARN: fallback also failed: {} — rerank-off", e2); None }
+                            }
+                        }
+                    }
+                } else {
+                    eprintln!("WARN: --rerank-model jina-cross-encoder requires ALLOW_BIG_DOWNLOAD=1 (model ~140MB). Falling back to BGE baseline.");
+                    match synapse_rerank::onnx::OnnxCrossEncoder::new() {
+                        Ok(r) => { println!("Reranker (fallback): BGE-reranker-v2-m3 (top={})", args.rerank_top); Some(Box::new(r)) }
+                        Err(e) => { eprintln!("WARN: fallback reranker init failed: {} — rerank-off", e); None }
+                    }
+                }
+            }
+            RerankModelArg::Baseline => {
+                match synapse_rerank::onnx::OnnxCrossEncoder::new() {
+                    Ok(r) => { println!("Reranker: BGE-reranker-v2-m3 (568M ONNX cross-encoder, top={})", args.rerank_top); Some(Box::new(r)) }
+                    Err(e) => { eprintln!("WARN: reranker init failed: {} — running rerank-off", e); None }
+                }
+            }
         }
     } else { None };
     #[cfg(not(feature = "rerank"))]

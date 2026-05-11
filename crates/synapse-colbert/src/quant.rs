@@ -1,4 +1,5 @@
 //! int8 symmetric quantization for ColBERT token vectors.
+use synapse_kernel::dot_i8;
 
 /// Quantize f32 slice → (i8 values, scale).
 /// scale = max(|v|) / 127.0
@@ -18,29 +19,6 @@ pub fn quant_i8(vec: &[f32]) -> (Vec<i8>, f32) {
 /// Dequantize i8 + scale → f32 (for debug / accuracy checks).
 pub fn dequant_i8(q: &[i8], scale: f32) -> Vec<f32> {
     q.iter().map(|&v| v as f32 * scale).collect()
-}
-
-/// Dot product of i8 vectors using i16 accumulator (no overflow for dim ≤ 512).
-/// Both slices must be equal length.
-#[inline]
-pub fn dot_i8(a: &[i8], b: &[i8]) -> i32 {
-    debug_assert_eq!(a.len(), b.len());
-    let n = a.len();
-    let mut acc0: i32 = 0; let mut acc1: i32 = 0;
-    let mut acc2: i32 = 0; let mut acc3: i32 = 0;
-    let mut i = 0;
-    while i + 4 <= n {
-        acc0 += unsafe { *a.get_unchecked(i)   as i32 * *b.get_unchecked(i)   as i32 };
-        acc1 += unsafe { *a.get_unchecked(i+1) as i32 * *b.get_unchecked(i+1) as i32 };
-        acc2 += unsafe { *a.get_unchecked(i+2) as i32 * *b.get_unchecked(i+2) as i32 };
-        acc3 += unsafe { *a.get_unchecked(i+3) as i32 * *b.get_unchecked(i+3) as i32 };
-        i += 4;
-    }
-    while i < n {
-        acc0 += unsafe { *a.get_unchecked(i) as i32 * *b.get_unchecked(i) as i32 };
-        i += 1;
-    }
-    (acc0 + acc1) + (acc2 + acc3)
 }
 
 /// ColBERT max-sim over i8 quantized token vectors.
@@ -89,7 +67,7 @@ mod tests {
     fn dot_i8_correctness() {
         let a = vec![1i8, 2, 3, 4];
         let b = vec![4i8, 3, 2, 1];
-        assert_eq!(dot_i8(&a, &b), 4 + 6 + 6 + 4);
+        assert_eq!(dot_i8(&a, &b), 20);
     }
 
     #[test]

@@ -1,0 +1,12 @@
+[package]
+name = "agent-memory"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+synapse-core = { path = "../../crates/synapse-core" }
+anyhow = "1"
+serde_json = "1"
+tempfile = "3"

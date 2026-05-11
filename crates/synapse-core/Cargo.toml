@@ -76,7 +76,7 @@ optional = true
 # 2026-05-10: simsimd enabled by default — 1.5× NEON cosine on M4 Max,
 # AVX2 on x86_64. Apple Silicon + Linux aarch64 / x86_64 supported.
 # Pure-Rust default lost; build with --no-default-features --features backend-rusqlite for pure-Rust.
-default = ["backend-rusqlite", "turbo", "simsimd"]
+default = ["backend-rusqlite", "turbo", "simsimd", "tantivy-fts"]
 backend-rusqlite = []
 backend-libsql = ["dep:libsql"]
 embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]

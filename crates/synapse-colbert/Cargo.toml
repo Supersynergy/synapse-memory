@@ -13,6 +13,7 @@ colbert = []
 colbert-jina = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
 
 [dependencies]
+synapse-kernel = { path = "../synapse-kernel" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -29,6 +30,11 @@ hf-hub       = { version = "0.3", features = ["tokio"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "i8_neon"
+harness = false
 
 [lib]
 name = "synapse_colbert"
