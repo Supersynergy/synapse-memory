@@ -70,6 +70,8 @@ members = [
     "crates/synapse-migrate",
     # Disk-tier SPANN: in-memory centroids + mmap posting-lists (unlimited corpus)
     "crates/synapse-spann",
+    # JS/TS SDK via napi-rs — `bun add @supersynergy/synapse`
+    "crates/synapse-js",
 ]
 
 [workspace.package]

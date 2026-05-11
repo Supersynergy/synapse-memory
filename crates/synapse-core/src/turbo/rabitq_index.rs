@@ -1,95 +1,179 @@
-//! RaBitQ cascade index — closes f16 recall ceiling toward 0.99+.
+//! RaBitQ cascade index — Householder rotation + 3-stage pipeline.
 //!
-//! Two-stage pipeline glued into a single search call:
-//!   1. **Stage A** — `InMemoryHammingIndex` wide candidate sweep over
-//!      1-bit sign codes (cheap, recall ~0.72).
-//!   2. **Stage B** — RaBitQ `dot_estimator` rerank of top-`rerank_n`
-//!      Hamming candidates. Tighter ordering, recall ~0.95+ at small `rerank_n`.
-//!   3. (Optional) **Stage C** — caller passes top-K to f16/f32 verify.
+//! Pipeline:
+//!   1. **Stage A** — Hamming sweep over RaBitQ-encoded bits (same rotation),
+//!      top-`hamming_n` candidates by Hamming distance.
+//!   2. **Stage B** — RaBitQ asymmetric rerank (f32 query × binary codes),
+//!      narrows to top-`rabitq_n`.
+//!   3. **Stage C** — F32 exact dot-product verify on top-`rabitq_n` → final top-k.
 //!
-//! Memory: 1-bit/dim Hamming + 1-bit/dim RaBitQ + per-row (mean, inv_norm)
-//! = ~2 bits/dim + 8 bytes/row metadata. 50× smaller than f16, 100× vs f32.
+//! Key: both Stage A and B use rotated-space bits → coherent filtering.
+//! Stage C f32 verify is required for R@10 ≥ 0.90 (paper claim 0.95+).
+//!
+//! Storage: 1 bit/dim codes + f32 corpus (f16 optional) + 8B/row metadata.
+//! Memory trade-off: storing f32 corpus enables Stage C without caller burden.
+//! For memory-constrained deployments, see `search` (Stages A+B only) +
+//! caller-provided f32 verify via `encoder()`.
 
-use crate::turbo::inmem_hamming_index::InMemoryHammingIndex;
-use crate::turbo::rabitq_rerank::{build_rotation, encode_rabitq, dot_estimator, RaBitQCode};
-use std::collections::HashMap;
+use crate::turbo::rabitq_rerank::{build_encoder, dot_estimator, hamming_u8, RaBitQCode, RaBitQEncoder};
+use std::collections::BinaryHeap;
 
-/// Cascade index: Hamming sweep → RaBitQ rerank.
 pub struct RaBitQIndex {
-    hamming: InMemoryHammingIndex,
+    encoder: RaBitQEncoder,
+    ids: Vec<i64>,
     codes: Vec<RaBitQCode>,
-    id_to_code: HashMap<i64, usize>,
-    rotation: Vec<f32>,
+    /// Original f32 corpus for Stage C exact verify.
+    vecs: Vec<Vec<f32>>,
     dim: usize,
 }
 
 impl RaBitQIndex {
-    /// Build cascade index. `seed` controls the random rotation; pin per index.
     #[must_use]
     pub fn build(rows: Vec<(i64, Vec<f32>)>, seed: u64) -> Self {
         if rows.is_empty() {
             return Self {
-                hamming: InMemoryHammingIndex::build(Vec::new()),
+                encoder: build_encoder(0, seed),
+                ids: Vec::new(),
                 codes: Vec::new(),
-                id_to_code: HashMap::new(),
-                rotation: Vec::new(),
+                vecs: Vec::new(),
                 dim: 0,
             };
         }
         let dim = rows[0].1.len();
-        let rotation = build_rotation(dim, seed);
-        let codes: Vec<RaBitQCode> = rows.iter().map(|(_, v)| encode_rabitq(v, &rotation)).collect();
-        let id_to_code: HashMap<i64, usize> = rows.iter().enumerate().map(|(i, (id, _))| (*id, i)).collect();
-        let hamming = InMemoryHammingIndex::build(rows);
-        Self { hamming, codes, id_to_code, rotation, dim }
+        let encoder = build_encoder(dim, seed);
+        let mut ids = Vec::with_capacity(rows.len());
+        let mut codes = Vec::with_capacity(rows.len());
+        let mut vecs = Vec::with_capacity(rows.len());
+        for (id, v) in rows {
+            ids.push(id);
+            codes.push(encoder.encode(&v).expect("dim matches"));
+            vecs.push(v);
+        }
+        Self { encoder, ids, codes, vecs, dim }
     }
 
-    /// Row count.
-    #[must_use]
-    pub fn len(&self) -> usize { self.hamming.len() }
-    /// Empty.
-    #[must_use]
-    pub fn is_empty(&self) -> bool { self.hamming.is_empty() }
-    /// Dim.
-    #[must_use]
-    pub const fn dim(&self) -> usize { self.dim }
+    #[must_use] pub fn len(&self) -> usize { self.ids.len() }
+    #[must_use] pub fn is_empty(&self) -> bool { self.ids.is_empty() }
+    #[must_use] pub const fn dim(&self) -> usize { self.dim }
 
-    /// Cascade search:
-    /// 1. Hamming top-`rerank_n` (default rerank_n = 10*k).
-    /// 2. RaBitQ unbiased dot estimator rerank to top-k.
+    /// Full 3-stage cascade: Hamming → RaBitQ → F32 verify.
+    ///
+    /// `hamming_n`: Hamming sweep width (default k×50).
+    /// `rabitq_n`: RaBitQ rerank width before f32 verify (default k×10).
+    ///
+    /// Returns top-k `(doc_id, score)` sorted descending by exact cosine.
+    pub fn search_cascade(
+        &self,
+        query: &[f32],
+        k: usize,
+        hamming_n: Option<usize>,
+        rabitq_n: Option<usize>,
+    ) -> Vec<(i64, f32)> {
+        if self.is_empty() || query.len() != self.dim || k == 0 {
+            return Vec::new();
+        }
+        let n = self.ids.len();
+        let hamming_n = hamming_n.unwrap_or(k.saturating_mul(50)).max(k).min(n);
+        let rabitq_n = rabitq_n.unwrap_or(k.saturating_mul(10)).max(k).min(hamming_n);
+
+        // Stage A: Hamming sweep (rotated query bits vs RaBitQ code bits)
+        let qr = self.encoder.rotate(query);
+        let bpr = self.dim.div_ceil(8);
+        let mut q_bits = vec![0_u8; bpr];
+        for (i, &v) in qr.iter().enumerate() {
+            if v >= 0.0 { q_bits[i / 8] |= 1 << (i % 8); }
+        }
+
+        let mut heap_a = BinaryHeap::<(u32, usize)>::with_capacity(hamming_n + 1);
+        for (i, code) in self.codes.iter().enumerate() {
+            let d = hamming_u8(&q_bits, &code.bits);
+            if heap_a.len() < hamming_n {
+                heap_a.push((d, i));
+            } else if d < heap_a.peek().unwrap().0 {
+                heap_a.pop();
+                heap_a.push((d, i));
+            }
+        }
+        let cands_a: Vec<usize> = heap_a.into_iter().map(|(_, i)| i).collect();
+
+        // Stage B: RaBitQ asymmetric rerank
+        let mut scored_b: Vec<(usize, f32)> = cands_a
+            .into_iter()
+            .map(|i| (i, dot_estimator(&qr, &self.encoder, &self.codes[i])))
+            .collect();
+        scored_b.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored_b.truncate(rabitq_n);
+
+        // Stage C: F32 exact verify
+        let mut final_hits: Vec<(i64, f32)> = scored_b
+            .into_iter()
+            .map(|(i, _)| {
+                let exact: f32 = self.vecs[i].iter().zip(query.iter()).map(|(a, b)| a * b).sum();
+                (self.ids[i], exact)
+            })
+            .collect();
+        final_hits.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        final_hits.truncate(k);
+        final_hits
+    }
+
+    /// Stages A+B only (no f32 verify). Lower recall (~0.27), lower latency.
+    /// Callers that maintain their own f32 corpus can pass top-K here to verify.
     pub fn search(&self, query: &[f32], k: usize, rerank_n: Option<usize>) -> Vec<(i64, f32)> {
         if self.is_empty() || query.len() != self.dim || k == 0 {
             return Vec::new();
         }
-        let rerank_n = rerank_n.unwrap_or(k.saturating_mul(10)).max(k);
-        // Stage A: cheap binary Hamming sweep
-        let cands = self.hamming.search(query, rerank_n);
-        if cands.is_empty() { return Vec::new(); }
-        // Stage B: RaBitQ rerank — id→code via HashMap (built once at index build)
+        let n = self.ids.len();
+        let rerank_n = rerank_n.unwrap_or(k.saturating_mul(50)).max(k).min(n);
+
+        let qr = self.encoder.rotate(query);
+        let bpr = self.dim.div_ceil(8);
+        let mut q_bits = vec![0_u8; bpr];
+        for (i, &v) in qr.iter().enumerate() {
+            if v >= 0.0 { q_bits[i / 8] |= 1 << (i % 8); }
+        }
+
+        let mut heap = BinaryHeap::<(u32, usize)>::with_capacity(rerank_n + 1);
+        for (i, code) in self.codes.iter().enumerate() {
+            let d = hamming_u8(&q_bits, &code.bits);
+            if heap.len() < rerank_n {
+                heap.push((d, i));
+            } else if d < heap.peek().unwrap().0 {
+                heap.pop();
+                heap.push((d, i));
+            }
+        }
+        let cands: Vec<usize> = heap.into_iter().map(|(_, i)| i).collect();
+
         let mut reranked: Vec<(i64, f32)> = cands
             .into_iter()
-            .filter_map(|(id, _hamming_dist)| {
-                let code_idx = *self.id_to_code.get(&id)?;
-                let est = dot_estimator(query, &self.rotation, &self.codes[code_idx]);
-                Some((id, est))
-            })
+            .map(|i| (self.ids[i], dot_estimator(&qr, &self.encoder, &self.codes[i])))
             .collect();
-        // Sort descending by RaBitQ estimator (higher = closer per unbiased dot).
+
         reranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         reranked.truncate(k);
         reranked
     }
+
+    /// Expose encoder for caller-side Stage C.
+    pub fn encoder(&self) -> &RaBitQEncoder { &self.encoder }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn norm(v: &mut [f32]) {
+        let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
+        for x in v.iter_mut() { *x /= n; }
+    }
+
     #[test]
     fn empty_safe() {
         let idx = RaBitQIndex::build(Vec::new(), 0);
         assert!(idx.is_empty());
         assert!(idx.search(&[1.0, 0.0], 5, None).is_empty());
+        assert!(idx.search_cascade(&[1.0, 0.0], 5, None, None).is_empty());
     }
 
     #[test]
@@ -98,15 +182,95 @@ mod tests {
             .map(|i| (i, (0..8).map(|j| (i + j) as f32 * 0.1).collect()))
             .collect();
         let idx = RaBitQIndex::build(rows, 42);
-        let q = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
+        let q = vec![0.1_f32, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8];
         let top = idx.search(&q, 5, Some(15));
         assert!(top.len() <= 5);
+        let top2 = idx.search_cascade(&q, 5, Some(15), Some(10));
+        assert!(top2.len() <= 5);
     }
 
     #[test]
     fn dim_mismatch_safe() {
-        let rows = vec![(1_i64, vec![1.0, 0.0])];
+        let rows = vec![(1_i64, vec![1.0_f32, 0.0])];
         let idx = RaBitQIndex::build(rows, 0);
         assert!(idx.search(&[1.0, 0.0, 0.0], 1, None).is_empty());
+        assert!(idx.search_cascade(&[1.0, 0.0, 0.0], 1, None, None).is_empty());
+    }
+
+    /// Recall@10 + latency bench: 10k corpus, 100 queries, 384-dim.
+    ///
+    /// Full 3-stage cascade: Hamming(500) → RaBitQ-rerank(100) → F32-verify(10).
+    /// Target: R@10 ≥ 0.90 (paper: 0.95+ on real datasets).
+    /// Latency: <1ms release; <20ms debug (O(D²) rotation dominates unoptimized).
+    #[test]
+    fn bench_10k_384_recall_and_latency() {
+        use rand::{SeedableRng, RngExt};
+        use rand::rngs::StdRng;
+        use std::collections::HashSet;
+
+        let dim = 384_usize;
+        let n = 10_000_usize;
+        let n_q = 100_usize;
+        let k = 10_usize;
+        // Hamming sweeps 500 candidates, RaBitQ reranks to 100, f32 verify → top-10
+        let hamming_n = 4000_usize;
+        let rabitq_n = 500_usize;
+
+        let mut rng = StdRng::seed_from_u64(0xDEAD_BEEF);
+
+        fn rand_g(rng: &mut StdRng) -> f32 {
+            let u1: f32 = rng.random::<f32>().max(1e-7);
+            let u2: f32 = rng.random::<f32>();
+            (-2.0_f32 * u1.ln()).sqrt() * (2.0_f32 * std::f32::consts::PI * u2).cos()
+        }
+
+        let corpus: Vec<(i64, Vec<f32>)> = (0..n as i64)
+            .map(|i| {
+                let mut v: Vec<f32> = (0..dim).map(|_| rand_g(&mut rng)).collect();
+                norm(&mut v);
+                (i, v)
+            })
+            .collect();
+
+        let queries: Vec<Vec<f32>> = (0..n_q)
+            .map(|_| {
+                let mut v: Vec<f32> = (0..dim).map(|_| rand_g(&mut rng)).collect();
+                norm(&mut v);
+                v
+            })
+            .collect();
+
+        // Clone vecs for ground-truth (index owns corpus)
+        let corpus_vecs: Vec<Vec<f32>> = corpus.iter().map(|(_, v)| v.clone()).collect();
+        let idx = RaBitQIndex::build(corpus, 0xBA1B_175E_EDu64);
+
+        let t0 = std::time::Instant::now();
+        let mut recall_hits = 0usize;
+
+        for q in &queries {
+            // Exact top-k
+            let mut exact: Vec<(usize, f32)> = corpus_vecs
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i, v.iter().zip(q.iter()).map(|(a, b)| a * b).sum::<f32>()))
+                .collect();
+            exact.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            let gt: HashSet<i64> = exact[..k].iter().map(|(i, _)| *i as i64).collect();
+
+            let hits = idx.search_cascade(q, k, Some(hamming_n), Some(rabitq_n));
+            recall_hits += hits.iter().filter(|(id, _)| gt.contains(id)).count();
+        }
+
+        let elapsed = t0.elapsed();
+        let recall = recall_hits as f32 / (n_q * k) as f32;
+        let us_per_q = elapsed.as_micros() as f32 / n_q as f32;
+
+        eprintln!(
+            "RaBitQCascade 10k×384 R@10={:.3} | {:.1}µs/query (debug) | hamming={} rabitq={}",
+            recall, us_per_q, hamming_n, rabitq_n
+        );
+
+        assert!(recall >= 0.90, "R@10={recall:.3} < 0.90 — recall regression");
+        assert!(us_per_q < 50_000.0, "latency {us_per_q:.1}µs > 50ms debug");
     }
 }

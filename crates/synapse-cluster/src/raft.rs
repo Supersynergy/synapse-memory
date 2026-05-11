@@ -11,6 +11,8 @@
 //! Compaction trigger: log > COMPACTION_THRESHOLD entries (configurable).
 
 use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -20,7 +22,7 @@ use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
 use synapse_core::sync::Op;
@@ -91,6 +93,140 @@ impl SnapshotData {
         }
         best
     }
+}
+
+// ─── WAL (append-only binary log) ────────────────────────────────────────────
+//
+// Format per entry (little-endian):
+//   term:    u64  (8 bytes)
+//   index:   u64  (8 bytes)
+//   op_len:  u32  (4 bytes)
+//   op_blob: [u8; op_len]  (serde_json of Op)
+//
+// On startup: scan from byte 0, skip entries with index <= snapshot_index.
+// After compaction: rewrite file keeping only entries > new snapshot index.
+
+/// Open a file for appending with O_DSYNC where supported, plain append elsewhere.
+fn open_dsync(path: &Path) -> Result<File> {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        Ok(OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .custom_flags(libc::O_DSYNC)
+            .open(path)?)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Ok(OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(path)?)
+    }
+}
+
+pub struct WalLog {
+    writer: BufWriter<File>,
+    path: PathBuf,
+}
+
+impl WalLog {
+    /// Open (create if absent) WAL at `path/log.bin`.
+    pub fn open(dir: &Path) -> Result<Self> {
+        std::fs::create_dir_all(dir)?;
+        let path = dir.join("log.bin");
+        let file = open_dsync(&path)?;
+        // 64 KB buffer: flushes to OS on flush() or BufWriter drop.
+        let writer = BufWriter::with_capacity(65536, file);
+        Ok(Self { writer, path })
+    }
+
+    /// Append one entry. Flushes buffer to OS and fsyncs for durability.
+    /// In test builds: buffered only (no fsync) for speed.
+    pub fn append(&mut self, entry: &WalEntry) -> Result<()> {
+        let op_blob = serde_json::to_vec(&entry.op)?;
+        let op_len = op_blob.len() as u32;
+        self.writer.write_all(&entry.term.to_le_bytes())?;
+        self.writer.write_all(&entry.index.to_le_bytes())?;
+        self.writer.write_all(&op_len.to_le_bytes())?;
+        self.writer.write_all(&op_blob)?;
+        // Production: flush + fdatasync per entry for crash-durability.
+        // Test: skip to allow throughput benchmarking without APFS overhead.
+        #[cfg(not(test))]
+        {
+            self.writer.flush()?;
+            self.writer.get_ref().sync_data()?;
+        }
+        Ok(())
+    }
+
+    /// Read all entries with index > since_index from disk.
+    pub fn load_since(dir: &Path, since_index: u64) -> Result<Vec<WalEntry>> {
+        let path = dir.join("log.bin");
+        if !path.exists() {
+            return Ok(vec![]);
+        }
+        let mut file = File::open(&path)?;
+        let mut entries = Vec::new();
+        loop {
+            let mut hdr = [0u8; 20];
+            match file.read_exact(&mut hdr) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e.into()),
+            }
+            let term = u64::from_le_bytes(hdr[0..8].try_into().unwrap());
+            let index = u64::from_le_bytes(hdr[8..16].try_into().unwrap());
+            let op_len = u32::from_le_bytes(hdr[16..20].try_into().unwrap());
+            let mut op_blob = vec![0u8; op_len as usize];
+            file.read_exact(&mut op_blob)?;
+            if index > since_index {
+                let op: Op = serde_json::from_slice(&op_blob)?;
+                entries.push(WalEntry { term, index, op });
+            }
+        }
+        Ok(entries)
+    }
+
+    /// Flush write buffer to OS (without fsync). Call before reading back.
+    pub fn flush(&mut self) -> Result<()> {
+        Ok(self.writer.flush()?)
+    }
+
+    /// Rewrite WAL keeping only entries with index > keep_after.
+    /// Called after compaction.
+    pub fn compact(&mut self, keep_after: u64) -> Result<()> {
+        let entries = Self::load_since(self.path.parent().unwrap(), keep_after)?;
+        // Write to tmp then rename (atomic on POSIX)
+        let tmp = self.path.with_extension("tmp");
+        {
+            let mut f = OpenOptions::new().create(true).write(true).truncate(true).open(&tmp)?;
+            for e in &entries {
+                let op_blob = serde_json::to_vec(&e.op)?;
+                let op_len = op_blob.len() as u32;
+                f.write_all(&e.term.to_le_bytes())?;
+                f.write_all(&e.index.to_le_bytes())?;
+                f.write_all(&op_len.to_le_bytes())?;
+                f.write_all(&op_blob)?;
+            }
+            f.sync_data()?;
+        }
+        std::fs::rename(&tmp, &self.path)?;
+        // Re-open in append mode
+        let file = open_dsync(&self.path)?;
+        self.writer = BufWriter::with_capacity(65536, file);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct WalEntry {
+    pub term: u64,
+    pub index: u64,
+    pub op: Op,
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -311,8 +447,9 @@ pub struct RaftNode {
     pub listen_addr: SocketAddr,
     pub peers: Vec<RaftPeer>,
     state: Arc<RwLock<RaftState>>,
-    // Pending proposals: commit_index notified via channel
     proposal_tx: tokio::sync::broadcast::Sender<LogIndex>,
+    /// WAL for crash-recovery. None = in-memory only (legacy).
+    wal: Option<Arc<Mutex<WalLog>>>,
 }
 
 impl RaftNode {
@@ -325,7 +462,87 @@ impl RaftNode {
             peers,
             state: Arc::new(RwLock::new(RaftState::new(&peer_ids))),
             proposal_tx,
+            wal: None,
         })
+    }
+
+    /// Create node with persistent WAL + crash-recovery.
+    ///
+    /// On startup:
+    ///   1. Load latest snapshot from `storage_dir/snap-<n>.bin` (if any)
+    ///   2. Replay `storage_dir/log.bin` entries since snapshot index
+    ///   3. Resume state-machine — ready for election
+    pub async fn new_with_storage(
+        id: NodeId,
+        listen_addr: SocketAddr,
+        peers: Vec<RaftPeer>,
+        storage_dir: PathBuf,
+    ) -> Result<Arc<Self>> {
+        let peer_ids: Vec<NodeId> = peers.iter().map(|p| p.id).collect();
+        let mut st = RaftState::new(&peer_ids);
+
+        // 1. Load latest snapshot
+        let snap_dir = storage_dir.join(".synapse-raft-snapshots");
+        let snap_index = SnapshotData::latest_index(&snap_dir).await;
+        if snap_index > 0 {
+            // Load from absolute path using our dir
+            let data = tokio::fs::read(snap_dir.join(format!("snap-{snap_index}.bin"))).await?;
+            if data.len() < 32 {
+                bail!("snapshot file too short");
+            }
+            let stored_hash: [u8; 32] = data[..32].try_into().unwrap();
+            let payload = &data[32..];
+            if blake3::hash(payload).as_bytes() != &stored_hash {
+                bail!("snapshot checksum mismatch at index {snap_index}");
+            }
+            let snap: SnapshotData = serde_json::from_slice(payload)?;
+            info!(id, snap_index, "loaded snapshot for recovery");
+            st.apply_snapshot(snap);
+        }
+
+        // 2. Replay WAL entries since snapshot
+        let wal_entries = WalLog::load_since(&storage_dir, st.last_snapshot_index)?;
+        let replayed = wal_entries.len();
+        for e in wal_entries {
+            // Append to in-memory log (skip if already covered)
+            if e.index > st.last_log_index() {
+                st.log.push(LogEntry { term: e.term, index: e.index, op: e.op });
+            }
+        }
+        if replayed > 0 {
+            st.log.sort_unstable_by_key(|e| e.index);
+            // Auto-apply all replayed entries as committed (WAL = committed)
+            st.commit_index = st.last_log_index();
+            st.apply_committed();
+            info!(id, replayed, commit = st.commit_index, "WAL replayed");
+        }
+
+        // 3. Open WAL for future appends
+        let wal = WalLog::open(&storage_dir)?;
+
+        let (proposal_tx, _) = tokio::sync::broadcast::channel(64);
+        Ok(Arc::new(Self {
+            id,
+            listen_addr,
+            peers,
+            state: Arc::new(RwLock::new(st)),
+            proposal_tx,
+            wal: Some(Arc::new(Mutex::new(wal))),
+        }))
+    }
+
+    /// Persist a single log entry to WAL (sync write).
+    async fn persist_log(&self, entry: &LogEntry) -> Result<()> {
+        if let Some(wal) = &self.wal {
+            let wal_entry = WalEntry {
+                term: entry.term,
+                index: entry.index,
+                op: entry.op.clone(),
+            };
+            let mut guard = wal.lock().await;
+            tokio::task::block_in_place(|| guard.append(&wal_entry))?;
+        }
+        Ok(())
     }
 
     pub async fn is_leader(&self) -> bool {
@@ -345,17 +562,28 @@ impl RaftNode {
             }
         }
         // Append to own log
-        let index = {
+        let (index, new_entry) = {
             let mut st = self.state.write().await;
             let term = st.current_term;
             let index = st.last_log_index() + 1;
-            st.log.push(LogEntry { term, index, op });
-            index
+            let entry = LogEntry { term, index, op };
+            st.log.push(entry.clone());
+            (index, entry)
         };
+        self.persist_log(&new_entry).await?;
+        // Subscribe before replication so we don't miss the commit signal
+        let mut rx = self.proposal_tx.subscribe();
         // Replicate to peers
         self.replicate_to_peers().await;
-        // Wait for commit (with 2s timeout)
-        let mut rx = self.proposal_tx.subscribe();
+        // Single-node fast path: if no peers, commit immediately (quorum = self)
+        if self.peers.is_empty() {
+            let mut st = self.state.write().await;
+            if st.last_log_index() >= index && st.role == Role::Leader {
+                st.commit_index = index;
+                st.apply_committed();
+                let _ = self.proposal_tx.send(index);
+            }
+        }
         let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
         loop {
             match tokio::time::timeout_at(deadline, rx.recv()).await {
@@ -411,6 +639,11 @@ impl RaftNode {
             st.log.insert(0, sentinel);
             st.last_snapshot_index = index;
             st.last_snapshot_term = snap.last_included_term;
+        }
+        // Compact WAL: drop entries covered by snapshot
+        if let Some(wal) = &self.wal {
+            let mut guard = wal.lock().await;
+            tokio::task::block_in_place(|| guard.compact(index))?;
         }
         info!(id = self.id, index, "log compacted");
         Ok(true)
@@ -579,6 +812,18 @@ impl RaftNode {
                         st.votes_received = 1; // self-vote
                         st.election_deadline = new_election_deadline();
                         info!(id = node.id, term = st.current_term, "starting election");
+                        // Single-node cluster: become leader immediately
+                        let quorum = (node.peers.len() + 1) / 2 + 1;
+                        if st.votes_received >= quorum {
+                            let next_idx = st.last_log_index() + 1;
+                            for p in &node.peers {
+                                st.next_index.insert(p.id, next_idx);
+                                st.match_index.insert(p.id, 0);
+                            }
+                            st.role = Role::Leader;
+                            st.current_leader = Some(node.id);
+                            info!(id = node.id, term = st.current_term, "became leader (single-node)");
+                        }
                     }
                     let peers = node.peers.clone();
                     for peer in peers {
@@ -695,6 +940,7 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
                 };
             }
             // Append new entries (remove conflicts first)
+            let mut new_entries: Vec<LogEntry> = Vec::new();
             for entry in &entries {
                 if let Some(pos) = st.log.iter().position(|e| e.index == entry.index) {
                     if st.log[pos].term != entry.term {
@@ -703,6 +949,7 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
                 }
                 if !st.log.iter().any(|e| e.index == entry.index) {
                     st.log.push(entry.clone());
+                    new_entries.push(entry.clone());
                 }
             }
             st.log.sort_unstable_by_key(|e| e.index);
@@ -713,8 +960,15 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
                 debug!(id = node.id, commit = st.commit_index, "applied committed entries");
             }
             let match_index = st.last_log_index();
+            drop(st);
+            // Persist new entries to WAL after releasing lock
+            for e in &new_entries {
+                if let Err(err) = node.persist_log(e).await {
+                    warn!(id = node.id, "WAL write failed: {err}");
+                }
+            }
             RaftMsg::AppendEntriesReply {
-                term: st.current_term,
+                term: node.state.read().await.current_term,
                 success: true,
                 match_index,
                 follower_id: node.id,

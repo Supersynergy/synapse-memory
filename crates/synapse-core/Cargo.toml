@@ -58,6 +58,8 @@ synapse-ann = { path = "../synapse-ann", optional = true }
 # NEON f16/i8 dot-product kernels (3.9× over scalar on M4 Max).
 synapse-kernel = { path = "../synapse-kernel" }
 synapse-engine = { path = "../synapse-engine" }
+# RaBitQ 1-bit cascade index — proper Householder rotation from synapse-quant.
+synapse-quant = { path = "../synapse-quant", features = ["rabitq"] }
 async-trait = "0.1"
 tokio = { workspace = true }
 # SOTA agent-memory layer: NER gazetteer + temporal/regex extraction.
@@ -70,6 +72,8 @@ rmpv = { version = "1", optional = true }
 synapse-fts = { path = "../synapse-fts", optional = true }
 # HippoRAG-2 / GraphRAG graph-retrieval (PPR over KG). Default OFF.
 synapse-graph = { path = "../synapse-graph", optional = true, features = ["hippo"] }
+# SPANN disk-tier: in-memory centroids + mmap posting lists. Default OFF.
+synapse-spann = { path = "../synapse-spann", optional = true }
 # Production observability (OTel + Prometheus). Default OFF.
 synapse-obs = { path = "../synapse-obs", optional = true }
 # embed-metal: Candle + Metal backend for BGE-small on Apple Silicon.
@@ -121,6 +125,8 @@ conformal = []
 observability = ["dep:synapse-obs", "synapse-obs/observability"]
 # HippoRAG-2 / GraphRAG: graph-PPR retrieval layer, +20-30% recall on entity queries.
 hippo = ["dep:synapse-graph"]
+# Auto disk-tier via SPANN when corpus > SYNAPSE_RAM_THRESHOLD_DOCS (default 100_000).
+spann-tier = ["dep:synapse-spann"]
 # Embedding dimension compile-time selection. Default = 384 (BGE-small / Arctic-XS/S).
 # embed-768:  Arctic-M / Nomic-1.5  (MTEB ≤62.5)
 # embed-1024: Mxbai-large / Arctic-L (MTEB ≤64.7)
@@ -158,6 +164,11 @@ required-features = ["embed-mlx", "embed"]
 name = "bench_embed_metal"
 path = "examples/bench_embed_metal.rs"
 required-features = ["embed-metal"]
+
+[[example]]
+name = "bench_tiered"
+path = "examples/bench_tiered.rs"
+required-features = ["spann-tier", "simsimd"]
 
 [lib]
 doctest = false

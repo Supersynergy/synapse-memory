@@ -3,15 +3,39 @@
 //! vecs blob = zstd( json: Vec<Vec<f32>> )
 //! Table: colbert_vecs_i8(doc_id INTEGER, vecs_i8 BLOB, scales BLOB)
 //! vecs_i8 blob = raw i8 bytes (n_tokens × dim), scales blob = n_tokens × f32-le
+//! Table: colbert_muvera(doc_id INTEGER, fde BLOB) [optional, muvera feature]
+//! fde blob = raw f32-le bytes of FDE vector
 
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use crate::{ColbertEmbedder, max_sim};
 use crate::quant::{quant_i8, max_sim_i8};
 
+#[cfg(feature = "muvera")]
+use crate::muvera::{muvera_encode, cosine_sim};
+
+/// Config for MUVERA two-tier search.
+#[cfg(feature = "muvera")]
+#[derive(Clone, Debug)]
+pub struct MuveraConfig {
+    /// FDE output dimension; must be a multiple of ColBERT token dim (128).
+    pub fde_dim: usize,
+    /// RNG seed for reproducible hyperplane matrix.
+    pub seed: u64,
+}
+
+#[cfg(feature = "muvera")]
+impl Default for MuveraConfig {
+    fn default() -> Self {
+        Self { fde_dim: 1024, seed: 42 }
+    }
+}
+
 pub struct ColbertStore<'a> {
     conn: &'a Connection,
     emb: ColbertEmbedder,
+    #[cfg(feature = "muvera")]
+    muvera_cfg: Option<MuveraConfig>,
 }
 
 impl<'a> ColbertStore<'a> {
@@ -27,7 +51,126 @@ impl<'a> ColbertStore<'a> {
                 scales  BLOB NOT NULL
             );"
         )?;
-        Ok(Self { conn, emb: ColbertEmbedder::default() })
+        Ok(Self {
+            conn,
+            emb: ColbertEmbedder::default(),
+            #[cfg(feature = "muvera")]
+            muvera_cfg: None,
+        })
+    }
+
+    /// Create store with MUVERA FDE support enabled.
+    #[cfg(feature = "muvera")]
+    pub fn new_with_muvera(conn: &'a Connection, cfg: MuveraConfig) -> Result<Self> {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS colbert_vecs (
+                doc_id  INTEGER PRIMARY KEY,
+                vecs    BLOB NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS colbert_vecs_i8 (
+                doc_id  INTEGER PRIMARY KEY,
+                vecs_i8 BLOB NOT NULL,
+                scales  BLOB NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS colbert_muvera (
+                doc_id  INTEGER PRIMARY KEY,
+                fde     BLOB NOT NULL
+            );"
+        )?;
+        Ok(Self {
+            conn,
+            emb: ColbertEmbedder::default(),
+            muvera_cfg: Some(cfg),
+        })
+    }
+
+    /// Store FDE for a doc (muvera feature). Silently no-ops if muvera not configured.
+    #[cfg(feature = "muvera")]
+    fn store_fde(&self, doc_id: i64, token_vecs: &[Vec<f32>]) -> Result<()> {
+        let cfg = match &self.muvera_cfg {
+            Some(c) => c,
+            None => return Ok(()),
+        };
+        let fde = muvera_encode(token_vecs, cfg.fde_dim, cfg.seed);
+        let fde_bytes: Vec<u8> = fde.iter().flat_map(|x| x.to_le_bytes()).collect();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO colbert_muvera (doc_id, fde) VALUES (?1, ?2)",
+            params![doc_id, fde_bytes],
+        )?;
+        Ok(())
+    }
+
+    /// Load FDE vector for a doc.
+    #[cfg(feature = "muvera")]
+    #[allow(dead_code)]
+    fn load_fde(&self, doc_id: i64) -> Result<Vec<f32>> {
+        let bytes: Vec<u8> = self.conn.query_row(
+            "SELECT fde FROM colbert_muvera WHERE doc_id = ?1",
+            params![doc_id],
+            |row| row.get(0),
+        )?;
+        Ok(bytes.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+    }
+
+    /// Two-tier MUVERA search: FDE-ANN (exhaustive dot-product) → ColBERT max-sim rerank.
+    ///
+    /// 1. Encode query token vecs → FDE
+    /// 2. Dot-product scan all stored FDEs → top-N candidates
+    /// 3. Load token vecs for top-N, ColBERT max-sim rerank
+    /// 4. Return top-K (doc_id, score) sorted desc
+    #[cfg(feature = "muvera")]
+    pub fn search_muvera_then_rerank(
+        &self,
+        query_token_vecs: &[Vec<f32>],
+        k: usize,
+        fde_top_n: usize,
+    ) -> Result<Vec<(i64, f32)>> {
+        let cfg = self.muvera_cfg.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("MUVERA not configured — use new_with_muvera()"))?;
+
+        let q_fde = muvera_encode(query_token_vecs, cfg.fde_dim, cfg.seed);
+
+        // Exhaustive FDE scan
+        let mut stmt = self.conn.prepare("SELECT doc_id, fde FROM colbert_muvera")?;
+        let mut fde_scores: Vec<(i64, f32)> = stmt.query_map([], |row| {
+            let doc_id: i64 = row.get(0)?;
+            let bytes: Vec<u8> = row.get(1)?;
+            Ok((doc_id, bytes))
+        })?
+        .filter_map(|r| r.ok())
+        .map(|(doc_id, bytes)| {
+            let fde: Vec<f32> = bytes.chunks_exact(4)
+                .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+                .collect();
+            let sim = cosine_sim(&q_fde, &fde);
+            (doc_id, sim)
+        })
+        .collect();
+
+        fde_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        fde_scores.truncate(fde_top_n);
+
+        let candidates: Vec<i64> = fde_scores.iter().map(|(id, _)| *id).collect();
+
+        // ColBERT max-sim rerank on top-N
+        let mut reranked: Vec<(i64, f32)> = candidates.iter().filter_map(|&doc_id| {
+            // Try i8 first, fall back to f32
+            let score = if let Ok(doc_q) = self.load_vecs_i8(doc_id) {
+                let query_q: Vec<(Vec<i8>, f32)> = query_token_vecs.iter()
+                    .map(|v| crate::quant::quant_i8(v))
+                    .collect();
+                max_sim_i8(&query_q, &doc_q)
+            } else if let Ok(doc_vecs) = self.load_vecs(doc_id) {
+                max_sim(query_token_vecs, &doc_vecs)
+            } else {
+                return None;
+            };
+            Some((doc_id, score))
+        }).collect();
+
+        reranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        reranked.truncate(k);
+        Ok(reranked)
     }
 
     /// Store pre-computed token vecs as int8-quantized.
@@ -51,6 +194,8 @@ impl<'a> ColbertStore<'a> {
             "INSERT OR REPLACE INTO colbert_vecs_i8 (doc_id, vecs_i8, scales) VALUES (?1, ?2, ?3)",
             params![doc_id, vecs_i8_bytes, scales_bytes],
         )?;
+        #[cfg(feature = "muvera")]
+        self.store_fde(doc_id, &vecs)?;
         Ok(())
     }
 
@@ -88,6 +233,8 @@ impl<'a> ColbertStore<'a> {
 
     /// Store pre-computed token vecs for a doc.
     pub fn add_colbert(&self, doc_id: i64, vecs: Vec<Vec<f32>>) -> Result<()> {
+        #[cfg(feature = "muvera")]
+        self.store_fde(doc_id, &vecs)?;
         let json = serde_json::to_vec(&vecs)?;
         let compressed = zstd::encode_all(json.as_slice(), 3)?;
         self.conn.execute(
@@ -250,6 +397,99 @@ mod tests {
 
         eprintln!("BENCH f32={f32_ms:.3}ms i8={i8_ms:.3}ms ratio={:.2}× top3-overlap={overlap}/3",
             f32_ms / i8_ms);
+        Ok(())
+    }
+
+    #[cfg(feature = "muvera")]
+    #[test]
+    fn muvera_two_tier_r10_smoke() -> Result<()> {
+        use std::time::Instant;
+        use super::MuveraConfig;
+        use crate::muvera::muvera_encode;
+        use crate::kernel::max_sim;
+
+        // Build structured synthetic docs: query has dim-0 dominant.
+        // Top-K docs have high dim-0; irrelevant docs have high other dims.
+        // This ensures FDE and ColBERT max-sim agree (both are dot-product-based).
+        let dim = 128usize;
+        let n_docs = 100i64;
+        let n_tokens = 4usize;
+        let fde_seed = 42u64;
+        let fde_dim = 512usize;
+
+        // query token vecs: unit vector in dim-0
+        let mut q_tok = vec![vec![0.0f32; dim]; n_tokens];
+        for t in &mut q_tok {
+            t[0] = 1.0; // all tokens point at dim-0
+        }
+
+        // Doc token vecs: relevant docs point at dim-0 with score proportional to match
+        // irrelevant docs point at dim-1..99 (orthogonal to query)
+        let make_doc_vecs = |doc_id: i64| -> Vec<Vec<f32>> {
+            (0..n_tokens).map(|_| {
+                let mut v = vec![0.0f32; dim];
+                if doc_id < 10 {
+                    // relevant: strong dim-0 signal
+                    v[0] = 0.9;
+                    v[(doc_id as usize + 1) % dim] = 0.1;
+                } else {
+                    // irrelevant: orthogonal dims
+                    let d = ((doc_id as usize) % (dim - 1)) + 1;
+                    v[d] = 1.0;
+                }
+                let norm = v.iter().map(|x| x*x).sum::<f32>().sqrt().max(1e-9);
+                v.iter_mut().for_each(|x| *x /= norm);
+                v
+            }).collect()
+        };
+
+        // Build store with synthetic vecs directly (bypass embedder)
+        let conn = Connection::open_in_memory()?;
+        let cfg = MuveraConfig { fde_dim, seed: fde_seed };
+        let store = ColbertStore::new_with_muvera(&conn, cfg)?;
+
+        for doc_id in 0..n_docs {
+            let vecs = make_doc_vecs(doc_id);
+            store.add_colbert(doc_id, vecs)?;
+        }
+
+        let all_candidates: Vec<i64> = (0..n_docs).collect();
+
+        // Full ColBERT rerank (ground truth)
+        let t_full = Instant::now();
+        let full_ranked: Vec<(i64, f32)> = all_candidates.iter().filter_map(|&doc_id| {
+            let doc_vecs = store.load_vecs(doc_id).ok()?;
+            let score = max_sim(&q_tok, &doc_vecs);
+            Some((doc_id, score))
+        }).collect::<Vec<_>>().into_iter().collect();
+        let mut full_sorted = full_ranked;
+        full_sorted.sort_by(|a,b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        let full_ms = t_full.elapsed().as_secs_f64() * 1000.0;
+        let full_top10: Vec<i64> = full_sorted[..10].iter().map(|(id,_)| *id).collect();
+
+        // MUVERA two-tier: FDE top-30 → ColBERT rerank → top-10
+        let fde_top_n = 30usize;
+        let t_muv = Instant::now();
+        let muv_ranked = store.search_muvera_then_rerank(&q_tok, 10, fde_top_n)?;
+        let muv_ms = t_muv.elapsed().as_secs_f64() * 1000.0;
+        let muv_top10: Vec<i64> = muv_ranked.iter().map(|(id,_)| *id).collect();
+
+        // R@10: how many of full top-10 recovered by MUVERA
+        let overlap = muv_top10.iter().filter(|id| full_top10.contains(id)).count();
+        let recall_at_10 = overlap as f32 / 10.0;
+
+        eprintln!(
+            "MUVERA smoke: full={full_ms:.1}ms muvera={muv_ms:.1}ms speedup={:.1}× R@10={recall_at_10:.2} (overlap={overlap}/10)",
+            full_ms / muv_ms.max(0.001)
+        );
+        eprintln!("  full top10:   {full_top10:?}");
+        eprintln!("  muvera top10: {muv_top10:?}");
+
+        assert!(
+            recall_at_10 >= 0.95,
+            "R@10 too low: {recall_at_10:.2} (overlap={overlap}/10). full={full_top10:?} muv={muv_top10:?}"
+        );
+
         Ok(())
     }
 }
