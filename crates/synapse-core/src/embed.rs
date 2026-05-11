@@ -27,13 +27,42 @@ fn get_pool_size() -> usize {
 /// Global pool of pre-warmed TextEmbedding sessions.
 static SESSION_POOL: OnceCell<Mutex<Vec<TextEmbedding>>> = OnceCell::new();
 
+/// Select embedding model from `SYNAPSE_EMBED_MODEL` env-var.
+/// Default `bge-small` (384-dim, MTEB 53.0) for backward compatibility.
+///
+/// IMPORTANT: switching models invalidates existing vector corpora (different dim).
+/// Use a fresh `.synapse/` directory after switching.
+///
+/// Accepted values:
+///   `bge-small`   → BGESmallENV15            (384-dim, MTEB 53.0, default)
+///   `bge-small-q` → BGESmallENV15Q           (384-dim, int8 quantized, smaller)
+///   `arctic-xs`   → SnowflakeArcticEmbedXS   (384-dim, MTEB 56.6)
+///   `arctic-s`    → SnowflakeArcticEmbedS    (384-dim, MTEB 60.0)
+///   `arctic-m`    → SnowflakeArcticEmbedM    (768-dim, MTEB 62.5) ← upgrade target
+///   `arctic-l`    → SnowflakeArcticEmbedL    (1024-dim, MTEB 63.0)
+///   `mxbai-large` → MxbaiEmbedLargeV1        (1024-dim, MTEB 64.7)
+///   `nomic-1.5`   → NomicEmbedTextV15        (768-dim, MTEB 62.4)
+fn select_model() -> EmbeddingModel {
+    match std::env::var("SYNAPSE_EMBED_MODEL").unwrap_or_default().to_lowercase().as_str() {
+        "bge-small-q"          => EmbeddingModel::BGESmallENV15Q,
+        "arctic-xs"            => EmbeddingModel::SnowflakeArcticEmbedXS,
+        "arctic-s"             => EmbeddingModel::SnowflakeArcticEmbedS,
+        "arctic-m"             => EmbeddingModel::SnowflakeArcticEmbedM,
+        "arctic-l"             => EmbeddingModel::SnowflakeArcticEmbedL,
+        "mxbai-large"          => EmbeddingModel::MxbaiEmbedLargeV1,
+        "nomic-1.5"            => EmbeddingModel::NomicEmbedTextV15,
+        _                      => EmbeddingModel::BGESmallENV15,
+    }
+}
+
 fn get_or_init_pool() -> Result<&'static Mutex<Vec<TextEmbedding>>> {
     SESSION_POOL.get_or_try_init(|| {
         let pool_size = get_pool_size();
+        let model = select_model();
         let mut sessions = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
             let m = TextEmbedding::try_new(
-                InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(false),
+                InitOptions::new(model.clone()).with_show_download_progress(false),
             )
             .map_err(|e| Error::Other(format!("fastembed init: {e}")))?;
             sessions.push(m);
