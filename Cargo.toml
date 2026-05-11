@@ -64,6 +64,8 @@ members = [
     "crates/synapse-obs",
     # Multimodal asset-DB + retrieval (images/video/audio, ComfyUI/Remotion/ffmpeg)
     "crates/synapse-media",
+    # MUVERA RRF fusion: dense + ColBERT reciprocal-rank-fusion
+    "crates/synapse-fusion",
 ]
 
 [workspace.package]

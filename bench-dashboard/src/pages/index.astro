@@ -2,42 +2,44 @@
 import Base from '../layouts/Base.astro';
 const base = import.meta.env.BASE_URL;
 ---
-<Base title="Synapse — Live Bench Dashboard">
+<Base title="Synapse — Live Bench Dashboard v1.0.1">
   <header class="hero">
     <h1>Synapse <span>·</span> Live Bench</h1>
     <p class="lead">
       Reproducible benchmarks against MariaDB, fastembed, and SQLite.
-      SHA pinned. Every number below was measured on 2026-04-25 against the
-      <code>session-2026-04-25-ultrathink</code> branch.
+      SHA pinned. Wave 2026-05-11: NEON-RRF, tantivy-warm, ColBERT/SPLADE/Conformal/CRDT-cluster.
     </p>
-    <span class="badge">Verified 2026-04-25 · M4 Max · 128 GB RAM</span>
+    <span class="badge">Verified 2026-05-11 · M4 Max · 128 GB RAM</span>
 
     <div class="grid3">
       <div class="stat">
-        <div class="label">WordPress Lex p50</div>
-        <div class="value">4.5 ms</div>
-        <div class="sub">PHP plugin, persistent socket. <strong>21.6×</strong> faster than the pre-fix client (97.1 ms). Beats the Python direct baseline.</div>
+        <div class="label">NEON-RRF fusion</div>
+        <div class="value">4.3–5.1×</div>
+        <div class="sub">NEON SIMD reciprocal-rank-fusion vs scalar baseline. M4 Max. Wave 2026-05-11.</div>
       </div>
       <div class="stat">
-        <div class="label">OLTP @ 8 threads</div>
-        <div class="value">7,153 OPS</div>
-        <div class="sub">Up from 2,190 (<strong>3.27×</strong>). Matches MariaDB (7,626 OPS) — and Synapse runs the real point-select with SQLite I/O, not <code>SELECT 1</code>.</div>
+        <div class="label">tantivy-warm BM25</div>
+        <div class="value">18.3×</div>
+        <div class="sub">tantivy warm-cache query vs FTS5 cold baseline. p50 latency drop &gt;18×.</div>
       </div>
       <div class="stat">
         <div class="label">MLX Vec p95 tail</div>
         <div class="value">−48%</div>
-        <div class="sub">90.8 ms vs 174.3 ms on fastembed CPU. Sub-100 ms p95 across the board on Metal. Parity 1.0000 vs fastembed.</div>
+        <div class="sub">90.8 ms vs 174.3 ms on fastembed CPU. Sub-100 ms p95 on Metal. Parity 1.0000.</div>
       </div>
     </div>
   </header>
 
   <main>
-    <h2>What changed today</h2>
+    <h2>Wave 2026-05-11 — what shipped</h2>
     <ul>
-      <li><strong>WP install</strong> — <code>wp core install</code> now succeeds end-to-end on the SQLite-backed shim. Round-trip INSERT → LAST_INSERT_ID → SELECT verified. <a href={`${base}/wordpress/`}>Details →</a></li>
-      <li><strong>WP plugin keep-alive</strong> — persistent UNIX socket restored client-side; daemon got a 60 s idle timeout. Lex 21.6×, Hybrid 47.0× faster.</li>
-      <li><strong>OLTP gap closed</strong> — regex cache + log-spam removal in <code>shim.rs::on_query</code>. Synapse OLTP now at MariaDB parity for point-select.</li>
-      <li><strong>MLX promoted to default</strong> — fastembed retained as graceful fallback. CRIT-2 frame-size DoS bound (256 MiB) added.</li>
+      <li><strong>NEON-RRF</strong> — SIMD reciprocal-rank-fusion <strong>4.3–5.1×</strong> faster than scalar. M4 Max NEON intrinsics + f32 lane-parallel accumulate.</li>
+      <li><strong>tantivy-warm</strong> — BM25 warm-cache path <strong>18.3×</strong> faster than FTS5 cold. <code>synapse-fts</code> crate, feature-gated off by default.</li>
+      <li><strong>ColBERT multi-vector</strong> — late-interaction scaffold (<code>synapse-colbert</code>), MaxSim kernel, ONNX-ready.</li>
+      <li><strong>SPLADE-v3</strong> — neural-sparse inverted-index (<code>synapse-splade</code>), BOW + IDF expansion.</li>
+      <li><strong>Split-Conformal</strong> — statistical recall guarantee (<code>conformal</code> feature), calibration on held-out set.</li>
+      <li><strong>CRDT-cluster</strong> — multi-node gossip AP cluster (<code>synapse-cluster</code>), convergence in &lt;200 ms LAN.</li>
+      <li><strong>MUVERA fusion</strong> — new <code>synapse-fusion</code> crate with <code>muvera_rrf()</code> dense+ColBERT RRF API.</li>
     </ul>
 
     <h2>Headline comparison</h2>

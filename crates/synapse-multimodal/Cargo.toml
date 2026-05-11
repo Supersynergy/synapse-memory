@@ -11,8 +11,10 @@ categories = ["multimedia", "data-structures"]
 
 [features]
 default = []
-# Enable real ONNX/CLIP model via ort runtime
+# Enable real ONNX/CLIP model via ort runtime (openai/clip-vit-base-patch32, 512-d)
 multimodal = ["dep:ort", "dep:image", "dep:ndarray", "dep:hf-hub"]
+# Enable jina-clip-v2 ONNX (jinaai/jina-clip-v2, 1024-d, multilingual 89 langs)
+clip-jina = ["dep:ort", "dep:image", "dep:ndarray", "dep:hf-hub", "dep:tokenizers"]
 # Placeholder dummy embedder (no model download, random+histogram) — used for E2E tests
 multimodal-dummy = ["dep:image"]
 
@@ -31,6 +33,7 @@ infer = "0.16"
 ort = { version = "2.0.0-rc.12", optional = true }
 hf-hub = { version = "0.3", optional = true }
 ndarray = { version = "0.16.1", optional = true }
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["http", "fancy-regex"] }
 
 # image decoding (shared between dummy + real)
 image = { version = "0.25", optional = true }

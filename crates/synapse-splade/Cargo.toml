@@ -9,6 +9,8 @@ description = "SPLADE-v3 neural-sparse scaffold for Synapse — inverted-index B
 default = []
 # Enable when candle-core / ONNX model loader wired for real naver/splade-v3 inference
 splade = []
+# Real naver/splade-v3 via ONNX Runtime + HF tokenizer + hf-hub model download
+splade-onnx = ["dep:ort", "dep:tokenizers", "dep:hf-hub"]
 
 [dependencies]
 anyhow.workspace = true
@@ -16,6 +18,11 @@ serde.workspace = true
 serde_json.workspace = true
 rusqlite.workspace = true
 tracing.workspace = true
+
+# SPLADE-v3 ONNX inference (feature-gated)
+ort = { version = "2.0.0-rc.12", optional = true }
+tokenizers = { version = "0.21", default-features = false, features = ["onig"], optional = true }
+hf-hub = { version = "0.3", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

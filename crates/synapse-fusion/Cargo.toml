@@ -1,0 +1,19 @@
+[package]
+name = "synapse-fusion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "MUVERA fusion: Reciprocal-Rank-Fusion over dense + ColBERT result sets"
+keywords = ["rrf", "fusion", "colbert", "retrieval", "rag"]
+categories = ["algorithms"]
+
+[dependencies]
+# No required deps — pure Rust RRF core
+
+[features]
+# full-pipeline: wire dense store + ColBERT reranker (opt-in, requires both crates)
+fusion = []
+
+[dev-dependencies]

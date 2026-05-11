@@ -22,9 +22,10 @@ zstd.workspace = true
 blake3.workspace = true
 tracing.workspace = true
 fastembed = { workspace = true, optional = true }
-# embed-dynamic: same as embed but ORT loaded via dlopen at runtime (no libstdc++ at link time).
+# embed-dynamic: ORT loaded via dlopen at runtime (no libstdc++ at link time).
 # Required when cross-compiling from mac to linux without a Linux sysroot.
-fastembed-dynamic = { package = "fastembed", version = "5", default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls"], optional = true }
+# Uses the same dep as `embed` but with ort-load-dynamic features layered on top.
+# When --all-features is used, both embed and embed-dynamic activate dep:fastembed — no alias conflict.
 redb = { workspace = true, optional = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
@@ -81,7 +82,7 @@ backend-libsql = ["dep:libsql"]
 embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
 # embed-dynamic: ORT loaded via dlopen. Use for Linux cross-compile builds.
 # At runtime, libonnxruntime.so must be on LD_LIBRARY_PATH or next to the binary.
-embed-dynamic = ["dep:fastembed-dynamic", "dep:redb", "dep:parking_lot", "dep:once_cell"]
+embed-dynamic = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
 encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 turbo = []
 ollama = ["turbo", "dep:reqwest"]

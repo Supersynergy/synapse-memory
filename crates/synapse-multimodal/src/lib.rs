@@ -28,8 +28,16 @@ pub mod mime;
 pub mod storage;
 
 pub use embedder::{ClipEmbedder, MultimodalEmbedder};
+#[cfg(feature = "clip-jina")]
+pub use embedder::jina::JinaClipEmbedder;
 pub use index::{CrossModalIndex, ModalHit, ModalKind};
 pub use mime::MimeKind;
 
-/// CLIP shared embed dimension — 512 for ViT-B/32.
+/// CLIP shared embed dimension.
+/// - `clip-jina` feature: 1024 (jina-clip-v2)
+/// - `multimodal` feature: 512 (openai/clip-vit-base-patch32)
+/// - dummy / stub: 512
+#[cfg(feature = "clip-jina")]
+pub const CLIP_DIM: usize = 1024;
+#[cfg(not(feature = "clip-jina"))]
 pub const CLIP_DIM: usize = 512;
