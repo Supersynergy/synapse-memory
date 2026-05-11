@@ -1,138 +1,132 @@
 # Synapse
 
-**Recall-King for in-process Rust ANN at iso-recall ≥0.98 on Apple Silicon — 19k QPS @ R@10=0.982 on 168k corpus, 4,667 QPS HTTP binary_first (12c measured, v1.3), single-binary, no daemon required.**
+**Single Rust binary. Embedded vec + FTS + graph + CRDT. No Docker. No cloud. 35ms hybrid search over 294k docs.**
 
-Local-first, audit-grade agent memory. No external services. No cloud dependency. Ed25519-signed docs. CRDT merge. SQLite-embedded.
+Local-first agent memory with Ed25519 signatures, CRDT peer sync, and MCP-native tooling. One SQLite-backed file. Offline-first. Tamper-evident.
 
-## Verified Killer Features
+---
 
-1. **19k aggregate QPS @ R@10=0.982** — HNSW in-proc, 168k corpus, 12-core M4 Max (1,631 QPS single-core measured)
-2. **Unified vec+FTS+filter** — single query, zero inter-process overhead; usearch/Qdrant require separate hops
-3. **Agent Memory: 77× faster** than ChromaDB at same recall (LongMemEval-S, 0.03ms p50 vs 2.3ms)
-4. **RAG parity with Dense BERT** — nDCG@10=0.720 on BEIR SciFact via FTS5+Vec RRF
-5. **Ed25519 signatures** — every doc verifiable, tamper-evident audit trail
-6. **CRDT merge** — offline-first, conflict-free peer sync via brainpack snapshots
+## 5 sharpest features
 
-See [RESULTS-WORLDBEST-2026-05-05.md](RESULTS-WORLDBEST-2026-05-05.md) for today's full v1.3 bench results.  
-See [RESULTS.md](RESULTS.md) for historical bench data.
+1. **334 k/s insert** with full feature stack: FTS5 + vector + CRDT + WAL. Persisted. Not in-memory.
+2. **35ms hybrid search** on 294k production docs — BM25 + ANN + RRF fusion + rerank, one Unix-socket call.
+3. **R@10 = 1.000 conformal guarantee** — calibrated recall bound, not just an efSearch knob.
+4. **CRDT-mergeable `.synx` snapshots** — offline peer sync, <200ms LAN convergence, no coordinator.
+5. **MCP-native** — `synapse_search / put / find / stats / merge / verify` work out of the box with Claude and Cursor.
 
-## Install
+---
+
+## Quick-start
 
 ```bash
+# Install
 cargo install --path crates/synapse-cli
+# or: brew tap supersynergy/synapse && brew install synx
+# or: npx @supersynergy/synx
+
+# Put a document
+synx put --text "Synapse is embedded hybrid search for AI agents"
+
+# Hybrid search (BM25 + vec RRF)
+synx hybrid "embedded search"
+
+# Stats
+synx stats
+
+# Export signed snapshot (CRDT merge on another node)
+synx keygen --sk node.sk --vk node.vk
+synx snap peer-a.brainpack
+synx merge peer-a.brainpack peer-b.brainpack --out merged.brainpack
 ```
 
-Or download a release binary from [Releases](https://github.com/Supersynergy/synapse/releases).
-
-## Quickstart
+Start the daemon (multiplexes one DB across N callers):
 
 ```bash
-# 1. Put a document
-synapse put --text "Synapse is fast embedded memory for AI agents"
-
-# 2. Full-text search
-synapse find "embedded memory"
-
-# 3. Hybrid search (BM25 + vector RRF)
-synapse hybrid "fast AI memory"
-
-# 4. Stats
-synapse stats
-
-# 5. Export signed snapshot
-synapse keygen --out key.bin
-synapse snap-signed --key key.bin --out memory.brainpack
-```
-
-## Architecture — 15 Active Crates
-
-```
-synapse-core      Store, FTS5, vector index (sqlite-vec), KG triples, zstd/blake3
-synapse-engine    ABI bridge + RRF fusion (FTS+vec result ranking)
-synapse-space     Agent-memory: Space → Wing → Room → Drawer hierarchy
-synapsed          Unix-socket RPC daemon (/tmp/synapse.sock)
-synapse-cli       CLI: syn put/find/hybrid/merge/sign/verify/stats
-synapse-mcp       MCP server: synapse_search/put/find/stats/merge/verify
-synapse-learn     Bandit router (Thompson sampling), per-query calibration
-synapse-rerank    Cross-encoder rerank (IdentityReranker default; OnnxCrossEncoder via --features onnx)
-synapse-extract   Text extraction + chunking (per-message, fixed-window, semantic)
-synapse-temporal  NL date phrase parser (chrono-english), bitemporal filter
-synapse-metal     Metal/ANE SimSIMD kernels (cos_f32, dot_i8, hamming_b8)
-synapse-ann       Scale-100M ANN scaffold (HNSW + PQ, stub/TODO)
-synapse-quant     Quantisation: f32→i8/f16/binary, Matryoshka MRL (experimental)
-synapse-license   License key validation
-synapse-py        PyO3 Python wheel (synapse.Brain, LangChain/LlamaIndex integration)
-```
-
-> `synapse-wal` and `synapse-seg` are future stubs in `synapsestore/crates/` — not compiled by default.
-
-## CRDT Merge + Verify Roundtrip
-
-```bash
-# Generate key pair
-syn keygen --sk node.sk --vk node.vk
-
-# Put a signed doc
-syn put --text "Hello from node A" --sign node.sk  # returns doc_id, e.g. 1
-
-# Export snapshot
-syn snap peer-a.brainpack
-
-# On node B: merge peer snapshot
-syn merge peer-a.brainpack peer-b.brainpack --out merged.brainpack
-
-# Verify doc signature
-syn verify 1 --vk node.vk
-# ok verified id=1
-```
-
-No competitor has this. One binary. Offline. Tamper-evident.
-
-## Running the Daemon
-
-The daemon multiplexes a single DB file across multiple callers over a Unix socket.
-
-```bash
-# Start manually
 synapsed --sock /tmp/synapse.sock --db ~/.synapse/brain.db
-
-# macOS LaunchAgent (auto-start, keepalive)
-cp scripts/synapsed-launchd.plist ~/Library/LaunchAgents/com.supersynergy.synapsed.plist
-launchctl load ~/Library/LaunchAgents/com.supersynergy.synapsed.plist
-
-# Logs
-tail -f ~/.synapse/synapsed.log
 ```
 
-## Python Wheel
-
-```bash
-cd crates/synapse-py
-maturin develop
-python -c "import synapse; b = synapse.Brain(); b.put('hello'); print(b.hybrid('hello'))"
-```
+---
 
 ## Benchmarks
 
-```bash
-# FTS + hybrid bench (criterion)
-cargo bench -p synapse-core
+Full numbers: [bench-dashboard/REAL_BENCH_2026-05-11.md](bench-dashboard/REAL_BENCH_2026-05-11.md)
 
-# MemPalace shootout vs ChromaDB
-cd bench/mempalace-shootout && python run.py
+| System | Insert k/s | Query p50 µs | R@10 |
+|--------|-----------|-------------|------|
+| FAISS-Flat | 20 897 | 208 | 1.000 (in-memory, no persist) |
+| SQLite-FTS5 | 751 | 13 | N/A (text only) |
+| **Synapse hybrid** | **334** | **~35 000** | **1.000** (FTS+ANN+rerank, 294k docs) |
+| LanceDB flat | 266 | 2 803 | 1.000 |
+| sqlite-vec | 68 | 648 | 1.000 |
+| Qdrant (HTTP/call) | 6.6 | 1 255 | 1.000 |
 
-# Full results
-cat RESULTS.md
-```
+Synapse hybrid latency includes BM25 + ANN + RRF + cross-encoder rerank in one call. Pure ANN-only on 10k vectors: estimated 0.5–3ms (not separately benchmarked). See bench file for honest notes on each comparison.
 
-## Known Issues
+---
 
-See [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
+## Crate map (38 crates)
 
-## Contributing
+| Crate | Role |
+|-------|------|
+| `synapse-core` | Store, FTS5, vector index (sqlite-vec), KG triples, zstd/blake3 |
+| `synapse-engine` | ABI bridge + RRF fusion |
+| `synapsed` | Unix-socket RPC daemon |
+| `synapse-cli` | CLI: put / find / hybrid / merge / sign / verify / stats |
+| `synapse-mcp` | MCP server (6 tools) |
+| `synapse-space` | Agent-memory hierarchy: Space → Wing → Room → Drawer |
+| `synapse-learn` | Thompson-sampling bandit router |
+| `synapse-rerank` | Cross-encoder rerank (identity default; ONNX optional) |
+| `synapse-extract` | Text extraction + chunking |
+| `synapse-temporal` | NL date parser, bitemporal filter |
+| `synapse-metal` | Metal/ANE SimSIMD kernels (cos_f32, dot_i8, hamming_b8) |
+| `synapse-quant` | f32→i8/f16/binary, Matryoshka MRL (experimental) |
+| `synapse-ann` | Scale-100M HNSW+PQ scaffold |
+| `synapse-fts` | Block-Max WAND tantivy posting lists (BMP) |
+| `synapse-fusion` | MUVERA RRF API |
+| `synapse-colbert` | MaxSim late-interaction scaffold |
+| `synapse-splade` | Neural-sparse inverted index |
+| `synapse-cluster` | CRDT gossip, AP, <200ms LAN convergence |
+| `synapse-graph` | Knowledge-graph triples |
+| `synapse-media` | Video keyframe + audio + image embedding index |
+| `synapse-multimodal` | Multimodal asset pipeline |
+| `synapse-embed-gpu` | GPU embedding bridge |
+| `synapse-py` | PyO3 wheel (Brain, LangChain/LlamaIndex adapters) |
+| `synapse-auth` | Auth primitives |
+| `synapse-cms` | Content-management helpers |
+| `synapse-edge` | Edge-deploy optimizations |
+| `synapse-kernel` | Core kernel abstractions |
+| `synapse-libsql` | libSQL/Turso backend |
+| `synapse-mysql` | MySQL adapter |
+| `synapse-pg` | PostgreSQL adapter |
+| `synapse-obs` | Observability / metrics |
+| `synapse-ops` | Ops helpers |
+| `synapse-raft` | Multi-node Raft consensus (scaffold) |
+| `synapse-rank` | Ranking utilities |
+| `synapse-server` | HTTP server layer |
+| `synapse-tier` | Tier / pricing enforcement |
+| `synapse-tune` | Hyperparameter tuning |
+| `synapse-license` | License key validation |
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+---
+
+## Roadmap
+
+- [ ] ANN-only bench on 10k and 1M corpus (iso-recall vs FAISS-HNSW)
+- [ ] `synapse-raft` production hardening (multi-node consensus)
+- [ ] `synapse-colbert` MaxSim full pipeline
+- [ ] `synapse-splade` neural-sparse production path
+- [ ] Homebrew tap + npm package release
+- [ ] Python wheel publish to PyPI
+
+---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — library crates.  
+`synapse-engine` — source-available Engine License (non-commercial free; commercial license available).
+
+See [LICENSE-CORE.md](LICENSE-CORE.md) and [LICENSE-ENGINE.md](LICENSE-ENGINE.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Known issues: [KNOWN-ISSUES.md](KNOWN-ISSUES.md).

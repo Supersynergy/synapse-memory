@@ -12,8 +12,18 @@ categories = ["algorithms"]
 [dependencies]
 # No required deps — pure Rust RRF core
 
+# fusion-full optional deps
+anyhow = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+synapse-colbert = { path = "../synapse-colbert", optional = true }
+synapse-splade  = { path = "../synapse-splade",  optional = true }
+
 [features]
-# full-pipeline: wire dense store + ColBERT reranker (opt-in, requires both crates)
+# light: RRF-only (no extra deps)
 fusion = []
+# full pipeline: dense ANN (in-proc) + SPLADE BMP + RRF + ColBERT i8 rerank
+fusion-full = ["fusion", "dep:anyhow", "dep:rusqlite", "dep:synapse-colbert", "dep:synapse-splade"]
 
 [dev-dependencies]
+anyhow = { workspace = true }
+rusqlite = { workspace = true }

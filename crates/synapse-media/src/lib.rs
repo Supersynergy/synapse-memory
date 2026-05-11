@@ -7,6 +7,7 @@
 //!
 //! Default build uses subprocess CLI for ffmpeg + tawnser (always-available path).
 
+pub mod audio_embed;
 pub mod db;
 pub mod ingest;
 pub mod integrations;

@@ -19,9 +19,15 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             artifact: synapse-macos-arm64
+            synx_artifact: synx-aarch64-apple-darwin
+          - target: x86_64-apple-darwin
+            os: macos-13
+            artifact: synapse-macos-x86_64
+            synx_artifact: synx-x86_64-apple-darwin
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: synapse-linux-x86_64
+            synx_artifact: synx-x86_64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
 
@@ -47,17 +53,33 @@ jobs:
       - name: Build synapsed daemon
         run: cargo build --release --target ${{ matrix.target }} -p synapsed
 
-      - name: Package
+      - name: Package synapse+synapsed
         run: |
           mkdir dist
           cp target/${{ matrix.target }}/release/synapse dist/
           cp target/${{ matrix.target }}/release/synapsed dist/
           tar czf ${{ matrix.artifact }}.tar.gz -C dist .
 
+      - name: Package synx (CLI binary + completions)
+        run: |
+          mkdir synx-dist
+          cp target/${{ matrix.target }}/release/synapse synx-dist/synx
+          # Generate shell completions if supported
+          mkdir -p synx-dist/completions
+          ./synx-dist/synx completions bash > synx-dist/completions/synx.bash 2>/dev/null || true
+          ./synx-dist/synx completions zsh  > synx-dist/completions/_synx    2>/dev/null || true
+          ./synx-dist/synx completions fish > synx-dist/completions/synx.fish 2>/dev/null || true
+          tar czf ${{ matrix.synx_artifact }}.tar.gz -C synx-dist .
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.synx_artifact }}
+          path: ${{ matrix.synx_artifact }}.tar.gz
 
   release:
     name: GitHub Release
@@ -74,3 +96,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*.tar.gz
+          generate_release_notes: true

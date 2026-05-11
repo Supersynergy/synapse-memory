@@ -97,10 +97,16 @@ impl<'a> ColbertStore<'a> {
         Ok(())
     }
 
-    /// Embed text and store.
+    /// Embed text and store (f32 path).
     pub fn embed_and_add(&self, doc_id: i64, text: &str) -> Result<()> {
         let vecs = self.emb.embed_doc(text)?;
         self.add_colbert(doc_id, vecs)
+    }
+
+    /// Embed text and store as int8-quantised (preferred for production rerank).
+    pub fn embed_and_add_i8(&self, doc_id: i64, text: &str) -> Result<()> {
+        let vecs = self.emb.embed_doc(text)?;
+        self.add_colbert_i8(doc_id, vecs)
     }
 
     /// Rerank ANN candidates by ColBERT max-sim. Returns sorted (doc_id, score) desc.

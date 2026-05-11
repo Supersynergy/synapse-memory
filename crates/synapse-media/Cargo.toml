@@ -44,6 +44,10 @@ clip-local = []
 #   Current backend: CLIP-mean-pool fallback (no extra deps).
 #   Future: add `ort = "2"` here once VJEPA-2 / SigLIP-2 ONNX export stabilises.
 video-vjepa = []
+# audio-clap: ClapEmbedder (laion/clap-htsat-unfused compatible 512-dim output).
+#   Current backend: mel-spectrogram mean-pool fallback (no extra deps, no model download).
+#   Future: add `ort = "2"` here once CLAP ONNX preprocessing is stabilised.
+audio-clap = []
 
 [dev-dependencies]
 tempfile = "3"

@@ -24,6 +24,10 @@ ann-usearch = ["dep:usearch"]
 # PR-A2: pure-Rust IVF-PQ on faer. No C++ deps.
 ann-ivfpq = []
 
+[[example]]
+name = "raw_ann_microbench"
+required-features = ["ann-usearch"]
+
 [[bench]]
 name = "ann_usearch"
 harness = false
