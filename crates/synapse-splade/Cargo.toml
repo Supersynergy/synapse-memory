@@ -31,3 +31,8 @@ tempfile = "3"
 name = "synapse_splade"
 path = "src/lib.rs"
 doctest = false
+
+[[bench]]
+name = "bmp_vs_naive"
+path = "benches/bmp_vs_naive.rs"
+harness = false

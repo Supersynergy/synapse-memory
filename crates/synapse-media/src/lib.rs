@@ -11,6 +11,7 @@ pub mod db;
 pub mod ingest;
 pub mod integrations;
 pub mod types;
+pub mod video_embed;
 
 pub use db::MediaDb;
 pub use ingest::{add_audio, add_image, add_video};

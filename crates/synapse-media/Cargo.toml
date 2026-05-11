@@ -40,6 +40,10 @@ default = []
 video = ["dep:ffmpeg-next"]
 # clip-local: candle-based local CLIP embedding (heavy, Apple Silicon only)
 clip-local = []
+# video-vjepa: temporal video embedding (VjepaEmbedder).
+#   Current backend: CLIP-mean-pool fallback (no extra deps).
+#   Future: add `ort = "2"` here once VJEPA-2 / SigLIP-2 ONNX export stabilises.
+video-vjepa = []
 
 [dev-dependencies]
 tempfile = "3"
