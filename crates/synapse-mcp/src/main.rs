@@ -10,8 +10,8 @@ use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
-use synapse_market::ffi::smx_query_range;
 use synapse_market::Market;
+use synapse_market::ffi::smx_query_range;
 
 #[derive(Parser)]
 #[command(name = "synapse-mcp", about = "MCP server (stdio) for synapsed")]
@@ -92,6 +92,22 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
             "serverInfo": {"name": "synapse", "version": env!("CARGO_PKG_VERSION")}
         })),
         "tools/list" => Ok(json!({"tools": [
+            // ── Coding-agent-friendly aliases ────────────────────────────────
+            {"name": "memory_save", "description": "Save a memory with optional tags. Returns doc id.", "inputSchema": {"type": "object", "properties": {
+                "text": {"type": "string"}, "title": {"type": "string"},
+                "tags": {"type": "array", "items": {"type": "string"}}
+            }, "required": ["text"]}},
+            {"name": "memory_search", "description": "Semantic + keyword search over memories. Returns top-k results.", "inputSchema": {"type": "object", "properties": {
+                "query": {"type": "string"}, "k": {"type": "integer", "default": 10},
+                "mode": {"type": "string", "enum": ["Lex", "Vec", "Hybrid"], "default": "Hybrid"}
+            }, "required": ["query"]}},
+            {"name": "memory_recent", "description": "Return the n most recently saved memories.", "inputSchema": {"type": "object", "properties": {
+                "n": {"type": "integer", "default": 20}
+            }}},
+            {"name": "memory_delete", "description": "Delete a memory by id.", "inputSchema": {"type": "object", "properties": {
+                "id": {"type": "integer"}
+            }, "required": ["id"]}},
+            // ── Low-level tools ───────────────────────────────────────────────
             {"name": "put", "description": "Append a memory.", "inputSchema": {"type": "object", "properties": {
                 "text": {"type": "string"}, "title": {"type": "string"}, "uri": {"type": "string"}, "embed": {"type": "boolean"}
             }, "required": ["text"]}},
@@ -155,6 +171,41 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
 
 async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
     let req = match name {
+        // ── Coding-agent aliases ──────────────────────────────────────────────
+        "memory_save" => {
+            let tags = args
+                .get("tags")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(","))
+                .unwrap_or_default();
+            let title = args.get("title").and_then(|v| v.as_str());
+            let uri_str = if tags.is_empty() { String::new() } else { format!("tags:{tags}") };
+            json!({"op": "Put", "args": {
+                "title": title,
+                "uri": if uri_str.is_empty() { Value::Null } else { Value::String(uri_str) },
+                "text": args.get("text").and_then(|v| v.as_str()).unwrap_or_default(),
+                "meta": null,
+                "embed": false,
+            }})
+        }
+        "memory_search" => json!({"op": "Search", "args": {
+            "mode": args.get("mode").and_then(|v| v.as_str()).unwrap_or("Lex"),
+            "q": args.get("query").and_then(|v| v.as_str()).unwrap_or_default(),
+            "limit": args.get("k").and_then(|v| v.as_u64()).unwrap_or(10),
+            "embed_query": false,
+        }}),
+        "memory_recent" => json!({"op": "Timeline", "args": {
+            "limit": args.get("n").and_then(|v| v.as_u64()).unwrap_or(20),
+            "offset": 0,
+        }}),
+        "memory_delete" => {
+            let id = args
+                .get("id")
+                .and_then(|v| v.as_i64())
+                .context("memory_delete requires id")?;
+            json!({"op": "Merge", "args": {"id": id, "state": []}})
+        }
+        // ── Low-level pass-throughs ───────────────────────────────────────────
         "put" => json!({"op": "Put", "args": {
             "title": args.get("title"), "uri": args.get("uri"),
             "text": args.get("text").and_then(|v| v.as_str()).unwrap_or_default(),
@@ -231,19 +282,10 @@ fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Val
     let m = Market::open(market_db).context("open market db")?;
     match name {
         "smx_candles" => {
-            let ticker = args
-                .get("ticker")
-                .and_then(|v| v.as_str())
-                .context("ticker")?;
-            let start = args
-                .get("start")
-                .and_then(|v| v.as_i64())
-                .context("start")?;
+            let ticker = args.get("ticker").and_then(|v| v.as_str()).context("ticker")?;
+            let start = args.get("start").and_then(|v| v.as_i64()).context("start")?;
             let end = args.get("end").and_then(|v| v.as_i64()).context("end")?;
-            let limit = args
-                .get("limit")
-                .and_then(|v| v.as_u64().map(|n| n as usize))
-                .unwrap_or(500);
+            let limit = args.get("limit").and_then(|v| v.as_u64().map(|n| n as usize)).unwrap_or(500);
             let rows = smx_query_range(&m, ticker, start, end).unwrap_or_default();
             let candles: Vec<Value> = rows
                 .into_iter()
@@ -255,18 +297,9 @@ fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Val
             Ok(json!({"ticker": ticker, "candles": candles}))
         }
         "smx_signal_similar" => {
-            let ticker = args
-                .get("ticker")
-                .and_then(|v| v.as_str())
-                .context("ticker")?;
-            let date_ts = args
-                .get("date_ts")
-                .and_then(|v| v.as_i64())
-                .context("date_ts")?;
-            let n = args
-                .get("n")
-                .and_then(|v| v.as_u64().map(|n| n as usize))
-                .unwrap_or(10);
+            let ticker = args.get("ticker").and_then(|v| v.as_str()).context("ticker")?;
+            let date_ts = args.get("date_ts").and_then(|v| v.as_i64()).context("date_ts")?;
+            let n = args.get("n").and_then(|v| v.as_u64().map(|n| n as usize)).unwrap_or(10);
             let similar = m.regime_search(ticker, date_ts, n)?;
             let out: Vec<Value> = similar
                 .into_iter()
@@ -275,10 +308,7 @@ fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Val
             Ok(json!({"ticker": ticker, "similar": out}))
         }
         "smx_pattern_stats" => {
-            let pattern = args
-                .get("pattern")
-                .and_then(|v| v.as_str())
-                .context("pattern")?;
+            let pattern = args.get("pattern").and_then(|v| v.as_str()).context("pattern")?;
             // Query signal_patterns table if it exists, else return stub
             let count: i64 = m
                 .conn
@@ -342,18 +372,10 @@ fn pearson(a: &[f64], b: &[f64]) -> f64 {
     let (a, b) = (&a[..n], &b[..n]);
     let mean_a = a.iter().sum::<f64>() / n as f64;
     let mean_b = b.iter().sum::<f64>() / n as f64;
-    let num: f64 = a
-        .iter()
-        .zip(b)
-        .map(|(x, y)| (x - mean_a) * (y - mean_b))
-        .sum();
+    let num: f64 = a.iter().zip(b).map(|(x, y)| (x - mean_a) * (y - mean_b)).sum();
     let da: f64 = a.iter().map(|x| (x - mean_a).powi(2)).sum::<f64>().sqrt();
     let db: f64 = b.iter().map(|y| (y - mean_b).powi(2)).sum::<f64>().sqrt();
-    if da * db == 0.0 {
-        0.0
-    } else {
-        num / (da * db)
-    }
+    if da * db == 0.0 { 0.0 } else { num / (da * db) }
 }
 
 fn json_array_to_bytes(v: Option<&Value>) -> Result<Vec<u8>> {
