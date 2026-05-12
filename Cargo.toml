@@ -181,3 +181,15 @@ debug = false
 incremental = false
 
 # Use this for production daemon binary: `cargo build --profile release-fast -p synapsed`
+
+# ANN bench profile: native CPU + fat LTO + native-tuned.
+# Usage: RUSTFLAGS="-C target-cpu=native" cargo bench --profile release-bench -p synapse-ann
+[profile.release-bench]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "none"
+debug = true
+overflow-checks = false

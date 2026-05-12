@@ -52,6 +52,26 @@ pub trait AnnIndex: Send + Sync {
         Ok(hits)
     }
 
+    /// Batch kNN search: run `queries` in parallel via rayon (feature `ann-batch`).
+    /// Falls back to sequential when the feature is absent or the pool is busy.
+    /// Returns one result-vec per query, same order.
+    #[allow(clippy::type_complexity)]
+    fn search_batch(
+        &self,
+        queries: &[Vec<f32>],
+        k: usize,
+    ) -> Vec<Result<Vec<(u64, f32)>, AnnError>> {
+        #[cfg(feature = "ann-batch")]
+        {
+            use rayon::prelude::*;
+            queries.par_iter().map(|q| self.search(q, k)).collect()
+        }
+        #[cfg(not(feature = "ann-batch"))]
+        {
+            queries.iter().map(|q| self.search(q, k)).collect()
+        }
+    }
+
     /// Current number of inserted vectors.
     fn len(&self) -> usize;
 
@@ -91,3 +111,5 @@ pub mod usearch_backend;
 pub use usearch_backend::UsearchIndex;
 
 // TODO(PR-A2): pub mod ivfpq;
+
+pub mod cascade;

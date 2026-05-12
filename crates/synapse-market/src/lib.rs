@@ -6,6 +6,9 @@
 //!  - News-FTS: FTS5 headline+body, graph edges to tickers
 //!  - Backtest: deterministic replay, Strategy trait, BacktestReport
 
+pub mod store;
+pub mod series;
+
 mod ohlcv;
 mod regime;
 mod news;

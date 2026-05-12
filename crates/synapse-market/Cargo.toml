@@ -16,6 +16,8 @@ serde.workspace = true
 serde_json.workspace = true
 rusqlite.workspace = true
 tracing.workspace = true
+memmap2 = "0.9"
+blake3 = "1"
 synapse-core = { path = "../synapse-core" }
 
 [features]
@@ -36,6 +38,11 @@ features = ["csv", "parquet"]
 
 [dev-dependencies]
 tempfile = "3"
+
+[[bench]]
+name = "w1_candle_range"
+path = "benches/w1_candle_range.rs"
+harness = false
 
 [[example]]
 name = "backtest_demo"
