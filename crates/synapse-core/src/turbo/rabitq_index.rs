@@ -15,7 +15,9 @@
 //! For memory-constrained deployments, see `search` (Stages A+B only) +
 //! caller-provided f32 verify via `encoder()`.
 
-use crate::turbo::rabitq_rerank::{build_encoder, dot_estimator, hamming_u8, RaBitQCode, RaBitQEncoder};
+use crate::turbo::rabitq_rerank::{
+    build_encoder, dot_estimator, hamming_u8, RaBitQCode, RaBitQEncoder,
+};
 use std::collections::BinaryHeap;
 
 pub struct RaBitQIndex {
@@ -49,12 +51,27 @@ impl RaBitQIndex {
             codes.push(encoder.encode(&v).expect("dim matches"));
             vecs.push(v);
         }
-        Self { encoder, ids, codes, vecs, dim }
+        Self {
+            encoder,
+            ids,
+            codes,
+            vecs,
+            dim,
+        }
     }
 
-    #[must_use] pub fn len(&self) -> usize { self.ids.len() }
-    #[must_use] pub fn is_empty(&self) -> bool { self.ids.is_empty() }
-    #[must_use] pub const fn dim(&self) -> usize { self.dim }
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
+    #[must_use]
+    pub const fn dim(&self) -> usize {
+        self.dim
+    }
 
     /// Full 3-stage cascade: Hamming → RaBitQ → F32 verify.
     ///
@@ -74,14 +91,19 @@ impl RaBitQIndex {
         }
         let n = self.ids.len();
         let hamming_n = hamming_n.unwrap_or(k.saturating_mul(50)).max(k).min(n);
-        let rabitq_n = rabitq_n.unwrap_or(k.saturating_mul(10)).max(k).min(hamming_n);
+        let rabitq_n = rabitq_n
+            .unwrap_or(k.saturating_mul(10))
+            .max(k)
+            .min(hamming_n);
 
         // Stage A: Hamming sweep (rotated query bits vs RaBitQ code bits)
         let qr = self.encoder.rotate(query);
         let bpr = self.dim.div_ceil(8);
         let mut q_bits = vec![0_u8; bpr];
         for (i, &v) in qr.iter().enumerate() {
-            if v >= 0.0 { q_bits[i / 8] |= 1 << (i % 8); }
+            if v >= 0.0 {
+                q_bits[i / 8] |= 1 << (i % 8);
+            }
         }
 
         let mut heap_a = BinaryHeap::<(u32, usize)>::with_capacity(hamming_n + 1);
@@ -108,7 +130,11 @@ impl RaBitQIndex {
         let mut final_hits: Vec<(i64, f32)> = scored_b
             .into_iter()
             .map(|(i, _)| {
-                let exact: f32 = self.vecs[i].iter().zip(query.iter()).map(|(a, b)| a * b).sum();
+                let exact: f32 = self.vecs[i]
+                    .iter()
+                    .zip(query.iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
                 (self.ids[i], exact)
             })
             .collect();
@@ -130,7 +156,9 @@ impl RaBitQIndex {
         let bpr = self.dim.div_ceil(8);
         let mut q_bits = vec![0_u8; bpr];
         for (i, &v) in qr.iter().enumerate() {
-            if v >= 0.0 { q_bits[i / 8] |= 1 << (i % 8); }
+            if v >= 0.0 {
+                q_bits[i / 8] |= 1 << (i % 8);
+            }
         }
 
         let mut heap = BinaryHeap::<(u32, usize)>::with_capacity(rerank_n + 1);
@@ -147,7 +175,12 @@ impl RaBitQIndex {
 
         let mut reranked: Vec<(i64, f32)> = cands
             .into_iter()
-            .map(|i| (self.ids[i], dot_estimator(&qr, &self.encoder, &self.codes[i])))
+            .map(|i| {
+                (
+                    self.ids[i],
+                    dot_estimator(&qr, &self.encoder, &self.codes[i]),
+                )
+            })
             .collect();
 
         reranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -156,7 +189,9 @@ impl RaBitQIndex {
     }
 
     /// Expose encoder for caller-side Stage C.
-    pub fn encoder(&self) -> &RaBitQEncoder { &self.encoder }
+    pub fn encoder(&self) -> &RaBitQEncoder {
+        &self.encoder
+    }
 }
 
 #[cfg(test)]
@@ -165,7 +200,9 @@ mod tests {
 
     fn norm(v: &mut [f32]) {
         let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
-        for x in v.iter_mut() { *x /= n; }
+        for x in v.iter_mut() {
+            *x /= n;
+        }
     }
 
     #[test]
@@ -194,7 +231,9 @@ mod tests {
         let rows = vec![(1_i64, vec![1.0_f32, 0.0])];
         let idx = RaBitQIndex::build(rows, 0);
         assert!(idx.search(&[1.0, 0.0, 0.0], 1, None).is_empty());
-        assert!(idx.search_cascade(&[1.0, 0.0, 0.0], 1, None, None).is_empty());
+        assert!(idx
+            .search_cascade(&[1.0, 0.0, 0.0], 1, None, None)
+            .is_empty());
     }
 
     /// Recall@10 + latency bench: 10k corpus, 100 queries, 384-dim.
@@ -204,8 +243,8 @@ mod tests {
     /// Latency: <1ms release; <20ms debug (O(D²) rotation dominates unoptimized).
     #[test]
     fn bench_10k_384_recall_and_latency() {
-        use rand::{SeedableRng, RngExt};
         use rand::rngs::StdRng;
+        use rand::{RngExt, SeedableRng};
         use std::collections::HashSet;
 
         let dim = 384_usize;
@@ -270,7 +309,10 @@ mod tests {
             recall, us_per_q, hamming_n, rabitq_n
         );
 
-        assert!(recall >= 0.90, "R@10={recall:.3} < 0.90 — recall regression");
+        assert!(
+            recall >= 0.90,
+            "R@10={recall:.3} < 0.90 — recall regression"
+        );
         assert!(us_per_q < 50_000.0, "latency {us_per_q:.1}µs > 50ms debug");
     }
 }

@@ -1,7 +1,7 @@
+use super::{parser::Parser, LiveTick, TickStream};
+use crate::Result;
 use futures_util::StreamExt;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use crate::Result;
-use super::{TickStream, LiveTick, parser::Parser};
 
 /// Live WebSocket tick source.
 pub struct WebSocketTickStream {
@@ -15,9 +15,14 @@ pub struct WebSocketTickStream {
 impl WebSocketTickStream {
     /// Connect to `url` and return a ready stream.
     pub async fn connect(url: &str, parser: Parser) -> Result<Self> {
-        let (ws, _) = connect_async(url).await
+        let (ws, _) = connect_async(url)
+            .await
             .map_err(|e| crate::Error::Market(format!("ws connect: {e}")))?;
-        Ok(Self { url: url.to_string(), parser, inner: ws })
+        Ok(Self {
+            url: url.to_string(),
+            parser,
+            inner: ws,
+        })
     }
 }
 

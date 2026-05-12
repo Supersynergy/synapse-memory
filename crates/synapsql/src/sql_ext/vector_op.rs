@@ -29,7 +29,8 @@ impl VectorOp {
         // Fast-path: skip if no operator.
         let arrow_pos = sql.find("<=>")?;
         let before = sql[..arrow_pos].trim_end();
-        let column = before.rsplit_once(' ')
+        let column = before
+            .rsplit_once(' ')
             .map(|(_, c)| c)
             .unwrap_or(before)
             .trim_matches(|c: char| !c.is_alphanumeric() && c != '_')
@@ -44,10 +45,16 @@ impl VectorOp {
             .to_owned();
 
         // Extract LIMIT k (best-effort).
-        let k = sql.to_ascii_uppercase()
+        let k = sql
+            .to_ascii_uppercase()
             .find("LIMIT")
-            .and_then(|p| sql[p + 5..].trim().split_whitespace().next()
-                .and_then(|n| n.parse().ok()))
+            .and_then(|p| {
+                sql[p + 5..]
+                    .trim()
+                    .split_whitespace()
+                    .next()
+                    .and_then(|n| n.parse().ok())
+            })
             .unwrap_or(10);
 
         Some(VectorOp { column, param, k })
@@ -92,7 +99,13 @@ mod tests {
         let sql = "SELECT id FROM docs WHERE embedding <=> :q LIMIT 5";
         let op = VectorOp::parse(sql).unwrap();
         let result = op.execute(&[0.1_f32, 0.2, 0.3]);
-        assert!(result.is_err(), "execute must return Err (not silent vec![]) until embedding pipeline is wired");
-        matches!(result.unwrap_err(), VecSearchError::EmbeddingPipelineNotWired);
+        assert!(
+            result.is_err(),
+            "execute must return Err (not silent vec![]) until embedding pipeline is wired"
+        );
+        matches!(
+            result.unwrap_err(),
+            VecSearchError::EmbeddingPipelineNotWired
+        );
     }
 }

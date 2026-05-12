@@ -145,9 +145,8 @@ pub fn personalized_pagerank(
     };
     let mut r: HashMap<i64, f64> = teleport.clone();
 
-    let mut stmt = conn.prepare_cached(
-        "SELECT dst_id, weight FROM memory_edges WHERE src_id = ?1 LIMIT 64",
-    )?;
+    let mut stmt =
+        conn.prepare_cached("SELECT dst_id, weight FROM memory_edges WHERE src_id = ?1 LIMIT 64")?;
 
     for _ in 0..iters {
         let mut next: HashMap<i64, f64> = HashMap::with_capacity(r.len() * 2);
@@ -353,16 +352,40 @@ mod tests {
     // 10 synthetic docs: physics, Einstein, Bohr, collaborators, relativity.
     fn populate(conn: &Connection) {
         let docs: &[(i64, &str)] = &[
-            (1, "Albert Einstein published the theory of General Relativity in 1915."),
-            (2, "Niels Bohr and Albert Einstein debated quantum mechanics at Solvay."),
-            (3, "Max Planck introduced quantum theory which Einstein extended."),
-            (4, "Marie Curie won the Nobel Prize in Physics and Chemistry."),
+            (
+                1,
+                "Albert Einstein published the theory of General Relativity in 1915.",
+            ),
+            (
+                2,
+                "Niels Bohr and Albert Einstein debated quantum mechanics at Solvay.",
+            ),
+            (
+                3,
+                "Max Planck introduced quantum theory which Einstein extended.",
+            ),
+            (
+                4,
+                "Marie Curie won the Nobel Prize in Physics and Chemistry.",
+            ),
             (5, "Werner Heisenberg formulated the uncertainty principle."),
             (6, "Erwin Schrodinger developed wave mechanics equations."),
-            (7, "Einstein and Schrodinger exchanged letters about wave functions."),
-            (8, "Bohr and Heisenberg had the Copenhagen debate on quantum interpretation."),
-            (9, "General Relativity predicts gravitational lensing near massive objects."),
-            (10, "Max Planck and Einstein shared views on statistical mechanics."),
+            (
+                7,
+                "Einstein and Schrodinger exchanged letters about wave functions.",
+            ),
+            (
+                8,
+                "Bohr and Heisenberg had the Copenhagen debate on quantum interpretation.",
+            ),
+            (
+                9,
+                "General Relativity predicts gravitational lensing near massive objects.",
+            ),
+            (
+                10,
+                "Max Planck and Einstein shared views on statistical mechanics.",
+            ),
         ];
         for (id, text) in docs {
             insert_doc(conn, *id, text);
@@ -375,21 +398,35 @@ mod tests {
     fn entities_extracted_from_text() {
         let text = "Albert Einstein collaborated with Niels Bohr on quantum theory.";
         let ents = extract_entities_regex(text);
-        assert!(ents.iter().any(|e| e.contains("Einstein")), "expected Einstein: {:?}", ents);
-        assert!(ents.iter().any(|e| e.contains("Bohr")), "expected Bohr: {:?}", ents);
+        assert!(
+            ents.iter().any(|e| e.contains("Einstein")),
+            "expected Einstein: {:?}",
+            ents
+        );
+        assert!(
+            ents.iter().any(|e| e.contains("Bohr")),
+            "expected Bohr: {:?}",
+            ents
+        );
     }
 
     #[test]
     fn build_kg_populates_entities_and_memories() {
         let conn = setup_db();
         insert_doc(&conn, 1, "Albert Einstein published General Relativity.");
-        build_kg_from_docs(&conn, &[(1, "Albert Einstein published General Relativity.")]).unwrap();
+        build_kg_from_docs(
+            &conn,
+            &[(1, "Albert Einstein published General Relativity.")],
+        )
+        .unwrap();
         let ent_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM entities", [], |r| r.get(0))
             .unwrap();
         assert!(ent_count >= 1, "no entities inserted");
         let mem_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM memories WHERE doc_id = 1", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM memories WHERE doc_id = 1", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(mem_count >= 1, "no memories for doc 1");
     }
@@ -397,13 +434,24 @@ mod tests {
     #[test]
     fn build_kg_creates_cooccurrence_edges() {
         let conn = setup_db();
-        insert_doc(&conn, 1, "Albert Einstein and Niels Bohr debated at Solvay.");
-        build_kg_from_docs(&conn, &[(1, "Albert Einstein and Niels Bohr debated at Solvay.")])
-            .unwrap();
+        insert_doc(
+            &conn,
+            1,
+            "Albert Einstein and Niels Bohr debated at Solvay.",
+        );
+        build_kg_from_docs(
+            &conn,
+            &[(1, "Albert Einstein and Niels Bohr debated at Solvay.")],
+        )
+        .unwrap();
         let edge_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM memory_edges", [], |r| r.get(0))
             .unwrap();
-        assert!(edge_count >= 2, "expected bidirectional co-occur edges, got {}", edge_count);
+        assert!(
+            edge_count >= 2,
+            "expected bidirectional co-occur edges, got {}",
+            edge_count
+        );
     }
 
     #[test]
@@ -416,7 +464,10 @@ mod tests {
         // docs 1,2,3,7,10 mention Einstein — at least one should rank in top-5
         let top_ids: Vec<i64> = results.iter().map(|(id, _)| *id).collect();
         let einstein_docs: &[i64] = &[1, 2, 3, 7, 10];
-        let recall = top_ids.iter().filter(|id| einstein_docs.contains(id)).count();
+        let recall = top_ids
+            .iter()
+            .filter(|id| einstein_docs.contains(id))
+            .count();
         assert!(recall >= 1, "no Einstein doc in top-5: {:?}", top_ids);
     }
 
@@ -445,6 +496,9 @@ mod tests {
         let merged = rrf_hippo(&vec_hits, &hippo_hits, 0.9, 2);
         assert!(!merged.is_empty());
         // with alpha_graph=0.9, doc 2 should win
-        assert_eq!(merged[0].0, 2, "expected doc 2 to win with high alpha_graph");
+        assert_eq!(
+            merged[0].0, 2,
+            "expected doc 2 to win with high alpha_graph"
+        );
     }
 }

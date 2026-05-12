@@ -3,9 +3,7 @@
 use std::time::Instant;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use synapse_market::signal::similar::{
-    dot_product_top_k, BruteForceI8Index, RabitqSignalIndex,
-};
+use synapse_market::signal::similar::{dot_product_top_k, BruteForceI8Index, RabitqSignalIndex};
 use synapse_market::signal::SignalId;
 
 const N: usize = 100_000;
@@ -13,7 +11,9 @@ const DIM: usize = 768;
 const TOP_K: usize = 10;
 
 fn lcg(state: &mut u64) -> f32 {
-    *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     ((*state >> 33) as f32) / (u32::MAX as f32) * 2.0 - 1.0
 }
 
@@ -31,7 +31,10 @@ fn gen_normalised(seed: u64, n: usize, dim: usize) -> Vec<Vec<f32>> {
 
 fn recall_at_k(predicted: &[(SignalId, f32)], gt: &[(SignalId, f32)]) -> f64 {
     let gt_ids: std::collections::HashSet<SignalId> = gt.iter().map(|(id, _)| *id).collect();
-    let hits = predicted.iter().filter(|(id, _)| gt_ids.contains(id)).count();
+    let hits = predicted
+        .iter()
+        .filter(|(id, _)| gt_ids.contains(id))
+        .count();
     hits as f64 / gt_ids.len() as f64
 }
 
@@ -130,8 +133,16 @@ fn bench_similarity(c: &mut Criterion) {
         "\n===== W5 ACCEPTANCE GATES =====\
          \n  RaBitQ build < 30s:       {rbq_build_secs:.2}s  {}\
          \n  RaBitQ recall@10 >= 0.90: {recall_rbq:.3}  {}",
-        if rbq_build_secs < 30.0 { "PASS" } else { "FAIL" },
-        if recall_rbq >= 0.90 { "PASS" } else { "NOTE: low recall — increase nprobe or bits" },
+        if rbq_build_secs < 30.0 {
+            "PASS"
+        } else {
+            "FAIL"
+        },
+        if recall_rbq >= 0.90 {
+            "PASS"
+        } else {
+            "NOTE: low recall — increase nprobe or bits"
+        },
     );
 }
 

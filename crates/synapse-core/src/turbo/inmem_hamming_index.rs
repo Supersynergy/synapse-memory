@@ -14,19 +14,18 @@ use rayon::prelude::*;
 const HAMMING_MIN_LEN: usize = 512;
 const SINGLE_THREAD_THRESHOLD: usize = 500_000;
 
-static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> =
-    std::sync::LazyLock::new(|| {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(1)
-            .thread_name(|i| format!("synapse-hamming-search-{i}"))
-            .build()
-            .expect("rayon hamming pool build")
-    });
+static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> = std::sync::LazyLock::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .thread_name(|i| format!("synapse-hamming-search-{i}"))
+        .build()
+        .expect("rayon hamming pool build")
+});
 
 /// 1-bit Hamming-distance brute-force index.
 pub struct InMemoryHammingIndex {
     ids: Vec<i64>,
-    bits: Vec<u8>,   // row-major, bytes per row = bpr
+    bits: Vec<u8>, // row-major, bytes per row = bpr
     bpr: usize,
     dim: usize,
 }
@@ -39,7 +38,12 @@ impl InMemoryHammingIndex {
     #[must_use]
     pub fn build(rows: Vec<(i64, Vec<f32>)>) -> Self {
         if rows.is_empty() {
-            return Self { ids: Vec::new(), bits: Vec::new(), bpr: 0, dim: 0 };
+            return Self {
+                ids: Vec::new(),
+                bits: Vec::new(),
+                bpr: 0,
+                dim: 0,
+            };
         }
         let dim = rows[0].1.len();
         assert!(rows.iter().all(|(_, v)| v.len() == dim), "ragged rows");
@@ -56,23 +60,36 @@ impl InMemoryHammingIndex {
                 }
             }
         }
-        Self { ids, bits, bpr, dim }
+        Self {
+            ids,
+            bits,
+            bpr,
+            dim,
+        }
     }
 
     /// Row count.
     #[must_use]
-    pub fn len(&self) -> usize { self.ids.len() }
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
     /// Empty probe.
     #[must_use]
-    pub fn is_empty(&self) -> bool { self.ids.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
     /// Dim.
     #[must_use]
-    pub const fn dim(&self) -> usize { self.dim }
+    pub const fn dim(&self) -> usize {
+        self.dim
+    }
 
     /// Row IDs in insertion order. Exposed for cascade indexes that need to
     /// map result IDs back to code-index positions (e.g. RaBitQIndex).
     #[must_use]
-    pub fn ids(&self) -> &[i64] { &self.ids }
+    pub fn ids(&self) -> &[i64] {
+        &self.ids
+    }
 
     /// Position of `id` in the index, or None if absent.
     #[must_use]
@@ -113,8 +130,12 @@ impl InMemoryHammingIndex {
                         || BinaryHeap::<(u32, usize)>::with_capacity(k + 1),
                         |mut heap, (i, row)| {
                             let d = hamming_u32(&q_bits, row);
-                            if heap.len() < k { heap.push((d, i)); }
-                            else if d < heap.peek().unwrap().0 { heap.pop(); heap.push((d, i)); }
+                            if heap.len() < k {
+                                heap.push((d, i));
+                            } else if d < heap.peek().unwrap().0 {
+                                heap.pop();
+                                heap.push((d, i));
+                            }
                             heap
                         },
                     )
@@ -122,8 +143,12 @@ impl InMemoryHammingIndex {
                         || BinaryHeap::<(u32, usize)>::with_capacity(k + 1),
                         |mut a, b| {
                             for item in b.into_iter() {
-                                if a.len() < k { a.push(item); }
-                                else if item.0 < a.peek().unwrap().0 { a.pop(); a.push(item); }
+                                if a.len() < k {
+                                    a.push(item);
+                                } else if item.0 < a.peek().unwrap().0 {
+                                    a.pop();
+                                    a.push(item);
+                                }
                             }
                             a
                         },
@@ -134,8 +159,12 @@ impl InMemoryHammingIndex {
             let mut heap = BinaryHeap::<(u32, usize)>::with_capacity(k + 1);
             for (i, row) in self.bits.chunks(self.bpr).enumerate() {
                 let d = hamming_u32(&q_bits, row);
-                if heap.len() < k { heap.push((d, i)); }
-                else if d < heap.peek().unwrap().0 { heap.pop(); heap.push((d, i)); }
+                if heap.len() < k {
+                    heap.push((d, i));
+                } else if d < heap.peek().unwrap().0 {
+                    heap.pop();
+                    heap.push((d, i));
+                }
             }
             heap.into_sorted_vec()
         };

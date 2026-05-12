@@ -19,7 +19,10 @@ impl MmapFile {
             .create(true)
             .truncate(false)
             .open(path.as_ref())?;
-        Ok(Self { file, path: path.as_ref().to_path_buf() })
+        Ok(Self {
+            file,
+            path: path.as_ref().to_path_buf(),
+        })
     }
 
     /// Current number of pages stored.
@@ -46,9 +49,17 @@ impl MmapFile {
         let offset = page_idx * PAGE_SIZE;
         let file_len = self.file.metadata()?.len() as usize;
         if offset + PAGE_SIZE > file_len {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "page out of range"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "page out of range",
+            ));
         }
-        let mmap = unsafe { MmapOptions::new().offset(offset as u64).len(PAGE_SIZE).map(&self.file)? };
+        let mmap = unsafe {
+            MmapOptions::new()
+                .offset(offset as u64)
+                .len(PAGE_SIZE)
+                .map(&self.file)?
+        };
         Ok(mmap.to_vec())
     }
 

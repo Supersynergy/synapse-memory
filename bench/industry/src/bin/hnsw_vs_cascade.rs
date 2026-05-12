@@ -72,7 +72,12 @@ fn recall_at_k_i64(result_ids: &[i64], gt_row: &[i64], k: usize) -> f64 {
     if gt.is_empty() {
         return 1.0;
     }
-    result_ids.iter().take(k).filter(|id| gt.contains(id)).count() as f64 / gt.len() as f64
+    result_ids
+        .iter()
+        .take(k)
+        .filter(|id| gt.contains(id))
+        .count() as f64
+        / gt.len() as f64
 }
 
 fn recall_at_k_u64(hits: &[(u64, f32)], gt_row: &[i64], k: usize) -> f64 {
@@ -80,7 +85,11 @@ fn recall_at_k_u64(hits: &[(u64, f32)], gt_row: &[i64], k: usize) -> f64 {
     if gt.is_empty() {
         return 1.0;
     }
-    hits.iter().take(k).filter(|(id, _)| gt.contains(id)).count() as f64 / gt.len() as f64
+    hits.iter()
+        .take(k)
+        .filter(|(id, _)| gt.contains(id))
+        .count() as f64
+        / gt.len() as f64
 }
 
 fn pct(sorted: &[f64], p: f64) -> f64 {
@@ -248,9 +257,8 @@ fn main() {
     // ── Build NdArraySearch (cascade / own ndarray backend) ──────────────────
     eprintln!("\nBuilding NdArraySearch (own binary-cascade backend)...");
     let t_build = Instant::now();
-    let cascade_idx =
-        NdArraySearch::from_vecs(corpus_ids.clone(), corpus_vecs.clone(), dim)
-            .expect("NdArraySearch::from_vecs");
+    let cascade_idx = NdArraySearch::from_vecs(corpus_ids.clone(), corpus_vecs.clone(), dim)
+        .expect("NdArraySearch::from_vecs");
     let cascade_build_ms = t_build.elapsed().as_millis();
     eprintln!("  cascade build: {cascade_build_ms}ms");
 
@@ -352,12 +360,16 @@ fn main() {
             .map(|r| format!("cascade-{}", r.binary_k))
             .unwrap_or_else(|| "none".into());
         let cas_qps = cas.map(|r| format!("{:.0}", r.qps)).unwrap_or("-".into());
-        let cas_r = cas.map(|r| format!("{:.4}", r.recall10)).unwrap_or("-".into());
+        let cas_r = cas
+            .map(|r| format!("{:.4}", r.recall10))
+            .unwrap_or("-".into());
         let us_s = us
             .map(|r| format!("M={} ef={}", r.m, r.ef_s))
             .unwrap_or_else(|| "none".into());
         let us_qps = us.map(|r| format!("{:.0}", r.qps)).unwrap_or("-".into());
-        let us_r = us.map(|r| format!("{:.4}", r.recall10)).unwrap_or("-".into());
+        let us_r = us
+            .map(|r| format!("{:.4}", r.recall10))
+            .unwrap_or("-".into());
         println!(
             "{:<16} {:>8} {:>8}  {:<16} {:>8} {:>8}",
             cas_s, cas_qps, cas_r, us_s, us_qps, us_r

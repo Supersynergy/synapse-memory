@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use synapse_market::learn::{OnlineLearner, FtrlLearner};
+use synapse_market::learn::{FtrlLearner, OnlineLearner};
 
 fn rand_f32(seed: &mut u64) -> f32 {
     *seed ^= *seed << 13;
@@ -13,9 +13,7 @@ fn bench_update(c: &mut Criterion) {
     let mut seed = 999u64;
     let features: Vec<f32> = (0..16).map(|_| rand_f32(&mut seed)).collect();
     c.bench_function("ftrl_update_d16", |b| {
-        b.iter(|| {
-            learner.update(black_box(&features), black_box(1.0))
-        })
+        b.iter(|| learner.update(black_box(&features), black_box(1.0)))
     });
 }
 
@@ -29,9 +27,7 @@ fn bench_predict(c: &mut Criterion) {
     }
     let features: Vec<f32> = (0..16).map(|_| rand_f32(&mut seed)).collect();
     c.bench_function("ftrl_predict_d16", |b| {
-        b.iter(|| {
-            learner.predict(black_box(&features))
-        })
+        b.iter(|| learner.predict(black_box(&features)))
     });
 }
 

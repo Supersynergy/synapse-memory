@@ -14,7 +14,9 @@ fn main() {
 
     fn vec(seed: u64) -> Vec<f32> {
         (0..DIM)
-            .map(|i| ((seed.wrapping_mul(13) + i as u64).wrapping_mul(7) % 997) as f32 / 997.0 - 0.5)
+            .map(|i| {
+                ((seed.wrapping_mul(13) + i as u64).wrapping_mul(7) % 997) as f32 / 997.0 - 0.5
+            })
             .collect()
     }
 
@@ -86,10 +88,7 @@ fn main() {
     println!("    R@10  = {:.4}", r10_rerank);
     println!("    p50   = {} µs", percentile(&mut lat_rerank, 50));
     println!("    p99   = {} µs", percentile(&mut lat_rerank, 99));
-    println!(
-        "    delta R@10 = {:+.4}",
-        r10_rerank - r10_plain
-    );
+    println!("    delta R@10 = {:+.4}", r10_rerank - r10_plain);
 }
 
 #[cfg(not(feature = "ann-usearch"))]

@@ -270,8 +270,7 @@ pub fn encrypt_pack(pack: impl AsRef<Path>, out: impl AsRef<Path>, passphrase: &
     use age::secrecy::SecretString;
     use std::io::Write as _;
     let data = std::fs::read(pack)?;
-    let encryptor =
-        age::Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string()));
+    let encryptor = age::Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string()));
     let mut output = vec![];
     let mut writer = encryptor
         .wrap_output(&mut output)
@@ -288,7 +287,6 @@ pub fn decrypt_pack(
     out: impl AsRef<Path>,
     passphrase: &str,
 ) -> Result<()> {
-    
     use std::io::Read as _;
     let data = std::fs::read(enc_pack)?;
     let decryptor = match age::Decryptor::new(&data[..]).map_err(|e| Error::Other(e.to_string()))? {
@@ -333,7 +331,6 @@ mod tests {
 
     #[test]
     fn signed_roundtrip() {
-        
         use crate::sign::random_signing_key;
         let sk = random_signing_key();
         let db = tempfile::NamedTempFile::new().unwrap();

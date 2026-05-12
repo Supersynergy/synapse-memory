@@ -3,7 +3,6 @@
 /// 8 elements per iteration (2×4). Upcast to f32 accumulator avoids f16 overflow.
 /// float16x4_t + vcvt_f32_f16 are stable (no stdarch_neon_f16 gate).
 /// Scalar fallback: f32 accumulator via half::f16::to_f32().
-
 use half::f16;
 
 /// Scalar fallback — 4-way unrolled.
@@ -18,15 +17,17 @@ pub fn dot_f16_scalar(a: &[f16], b: &[f16]) -> f32 {
     let mut i = 0;
     while i + 4 <= n {
         unsafe {
-            acc0 += a.get_unchecked(i).to_f32()   * b.get_unchecked(i).to_f32();
-            acc1 += a.get_unchecked(i+1).to_f32() * b.get_unchecked(i+1).to_f32();
-            acc2 += a.get_unchecked(i+2).to_f32() * b.get_unchecked(i+2).to_f32();
-            acc3 += a.get_unchecked(i+3).to_f32() * b.get_unchecked(i+3).to_f32();
+            acc0 += a.get_unchecked(i).to_f32() * b.get_unchecked(i).to_f32();
+            acc1 += a.get_unchecked(i + 1).to_f32() * b.get_unchecked(i + 1).to_f32();
+            acc2 += a.get_unchecked(i + 2).to_f32() * b.get_unchecked(i + 2).to_f32();
+            acc3 += a.get_unchecked(i + 3).to_f32() * b.get_unchecked(i + 3).to_f32();
         }
         i += 4;
     }
     while i < n {
-        unsafe { acc0 += a.get_unchecked(i).to_f32() * b.get_unchecked(i).to_f32(); }
+        unsafe {
+            acc0 += a.get_unchecked(i).to_f32() * b.get_unchecked(i).to_f32();
+        }
         i += 1;
     }
     (acc0 + acc1) + (acc2 + acc3)
@@ -107,7 +108,9 @@ pub fn dot_f16_neon(a: &[f16], b: &[f16]) -> f32 {
 
     // scalar tail
     while i < n {
-        unsafe { result += a.get_unchecked(i).to_f32() * b.get_unchecked(i).to_f32(); }
+        unsafe {
+            result += a.get_unchecked(i).to_f32() * b.get_unchecked(i).to_f32();
+        }
         i += 1;
     }
     result
@@ -131,7 +134,9 @@ mod tests {
     use super::*;
     use half::f16;
 
-    fn v(xs: &[f32]) -> Vec<f16> { xs.iter().map(|&x| f16::from_f32(x)).collect() }
+    fn v(xs: &[f32]) -> Vec<f16> {
+        xs.iter().map(|&x| f16::from_f32(x)).collect()
+    }
 
     #[test]
     fn correctness_small() {
@@ -143,8 +148,12 @@ mod tests {
 
     #[test]
     fn scalar_vs_neon_dim128() {
-        let a: Vec<f16> = (0..128).map(|i| f16::from_f32((i % 10) as f32 * 0.1)).collect();
-        let b: Vec<f16> = (0..128).map(|i| f16::from_f32(((127-i) % 10) as f32 * 0.1)).collect();
+        let a: Vec<f16> = (0..128)
+            .map(|i| f16::from_f32((i % 10) as f32 * 0.1))
+            .collect();
+        let b: Vec<f16> = (0..128)
+            .map(|i| f16::from_f32(((127 - i) % 10) as f32 * 0.1))
+            .collect();
         let s = dot_f16_scalar(&a, &b);
         let n = dot_f16(&a, &b);
         assert!((s - n).abs() < 0.5, "scalar={s} neon={n}");
@@ -152,8 +161,12 @@ mod tests {
 
     #[test]
     fn scalar_vs_neon_dim256() {
-        let a: Vec<f16> = (0..256).map(|i| f16::from_f32((i % 20) as f32 * 0.05 - 0.5)).collect();
-        let b: Vec<f16> = (0..256).map(|i| f16::from_f32(((i*3) % 20) as f32 * 0.05 - 0.5)).collect();
+        let a: Vec<f16> = (0..256)
+            .map(|i| f16::from_f32((i % 20) as f32 * 0.05 - 0.5))
+            .collect();
+        let b: Vec<f16> = (0..256)
+            .map(|i| f16::from_f32(((i * 3) % 20) as f32 * 0.05 - 0.5))
+            .collect();
         let s = dot_f16_scalar(&a, &b);
         let n = dot_f16(&a, &b);
         assert!((s - n).abs() < 1.0, "scalar={s} neon={n}");
@@ -162,7 +175,9 @@ mod tests {
     #[test]
     fn non_multiple_of_8() {
         let a: Vec<f16> = (0..37).map(|i| f16::from_f32(i as f32 * 0.1)).collect();
-        let b: Vec<f16> = (0..37).map(|i| f16::from_f32((37-i) as f32 * 0.1)).collect();
+        let b: Vec<f16> = (0..37)
+            .map(|i| f16::from_f32((37 - i) as f32 * 0.1))
+            .collect();
         let s = dot_f16_scalar(&a, &b);
         let n = dot_f16(&a, &b);
         assert!((s - n).abs() < 0.5, "scalar={s} neon={n}");

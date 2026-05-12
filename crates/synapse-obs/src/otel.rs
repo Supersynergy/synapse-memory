@@ -13,13 +13,12 @@ pub fn init_tracer() -> anyhow::Result<()> {
     let tracer_provider = opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(exporter)
-        .with_trace_config(
-            sdktrace::Config::default()
-                .with_resource(opentelemetry_sdk::Resource::new(vec![
-                    opentelemetry::KeyValue::new("service.name", "synapse"),
-                    opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-                ])),
-        )
+        .with_trace_config(sdktrace::Config::default().with_resource(
+            opentelemetry_sdk::Resource::new(vec![
+                opentelemetry::KeyValue::new("service.name", "synapse"),
+                opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+            ]),
+        ))
         .install_batch(runtime::Tokio)?;
 
     let tracer = tracer_provider.tracer("synapse-core");

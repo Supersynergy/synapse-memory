@@ -1,8 +1,8 @@
 //! Posting-list codec: (DocId, Vec<f32>) entries, binary flat on disk, mmap'd on load.
 
-use std::{fs, path::Path};
-use memmap2::Mmap;
 use anyhow::Result;
+use memmap2::Mmap;
+use std::{fs, path::Path};
 
 /// Entry size in bytes: 8 (docid u64) + dim*4 (f32)
 #[inline]
@@ -47,7 +47,10 @@ impl MmapPostingList {
         let file = fs::File::open(path)?;
         // SAFETY: file is read-only; process must not truncate while mmap is live.
         let mmap = unsafe { Mmap::map(&file)? };
-        Ok(Self { mmap: Some(mmap), dim })
+        Ok(Self {
+            mmap: Some(mmap),
+            dim,
+        })
     }
 
     pub fn len(&self) -> usize {

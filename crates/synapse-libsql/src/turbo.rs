@@ -17,9 +17,9 @@
 //! - Use for: caches, comments, analytics, transient WP options
 //! - DO NOT use for: financial txns, authoritative state
 
+use crate::{Error, QueryResult, Store};
 use async_trait::async_trait;
 use libsql::{Builder, Connection};
-use crate::{Error, QueryResult, Store};
 use tokio::sync::Mutex;
 
 pub struct TurboLibsqlStore {
@@ -32,9 +32,7 @@ impl TurboLibsqlStore {
             .build()
             .await
             .map_err(|e| Error::Backend(e.to_string()))?;
-        let conn = db
-            .connect()
-            .map_err(|e| Error::Backend(e.to_string()))?;
+        let conn = db.connect().map_err(|e| Error::Backend(e.to_string()))?;
         // Apply turbo pragmas — order matters: page_size BEFORE any table create
         let pragmas = [
             "PRAGMA page_size=8192",
@@ -50,7 +48,9 @@ impl TurboLibsqlStore {
         for p in pragmas {
             let _ = conn.execute(p, ()).await;
         }
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     pub async fn checkpoint(&self) -> Result<(), Error> {
@@ -73,16 +73,26 @@ impl Store for TurboLibsqlStore {
                 .await
                 .map_err(|e| Error::Backend(e.to_string()))?;
             let mut count = 0u64;
-            while let Some(_) = rows.next().await.map_err(|e| Error::Backend(e.to_string()))? {
+            while let Some(_) = rows
+                .next()
+                .await
+                .map_err(|e| Error::Backend(e.to_string()))?
+            {
                 count += 1;
             }
-            Ok(QueryResult { affected: count, rows: vec![] })
+            Ok(QueryResult {
+                affected: count,
+                rows: vec![],
+            })
         } else {
             let affected = conn
                 .execute(sql, ())
                 .await
                 .map_err(|e| Error::Backend(e.to_string()))?;
-            Ok(QueryResult { affected, rows: vec![] })
+            Ok(QueryResult {
+                affected,
+                rows: vec![],
+            })
         }
     }
     async fn exec(&self, sql: &str) -> Result<u64, Error> {
@@ -101,7 +111,9 @@ mod tests {
     async fn turbo_inserts_work() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("turbo.db");
-        let s = TurboLibsqlStore::open_local(path.to_str().unwrap()).await.unwrap();
+        let s = TurboLibsqlStore::open_local(path.to_str().unwrap())
+            .await
+            .unwrap();
         s.exec("CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)")
             .await
             .unwrap();

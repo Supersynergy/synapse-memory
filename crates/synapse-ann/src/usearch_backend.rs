@@ -40,8 +40,7 @@ impl UsearchIndex {
     /// arrays; under-sizing forces realloc, over-sizing costs RAM.
     pub fn new(dim: usize, expected_capacity: usize) -> Result<Self, AnnError> {
         let opts = Self::default_opts(dim);
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(expected_capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -80,8 +79,7 @@ impl UsearchIndex {
             expansion_search,
             multi: false,
         };
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -98,8 +96,7 @@ impl UsearchIndex {
             expansion_search: 256,
             multi: false,
         };
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(expected_capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -117,8 +114,7 @@ impl UsearchIndex {
             expansion_search: 256,
             multi: false,
         };
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(expected_capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -218,7 +214,12 @@ impl UsearchIndex {
     /// search → restore. Trades latency for recall on the hot path while
     /// leaving build-time ef untouched. Not thread-safe with concurrent calls
     /// to `search` from other threads.
-    pub fn search_with_ef(&self, query: &[f32], k: usize, ef: usize) -> Result<Vec<(u64, f32)>, AnnError> {
+    pub fn search_with_ef(
+        &self,
+        query: &[f32],
+        k: usize,
+        ef: usize,
+    ) -> Result<Vec<(u64, f32)>, AnnError> {
         let prev = self.expansion_search();
         self.idx.change_expansion_search(ef.max(k));
         let r = AnnIndex::search(self, query, k);
@@ -241,8 +242,7 @@ impl UsearchIndex {
             )));
         }
         let opts = Self::default_opts(dim);
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         let path_str = path.to_string_lossy();
         idx.load(path_str.as_ref())
             .map_err(|e| AnnError::Corrupt(format!("usearch load {}: {e:?}", path.display())))?;
@@ -300,11 +300,7 @@ impl AnnIndex for UsearchIndex {
             .idx
             .search(query, k)
             .map_err(|e| AnnError::Other(format!("usearch search: {e:?}")))?;
-        Ok(matches
-            .keys
-            .into_iter()
-            .zip(matches.distances)
-            .collect())
+        Ok(matches.keys.into_iter().zip(matches.distances).collect())
     }
 
     /// usearch override: use runtime `change_expansion_search` to actually

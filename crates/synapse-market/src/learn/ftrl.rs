@@ -20,7 +20,12 @@ pub struct FtrlConfig {
 
 impl Default for FtrlConfig {
     fn default() -> Self {
-        Self { alpha: 0.1, beta: 1.0, l1: 0.0, l2: 0.0 }
+        Self {
+            alpha: 0.1,
+            beta: 1.0,
+            l1: 0.0,
+            l2: 0.0,
+        }
     }
 }
 
@@ -42,7 +47,12 @@ impl FtrlLearner {
     }
 
     pub fn with_config(dim: usize, cfg: FtrlConfig) -> Self {
-        Self { cfg, z: vec![0.0; dim], n: vec![0.0; dim], dim }
+        Self {
+            cfg,
+            z: vec![0.0; dim],
+            n: vec![0.0; dim],
+            dim,
+        }
     }
 
     /// Compute weight vector w from z, n (not stored — derived on the fly).
@@ -102,33 +112,53 @@ impl OnlineLearner for FtrlLearner {
         buf.extend_from_slice(&self.cfg.beta.to_le_bytes());
         buf.extend_from_slice(&self.cfg.l1.to_le_bytes());
         buf.extend_from_slice(&self.cfg.l2.to_le_bytes());
-        for &v in &self.z { buf.extend_from_slice(&v.to_le_bytes()); }
-        for &v in &self.n { buf.extend_from_slice(&v.to_le_bytes()); }
+        for &v in &self.z {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        for &v in &self.n {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
         buf
     }
 
     fn deserialize_from(bytes: &[u8]) -> Option<Self> {
-        if bytes.is_empty() || bytes[0] != 1 { return None; }
+        if bytes.is_empty() || bytes[0] != 1 {
+            return None;
+        }
         let mut pos = 1usize;
         let read_u32 = |pos: &mut usize| -> Option<u32> {
-            let b = bytes.get(*pos..*pos+4)?;
+            let b = bytes.get(*pos..*pos + 4)?;
             *pos += 4;
             Some(u32::from_le_bytes(b.try_into().ok()?))
         };
         let read_f32 = |pos: &mut usize| -> Option<f32> {
-            let b = bytes.get(*pos..*pos+4)?;
+            let b = bytes.get(*pos..*pos + 4)?;
             *pos += 4;
             Some(f32::from_le_bytes(b.try_into().ok()?))
         };
         let dim = read_u32(&mut pos)? as usize;
         let alpha = read_f32(&mut pos)?;
-        let beta  = read_f32(&mut pos)?;
-        let l1    = read_f32(&mut pos)?;
-        let l2    = read_f32(&mut pos)?;
+        let beta = read_f32(&mut pos)?;
+        let l1 = read_f32(&mut pos)?;
+        let l2 = read_f32(&mut pos)?;
         let mut z = Vec::with_capacity(dim);
         let mut n = Vec::with_capacity(dim);
-        for _ in 0..dim { z.push(read_f32(&mut pos)?); }
-        for _ in 0..dim { n.push(read_f32(&mut pos)?); }
-        Some(Self { cfg: FtrlConfig { alpha, beta, l1, l2 }, z, n, dim })
+        for _ in 0..dim {
+            z.push(read_f32(&mut pos)?);
+        }
+        for _ in 0..dim {
+            n.push(read_f32(&mut pos)?);
+        }
+        Some(Self {
+            cfg: FtrlConfig {
+                alpha,
+                beta,
+                l1,
+                l2,
+            },
+            z,
+            n,
+            dim,
+        })
     }
 }

@@ -1,8 +1,8 @@
 //! Prometheus metric definitions — shared global registry.
 
 use prometheus::{
-    exponential_buckets, Counter, Gauge, Histogram, HistogramOpts, HistogramVec,
-    IntCounter, IntGauge, Opts, Registry,
+    exponential_buckets, Counter, Gauge, Histogram, HistogramOpts, HistogramVec, IntCounter,
+    IntGauge, Opts, Registry,
 };
 use std::sync::OnceLock;
 

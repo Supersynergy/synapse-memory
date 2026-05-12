@@ -24,9 +24,13 @@ fn maxsim(query_tokens: &[Vec<f32>], doc_tokens: &[Vec<f32>]) -> f32 {
         let mut best = f32::MIN;
         for d in doc_tokens {
             let cos: f32 = q.iter().zip(d).map(|(a, b)| a * b).sum();
-            if cos > best { best = cos; }
+            if cos > best {
+                best = cos;
+            }
         }
-        if best > f32::MIN { total += best; }
+        if best > f32::MIN {
+            total += best;
+        }
     }
     total
 }
@@ -45,7 +49,10 @@ impl ColbertReranker {
     }
 
     pub fn is_loaded(&self) -> bool {
-        self.model_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+        self.model_path
+            .as_ref()
+            .map(|p| p.exists())
+            .unwrap_or(false)
     }
 }
 
@@ -81,11 +88,23 @@ mod tests {
     fn unloaded_passes_through() {
         let r = ColbertReranker::new(None);
         let hits = vec![
-            Hit { id: 1, uri: None, title: None, text: String::new(), score: 0.9 },
-            Hit { id: 2, uri: None, title: None, text: String::new(), score: 0.5 },
+            Hit {
+                id: 1,
+                uri: None,
+                title: None,
+                text: String::new(),
+                score: 0.9,
+            },
+            Hit {
+                id: 2,
+                uri: None,
+                title: None,
+                text: String::new(),
+                score: 0.5,
+            },
         ];
         let out = r.rerank("test", hits.clone(), 10).unwrap();
         assert_eq!(out.len(), 2);
-        assert_eq!(out[0].id, 1);  // order preserved
+        assert_eq!(out[0].id, 1); // order preserved
     }
 }

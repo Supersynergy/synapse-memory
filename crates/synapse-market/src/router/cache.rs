@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::Path;
 
-use super::{Plan, QueryKey, learn::ThompsonSampler};
+use super::{learn::ThompsonSampler, Plan, QueryKey};
 
 /// LRU plan cache with ε-greedy bandit routing.
 pub struct PlanCache {
@@ -50,7 +50,9 @@ impl PlanCache {
 
     /// Load from bincode file. Returns default cache on any error.
     pub fn load<P: AsRef<Path>>(path: P, capacity: usize) -> Self {
-        let Ok(bytes) = std::fs::read(&path) else { return Self::new(capacity) };
+        let Ok(bytes) = std::fs::read(&path) else {
+            return Self::new(capacity);
+        };
         let Ok(snap): Result<CacheSnapshot, _> = bincode::deserialize(&bytes) else {
             return Self::new(capacity);
         };
@@ -59,7 +61,10 @@ impl PlanCache {
         for (k, v) in snap.entries {
             cache.put(k, v);
         }
-        Self { cache, bandit: snap.bandit }
+        Self {
+            cache,
+            bandit: snap.bandit,
+        }
     }
 }
 

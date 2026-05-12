@@ -1,9 +1,9 @@
 //! Multi-protocol server: auto-detects MySQL / Postgres / HTTP per port.
 
+pub mod brain_adapter;
+pub mod http;
 pub mod mysql;
 pub mod pg;
-pub mod http;
-pub mod brain_adapter;
 
 use std::sync::Arc;
 use synapse_libsql::Store;
@@ -21,14 +21,23 @@ impl Service {
         Self {
             store,
             mysql_addr: "127.0.0.1:3306".into(),
-            pg_addr:    "127.0.0.1:5432".into(),
-            http_addr:  "127.0.0.1:9477".into(),
+            pg_addr: "127.0.0.1:5432".into(),
+            http_addr: "127.0.0.1:9477".into(),
         }
     }
 
-    pub fn with_mysql(mut self, addr: &str) -> Self { self.mysql_addr = addr.into(); self }
-    pub fn with_pg(mut self, addr: &str) -> Self    { self.pg_addr    = addr.into(); self }
-    pub fn with_http(mut self, addr: &str) -> Self  { self.http_addr  = addr.into(); self }
+    pub fn with_mysql(mut self, addr: &str) -> Self {
+        self.mysql_addr = addr.into();
+        self
+    }
+    pub fn with_pg(mut self, addr: &str) -> Self {
+        self.pg_addr = addr.into();
+        self
+    }
+    pub fn with_http(mut self, addr: &str) -> Self {
+        self.http_addr = addr.into();
+        self
+    }
 
     /// Spawn all listeners; returns on first fatal error.
     pub async fn run(self) -> std::io::Result<()> {
@@ -37,15 +46,9 @@ impl Service {
         let ma = self.mysql_addr.clone();
         let pa = self.pg_addr.clone();
 
-        let mysql_task = tokio::spawn(async move {
-            synapse_mysql::serve(&ma, s1).await
-        });
-        let pg_task = tokio::spawn(async move {
-            synapse_pg::serve(&pa, s2).await
-        });
-        let http_task = tokio::spawn(async move {
-            http::serve(&self.http_addr).await
-        });
+        let mysql_task = tokio::spawn(async move { synapse_mysql::serve(&ma, s1).await });
+        let pg_task = tokio::spawn(async move { synapse_pg::serve(&pa, s2).await });
+        let http_task = tokio::spawn(async move { http::serve(&self.http_addr).await });
 
         tokio::select! {
             r = mysql_task => r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,

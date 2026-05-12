@@ -89,27 +89,27 @@ impl MetadataPredicate {
 
     fn matches_field(&self, obj: &Value) -> bool {
         match self {
-            MetadataPredicate::Eq { key, value } => {
-                obj.get(key).map_or(false, |f| f == value)
-            }
-            MetadataPredicate::Ne { key, value } => {
-                obj.get(key).map_or(false, |f| f != value)
-            }
-            MetadataPredicate::Lt { key, value } => {
-                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n < *value)
-            }
-            MetadataPredicate::Gt { key, value } => {
-                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n > *value)
-            }
-            MetadataPredicate::Lte { key, value } => {
-                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n <= *value)
-            }
-            MetadataPredicate::Gte { key, value } => {
-                obj.get(key).and_then(|f| f.as_f64()).map_or(false, |n| n >= *value)
-            }
-            MetadataPredicate::In { key, values } => {
-                obj.get(key).map_or(false, |f| values.iter().any(|v| v == f))
-            }
+            MetadataPredicate::Eq { key, value } => obj.get(key).map_or(false, |f| f == value),
+            MetadataPredicate::Ne { key, value } => obj.get(key).map_or(false, |f| f != value),
+            MetadataPredicate::Lt { key, value } => obj
+                .get(key)
+                .and_then(|f| f.as_f64())
+                .map_or(false, |n| n < *value),
+            MetadataPredicate::Gt { key, value } => obj
+                .get(key)
+                .and_then(|f| f.as_f64())
+                .map_or(false, |n| n > *value),
+            MetadataPredicate::Lte { key, value } => obj
+                .get(key)
+                .and_then(|f| f.as_f64())
+                .map_or(false, |n| n <= *value),
+            MetadataPredicate::Gte { key, value } => obj
+                .get(key)
+                .and_then(|f| f.as_f64())
+                .map_or(false, |n| n >= *value),
+            MetadataPredicate::In { key, values } => obj
+                .get(key)
+                .map_or(false, |f| values.iter().any(|v| v == f)),
             MetadataPredicate::And(_) | MetadataPredicate::Or(_) | MetadataPredicate::Not(_) => {
                 unreachable!("compound handled in matches()")
             }
@@ -125,12 +125,17 @@ impl MetadataPredicate {
             MetadataPredicate::Lt { .. } | MetadataPredicate::Gt { .. } => 0.3,
             MetadataPredicate::Lte { .. } | MetadataPredicate::Gte { .. } => 0.35,
             MetadataPredicate::In { values, .. } => (values.len() as f64 * 0.2).min(0.9),
-            MetadataPredicate::And(preds) => {
-                preds.iter().map(|p| p.estimated_selectivity()).product::<f64>().max(0.01)
-            }
+            MetadataPredicate::And(preds) => preds
+                .iter()
+                .map(|p| p.estimated_selectivity())
+                .product::<f64>()
+                .max(0.01),
             MetadataPredicate::Or(preds) => {
                 // P(A∪B) ≈ 1 - ∏(1 - sᵢ)
-                let miss: f64 = preds.iter().map(|p| 1.0 - p.estimated_selectivity()).product();
+                let miss: f64 = preds
+                    .iter()
+                    .map(|p| 1.0 - p.estimated_selectivity())
+                    .product();
                 (1.0 - miss).min(0.99)
             }
             MetadataPredicate::Not(pred) => (1.0 - pred.estimated_selectivity()).max(0.01),

@@ -5,9 +5,9 @@
 
 #[cfg(feature = "multimodal-dummy")]
 mod smoke {
+    use image::{GrayImage, Luma};
     use synapse_multimodal::{ClipEmbedder, CrossModalIndex, MultimodalEmbedder};
     use tempfile::TempDir;
-    use image::{GrayImage, Luma};
 
     fn make_test_image(dir: &std::path::Path, name: &str, brightness: u8) -> std::path::PathBuf {
         let path = dir.join(name);
@@ -26,7 +26,7 @@ mod smoke {
         // 5 images with varying brightness (proxy for "different content")
         let paths = [
             ("img_cat", 30u8, "a cat sitting on a mat"),
-            ("img_dog", 90,  "a dog running in the park"),
+            ("img_dog", 90, "a dog running in the park"),
             ("img_car", 150, "a red sports car"),
             ("img_sky", 200, "blue sky with clouds"),
             ("img_food", 240, "delicious pizza"),
@@ -40,8 +40,8 @@ mod smoke {
         // 5 text captions (different from above)
         let texts = [
             ("txt_kitten", "kitten playing with yarn"),
-            ("txt_puppy",  "puppy fetching a ball"),
-            ("txt_truck",  "large delivery truck"),
+            ("txt_puppy", "puppy fetching a ball"),
+            ("txt_truck", "large delivery truck"),
             ("txt_clouds", "stormy clouds over the ocean"),
             ("txt_burger", "juicy cheeseburger"),
         ];
@@ -60,7 +60,10 @@ mod smoke {
         // Verify top hit is either the cat image or cat text.
         let top = &hits[0];
         let _is_cat_related = top.id == "img_cat" || top.id == "txt_kitten";
-        println!("Top hit for 'cat': id={} score={:.4} kind={:?}", top.id, top.score, top.kind);
+        println!(
+            "Top hit for 'cat': id={} score={:.4} kind={:?}",
+            top.id, top.score, top.kind
+        );
         // Relaxed: just assert top score is > 0
         assert!(top.score > 0.0, "cosine similarity must be positive");
 
@@ -84,7 +87,10 @@ mod smoke {
 
         // Verify L2 norm ≈ 1.0
         let norm: f32 = t.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 1e-4, "text embed not unit-normalized: norm={norm}");
+        assert!(
+            (norm - 1.0).abs() < 1e-4,
+            "text embed not unit-normalized: norm={norm}"
+        );
     }
 
     #[test]

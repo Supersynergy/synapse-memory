@@ -19,13 +19,13 @@ use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct CsrGraph {
-    pub indptr: Vec<i32>,        // |V|+1
-    pub indices: Vec<i32>,       // |E|
-    pub weights: Vec<f32>,       // |E|
-    pub rels: Vec<u8>,           // |E| (index into rel_dict)
-    pub rel_dict: Vec<String>,   // e.g. ["READ", "CITES", "MENTIONS"]
-    pub node_index: HashMap<i64, i32>,    // brain_id → csr_idx
-    pub node_reverse: Vec<i64>,           // csr_idx → brain_id
+    pub indptr: Vec<i32>,              // |V|+1
+    pub indices: Vec<i32>,             // |E|
+    pub weights: Vec<f32>,             // |E|
+    pub rels: Vec<u8>,                 // |E| (index into rel_dict)
+    pub rel_dict: Vec<String>,         // e.g. ["READ", "CITES", "MENTIONS"]
+    pub node_index: HashMap<i64, i32>, // brain_id → csr_idx
+    pub node_reverse: Vec<i64>,        // csr_idx → brain_id
     pub built_at: Instant,
     pub edge_count: usize,
 }
@@ -47,14 +47,23 @@ impl CsrGraph {
 
     /// Rebuild CSR from brain.db edges. O(E log E) due to sort.
     pub fn rebuild(conn: &Connection) -> Result<Self> {
-        let mut stmt = conn.prepare(
-            "SELECT from_id, to_id, rel, COALESCE(weight, 1.0) FROM edges ORDER BY from_id"
-        ).map_err(crate::GraphError::Sql)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT from_id, to_id, rel, COALESCE(weight, 1.0) FROM edges ORDER BY from_id",
+            )
+            .map_err(crate::GraphError::Sql)?;
 
         let mut edges: Vec<(i64, i64, String, f64)> = Vec::new();
-        let rows = stmt.query_map([], |r| Ok((
-            r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?, r.get::<_, f64>(3)?
-        ))).map_err(crate::GraphError::Sql)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, f64>(3)?,
+                ))
+            })
+            .map_err(crate::GraphError::Sql)?;
         for row in rows {
             edges.push(row.map_err(crate::GraphError::Sql)?);
         }
@@ -66,8 +75,11 @@ impl CsrGraph {
             node_set.insert(*t);
         }
         let node_reverse: Vec<i64> = node_set.into_iter().collect();
-        let node_index: HashMap<i64, i32> = node_reverse.iter()
-            .enumerate().map(|(i, &id)| (id, i as i32)).collect();
+        let node_index: HashMap<i64, i32> = node_reverse
+            .iter()
+            .enumerate()
+            .map(|(i, &id)| (id, i as i32))
+            .collect();
 
         // Build rel dictionary (max 256 rels, u8)
         let mut rel_dict: Vec<String> = Vec::new();
@@ -108,8 +120,13 @@ impl CsrGraph {
         }
 
         Ok(Self {
-            indptr, indices, weights, rels, rel_dict,
-            node_index, node_reverse,
+            indptr,
+            indices,
+            weights,
+            rels,
+            rel_dict,
+            node_index,
+            node_reverse,
             built_at: Instant::now(),
             edge_count: n_edges,
         })
@@ -119,7 +136,9 @@ impl CsrGraph {
     #[inline]
     pub fn neighbors(&self, csr_idx: i32) -> &[i32] {
         let i = csr_idx as usize;
-        if i >= self.indptr.len() - 1 { return &[]; }
+        if i >= self.indptr.len() - 1 {
+            return &[];
+        }
         let s = self.indptr[i] as usize;
         let e = self.indptr[i + 1] as usize;
         &self.indices[s..e]
@@ -133,8 +152,12 @@ impl CsrGraph {
         &self.rel_dict[self.rels[edge_offset] as usize]
     }
 
-    pub fn n_nodes(&self) -> usize { self.indptr.len() - 1 }
-    pub fn n_edges(&self) -> usize { self.edge_count }
+    pub fn n_nodes(&self) -> usize {
+        self.indptr.len() - 1
+    }
+    pub fn n_edges(&self) -> usize {
+        self.edge_count
+    }
 
     pub fn brain_to_csr(&self, brain_id: i64) -> Option<i32> {
         self.node_index.get(&brain_id).copied()
@@ -146,12 +169,12 @@ impl CsrGraph {
     /// In-memory size estimate (bytes).
     pub fn size_bytes(&self) -> usize {
         4 * self.indptr.len()
-        + 4 * self.indices.len()
-        + 4 * self.weights.len()
-        + self.rels.len()
-        + self.rel_dict.iter().map(|s| s.len() + 24).sum::<usize>()
-        + 16 * self.node_reverse.len()
-        + 32 * self.node_index.len()
+            + 4 * self.indices.len()
+            + 4 * self.weights.len()
+            + self.rels.len()
+            + self.rel_dict.iter().map(|s| s.len() + 24).sum::<usize>()
+            + 16 * self.node_reverse.len()
+            + 32 * self.node_index.len()
     }
 }
 
@@ -161,13 +184,19 @@ pub struct CsrCache {
 }
 
 impl CsrCache {
-    pub fn new() -> Self { Self { inner: RwLock::new(None) } }
+    pub fn new() -> Self {
+        Self {
+            inner: RwLock::new(None),
+        }
+    }
     pub fn get_or_build(&self, conn: &Connection) -> Result<CsrGuard<'_>> {
         if self.inner.read().unwrap().is_none() {
             let g = CsrGraph::rebuild(conn)?;
             *self.inner.write().unwrap() = Some(g);
         }
-        Ok(CsrGuard { inner: self.inner.read().unwrap() })
+        Ok(CsrGuard {
+            inner: self.inner.read().unwrap(),
+        })
     }
     pub fn invalidate(&self) {
         *self.inner.write().unwrap() = None;
@@ -179,7 +208,11 @@ impl CsrCache {
     }
 }
 
-impl Default for CsrCache { fn default() -> Self { Self::new() } }
+impl Default for CsrCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 pub struct CsrGuard<'a> {
     inner: std::sync::RwLockReadGuard<'a, Option<CsrGraph>>,
@@ -187,7 +220,9 @@ pub struct CsrGuard<'a> {
 
 impl<'a> std::ops::Deref for CsrGuard<'a> {
     type Target = CsrGraph;
-    fn deref(&self) -> &CsrGraph { self.inner.as_ref().unwrap() }
+    fn deref(&self) -> &CsrGraph {
+        self.inner.as_ref().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -198,8 +233,11 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         crate::ensure_schema(&conn).unwrap();
         for (f, t, r, w) in [
-            (1, 2, "READ", 1.0), (1, 3, "READ", 0.8), (2, 4, "CITES", 1.0),
-            (3, 4, "CITES", 0.9), (4, 5, "MENTIONS", 0.7),
+            (1, 2, "READ", 1.0),
+            (1, 3, "READ", 0.8),
+            (2, 4, "CITES", 1.0),
+            (3, 4, "CITES", 0.9),
+            (4, 5, "MENTIONS", 0.7),
         ] {
             crate::relate(&conn, f, t, r, w, None).unwrap();
         }
@@ -211,8 +249,8 @@ mod tests {
         let conn = setup();
         let g = CsrGraph::rebuild(&conn).unwrap();
         assert_eq!(g.n_edges(), 5);
-        assert_eq!(g.n_nodes(), 5);  // {1,2,3,4,5}
-        assert_eq!(g.rel_dict.len(), 3);  // READ, CITES, MENTIONS
+        assert_eq!(g.n_nodes(), 5); // {1,2,3,4,5}
+        assert_eq!(g.rel_dict.len(), 3); // READ, CITES, MENTIONS
     }
 
     #[test]

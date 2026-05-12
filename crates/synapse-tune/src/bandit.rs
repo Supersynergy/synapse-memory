@@ -14,7 +14,12 @@ pub struct BetaArm {
 }
 
 impl BetaArm {
-    pub fn new() -> Self { Self { alpha: 1.0, beta: 1.0 } }
+    pub fn new() -> Self {
+        Self {
+            alpha: 1.0,
+            beta: 1.0,
+        }
+    }
     /// Thompson-sample: draw value from Beta(α, β).
     /// Approx via inverse-CDF; simple Marsaglia for production-grade.
     pub fn sample(&self, rng: &mut impl FnMut() -> f64) -> f64 {
@@ -25,21 +30,32 @@ impl BetaArm {
         x / (x + y + 1e-9)
     }
     pub fn update(&mut self, reward: f64) {
-        if reward > 0.0 { self.alpha += reward; } else { self.beta += -reward; }
+        if reward > 0.0 {
+            self.alpha += reward;
+        } else {
+            self.beta += -reward;
+        }
     }
 }
 
-impl Default for BetaArm { fn default() -> Self { Self::new() } }
+impl Default for BetaArm {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// Per-tag TTL picker over fixed bucket set.
 pub struct TtlBandit {
-    buckets: Vec<u32>,  // seconds
+    buckets: Vec<u32>, // seconds
     state: RwLock<HashMap<String, Vec<BetaArm>>>,
 }
 
 impl TtlBandit {
     pub fn new(buckets: Vec<u32>) -> Self {
-        Self { buckets, state: RwLock::new(HashMap::new()) }
+        Self {
+            buckets,
+            state: RwLock::new(HashMap::new()),
+        }
     }
     pub fn default_buckets() -> Self {
         Self::new(vec![1, 10, 60, 600, 3600])
@@ -58,7 +74,9 @@ impl TtlBandit {
         let mut best = (0usize, f64::NEG_INFINITY);
         for (i, a) in arms.iter().enumerate() {
             let s = a.sample(rng);
-            if s > best.1 { best = (i, s); }
+            if s > best.1 {
+                best = (i, s);
+            }
         }
         self.buckets[best.0]
     }
@@ -68,11 +86,15 @@ impl TtlBandit {
     pub fn update(&self, tag: &str, bucket_idx: usize, reward: f64) {
         if let Ok(mut g) = self.state.write() {
             if let Some(arms) = g.get_mut(tag) {
-                if let Some(a) = arms.get_mut(bucket_idx) { a.update(reward); }
+                if let Some(a) = arms.get_mut(bucket_idx) {
+                    a.update(reward);
+                }
             }
         }
     }
-    pub fn buckets(&self) -> &[u32] { &self.buckets }
+    pub fn buckets(&self) -> &[u32] {
+        &self.buckets
+    }
 }
 
 #[cfg(test)]
@@ -81,7 +103,9 @@ mod tests {
     fn rng() -> impl FnMut() -> f64 {
         let mut state = 12345u64;
         move || {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             (state >> 33) as f64 / u32::MAX as f64
         }
     }
@@ -99,13 +123,15 @@ mod tests {
         // Reward bucket-2 (60s) repeatedly
         for _ in 0..100 {
             let _ = b.pick("hot.tag", &mut r);
-            b.update("hot.tag", 2, 1.0);  // 60s rewarded
+            b.update("hot.tag", 2, 1.0); // 60s rewarded
             b.update("hot.tag", 0, -2.0); // 1s penalized
         }
         // After many updates, 60s bucket should be picked more often
         let mut hits = 0;
         for _ in 0..50 {
-            if b.pick("hot.tag", &mut r) == 60 { hits += 1; }
+            if b.pick("hot.tag", &mut r) == 60 {
+                hits += 1;
+            }
         }
         assert!(hits > 25, "60s should dominate, got {hits}/50");
     }

@@ -8,7 +8,10 @@ fn insert_and_query_present() {
         b.add(xxh3_64(&i.to_le_bytes()));
     }
     for i in 0u64..10_000 {
-        assert!(b.contains(xxh3_64(&i.to_le_bytes())), "false negative at {i}");
+        assert!(
+            b.contains(xxh3_64(&i.to_le_bytes())),
+            "false negative at {i}"
+        );
     }
 }
 

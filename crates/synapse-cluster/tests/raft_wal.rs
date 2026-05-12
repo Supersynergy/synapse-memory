@@ -13,7 +13,10 @@ mod wal_tests {
     }
 
     fn make_op(i: u64) -> Op {
-        Op::Delete { doc_id: format!("doc-{i}"), ts: i as i64 }
+        Op::Delete {
+            doc_id: format!("doc-{i}"),
+            ts: i as i64,
+        }
     }
 
     // ── WAL round-trip (unit) ────────────────────────────────────────────────
@@ -133,8 +136,12 @@ mod wal_tests {
             // Wait for leader (single node always wins within ~300ms)
             let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
             loop {
-                if node.is_leader().await { break; }
-                if tokio::time::Instant::now() > deadline { panic!("node never became leader"); }
+                if node.is_leader().await {
+                    break;
+                }
+                if tokio::time::Instant::now() > deadline {
+                    panic!("node never became leader");
+                }
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
 

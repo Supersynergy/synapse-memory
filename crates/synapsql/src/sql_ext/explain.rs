@@ -37,20 +37,39 @@ pub const EXPLAIN_COLS: &[&str] = &["step", "op", "detail", "estimated_cost"];
 /// If `analyze` is true, the label shows EXPLAIN ANALYZE.
 /// Returns rows suitable for wire-protocol text response.
 pub fn explain_plan(sql: &str, analyze: bool) -> Vec<PlanRow> {
-    let label = if analyze { "EXPLAIN ANALYZE" } else { "EXPLAIN" };
+    let label = if analyze {
+        "EXPLAIN ANALYZE"
+    } else {
+        "EXPLAIN"
+    };
     let result = rewrite(sql);
     let mut rows: Vec<PlanRow> = Vec::new();
     let mut step = 0u32;
 
     // Parse phase annotation
-    rows.push(PlanRow::new(step, label, &format!("input: {}", sql.trim()), "0"));
+    rows.push(PlanRow::new(
+        step,
+        label,
+        &format!("input: {}", sql.trim()),
+        "0",
+    ));
     step += 1;
 
     if result.extensions.is_empty() {
         // Plain SQL — delegate to SQLite EXPLAIN
-        rows.push(PlanRow::new(step, "SQLite", "passthrough to SQLite query planner", "~1"));
+        rows.push(PlanRow::new(
+            step,
+            "SQLite",
+            "passthrough to SQLite query planner",
+            "~1",
+        ));
         step += 1;
-        rows.push(PlanRow::new(step, "IndexScan", "SQLite chooses index via cost-based optimizer", "varies"));
+        rows.push(PlanRow::new(
+            step,
+            "IndexScan",
+            "SQLite chooses index via cost-based optimizer",
+            "varies",
+        ));
         return rows;
     }
 
@@ -71,7 +90,10 @@ pub fn explain_plan(sql: &str, analyze: bool) -> Vec<PlanRow> {
                     "~8ms/113k",
                 ));
             }
-            Extension::FtsSearch { column, query_param } => {
+            Extension::FtsSearch {
+                column,
+                query_param,
+            } => {
                 rows.push(PlanRow::new(
                     step,
                     "FTS5IndexScan",
@@ -86,7 +108,11 @@ pub fn explain_plan(sql: &str, analyze: bool) -> Vec<PlanRow> {
                     "~2ms/100k",
                 ));
             }
-            Extension::HybridRank { text_col, vec_col, query_param } => {
+            Extension::HybridRank {
+                text_col,
+                vec_col,
+                query_param,
+            } => {
                 rows.push(PlanRow::new(
                     step,
                     "HybridRRFPlan",
@@ -130,7 +156,10 @@ pub fn explain_plan(sql: &str, analyze: bool) -> Vec<PlanRow> {
                 rows.push(PlanRow::new(
                     step,
                     "PredicatePushdown",
-                    &format!("{} scalar filters pushed before vec-search", predicates.len()),
+                    &format!(
+                        "{} scalar filters pushed before vec-search",
+                        predicates.len()
+                    ),
                     "O(candidates)",
                 ));
             }

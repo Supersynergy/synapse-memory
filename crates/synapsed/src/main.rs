@@ -4,9 +4,9 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+mod livequery;
 mod metrics;
 mod proto;
-mod livequery;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -16,14 +16,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use synapse_core::{embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
+use parking_lot::Mutex as PlMutex;
 use synapse_core::turbo::ndarray_search::NdArraySearch;
+use synapse_core::{embedder_trait::TextEmbedder, snap, PutRequest, SearchMode, Store};
 use synapse_rerank::{build_reranker_from_env, IdentityReranker, Reranker};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
-use parking_lot::Mutex as PlMutex;
 use tracing::{error, info, warn};
 
 /// Idle timeout between requests on a kept-alive socket. Prevents fd leaks
@@ -53,7 +53,10 @@ struct Cli {
     #[arg(long)]
     license_jwt: Option<PathBuf>,
     /// Ed25519 public key hex (32 bytes) used to verify the license JWT.
-    #[arg(long, default_value = "0000000000000000000000000000000000000000000000000000000000000000")]
+    #[arg(
+        long,
+        default_value = "0000000000000000000000000000000000000000000000000000000000000000"
+    )]
     license_pubkey: String,
     /// Prometheus metrics endpoint. Default: 127.0.0.1:9090. Env: SYNAPSE_METRICS_ADDR.
     #[arg(long, env = "SYNAPSE_METRICS_ADDR", default_value = "127.0.0.1:9090")]
@@ -95,7 +98,9 @@ impl State {
                 self.cache_path.display()
             );
             let t0 = std::time::Instant::now();
-            *g = Some(synapse_core::embed::pick_embedder_with_cache(Some(&self.cache_path)));
+            *g = Some(synapse_core::embed::pick_embedder_with_cache(Some(
+                &self.cache_path,
+            )));
             info!("embedder ready in {:?}", t0.elapsed());
         }
         Ok(())
@@ -142,7 +147,10 @@ fn open_store(
             let jwt = match std::fs::read_to_string(&jwt_path) {
                 Ok(s) => s.trim().to_owned(),
                 Err(e) => {
-                    warn!("failed to read license file {}: {e} — falling back to free tier", jwt_path.display());
+                    warn!(
+                        "failed to read license file {}: {e} — falling back to free tier",
+                        jwt_path.display()
+                    );
                     return Store::open(file).context("open store (free tier)");
                 }
             };
@@ -155,12 +163,16 @@ fn open_store(
             };
             match synapse_license::verify_license(&jwt, &pubkey_bytes) {
                 Ok(license) => {
-                    info!("license verified: customer={} tier={}", license.customer_id, license.tier);
+                    info!(
+                        "license verified: customer={} tier={}",
+                        license.customer_id, license.tier
+                    );
                     let hw_fp = synapse_license::current_hw_fingerprint();
                     // Use the raw JWT bytes as the "signature" material for brain_key derivation.
                     let brain_key = synapse_core::db::derive_brain_key(jwt.as_bytes(), &hw_fp);
                     info!("brain_key derived — opening encrypted store");
-                    return Store::open_with_brain_key(file, &brain_key).context("open encrypted store");
+                    return Store::open_with_brain_key(file, &brain_key)
+                        .context("open encrypted store");
                 }
                 Err(e) => {
                     warn!("license invalid ({e}) — falling back to free tier (unencrypted)");
@@ -168,7 +180,10 @@ fn open_store(
                 }
             }
         } else {
-            info!("no license file found at {} — running free tier", jwt_path.display());
+            info!(
+                "no license file found at {} — running free tier",
+                jwt_path.display()
+            );
         }
     }
     #[cfg(not(feature = "licensed"))]
@@ -217,7 +232,9 @@ async fn main() -> Result<()> {
         None
     } else {
         info!("warming embedder…");
-        Some(synapse_core::embed::pick_embedder_with_cache(Some(&cache_path)))
+        Some(synapse_core::embed::pick_embedder_with_cache(Some(
+            &cache_path,
+        )))
     };
     let snap_dir = cli.snap_dir.clone().unwrap_or_else(|| {
         cli.file
@@ -230,14 +247,20 @@ async fn main() -> Result<()> {
     // Pre-open PRAGMA-tuned read-only Sql conn for analytics ops.
     let sql_conn = {
         use rusqlite::{Connection, OpenFlags};
-        match Connection::open_with_flags(&cli.file, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI) {
+        match Connection::open_with_flags(
+            &cli.file,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+        ) {
             Ok(c) => {
                 let _ = c.pragma_update(None, "mmap_size", 1_073_741_824_i64);
                 let _ = c.pragma_update(None, "cache_size", -262_144_i64);
                 let _ = c.pragma_update(None, "temp_store", 2_i64);
                 Some(c)
             }
-            Err(e) => { tracing::warn!("sql_conn pre-open failed: {e}"); None }
+            Err(e) => {
+                tracing::warn!("sql_conn pre-open failed: {e}");
+                None
+            }
         }
     };
     let state = Arc::new(State {
@@ -313,7 +336,7 @@ async fn main() -> Result<()> {
 async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
     let api_key = std::env::var("SYNAPSE_API_KEY").ok();
     let auth_required = api_key.is_some();
-    let mut authed = !auth_required;  // session-scoped auth state
+    let mut authed = !auth_required; // session-scoped auth state
     loop {
         let mut lenbuf = [0u8; 4];
         match timeout(IDLE_TIMEOUT, stream.read_exact(&mut lenbuf)).await {
@@ -335,7 +358,9 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
                 _ => {
                     let r = Response::Err("auth required: send Auth{token}".into());
                     let encoded = rmp_serde::to_vec_named(&r)?;
-                    stream.write_all(&(encoded.len() as u32).to_le_bytes()).await?;
+                    stream
+                        .write_all(&(encoded.len() as u32).to_le_bytes())
+                        .await?;
                     stream.write_all(&encoded).await?;
                     stream.flush().await?;
                     continue;
@@ -352,7 +377,9 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
             dispatch(&state, req).await
         };
         let encoded = rmp_serde::to_vec_named(&resp)?;
-        stream.write_all(&(encoded.len() as u32).to_le_bytes()).await?;
+        stream
+            .write_all(&(encoded.len() as u32).to_le_bytes())
+            .await?;
         stream.write_all(&encoded).await?;
         stream.flush().await?;
     }
@@ -371,8 +398,14 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Ok(id) => {
                     // P2.2 LiveQuery emit
                     state.live_broker.emit(livequery::LiveEvent {
-                        op: "Put".into(), id, title, uri,
-                        ts: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0),
+                        op: "Put".into(),
+                        id,
+                        title,
+                        uri,
+                        ts: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0),
                     });
                     Response::Id(id)
                 }
@@ -381,15 +414,25 @@ async fn dispatch(state: &State, req: Request) -> Response {
         }
         Request::PutBatch(batch) => {
             let t0 = Instant::now();
-            let titles: Vec<_> = batch.iter().map(|p| (p.title.clone(), p.uri.clone())).collect();
+            let titles: Vec<_> = batch
+                .iter()
+                .map(|p| (p.title.clone(), p.uri.clone()))
+                .collect();
             let result = put_batch(state, batch).await;
             metrics::record_put(t0.elapsed());
             match result {
                 Ok(ids) => {
-                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
                     for (id, (title, uri)) in ids.iter().zip(titles.iter()) {
                         state.live_broker.emit(livequery::LiveEvent {
-                            op: "PutBatch".into(), id: *id, title: title.clone(), uri: uri.clone(), ts: now,
+                            op: "PutBatch".into(),
+                            id: *id,
+                            title: title.clone(),
+                            uri: uri.clone(),
+                            ts: now,
                         });
                     }
                     Response::Ids(ids)
@@ -471,12 +514,10 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(_) => Response::Err("vk must be 32 bytes".into()),
                 Ok(arr) => match ed25519_dalek::VerifyingKey::from_bytes(&arr) {
                     Err(e) => Response::Err(e.to_string()),
-                    Ok(verifying_key) => {
-                        match { state.store.lock().verify(id, &verifying_key) } {
-                            Ok(()) => Response::Ok,
-                            Err(e) => Response::Err(e.to_string()),
-                        }
-                    }
+                    Ok(verifying_key) => match { state.store.lock().verify(id, &verifying_key) } {
+                        Ok(()) => Response::Ok,
+                        Err(e) => Response::Err(e.to_string()),
+                    },
                 },
             }
         }
@@ -487,8 +528,12 @@ async fn dispatch(state: &State, req: Request) -> Response {
                     if let Some(d) = dim {
                         if d < vec.len() && d > 0 {
                             vec.truncate(d);
-                            let n: f32 = vec.iter().map(|x| x*x).sum::<f32>().sqrt();
-                            if n > 1e-10 { for x in vec.iter_mut() { *x /= n; } }
+                            let n: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+                            if n > 1e-10 {
+                                for x in vec.iter_mut() {
+                                    *x /= n;
+                                }
+                            }
                         }
                     }
                     Response::Embed { vec }
@@ -496,14 +541,30 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(e) => Response::Err(e.to_string()),
             }
         }
-        Request::SnapMerge { snapshot_path, out_path, level } => {
+        Request::SnapMerge {
+            snapshot_path,
+            out_path,
+            level,
+        } => {
             let db_path = state.db_path.clone();
-            let tmp = std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
-            match synapse_core::snap::export(&db_path, &tmp, level)
-                .and_then(|_| synapse_core::snap::merge_packs(&tmp, std::path::Path::new(&snapshot_path), std::path::Path::new(&out_path), level))
-            {
-                Ok(_) => { let _ = std::fs::remove_file(&tmp); Response::Ok }
-                Err(e) => { let _ = std::fs::remove_file(&tmp); Response::Err(e.to_string()) }
+            let tmp =
+                std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
+            match synapse_core::snap::export(&db_path, &tmp, level).and_then(|_| {
+                synapse_core::snap::merge_packs(
+                    &tmp,
+                    std::path::Path::new(&snapshot_path),
+                    std::path::Path::new(&out_path),
+                    level,
+                )
+            }) {
+                Ok(_) => {
+                    let _ = std::fs::remove_file(&tmp);
+                    Response::Ok
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&tmp);
+                    Response::Err(e.to_string())
+                }
             }
         }
         Request::SearchVec { embedding, limit } => {
@@ -548,12 +609,14 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 }
             }
         }
-        Request::Rerank { query, candidates, top_k } => {
-            match state.reranker.rerank(&query, candidates, top_k) {
-                Ok(hits) => Response::Hits(hits),
-                Err(e) => Response::Err(e.to_string()),
-            }
-        }
+        Request::Rerank {
+            query,
+            candidates,
+            top_k,
+        } => match state.reranker.rerank(&query, candidates, top_k) {
+            Ok(hits) => Response::Hits(hits),
+            Err(e) => Response::Err(e.to_string()),
+        },
         Request::BatchSearch { queries } => {
             // Sequential per-query, single roundtrip — saves N socket cycles.
             let mut all = Vec::with_capacity(queries.len());
@@ -568,10 +631,17 @@ async fn dispatch(state: &State, req: Request) -> Response {
         Request::UseTenant { name } => {
             // P4.1 simple multi-tenant: validate name + ATTACH read-only.
             // Tenant DBs at ~/.synapse/tenants/{name}.db.
-            if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            if !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
                 return Response::Err("invalid tenant name (alnum/_/- only)".into());
             }
-            let path = format!("{}/.synapse/tenants/{}.db", std::env::var("HOME").unwrap_or_default(), name);
+            let path = format!(
+                "{}/.synapse/tenants/{}.db",
+                std::env::var("HOME").unwrap_or_default(),
+                name
+            );
             if !std::path::Path::new(&path).exists() {
                 return Response::Err(format!("tenant db not found: {path}"));
             }
@@ -579,8 +649,11 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 let mut g = state.sql_conn.lock();
                 if let Some(conn) = g.as_mut() {
                     conn.execute(&format!("DETACH DATABASE tenant"), []).ok();
-                    conn.execute(&format!("ATTACH DATABASE 'file:{}?mode=ro' AS tenant", path), [])
-                        .map_err(|e| e.to_string())?;
+                    conn.execute(
+                        &format!("ATTACH DATABASE 'file:{}?mode=ro' AS tenant", path),
+                        [],
+                    )
+                    .map_err(|e| e.to_string())?;
                 }
                 Ok(())
             });
@@ -593,9 +666,13 @@ async fn dispatch(state: &State, req: Request) -> Response {
             // Constant-time compare to thwart timing attacks (basic).
             match std::env::var("SYNAPSE_API_KEY") {
                 Ok(k) if !k.is_empty() => {
-                    if subtle_eq(&token, &k) { Response::Ok } else { Response::Err("invalid token".into()) }
+                    if subtle_eq(&token, &k) {
+                        Response::Ok
+                    } else {
+                        Response::Err("invalid token".into())
+                    }
                 }
-                _ => Response::Ok,  // no key configured — auth always passes
+                _ => Response::Ok, // no key configured — auth always passes
             }
         }
         Request::Transaction { ops } => {
@@ -612,45 +689,65 @@ async fn dispatch(state: &State, req: Request) -> Response {
         }
         Request::Sql { query, params } => {
             // Read-only raw SQL via pooled PRAGMA-tuned conn (avoid per-call open + PRAGMA cost).
-            let result: Result<(Vec<String>, Vec<Vec<serde_json::Value>>), String> = tokio::task::block_in_place(|| {
-                use rusqlite::types::ValueRef;
-                let guard = state.sql_conn.lock();
-                let conn = guard.as_ref().ok_or_else(|| "sql_conn unavailable".to_string())?;
-                let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
-                let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
-                let n_cols = cols.len();
-                let rusq_params: Vec<rusqlite::types::Value> = params.iter().map(|v| {
-                    match v {
-                        serde_json::Value::Null => rusqlite::types::Value::Null,
-                        serde_json::Value::Bool(b) => rusqlite::types::Value::Integer(*b as i64),
-                        serde_json::Value::Number(n) => {
-                            if let Some(i) = n.as_i64() { rusqlite::types::Value::Integer(i) }
-                            else if let Some(f) = n.as_f64() { rusqlite::types::Value::Real(f) }
-                            else { rusqlite::types::Value::Null }
+            let result: Result<(Vec<String>, Vec<Vec<serde_json::Value>>), String> =
+                tokio::task::block_in_place(|| {
+                    use rusqlite::types::ValueRef;
+                    let guard = state.sql_conn.lock();
+                    let conn = guard
+                        .as_ref()
+                        .ok_or_else(|| "sql_conn unavailable".to_string())?;
+                    let mut stmt = conn.prepare(&query).map_err(|e| e.to_string())?;
+                    let cols: Vec<String> =
+                        stmt.column_names().iter().map(|s| s.to_string()).collect();
+                    let n_cols = cols.len();
+                    let rusq_params: Vec<rusqlite::types::Value> = params
+                        .iter()
+                        .map(|v| match v {
+                            serde_json::Value::Null => rusqlite::types::Value::Null,
+                            serde_json::Value::Bool(b) => {
+                                rusqlite::types::Value::Integer(*b as i64)
+                            }
+                            serde_json::Value::Number(n) => {
+                                if let Some(i) = n.as_i64() {
+                                    rusqlite::types::Value::Integer(i)
+                                } else if let Some(f) = n.as_f64() {
+                                    rusqlite::types::Value::Real(f)
+                                } else {
+                                    rusqlite::types::Value::Null
+                                }
+                            }
+                            serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                            _ => rusqlite::types::Value::Text(v.to_string()),
+                        })
+                        .collect();
+                    let param_refs: Vec<&dyn rusqlite::ToSql> = rusq_params
+                        .iter()
+                        .map(|v| v as &dyn rusqlite::ToSql)
+                        .collect();
+                    let mut rows_out = Vec::new();
+                    let mut rows_iter = stmt
+                        .query(rusqlite::params_from_iter(&param_refs))
+                        .map_err(|e| e.to_string())?;
+                    while let Some(row) = rows_iter.next().map_err(|e| e.to_string())? {
+                        let mut row_vals = Vec::with_capacity(n_cols);
+                        for i in 0..n_cols {
+                            let v = row.get_ref(i).map_err(|e| e.to_string())?;
+                            row_vals.push(match v {
+                                ValueRef::Null => serde_json::Value::Null,
+                                ValueRef::Integer(i) => serde_json::Value::from(i),
+                                ValueRef::Real(f) => serde_json::Value::from(f),
+                                ValueRef::Text(t) => serde_json::Value::String(
+                                    String::from_utf8_lossy(t).into_owned(),
+                                ),
+                                ValueRef::Blob(b) => {
+                                    serde_json::Value::String(format!("<blob:{}b>", b.len()))
+                                }
+                            });
                         }
-                        serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
-                        _ => rusqlite::types::Value::Text(v.to_string()),
+                        rows_out.push(row_vals);
                     }
-                }).collect();
-                let param_refs: Vec<&dyn rusqlite::ToSql> = rusq_params.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
-                let mut rows_out = Vec::new();
-                let mut rows_iter = stmt.query(rusqlite::params_from_iter(&param_refs)).map_err(|e| e.to_string())?;
-                while let Some(row) = rows_iter.next().map_err(|e| e.to_string())? {
-                    let mut row_vals = Vec::with_capacity(n_cols);
-                    for i in 0..n_cols {
-                        let v = row.get_ref(i).map_err(|e| e.to_string())?;
-                        row_vals.push(match v {
-                            ValueRef::Null => serde_json::Value::Null,
-                            ValueRef::Integer(i) => serde_json::Value::from(i),
-                            ValueRef::Real(f) => serde_json::Value::from(f),
-                            ValueRef::Text(t) => serde_json::Value::String(String::from_utf8_lossy(t).into_owned()),
-                            ValueRef::Blob(b) => serde_json::Value::String(format!("<blob:{}b>", b.len())),
-                        });
-                    }
-                    rows_out.push(row_vals);
-                }
-                Ok((cols, rows_out))
-            });
+                    Ok((cols, rows_out))
+                });
             match result {
                 Ok((cols, rows)) => Response::Rows { cols, rows },
                 Err(e) => Response::Err(e),
@@ -661,7 +758,9 @@ async fn dispatch(state: &State, req: Request) -> Response {
 
 /// Constant-time equality compare — prevents timing attacks on token check.
 fn subtle_eq(a: &str, b: &str) -> bool {
-    if a.len() != b.len() { return false; }
+    if a.len() != b.len() {
+        return false;
+    }
     let mut acc: u8 = 0;
     for (x, y) in a.as_bytes().iter().zip(b.as_bytes().iter()) {
         acc |= x ^ y;
@@ -724,7 +823,10 @@ async fn put_batch(state: &State, batch: Vec<PutReq>) -> Result<Vec<i64>> {
             anyhow::bail!("text too large: {} > {}", r.text.len(), state.max_put_bytes);
         }
     }
-    let need_server_embed: Vec<bool> = batch.iter().map(|r| r.embed && r.embedding.is_none()).collect();
+    let need_server_embed: Vec<bool> = batch
+        .iter()
+        .map(|r| r.embed && r.embedding.is_none())
+        .collect();
     let any_embed = need_server_embed.iter().any(|b| *b);
     let server_embeddings = if any_embed {
         state.ensure_embedder().await?;
@@ -775,16 +877,15 @@ async fn search(
     let t0 = std::time::Instant::now();
     let q_owned = q.to_owned();
     let emb_owned = emb;
-    let (hits, latency_us, hit_count, top_score, log_err) =
-        tokio::task::block_in_place(|| {
-            let store = state.store.lock();
-            let h = store.search(&q_owned, mode, emb_owned.as_deref(), limit)?;
-            let lat = t0.elapsed().as_micros() as u64;
-            let cnt = h.len();
-            let top = h.first().map(|x| x.score).unwrap_or(0.0);
-            let lerr = store.log_query(&q_owned, mode, lat, cnt, top).err();
-            Ok::<_, synapse_core::Error>((h, lat, cnt, top, lerr))
-        })?;
+    let (hits, latency_us, hit_count, top_score, log_err) = tokio::task::block_in_place(|| {
+        let store = state.store.lock();
+        let h = store.search(&q_owned, mode, emb_owned.as_deref(), limit)?;
+        let lat = t0.elapsed().as_micros() as u64;
+        let cnt = h.len();
+        let top = h.first().map(|x| x.score).unwrap_or(0.0);
+        let lerr = store.log_query(&q_owned, mode, lat, cnt, top).err();
+        Ok::<_, synapse_core::Error>((h, lat, cnt, top, lerr))
+    })?;
     if let Some(e) = log_err {
         warn!("query_log insert failed (non-fatal): {e}");
     }

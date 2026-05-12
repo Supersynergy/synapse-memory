@@ -13,10 +13,7 @@
 //!
 //! Architecture stolen from Vitess: AST rewrite before backend dispatch.
 
-use crate::sql_ext::{
-    vector_op::VectorOp,
-    conformal::strip_recall_clause,
-};
+use crate::sql_ext::{conformal::strip_recall_clause, vector_op::VectorOp};
 
 /// The result of a rewrite pass.
 #[derive(Debug, Clone)]
@@ -35,7 +32,11 @@ pub enum Extension {
     /// Full-text search: `MATCH(col) AGAINST(expr)`.
     FtsSearch { column: String, query_param: String },
     /// Hybrid RRF: combine vec + FTS.
-    HybridRank { text_col: String, vec_col: String, query_param: String },
+    HybridRank {
+        text_col: String,
+        vec_col: String,
+        query_param: String,
+    },
     /// Conformal recall guarantee.
     ConformalRecall { alpha: f64 },
     /// Predicate pushdown: scalar filters extracted from mixed WHERE clause.
@@ -82,7 +83,10 @@ pub fn rewrite(sql: &str) -> RewriteResult {
             query_param: hr.2,
         });
         // Leave SQL as-is — backend will see HYBRID_RANK call and we intercept
-        return RewriteResult { sql: working, extensions };
+        return RewriteResult {
+            sql: working,
+            extensions,
+        };
     }
 
     // 3. Vec operator `<=>` — with predicate pushdown
@@ -99,11 +103,17 @@ pub fn rewrite(sql: &str) -> RewriteResult {
 
     // 4. MATCH ... AGAINST
     if let Some((col, param)) = parse_match_against(&working) {
-        extensions.push(Extension::FtsSearch { column: col, query_param: param });
+        extensions.push(Extension::FtsSearch {
+            column: col,
+            query_param: param,
+        });
         working = rewrite_match_to_stub(&working);
     }
 
-    RewriteResult { sql: working, extensions }
+    RewriteResult {
+        sql: working,
+        extensions,
+    }
 }
 
 /// Detect `HYBRID_RANK(text_col, vec_col, :param)`.
@@ -158,14 +168,18 @@ pub fn extract_scalar_predicates(sql: &str) -> Vec<ScalarPredicate> {
     };
     // Only look before the `<=>` operator
     let vec_pos = upper.find("<=>").unwrap_or(sql.len());
-    if vec_pos <= where_pos { return vec![]; }
+    if vec_pos <= where_pos {
+        return vec![];
+    }
     let clause = &sql[where_pos..vec_pos];
 
     let mut results = Vec::new();
     // Split by AND (case-insensitive); ignore OR (too risky to push through OR)
     for part in clause.split_ascii_whitespace_and_and(clause) {
         let part = part.trim();
-        if part.is_empty() { continue; }
+        if part.is_empty() {
+            continue;
+        }
         let part_upper = part.to_ascii_uppercase();
         // Try operators longest-first to avoid `<` matching `<=`
         let ops: &[(&str, PredicateOp)] = &[
@@ -173,24 +187,32 @@ pub fn extract_scalar_predicates(sql: &str) -> Vec<ScalarPredicate> {
             ("<>", PredicateOp::Ne),
             ("<=", PredicateOp::Le),
             (">=", PredicateOp::Ge),
-            ("<",  PredicateOp::Lt),
-            (">",  PredicateOp::Gt),
-            ("=",  PredicateOp::Eq),
+            ("<", PredicateOp::Lt),
+            (">", PredicateOp::Gt),
+            ("=", PredicateOp::Eq),
         ];
         for (sym, op) in ops {
             if let Some(pos) = part.find(sym) {
                 // Skip if part of `<=>` (vec operator leaking through)
                 if sym == &"<" || sym == &">" {
                     let next = part.as_bytes().get(pos + sym.len()).copied();
-                    if next == Some(b'=') || next == Some(b'>') { continue; }
+                    if next == Some(b'=') || next == Some(b'>') {
+                        continue;
+                    }
                 }
                 let col = part[..pos].trim().to_owned();
                 let val = part[pos + sym.len()..].trim().to_owned();
                 // col must be a simple identifier, val a literal or :param
-                let col_ok = col.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.');
+                let col_ok = col
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '.');
                 let val_ok = !val.is_empty() && !val.to_ascii_uppercase().contains("SELECT");
                 if col_ok && val_ok {
-                    results.push(ScalarPredicate { column: col, op: op.clone(), value: val });
+                    results.push(ScalarPredicate {
+                        column: col,
+                        op: op.clone(),
+                        value: val,
+                    });
                 }
                 break;
             }
@@ -214,9 +236,9 @@ impl SplitByAnd for str {
         let len = bytes.len();
         let mut i = 0;
         while i + 3 <= len {
-            if &bytes[i..i+3] == b"AND" {
-                let prev_ok = i == 0 || bytes[i-1].is_ascii_whitespace();
-                let next_ok = i + 3 >= len || bytes[i+3].is_ascii_whitespace();
+            if &bytes[i..i + 3] == b"AND" {
+                let prev_ok = i == 0 || bytes[i - 1].is_ascii_whitespace();
+                let next_ok = i + 3 >= len || bytes[i + 3].is_ascii_whitespace();
                 if prev_ok && next_ok {
                     parts.push(s[start..i].trim());
                     start = i + 3;
@@ -269,7 +291,10 @@ mod tests {
     fn vec_rewrite() {
         let sql = "SELECT id FROM docs WHERE embedding <=> :q LIMIT 10";
         let r = rewrite(sql);
-        assert!(r.extensions.iter().any(|e| matches!(e, Extension::VecSearch(_))));
+        assert!(r
+            .extensions
+            .iter()
+            .any(|e| matches!(e, Extension::VecSearch(_))));
         assert!(!r.sql.contains("<=>"), "stub sql: {}", r.sql);
     }
 
@@ -277,7 +302,10 @@ mod tests {
     fn hybrid_rank_detected() {
         let sql = "SELECT id, HYBRID_RANK(body, emb, :q) AS s FROM docs ORDER BY s DESC";
         let r = rewrite(sql);
-        assert!(r.extensions.iter().any(|e| matches!(e, Extension::HybridRank { .. })));
+        assert!(r
+            .extensions
+            .iter()
+            .any(|e| matches!(e, Extension::HybridRank { .. })));
     }
 
     #[test]
@@ -285,7 +313,11 @@ mod tests {
         let sql = "SELECT id FROM docs WHERE tenant_id = 'acme' AND embedding <=> :q LIMIT 10";
         let r = rewrite(sql);
         let pushed = r.extensions.iter().find_map(|e| {
-            if let Extension::PredicatePushdown { predicates } = e { Some(predicates) } else { None }
+            if let Extension::PredicatePushdown { predicates } = e {
+                Some(predicates)
+            } else {
+                None
+            }
         });
         assert!(pushed.is_some(), "expected PredicatePushdown extension");
         let preds = pushed.unwrap();
@@ -300,7 +332,11 @@ mod tests {
         let sql = "SELECT id FROM docs WHERE score > 0.5 AND lang = 'en' AND emb <=> :q LIMIT 5";
         let r = rewrite(sql);
         let pushed = r.extensions.iter().find_map(|e| {
-            if let Extension::PredicatePushdown { predicates } = e { Some(predicates) } else { None }
+            if let Extension::PredicatePushdown { predicates } = e {
+                Some(predicates)
+            } else {
+                None
+            }
         });
         assert!(pushed.is_some());
         let preds = pushed.unwrap();
@@ -311,13 +347,19 @@ mod tests {
     fn no_pushdown_without_vec() {
         let sql = "SELECT id FROM docs WHERE tenant_id = 'acme' LIMIT 10";
         let r = rewrite(sql);
-        assert!(!r.extensions.iter().any(|e| matches!(e, Extension::PredicatePushdown { .. })));
+        assert!(!r
+            .extensions
+            .iter()
+            .any(|e| matches!(e, Extension::PredicatePushdown { .. })));
     }
 
     #[test]
     fn conformal_recall() {
         let sql = "SELECT id FROM docs WHERE embedding <=> :q LIMIT 10 WITH RECALL_GUARANTEE 0.99";
         let r = rewrite(sql);
-        assert!(r.extensions.iter().any(|e| matches!(e, Extension::ConformalRecall { alpha } if *alpha == 0.99)));
+        assert!(r
+            .extensions
+            .iter()
+            .any(|e| matches!(e, Extension::ConformalRecall { alpha } if *alpha == 0.99)));
     }
 }

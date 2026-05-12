@@ -36,7 +36,9 @@ fn make_normalized(n: usize, d: usize, seed: u64) -> Vec<f32> {
 fn top_k_indices(sims: &[f32], k: usize) -> Vec<usize> {
     let mut idx: Vec<usize> = (0..sims.len()).collect();
     idx.select_nth_unstable_by(k - 1, |a, b| {
-        sims[*b].partial_cmp(&sims[*a]).unwrap_or(std::cmp::Ordering::Equal)
+        sims[*b]
+            .partial_cmp(&sims[*a])
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     idx[..k].to_vec()
 }

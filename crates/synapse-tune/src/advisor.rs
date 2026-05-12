@@ -35,7 +35,11 @@ pub struct IndexAdvisor {
 }
 
 impl IndexAdvisor {
-    pub fn new() -> Self { Self { seen: HashMap::new() } }
+    pub fn new() -> Self {
+        Self {
+            seen: HashMap::new(),
+        }
+    }
 
     /// Record observed query SQL. Extract candidates via regex.
     pub fn observe(&mut self, sql: &str) {
@@ -57,35 +61,50 @@ impl IndexAdvisor {
     pub fn top_n(&self, n: usize) -> Vec<Recommendation> {
         let mut v: Vec<_> = self.seen.iter().collect();
         v.sort_by_key(|(_, count)| std::cmp::Reverse(**count));
-        v.into_iter().take(n).map(|(cand, count)| {
-            let score = (*count as f64).ln_1p();
-            let create_sql = format!(
-                "CREATE INDEX idx_{}_{} ON {} ({});",
-                cand.table,
-                cand.columns.join("_"),
-                cand.table,
-                cand.columns.join(", "),
-            );
-            Recommendation {
-                candidate: cand.clone(),
-                score,
-                seen_count: *count,
-                create_sql,
-            }
-        }).collect()
+        v.into_iter()
+            .take(n)
+            .map(|(cand, count)| {
+                let score = (*count as f64).ln_1p();
+                let create_sql = format!(
+                    "CREATE INDEX idx_{}_{} ON {} ({});",
+                    cand.table,
+                    cand.columns.join("_"),
+                    cand.table,
+                    cand.columns.join(", "),
+                );
+                Recommendation {
+                    candidate: cand.clone(),
+                    score,
+                    seen_count: *count,
+                    create_sql,
+                }
+            })
+            .collect()
     }
 
-    pub fn len(&self) -> usize { self.seen.len() }
+    pub fn len(&self) -> usize {
+        self.seen.len()
+    }
 }
 
-impl Default for IndexAdvisor { fn default() -> Self { Self::new() } }
+impl Default for IndexAdvisor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 fn extract_from_table(sql: &str) -> Option<String> {
     let from_pos = sql.find(" from ")?;
     let after = &sql[from_pos + 6..];
-    let end = after.find(|c: char| c.is_whitespace() || c == ',' || c == ';').unwrap_or(after.len());
+    let end = after
+        .find(|c: char| c.is_whitespace() || c == ',' || c == ';')
+        .unwrap_or(after.len());
     let table = after[..end].trim_matches('`').to_string();
-    if table.is_empty() { None } else { Some(table) }
+    if table.is_empty() {
+        None
+    } else {
+        Some(table)
+    }
 }
 
 fn extract_where_cols(sql: &str) -> Option<Vec<String>> {
@@ -93,18 +112,36 @@ fn extract_where_cols(sql: &str) -> Option<Vec<String>> {
     let after = &sql[where_pos + 7..];
     let mut cols = Vec::new();
     // Match pattern: identifier (= | > | < | LIKE | IN)
-    for token in after.split(|c: char| !c.is_alphanumeric() && c != '_').filter(|s| !s.is_empty()) {
+    for token in after
+        .split(|c: char| !c.is_alphanumeric() && c != '_')
+        .filter(|s| !s.is_empty())
+    {
         // Skip keywords
-        if matches!(token, "and" | "or" | "not" | "in" | "is" | "null" | "like" | "between") { continue; }
-        if token.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false)
+        if matches!(
+            token,
+            "and" | "or" | "not" | "in" | "is" | "null" | "like" | "between"
+        ) {
+            continue;
+        }
+        if token
+            .chars()
+            .next()
+            .map(|c| c.is_alphabetic())
+            .unwrap_or(false)
             && !token.chars().all(|c| c.is_ascii_digit())
             && token.len() > 2
         {
             cols.push(token.to_string());
-            if cols.len() >= 3 { break; }
+            if cols.len() >= 3 {
+                break;
+            }
         }
     }
-    if cols.is_empty() { None } else { Some(cols) }
+    if cols.is_empty() {
+        None
+    } else {
+        Some(cols)
+    }
 }
 
 #[cfg(test)]
@@ -118,7 +155,10 @@ mod tests {
         let top = a.top_n(5);
         assert_eq!(top.len(), 1);
         assert_eq!(top[0].candidate.table, "wp_posts");
-        assert!(top[0].candidate.columns.contains(&"post_status".to_string()));
+        assert!(top[0]
+            .candidate
+            .columns
+            .contains(&"post_status".to_string()));
         assert!(top[0].create_sql.contains("CREATE INDEX"));
     }
 

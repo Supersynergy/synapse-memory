@@ -37,10 +37,15 @@ pub struct Space {
 impl Space {
     pub fn open(name: impl Into<String>, path: impl AsRef<std::path::Path>) -> Result<Self> {
         let store = Store::open(path.as_ref())?;
-        Ok(Self { store, name: name.into() })
+        Ok(Self {
+            store,
+            name: name.into(),
+        })
     }
 
-    pub fn name(&self) -> &str { &self.name }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
     /// Borrow the underlying rusqlite connection for raw SQL queries.
     pub(crate) fn conn_ref(&self) -> &Connection {
@@ -48,7 +53,10 @@ impl Space {
     }
 
     pub fn wing<'s>(&'s mut self, name: impl Into<String>) -> Wing<'s> {
-        Wing { space: self, name: name.into() }
+        Wing {
+            space: self,
+            name: name.into(),
+        }
     }
 
     /// Forward `PutRequest` directly to the underlying Store — used by `space_sweep`.
@@ -69,7 +77,11 @@ impl Space {
         let hits = self.store.search(query, mode, embedding, limit)?;
         Ok(hits
             .into_iter()
-            .map(|h| DrawerHit { id: h.id, text: h.text, score: h.score })
+            .map(|h| DrawerHit {
+                id: h.id,
+                text: h.text,
+                score: h.score,
+            })
             .collect())
     }
 
@@ -94,7 +106,7 @@ impl Space {
         let candidates = self.store.search(query, mode, embedding, pool)?;
         #[cfg(all(feature = "rerank", feature = "onnx"))]
         let reranked = {
-            use synapse_rerank::{onnx::OnnxCrossEncoder, Reranker};
+            use synapse_rerank::{Reranker, onnx::OnnxCrossEncoder};
             let reranker = OnnxCrossEncoder::new()?;
             reranker.rerank(query, candidates, k)?
         };
@@ -104,8 +116,13 @@ impl Space {
             let reranker = IdentityReranker;
             reranker.rerank(query, candidates, k)?
         };
-        Ok(reranked.into_iter()
-            .map(|h| DrawerHit { id: h.id, text: h.text, score: h.score })
+        Ok(reranked
+            .into_iter()
+            .map(|h| DrawerHit {
+                id: h.id,
+                text: h.text,
+                score: h.score,
+            })
             .collect())
     }
 
@@ -126,7 +143,9 @@ impl Space {
         use synapse_core::types::SearchMode;
 
         let fts_hits = self.store.search(query, SearchMode::Lex, None, fts_n)?;
-        let vec_hits = self.store.search(query, SearchMode::Vec, Some(embedding), vec_n)?;
+        let vec_hits = self
+            .store
+            .search(query, SearchMode::Vec, Some(embedding), vec_n)?;
 
         // Map id → RRF score
         let mut scores: HashMap<i64, f64> = HashMap::new();
@@ -175,7 +194,11 @@ impl Space {
         // Step 2: rerank by cosine (sqlite-vec already did this; pass through)
         let mut hits: Vec<DrawerHit> = candidates
             .into_iter()
-            .map(|h| DrawerHit { id: h.id, text: h.text, score: h.score })
+            .map(|h| DrawerHit {
+                id: h.id,
+                text: h.text,
+                score: h.score,
+            })
             .collect();
         hits.truncate(limit);
         Ok(hits)
@@ -188,10 +211,16 @@ pub struct Wing<'s> {
 }
 
 impl<'s> Wing<'s> {
-    pub fn name(&self) -> &str { &self.name }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
     pub fn room(self, topic: impl Into<String>) -> Room<'s> {
-        Room { space: self.space, wing_name: self.name, topic: topic.into() }
+        Room {
+            space: self.space,
+            wing_name: self.name,
+            topic: topic.into(),
+        }
     }
 }
 
@@ -202,15 +231,18 @@ pub struct Room<'s> {
 }
 
 impl<'s> Room<'s> {
-    pub fn topic(&self) -> &str { &self.topic }
+    pub fn topic(&self) -> &str {
+        &self.topic
+    }
 
-    pub fn put(
-        &mut self,
-        text: impl Into<String>,
-        embedding: Option<Vec<f32>>,
-    ) -> Result<Drawer> {
+    pub fn put(&mut self, text: impl Into<String>, embedding: Option<Vec<f32>>) -> Result<Drawer> {
         let text = text.into();
-        let uri = format!("spaces://{}/{}/{}", self.wing_name, self.topic, monotonic_uid());
+        let uri = format!(
+            "spaces://{}/{}/{}",
+            self.wing_name,
+            self.topic,
+            monotonic_uid()
+        );
         let req = PutRequest {
             uri: Some(uri.clone()),
             title: Some(format!("{}/{}", self.wing_name, self.topic)),
@@ -256,15 +288,25 @@ mod tests {
         let f = NamedTempFile::new()?;
         let mut space = Space::open("test-space", f.path())?;
 
-        space.wing("alice").room("greetings").put("Hello from the first drawer", None)?;
-        space.wing("alice").room("greetings").put("Second drawer about Rust programming", None)?;
-        space.wing("bob").room("notes").put("Bob note about vector search similarity", None)?;
+        space
+            .wing("alice")
+            .room("greetings")
+            .put("Hello from the first drawer", None)?;
+        space
+            .wing("alice")
+            .room("greetings")
+            .put("Second drawer about Rust programming", None)?;
+        space
+            .wing("bob")
+            .room("notes")
+            .put("Bob note about vector search similarity", None)?;
 
         let hits = space.search("Rust programming", None, 5)?;
         assert!(!hits.is_empty(), "expected at least one FTS hit");
         assert!(
             hits[0].text.to_lowercase().contains("rust"),
-            "top hit should be about Rust, got: {:?}", hits[0].text
+            "top hit should be about Rust, got: {:?}",
+            hits[0].text
         );
         Ok(())
     }
@@ -278,12 +320,15 @@ mod tests {
         space.wing("w").room("r").put("alpha text", None)?;
         space.wing("w").room("r").put("beta text", None)?;
 
-        let result = crate::mcp::dispatch("drawer_list", json!({
-            "space_path": f.path().to_str().unwrap(),
-            "wing": "w",
-            "room": "r",
-            "limit": 10
-        }));
+        let result = crate::mcp::dispatch(
+            "drawer_list",
+            json!({
+                "space_path": f.path().to_str().unwrap(),
+                "wing": "w",
+                "room": "r",
+                "limit": 10
+            }),
+        );
         let drawers = result["drawers"].as_array().expect("drawers array");
         assert_eq!(drawers.len(), 2);
         Ok(())
@@ -295,12 +340,20 @@ mod tests {
         let mut space = Space::open("t", f.path())?;
         let d = space.wing("w").room("r").put("show me this text", None)?;
 
-        let result = crate::mcp::dispatch("drawer_show", json!({
-            "space_path": f.path().to_str().unwrap(),
-            "id": d.id
-        }));
+        let result = crate::mcp::dispatch(
+            "drawer_show",
+            json!({
+                "space_path": f.path().to_str().unwrap(),
+                "id": d.id
+            }),
+        );
         assert_eq!(result["ok"], true);
-        assert!(result["drawer"]["text"].as_str().unwrap().contains("show me"));
+        assert!(
+            result["drawer"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("show me")
+        );
         Ok(())
     }
 
@@ -310,20 +363,29 @@ mod tests {
         let mut space = Space::open("t", f.path())?;
         let d = space.wing("w").room("r").put("to be deleted", None)?;
 
-        let del = crate::mcp::dispatch("drawer_delete", json!({
-            "space_path": f.path().to_str().unwrap(),
-            "id": d.id
-        }));
+        let del = crate::mcp::dispatch(
+            "drawer_delete",
+            json!({
+                "space_path": f.path().to_str().unwrap(),
+                "id": d.id
+            }),
+        );
         assert_eq!(del["ok"], true);
 
         // After soft-delete, drawer_list should exclude it
-        let list = crate::mcp::dispatch("drawer_list", json!({
-            "space_path": f.path().to_str().unwrap(),
-            "wing": "w",
-            "room": "r"
-        }));
+        let list = crate::mcp::dispatch(
+            "drawer_list",
+            json!({
+                "space_path": f.path().to_str().unwrap(),
+                "wing": "w",
+                "room": "r"
+            }),
+        );
         let drawers = list["drawers"].as_array().unwrap();
-        assert!(drawers.is_empty(), "soft-deleted drawer should not appear in list");
+        assert!(
+            drawers.is_empty(),
+            "soft-deleted drawer should not appear in list"
+        );
         Ok(())
     }
 
@@ -347,14 +409,20 @@ mod tests {
 
         let r1 = crate::mcp::dispatch("space_sweep", input.clone());
         // 5 short messages → 5 drawers (one per message)
-        assert!(r1["inserted"].as_u64().unwrap() >= 5,
-            "expected >=5 drawers for 5 messages, got {}", r1["inserted"]);
+        assert!(
+            r1["inserted"].as_u64().unwrap() >= 5,
+            "expected >=5 drawers for 5 messages, got {}",
+            r1["inserted"]
+        );
         assert_eq!(r1["skipped"], 0);
 
         // Second sweep: same messages → all skipped (idempotent)
         let r2 = crate::mcp::dispatch("space_sweep", input);
-        assert_eq!(r2["inserted"], 0,
-            "second sweep should insert 0, got {}", r2["inserted"]);
+        assert_eq!(
+            r2["inserted"], 0,
+            "second sweep should insert 0, got {}",
+            r2["inserted"]
+        );
         Ok(())
     }
 
@@ -363,19 +431,27 @@ mod tests {
         let f = NamedTempFile::new()?;
         // A message with >1000 chars should produce multiple drawers (windowed split)
         // Use varied content so windows differ and aren't deduped by blake3.
-        let long_content: String = (0..1200).map(|i| char::from(b'A' + (i % 26) as u8)).collect();
+        let long_content: String = (0..1200)
+            .map(|i| char::from(b'A' + (i % 26) as u8))
+            .collect();
         let msgs = json!([
             { "role": "assistant", "content": long_content, "ts": "2026-05-03T10:00:00Z" }
         ]);
-        let result = crate::mcp::dispatch("space_sweep", json!({
-            "space_path": f.path().to_str().unwrap(),
-            "wing": "w",
-            "room": "chat",
-            "messages": msgs
-        }));
+        let result = crate::mcp::dispatch(
+            "space_sweep",
+            json!({
+                "space_path": f.path().to_str().unwrap(),
+                "wing": "w",
+                "room": "chat",
+                "messages": msgs
+            }),
+        );
         // 1200 chars, window=400, step=350 → windows at 0,350,700,1050 → 4 chunks
-        assert!(result["inserted"].as_u64().unwrap() >= 3,
-            "long message should yield >=3 chunks, got {}", result["inserted"]);
+        assert!(
+            result["inserted"].as_u64().unwrap() >= 3,
+            "long message should yield >=3 chunks, got {}",
+            result["inserted"]
+        );
         Ok(())
     }
 
@@ -383,15 +459,24 @@ mod tests {
     fn mcp_wing_search_scoped() -> Result<()> {
         let f = NamedTempFile::new()?;
         let mut space = Space::open("t", f.path())?;
-        space.wing("alice").room("notes").put("quantum computing fundamentals", None)?;
-        space.wing("bob").room("notes").put("classical music theory", None)?;
+        space
+            .wing("alice")
+            .room("notes")
+            .put("quantum computing fundamentals", None)?;
+        space
+            .wing("bob")
+            .room("notes")
+            .put("classical music theory", None)?;
 
-        let result = crate::mcp::dispatch("wing_search", json!({
-            "space_path": f.path().to_str().unwrap(),
-            "wing": "alice",
-            "query": "quantum",
-            "k": 5
-        }));
+        let result = crate::mcp::dispatch(
+            "wing_search",
+            json!({
+                "space_path": f.path().to_str().unwrap(),
+                "wing": "alice",
+                "query": "quantum",
+                "k": 5
+            }),
+        );
         assert_eq!(result["ok"], true);
         let hits = result["results"].as_array().unwrap();
         // All hits should be from alice's wing
@@ -405,16 +490,35 @@ mod tests {
     fn search_reranked_returns_relevant() -> Result<()> {
         let f = NamedTempFile::new()?;
         let mut space = Space::open("t", f.path())?;
-        space.wing("w").room("r").put("quantum entanglement in physics experiments", None)?;
-        space.wing("w").room("r").put("banana bread recipe with walnuts", None)?;
-        space.wing("w").room("r").put("quantum computing qubit coherence times", None)?;
-        space.wing("w").room("r").put("chocolate chip cookie recipe", None)?;
-        space.wing("w").room("r").put("quantum error correction surface codes", None)?;
+        space
+            .wing("w")
+            .room("r")
+            .put("quantum entanglement in physics experiments", None)?;
+        space
+            .wing("w")
+            .room("r")
+            .put("banana bread recipe with walnuts", None)?;
+        space
+            .wing("w")
+            .room("r")
+            .put("quantum computing qubit coherence times", None)?;
+        space
+            .wing("w")
+            .room("r")
+            .put("chocolate chip cookie recipe", None)?;
+        space
+            .wing("w")
+            .room("r")
+            .put("quantum error correction surface codes", None)?;
 
         let hits = space.search_reranked("quantum physics", None, 3, 10)?;
         assert!(!hits.is_empty(), "expected hits");
         let top_text = hits[0].text.to_lowercase();
-        assert!(top_text.contains("quantum"), "top hit should mention quantum, got: {}", hits[0].text);
+        assert!(
+            top_text.contains("quantum"),
+            "top hit should mention quantum, got: {}",
+            hits[0].text
+        );
         Ok(())
     }
 
@@ -447,13 +551,17 @@ mod tests {
         };
         // Synonym sentence — same semantic domain, should be very similar
         let car_text = embed_text(
-            "The car motor needs routine maintenance including oil replacement and tuning"
-        ).await.expect("embed car sentence");
+            "The car motor needs routine maintenance including oil replacement and tuning",
+        )
+        .await
+        .expect("embed car sentence");
 
         // Unrelated domain — cooking, no vehicle content
         let recipe_text = embed_text(
-            "Slice the ripe banana and mix with yogurt and honey for a healthy breakfast smoothie"
-        ).await.expect("embed recipe sentence");
+            "Slice the ripe banana and mix with yogurt and honey for a healthy breakfast smoothie",
+        )
+        .await
+        .expect("embed recipe sentence");
 
         let sim_synonyms = cosine(&automotive_text, &car_text);
         let sim_unrelated = cosine(&automotive_text, &recipe_text);

@@ -7,12 +7,12 @@
 //!   cargo run --release -p synapsql --bin synapsql_bench -- \
 //!     --addr 127.0.0.1:3306 --concurrency 100 --queries 1000
 
-use std::sync::Arc;
+use clap::Parser;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "synapsql_bench")]
@@ -33,8 +33,10 @@ async fn main() {
     let addr = Arc::new(cli.addr.clone());
     let total_queries = cli.concurrency * cli.queries;
 
-    println!("SynapsQL bench: {} concurrent × {} queries = {} total",
-        cli.concurrency, cli.queries, total_queries);
+    println!(
+        "SynapsQL bench: {} concurrent × {} queries = {} total",
+        cli.concurrency, cli.queries, total_queries
+    );
     println!("Target: server running on {}", cli.addr);
     println!();
 
@@ -63,19 +65,29 @@ async fn main() {
                         match tokio::time::timeout(
                             Duration::from_millis(500),
                             stream.read(&mut buf),
-                        ).await {
-                            Ok(Ok(_)) => { ok.fetch_add(1, Ordering::Relaxed); }
-                            _ => { err.fetch_add(1, Ordering::Relaxed); }
+                        )
+                        .await
+                        {
+                            Ok(Ok(_)) => {
+                                ok.fetch_add(1, Ordering::Relaxed);
+                            }
+                            _ => {
+                                err.fetch_add(1, Ordering::Relaxed);
+                            }
                         }
                         let _ = stream.shutdown().await;
                     }
-                    Err(_) => { err.fetch_add(1, Ordering::Relaxed); }
+                    Err(_) => {
+                        err.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
             }
         }));
     }
 
-    for h in handles { let _ = h.await; }
+    for h in handles {
+        let _ = h.await;
+    }
 
     let elapsed = start.elapsed();
     let ok_count = ok.load(Ordering::Relaxed);

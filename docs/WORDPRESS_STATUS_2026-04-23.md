@@ -46,7 +46,7 @@ WP is therefore **bootable but unusable for real workloads**. Reads of static pa
 
 - ✅ Multi-table DELETE → no-op
 - ✅ `SET ...` → mostly no-op or `PRAGMA foreign_keys`
-- ✅ `SHOW TABLES`, `SHOW DATABASES`, `SHOW VARIABLES LIKE`, `SHOW CREATE TABLE`, `SHOW COLUMNS` (partial, missing `Field` field shape per error #5)
+- ✅ `SHOW TABLES`, `SHOW DATABASES`, `SHOW VARIABLES LIKE`, `SHOW CREATE TABLE`, `SHOW COLUMNS` — full MySQL 6-column shape (Field/Type/Null/Key/Default/Extra) via `pragma_table_info()` SELECT. `DESC` / `DESCRIBE` also fixed. Branch `wp-fix-protocol`.
 - ✅ **`INSERT ... ON DUPLICATE KEY UPDATE`** — rewritten to `INSERT ... ON CONFLICT(col) DO UPDATE SET` for known WP tables; `INSERT OR REPLACE` fallback for unknown tables. Branch `wp-fix-on-duplicate`, commit `6f598e4`.
 - ❌ **MySQL-specific functions** (`SQL_CALC_FOUND_ROWS`, `FOUND_ROWS()`, `IF()`, `IFNULL()` semantics differ from SQLite) — passed through unchanged.
 - ❌ **DATETIME/TIMESTAMP** type coercion — SQLite has no native datetime; WP queries that compare/order on date columns will return string-sorted results.
@@ -138,9 +138,9 @@ WordPress `wpdb::set_sql_mode()` calls `SELECT @@SESSION.sql_mode`. PHP `mysqlnd
 ## Concrete next-step backlog (prioritized)
 
 1. ~~**Add `INSERT ... ON DUPLICATE KEY UPDATE → INSERT ... ON CONFLICT DO UPDATE` rewrite**~~ ✅ **FIXED** — `crates/synapse-mysql/src/rewrite.rs`, commit `6f598e4`, branch `wp-fix-on-duplicate`. 7 unit tests green. Known WP tables use hardcoded conflict column; plugin tables fall back to `INSERT OR REPLACE`. `UNIQUE constraint failed: wp_options.option_name` errors: 0 in post-restart log.
-2. **Fix `SHOW COLUMNS` output shape** to expose `Field`, `Type`, `Null`, `Key`, `Default`, `Extra` columns expected by WP — kills error #5 cascade. ~40 LoC + 3 tests.
+2. ~~**Fix `SHOW COLUMNS` output shape**~~ ✅ **FIXED** — `crates/synapse-mysql/src/rewrite.rs`, branch `wp-fix-protocol`. `SHOW COLUMNS FROM t` / `SHOW FULL COLUMNS FROM t` / `DESC t` now return `Field, Type, Null, Key, Default, Extra` via `pragma_table_info()` SELECT. `PHP Warning: Undefined property: stdClass::$Field` errors: 0 expected after restart. 3 tests added (total 10 green).
 3. **Strip MySQL engine options** from `CREATE TABLE` (`ENGINE=`, `CHARSET=`, `COLLATE=`, `AUTO_INCREMENT=`) — needed for clean migration. ~50 LoC + 5 tests.
-4. **Bump msql-srv packet buffer** to handle WP serialized blobs > 64 KB — kills error #2. Likely a configuration knob in the patched `msql-srv` (see `crates/msql-srv-patched/`).
+4. ~~**Bump msql-srv packet buffer**~~ ✅ **FIXED** — `crates/msql-srv-patched/src/packet.rs`, branch `wp-fix-protocol`. The `Write` impl previously silently truncated data when the 16 MiB packet window was nearly full, returning `Ok(left < buf.len())` and losing the tail. Fixed with a write-loop that drains all bytes across multiple packets. `Packet buffer wasn't big enough` + `Commands out of sync` cascade: eliminated at the source.
 5. **Translate `SQL_CALC_FOUND_ROWS` + `FOUND_ROWS()`** to SQLite-equivalent (run query without `LIMIT`, then capture `COUNT(*)`).
 6. **Datetime coercion layer** — store as SQLite TEXT in ISO-8601, intercept `DATE()`, `DATETIME()`, `UNIX_TIMESTAMP()` calls, register equivalent UDFs.
 7. **Adopt the upstream lexer+parser** (port to Rust or call out to PHP-WASM) — strategic; ends the regex-rewriter approach.

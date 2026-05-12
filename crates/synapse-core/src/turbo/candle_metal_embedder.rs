@@ -131,15 +131,11 @@ impl MetalBertInner {
             .map_err(|e| Error::Other(format!("load tokenizer: {e}")))?;
 
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(
-                &[weights_path],
-                DType::F32,
-                &device,
-            )
-            .map_err(|e| Error::Other(format!("load weights: {e}")))?
+            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
+                .map_err(|e| Error::Other(format!("load weights: {e}")))?
         };
-        let model = BertModel::load(vb, &config)
-            .map_err(|e| Error::Other(format!("build bert: {e}")))?;
+        let model =
+            BertModel::load(vb, &config).map_err(|e| Error::Other(format!("build bert: {e}")))?;
 
         Ok(Self {
             model: std::sync::Mutex::new(model),
@@ -190,7 +186,9 @@ impl MetalBertInner {
             .map_err(|e| Error::Other(format!("type_ids tensor: {e}")))?;
 
         let hidden = {
-            let mut model = self.model.lock()
+            let mut model = self
+                .model
+                .lock()
                 .map_err(|_| Error::Other("bert mutex poisoned".into()))?;
             model
                 .forward(&ids, &type_ids, Some(&mask))

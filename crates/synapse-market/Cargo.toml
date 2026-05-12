@@ -169,6 +169,11 @@ name = "online_learner"
 path = "benches/online_learner.rs"
 harness = false
 
+[[bench]]
+name = "hilbert_locality"
+path = "benches/hilbert_locality.rs"
+harness = false
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 doctest = false

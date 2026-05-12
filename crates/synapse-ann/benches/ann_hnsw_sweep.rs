@@ -61,20 +61,16 @@ fn bench_config(
     for (qi, q) in queries.iter().enumerate() {
         let hits = idx.search(q, K).unwrap();
         let hit_ids: std::collections::HashSet<u64> = hits.iter().map(|(id, _)| *id).collect();
-        let gt_set: std::collections::HashSet<u64> =
-            gt[qi].iter().map(|i| *i as u64).collect();
+        let gt_set: std::collections::HashSet<u64> = gt[qi].iter().map(|i| *i as u64).collect();
         recall_total += hit_ids.intersection(&gt_set).count();
     }
     let recall = recall_total as f32 / (q_count * K) as f32;
-    println!(
-        "=== {name} M={m} ef_c={ef_c} ef_s={ef_s} -> recall@10={recall:.4} ===",
-    );
+    println!("=== {name} M={m} ef_c={ef_c} ef_s={ef_s} -> recall@10={recall:.4} ===",);
 
     let q0 = &queries[0];
-    c.bench_function(
-        &format!("hnsw_{name}_M{m}_ec{ef_c}_es{ef_s}"),
-        |b| b.iter(|| black_box(idx.search(q0, K).unwrap())),
-    );
+    c.bench_function(&format!("hnsw_{name}_M{m}_ec{ef_c}_es{ef_s}"), |b| {
+        b.iter(|| black_box(idx.search(q0, K).unwrap()))
+    });
 }
 
 fn benches(c: &mut Criterion) {

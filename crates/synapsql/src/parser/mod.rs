@@ -7,12 +7,12 @@
 //! - maxpert/marmot: MVCC snapshot isolation (BEGIN READ ONLY / AS OF TIMESTAMP)
 //! - Apache Hive + TanStack/db: predicate pushdown optimization
 
-pub mod rewriter;
 pub mod cache;
 pub mod fingerprint;
+pub mod rewriter;
 pub mod transactions;
 
-pub use rewriter::{rewrite, RewriteResult};
-pub use cache::{QueryCache, PlanCache};
+pub use cache::{PlanCache, QueryCache};
 pub use fingerprint::fingerprint;
-pub use transactions::{classify_txn, is_txn_statement, TxnStatement, IsolationLevel};
+pub use rewriter::{rewrite, RewriteResult};
+pub use transactions::{classify_txn, is_txn_statement, IsolationLevel, TxnStatement};

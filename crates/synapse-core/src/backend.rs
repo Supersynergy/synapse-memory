@@ -41,13 +41,16 @@ impl SqliteBackend for RusqliteBackend {
                     .map(|i| row.get::<_, rusqlite::types::Value>(i))
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(|e| e.to_string())?;
-                let strs = vals.into_iter().map(|v| match v {
-                    rusqlite::types::Value::Text(s) => s,
-                    rusqlite::types::Value::Integer(n) => n.to_string(),
-                    rusqlite::types::Value::Real(f) => f.to_string(),
-                    rusqlite::types::Value::Blob(_) => "<blob>".into(),
-                    rusqlite::types::Value::Null => "NULL".into(),
-                }).collect();
+                let strs = vals
+                    .into_iter()
+                    .map(|v| match v {
+                        rusqlite::types::Value::Text(s) => s,
+                        rusqlite::types::Value::Integer(n) => n.to_string(),
+                        rusqlite::types::Value::Real(f) => f.to_string(),
+                        rusqlite::types::Value::Blob(_) => "<blob>".into(),
+                        rusqlite::types::Value::Null => "NULL".into(),
+                    })
+                    .collect();
                 Ok(Some(strs))
             }
         }
@@ -70,16 +73,16 @@ impl LibsqlBackend {
     async fn conn(&self) -> Result<libsql::Connection, String> {
         // Register extensions BEFORE opening the connection (ABI-verified 2026-04-24).
         unsafe {
-            libsql::ffi::sqlite3_auto_extension(Some(
-                std::mem::transmute::<
-                    *const (),
-                    unsafe extern "C" fn(
-                        *mut libsql::ffi::sqlite3,
-                        *mut *const i8,
-                        *const libsql::ffi::sqlite3_api_routines,
-                    ) -> i32,
-                >(sqlite_vec::sqlite3_vec_init as *const ()),
-            ));
+            libsql::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
+                *const (),
+                unsafe extern "C" fn(
+                    *mut libsql::ffi::sqlite3,
+                    *mut *const i8,
+                    *const libsql::ffi::sqlite3_api_routines,
+                ) -> i32,
+            >(
+                sqlite_vec::sqlite3_vec_init as *const ()
+            )));
         }
         let db = libsql::Builder::new_local(&self.path)
             .build()

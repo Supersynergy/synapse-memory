@@ -13,7 +13,9 @@ impl SeriesXorFilter {
         if keys.len() < 2 {
             return None;
         }
-        Some(Self { inner: Xor8::from(keys) })
+        Some(Self {
+            inner: Xor8::from(keys),
+        })
     }
 
     pub fn contains(&self, key: u64) -> bool {
@@ -38,7 +40,11 @@ impl SeriesXorFilter {
         let block_length = u64::from_le_bytes(bytes[8..16].try_into().ok()?) as usize;
         let fingerprints: Box<[u8]> = bytes[16..].to_vec().into_boxed_slice();
         Some(Self {
-            inner: Xor8 { seed, block_length, fingerprints },
+            inner: Xor8 {
+                seed,
+                block_length,
+                fingerprints,
+            },
         })
     }
 

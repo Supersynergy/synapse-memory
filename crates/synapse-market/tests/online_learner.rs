@@ -1,17 +1,20 @@
-use synapse_market::learn::{OnlineLearner, FtrlLearner};
+use synapse_market::learn::{FtrlLearner, OnlineLearner};
 use synapse_market::series::Series;
 use tempfile::TempDir;
 
 fn label(x: &[f32]) -> f32 {
-    if x[0] + x[1] > 0.0 { 1.0 } else { 0.0 }
+    if x[0] + x[1] > 0.0 {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 fn rand_f32(seed: &mut u64) -> f32 {
     *seed ^= *seed << 13;
     *seed ^= *seed >> 7;
     *seed ^= *seed << 17;
-    let bits = (*seed as u32) | 0x3f800000u32 & 0x3fffffff;
-    f32::from_bits(bits) * 2.0 - 3.0
+    ((*seed as i32) as f32) / i32::MAX as f32
 }
 
 #[test]
@@ -31,7 +34,9 @@ fn ftrl_converges() {
         let x: Vec<f32> = (0..4).map(|_| rand_f32(&mut eval_seed)).collect();
         let y = label(&x);
         let p = learner.predict(&x);
-        if (p > 0.5) == (y > 0.5) { correct += 1; }
+        if (p > 0.5) == (y > 0.5) {
+            correct += 1;
+        }
     }
     let acc = correct as f64 / 500.0;
     assert!(acc >= 0.80, "accuracy {acc:.3} < 0.80");
@@ -70,7 +75,7 @@ fn ftrl_warm_start() {
     let loaded = FtrlLearner::deserialize_from(&bytes).expect("deserialize");
     // Predict test point
     let test = [0.5f32, 0.3, -0.1, 0.2];
-    let p_orig  = learner.predict(&test);
+    let p_orig = learner.predict(&test);
     let p_loaded = loaded.predict(&test);
     assert!((p_orig - p_loaded).abs() < 1e-6);
 }
@@ -98,5 +103,8 @@ fn series_learner_persist_reload() {
     s2.load_learners().unwrap();
 
     let p_after = s2.predict("trend", &test).unwrap();
-    assert!((p_before - p_after).abs() < 1e-6, "p_before={p_before} p_after={p_after}");
+    assert!(
+        (p_before - p_after).abs() < 1e-6,
+        "p_before={p_before} p_after={p_after}"
+    );
 }

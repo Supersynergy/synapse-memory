@@ -14,7 +14,9 @@ fn rand_vec(seed: u64, dim: usize) -> Vec<f32> {
     let mut s = seed.wrapping_add(1);
     let mut v: Vec<f32> = (0..dim)
         .map(|_| {
-            s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
             (s as f32) / (u64::MAX as f32) * 2.0 - 1.0
         })
         .collect();
@@ -36,7 +38,13 @@ fn main() {
     let build_mem = t0.elapsed();
     let t1 = Instant::now();
     for _ in 0..100 {
-        let _ = mem_idx.search(&query, SearchHints { k: K, ..Default::default() });
+        let _ = mem_idx.search(
+            &query,
+            SearchHints {
+                k: K,
+                ..Default::default()
+            },
+        );
     }
     let search_mem = t1.elapsed() / 100;
     eprintln!("all-mem  build={build_mem:.2?}  search(k={K})={search_mem:.2?}");

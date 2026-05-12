@@ -49,7 +49,10 @@ fn resolve_extractor(arg: &str) -> &'static str {
         "mlx" => "mlx",
         "minimax" => "minimax",
         _ => {
-            if std::env::var("MINIMAX_API_KEY").map(|v| !v.is_empty()).unwrap_or(false) {
+            if std::env::var("MINIMAX_API_KEY")
+                .map(|v| !v.is_empty())
+                .unwrap_or(false)
+            {
                 "minimax"
             } else {
                 "rule"

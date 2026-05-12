@@ -43,15 +43,19 @@ static SESSION_POOL: OnceCell<Mutex<Vec<TextEmbedding>>> = OnceCell::new();
 ///   `mxbai-large` → MxbaiEmbedLargeV1        (1024-dim, MTEB 64.7)
 ///   `nomic-1.5`   → NomicEmbedTextV15        (768-dim, MTEB 62.4)
 fn select_model() -> EmbeddingModel {
-    match std::env::var("SYNAPSE_EMBED_MODEL").unwrap_or_default().to_lowercase().as_str() {
-        "bge-small-q"          => EmbeddingModel::BGESmallENV15Q,
-        "arctic-xs"            => EmbeddingModel::SnowflakeArcticEmbedXS,
-        "arctic-s"             => EmbeddingModel::SnowflakeArcticEmbedS,
-        "arctic-m"             => EmbeddingModel::SnowflakeArcticEmbedM,
-        "arctic-l"             => EmbeddingModel::SnowflakeArcticEmbedL,
-        "mxbai-large"          => EmbeddingModel::MxbaiEmbedLargeV1,
-        "nomic-1.5"            => EmbeddingModel::NomicEmbedTextV15,
-        _                      => EmbeddingModel::BGESmallENV15,
+    match std::env::var("SYNAPSE_EMBED_MODEL")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "bge-small-q" => EmbeddingModel::BGESmallENV15Q,
+        "arctic-xs" => EmbeddingModel::SnowflakeArcticEmbedXS,
+        "arctic-s" => EmbeddingModel::SnowflakeArcticEmbedS,
+        "arctic-m" => EmbeddingModel::SnowflakeArcticEmbedM,
+        "arctic-l" => EmbeddingModel::SnowflakeArcticEmbedL,
+        "mxbai-large" => EmbeddingModel::MxbaiEmbedLargeV1,
+        "nomic-1.5" => EmbeddingModel::NomicEmbedTextV15,
+        _ => EmbeddingModel::BGESmallENV15,
     }
 }
 
@@ -248,7 +252,5 @@ pub fn pick_embedder_with_cache<P: AsRef<std::path::Path>>(
         model = "bge-small-en-v1.5",
         "pick_embedder: fastembed ONNX CPU selected"
     );
-    Box::new(
-        Embedder::new_with_cache(cache_path).expect("fastembed pool init failed"),
-    )
+    Box::new(Embedder::new_with_cache(cache_path).expect("fastembed pool init failed"))
 }

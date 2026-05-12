@@ -1,6 +1,6 @@
 /// Property-based tests for page encode/decode, range-filter, delta-encoding.
 use proptest::prelude::*;
-use synapse_market::store::page::{Bar, encode_page, decode_page};
+use synapse_market::store::page::{decode_page, encode_page, Bar};
 
 // ── Strategies ────────────────────────────────────────────────────────────────
 fn arb_bar() -> impl Strategy<Value = Bar> {
@@ -11,9 +11,15 @@ fn arb_bar() -> impl Strategy<Value = Bar> {
         0.01f32..=10_000.0f32,
         0.01f32..=10_000.0f32,
         0.0f32..=1_000_000_000.0f32,
-    ).prop_map(|(ts, open, high, low, close, volume)| Bar {
-        ts, open, high, low, close, volume,
-    })
+    )
+        .prop_map(|(ts, open, high, low, close, volume)| Bar {
+            ts,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        })
 }
 
 fn arb_bars(max: usize) -> impl Strategy<Value = Vec<Bar>> {

@@ -1,8 +1,11 @@
 //! SpannIndex — public facade: build, save, load, search.
 
-use std::{fs, path::{Path, PathBuf}};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     build::{build_index, load_centroids},
@@ -37,11 +40,7 @@ pub struct SpannIndex {
 
 impl SpannIndex {
     /// Build a new SPANN index from docs, persist to `dir`.
-    pub fn build(
-        dir: &Path,
-        docs: &[(u64, Vec<f32>)],
-        config: SpannConfig,
-    ) -> Result<Self> {
+    pub fn build(dir: &Path, docs: &[(u64, Vec<f32>)], config: SpannConfig) -> Result<Self> {
         fs::create_dir_all(dir)?;
         let centroids = build_index(dir, docs, config.n_clusters, config.dim, config.max_iter)?;
         let n_clusters = centroids.len();
@@ -59,7 +58,11 @@ impl SpannIndex {
         let posting_lists = Self::open_posting_lists(dir, n_clusters, config.dim)?;
 
         Ok(Self {
-            config: SpannConfig { n_clusters, n_docs: docs.len(), ..config },
+            config: SpannConfig {
+                n_clusters,
+                n_docs: docs.len(),
+                ..config
+            },
             dir: dir.to_path_buf(),
             centroids,
             posting_lists,
@@ -75,8 +78,7 @@ impl SpannIndex {
             manifest.n_clusters,
             manifest.dim,
         )?;
-        let posting_lists =
-            Self::open_posting_lists(dir, manifest.n_clusters, manifest.dim)?;
+        let posting_lists = Self::open_posting_lists(dir, manifest.n_clusters, manifest.dim)?;
         Ok(Self {
             config: SpannConfig {
                 n_clusters: manifest.n_clusters,

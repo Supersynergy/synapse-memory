@@ -23,5 +23,7 @@ pub trait OnlineLearner: Send + Sync {
     /// Serialize state to bytes (for sidecar persistence).
     fn serialize(&self) -> Vec<u8>;
     /// Deserialize from bytes. Returns `None` on format mismatch.
-    fn deserialize_from(bytes: &[u8]) -> Option<Self> where Self: Sized;
+    fn deserialize_from(bytes: &[u8]) -> Option<Self>
+    where
+        Self: Sized;
 }

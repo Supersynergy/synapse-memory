@@ -13,10 +13,14 @@ fn main() {
 
     /// LCG-based pseudo-random float vector, normalized to unit sphere.
     fn vec(seed: u64) -> Vec<f32> {
-        let mut state = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let mut state = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         let mut v: Vec<f32> = (0..DIM)
             .map(|_| {
-                state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 // Box-Muller approx via uniform: map to [-1,1]
                 (state >> 33) as f32 / (u32::MAX as f32 / 2.0) - 1.0
             })
@@ -52,7 +56,9 @@ fn main() {
         println!(
             "=== corpus={} ef_search={} ===",
             n,
-            ef_search.map(|e| e.to_string()).unwrap_or_else(|| "default".into())
+            ef_search
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "default".into())
         );
 
         let t_build = Instant::now();
@@ -107,7 +113,9 @@ fn main() {
     let vectors_100k: Vec<Vec<f32>> = (0..n100k as u64).map(vec).collect();
     // Query seeds chosen so they land in same distribution as corpus (uniform LCG).
     // Offset by n100k so they are NOT in corpus but draw from same distribution.
-    let queries: Vec<Vec<f32>> = (0..QUERIES as u64).map(|i| vec(n100k as u64 + 1337 + i)).collect();
+    let queries: Vec<Vec<f32>> = (0..QUERIES as u64)
+        .map(|i| vec(n100k as u64 + 1337 + i))
+        .collect();
 
     println!("Computing brute-force truth for 100k...");
     let t_truth = Instant::now();

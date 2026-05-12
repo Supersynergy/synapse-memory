@@ -9,11 +9,15 @@ pub fn max_sim(query_vecs: &[Vec<f32>], doc_vecs: &[Vec<f32>]) -> f32 {
     if query_vecs.is_empty() || doc_vecs.is_empty() {
         return 0.0;
     }
-    query_vecs.iter().map(|qv| {
-        doc_vecs.iter()
-            .map(|dv| dot(qv, dv))
-            .fold(f32::NEG_INFINITY, f32::max)
-    }).sum()
+    query_vecs
+        .iter()
+        .map(|qv| {
+            doc_vecs
+                .iter()
+                .map(|dv| dot(qv, dv))
+                .fold(f32::NEG_INFINITY, f32::max)
+        })
+        .sum()
 }
 
 #[inline(always)]
@@ -21,13 +25,16 @@ fn dot(a: &[f32], b: &[f32]) -> f32 {
     debug_assert_eq!(a.len(), b.len());
     // unroll-4 for compiler auto-vec; same pattern as synapse-kernel f32_l2
     let n = a.len();
-    let mut acc0 = 0f32; let mut acc1 = 0f32; let mut acc2 = 0f32; let mut acc3 = 0f32;
+    let mut acc0 = 0f32;
+    let mut acc1 = 0f32;
+    let mut acc2 = 0f32;
+    let mut acc3 = 0f32;
     let mut i = 0;
     while i + 4 <= n {
-        acc0 += unsafe { *a.get_unchecked(i)   * *b.get_unchecked(i) };
-        acc1 += unsafe { *a.get_unchecked(i+1) * *b.get_unchecked(i+1) };
-        acc2 += unsafe { *a.get_unchecked(i+2) * *b.get_unchecked(i+2) };
-        acc3 += unsafe { *a.get_unchecked(i+3) * *b.get_unchecked(i+3) };
+        acc0 += unsafe { *a.get_unchecked(i) * *b.get_unchecked(i) };
+        acc1 += unsafe { *a.get_unchecked(i + 1) * *b.get_unchecked(i + 1) };
+        acc2 += unsafe { *a.get_unchecked(i + 2) * *b.get_unchecked(i + 2) };
+        acc3 += unsafe { *a.get_unchecked(i + 3) * *b.get_unchecked(i + 3) };
         i += 4;
     }
     while i < n {

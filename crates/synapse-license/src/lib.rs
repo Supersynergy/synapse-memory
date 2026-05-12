@@ -56,11 +56,17 @@ static CACHE_PATH_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 #[doc(hidden)]
 pub fn _set_cache_path_for_test(p: Option<PathBuf>) {
-    *CACHE_PATH_OVERRIDE.write().unwrap_or_else(|e| e.into_inner()) = p;
+    *CACHE_PATH_OVERRIDE
+        .write()
+        .unwrap_or_else(|e| e.into_inner()) = p;
 }
 
 fn cache_path() -> PathBuf {
-    if let Some(p) = CACHE_PATH_OVERRIDE.read().unwrap_or_else(|e| e.into_inner()).clone() {
+    if let Some(p) = CACHE_PATH_OVERRIDE
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    {
         return p;
     }
     dirs::config_dir()
@@ -296,7 +302,10 @@ fn get_cpu_brand() -> String {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        if let Ok(out) = Command::new("sysctl").args(["-n", "machdep.cpu.brand_string"]).output() {
+        if let Ok(out) = Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+        {
             return String::from_utf8_lossy(&out.stdout).trim().to_string();
         }
         "unknown-cpu".to_string()

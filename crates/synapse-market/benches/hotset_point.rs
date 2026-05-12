@@ -1,11 +1,11 @@
+use rusqlite::Connection;
 /// HotSet point-lookup bench: 220 tickers × 122 bars.
 /// Compares: SQLite WAL, Synapse-X cold, Synapse-X warm (HotSet).
 use std::time::Instant;
 use tempfile::TempDir;
-use rusqlite::Connection;
 
-use synapse_market::store::page::Bar;
 use synapse_market::series::Series;
+use synapse_market::store::page::Bar;
 
 const TICKERS: usize = 220;
 const BARS_PER_TICKER: usize = 122;
@@ -49,7 +49,8 @@ fn setup_sqlite(dir: &TempDir) -> Connection {
         let tx = conn.unchecked_transaction().unwrap();
         for t in 0..TICKERS {
             for b in make_bars(t) {
-                stmt.execute(rusqlite::params![t as i64, b.ts, b.close as f64]).unwrap();
+                stmt.execute(rusqlite::params![t as i64, b.ts, b.close as f64])
+                    .unwrap();
             }
         }
         tx.commit().unwrap();
@@ -130,19 +131,36 @@ fn main() {
     // ── Report ────────────────────────────────────────────────────────────────
     let sqlite_p50 = percentile(sqlite_times.clone(), 50.0);
     let sqlite_p95 = percentile(sqlite_times, 95.0);
-    let cold_p50   = percentile(cold_times.clone(), 50.0);
-    let cold_p95   = percentile(cold_times, 95.0);
-    let warm_p50   = percentile(warm_times.clone(), 50.0);
-    let warm_p95   = percentile(warm_times, 95.0);
+    let cold_p50 = percentile(cold_times.clone(), 50.0);
+    let cold_p95 = percentile(cold_times, 95.0);
+    let warm_p50 = percentile(warm_times.clone(), 50.0);
+    let warm_p95 = percentile(warm_times, 95.0);
 
-    println!("=== hotset_point bench ({ITERS} iters, {TICKERS} tickers × {BARS_PER_TICKER} bars) ===");
-    println!("SQLite WAL  p50={:>6}µs  p95={:>6}µs", sqlite_p50/1000, sqlite_p95/1000);
-    println!("Synapse cold p50={:>6}µs  p95={:>6}µs", cold_p50/1000, cold_p95/1000);
-    println!("Synapse warm p50={:>6}µs  p95={:>6}µs  [HotSet]", warm_p50/1000, warm_p95/1000);
+    println!(
+        "=== hotset_point bench ({ITERS} iters, {TICKERS} tickers × {BARS_PER_TICKER} bars) ==="
+    );
+    println!(
+        "SQLite WAL  p50={:>6}µs  p95={:>6}µs",
+        sqlite_p50 / 1000,
+        sqlite_p95 / 1000
+    );
+    println!(
+        "Synapse cold p50={:>6}µs  p95={:>6}µs",
+        cold_p50 / 1000,
+        cold_p95 / 1000
+    );
+    println!(
+        "Synapse warm p50={:>6}µs  p95={:>6}µs  [HotSet]",
+        warm_p50 / 1000,
+        warm_p95 / 1000
+    );
 
     let gate = warm_p50 <= 12_000; // 12µs in nanos
     println!();
-    println!("Gate (warm p50 ≤ 12µs): {}", if gate { "PASS ✓" } else { "FAIL ✗" });
+    println!(
+        "Gate (warm p50 ≤ 12µs): {}",
+        if gate { "PASS ✓" } else { "FAIL ✗" }
+    );
 
     // Print hit/miss stats
     let mut total_hits = 0u64;

@@ -2,8 +2,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
-use synapse_market::Market;
 use synapse_market::ffi::smx_query_range;
+use synapse_market::Market;
 
 fn py_err(e: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -49,10 +49,7 @@ impl SeriesHandle {
     fn closes_bytes(&self, start: i64, end: i64) -> PyResult<PyObject> {
         let m = unsafe { &*(self.market_ptr as *const Market) };
         let rows = smx_query_range(m, &self.ticker, start, end).map_err(py_err)?;
-        let bytes: Vec<u8> = rows
-            .iter()
-            .flat_map(|r| r.4.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = rows.iter().flat_map(|r| r.4.to_le_bytes()).collect();
         Python::with_gil(|py| Ok(pyo3::types::PyBytes::new_bound(py, &bytes).into()))
     }
 }

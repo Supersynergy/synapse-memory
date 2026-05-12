@@ -3,7 +3,7 @@
 //! Score(q, d) = Σ_{t ∈ q∩d} q_weight(t) * d_weight(t)   [dot-product over sparse vecs]
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::collections::HashMap;
 
 use crate::SparseVec;
@@ -17,7 +17,8 @@ impl SpladeIndex {
     /// Use `":memory:"` for ephemeral / test usage.
     pub fn open(path: &str) -> Result<Self> {
         let conn = Connection::open(path)?;
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             PRAGMA journal_mode = WAL;
             PRAGMA synchronous = NORMAL;
             CREATE TABLE IF NOT EXISTS postings (
@@ -27,7 +28,8 @@ impl SpladeIndex {
                 PRIMARY KEY (term_id, doc_id)
             );
             CREATE INDEX IF NOT EXISTS idx_postings_term ON postings(term_id);
-        ")?;
+        ",
+        )?;
         Ok(Self { conn })
     }
 
@@ -35,7 +37,10 @@ impl SpladeIndex {
     pub fn add_doc(&mut self, doc_id: u64, sparse: &SparseVec) -> Result<()> {
         let tx = self.conn.transaction()?;
         // Remove old postings for this doc (upsert via DELETE + INSERT)
-        tx.execute("DELETE FROM postings WHERE doc_id = ?1", params![doc_id as i64])?;
+        tx.execute(
+            "DELETE FROM postings WHERE doc_id = ?1",
+            params![doc_id as i64],
+        )?;
         for (&term_id, &weight) in sparse {
             tx.execute(
                 "INSERT INTO postings(term_id, doc_id, weight) VALUES(?1, ?2, ?3)",
@@ -56,9 +61,9 @@ impl SpladeIndex {
         let mut scores: HashMap<i64, f32> = HashMap::new();
 
         for (&term_id, &q_weight) in query {
-            let mut stmt = self.conn.prepare_cached(
-                "SELECT doc_id, weight FROM postings WHERE term_id = ?1",
-            )?;
+            let mut stmt = self
+                .conn
+                .prepare_cached("SELECT doc_id, weight FROM postings WHERE term_id = ?1")?;
             let rows = stmt.query_map(params![term_id as i64], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)? as f32))
             })?;
@@ -69,10 +74,8 @@ impl SpladeIndex {
         }
 
         // Sort descending, take top_k
-        let mut ranked: Vec<(u64, f32)> = scores
-            .into_iter()
-            .map(|(did, s)| (did as u64, s))
-            .collect();
+        let mut ranked: Vec<(u64, f32)> =
+            scores.into_iter().map(|(did, s)| (did as u64, s)).collect();
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         ranked.truncate(top_k);
         Ok(ranked)
@@ -80,8 +83,11 @@ impl SpladeIndex {
 
     /// Number of indexed documents (approximate — counts distinct doc_ids).
     pub fn doc_count(&self) -> Result<u64> {
-        let n: i64 = self.conn
-            .query_row("SELECT COUNT(DISTINCT doc_id) FROM postings", [], |r| r.get(0))?;
+        let n: i64 =
+            self.conn
+                .query_row("SELECT COUNT(DISTINCT doc_id) FROM postings", [], |r| {
+                    r.get(0)
+                })?;
         Ok(n as u64)
     }
 }
@@ -102,15 +108,15 @@ mod tests {
 
         let docs = vec![
             (0u64, "splade neural sparse retrieval model"),
-            (1,    "dense retrieval bi-encoder sentence"),
-            (2,    "inverted index posting list BM25"),
-            (3,    "transformer masked language model BERT"),
-            (4,    "splade expansion vocabulary terms"),
-            (5,    "colbert late interaction multi-vector"),
-            (6,    "sparse representation regularisation"),
-            (7,    "neural ranking passage reranking"),
-            (8,    "query expansion pseudo relevance feedback"),
-            (9,    "MTEB benchmark retrieval recall"),
+            (1, "dense retrieval bi-encoder sentence"),
+            (2, "inverted index posting list BM25"),
+            (3, "transformer masked language model BERT"),
+            (4, "splade expansion vocabulary terms"),
+            (5, "colbert late interaction multi-vector"),
+            (6, "sparse representation regularisation"),
+            (7, "neural ranking passage reranking"),
+            (8, "query expansion pseudo relevance feedback"),
+            (9, "MTEB benchmark retrieval recall"),
         ];
 
         for (id, text) in &docs {

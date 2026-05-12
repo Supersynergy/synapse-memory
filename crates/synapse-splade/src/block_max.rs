@@ -6,8 +6,8 @@
 //!
 //! Score(q,d) = Σ_{t ∈ q∩d} q_weight(t) * d_weight(t)
 
-use std::collections::{BinaryHeap, HashMap};
 use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 
 use crate::SparseVec;
 
@@ -26,7 +26,10 @@ impl Block {
     fn from_postings(mut postings: Vec<(DocId, f32)>) -> Self {
         postings.sort_unstable_by_key(|p| p.0);
         let max_weight = postings.iter().map(|p| p.1).fold(0.0_f32, f32::max);
-        Self { max_weight, postings }
+        Self {
+            max_weight,
+            postings,
+        }
     }
 }
 
@@ -66,7 +69,10 @@ impl BlockMaxIndex {
             buf.push((doc_id, weight));
             if buf.len() >= self.block_size {
                 let full = std::mem::take(buf);
-                self.terms.entry(term_id).or_default().push(Block::from_postings(full));
+                self.terms
+                    .entry(term_id)
+                    .or_default()
+                    .push(Block::from_postings(full));
             }
         }
     }
@@ -77,7 +83,10 @@ impl BlockMaxIndex {
         let pending = std::mem::take(&mut self.pending);
         for (term_id, buf) in pending {
             if !buf.is_empty() {
-                self.terms.entry(term_id).or_default().push(Block::from_postings(buf));
+                self.terms
+                    .entry(term_id)
+                    .or_default()
+                    .push(Block::from_postings(buf));
             }
         }
     }
@@ -108,7 +117,8 @@ impl BlockMaxIndex {
             .collect();
 
         // Sort by term_upper_bound descending (process most impactful terms first)
-        query_terms.sort_unstable_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        query_terms
+            .sort_unstable_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
         // Prefix sum of remaining term upper bounds (for skip estimation)
         let n = query_terms.len();
@@ -124,7 +134,9 @@ impl BlockMaxIndex {
         // Use BinaryHeap<Reverse<(u32, DocId)>> where u32 = f32::to_bits
         let mut heap: BinaryHeap<Reverse<(u32, DocId)>> = BinaryHeap::new();
         let heap_min = |heap: &BinaryHeap<Reverse<(u32, DocId)>>| -> f32 {
-            heap.peek().map(|Reverse((bits, _))| f32::from_bits(*bits)).unwrap_or(0.0)
+            heap.peek()
+                .map(|Reverse((bits, _))| f32::from_bits(*bits))
+                .unwrap_or(0.0)
         };
 
         for (i, &(tid, qw, _)) in query_terms.iter().enumerate() {
@@ -186,7 +198,10 @@ mod tests {
         let enc = SpladeEncoder::default();
         let mut idx = BlockMaxIndex::default();
         for i in 0..n_docs {
-            let text = format!("document number {} with tokens splade neural sparse retrieval", i);
+            let text = format!(
+                "document number {} with tokens splade neural sparse retrieval",
+                i
+            );
             let sv = enc.encode(&text).unwrap();
             idx.add_doc(i as DocId, &sv);
         }
@@ -231,7 +246,10 @@ mod tests {
         let naive_ids: Vec<DocId> = naive_res.iter().map(|(id, _)| *id).collect();
         let bmp_ids: Vec<DocId> = bmp_res.iter().map(|(id, _)| *id).collect();
 
-        assert_eq!(naive_ids, bmp_ids, "BMP rank mismatch vs naive\nnaive={naive_ids:?}\nbmp={bmp_ids:?}");
+        assert_eq!(
+            naive_ids, bmp_ids,
+            "BMP rank mismatch vs naive\nnaive={naive_ids:?}\nbmp={bmp_ids:?}"
+        );
     }
 
     #[test]
@@ -259,7 +277,9 @@ mod tests {
         let mut idx = BlockMaxIndex::default();
         let sv0 = enc.encode("splade neural sparse unique_token_xyz").unwrap();
         for i in 1..20u64 {
-            let sv = enc.encode(&format!("unrelated document number {}", i)).unwrap();
+            let sv = enc
+                .encode(&format!("unrelated document number {}", i))
+                .unwrap();
             idx.add_doc(i, &sv);
         }
         idx.add_doc(0, &sv0);

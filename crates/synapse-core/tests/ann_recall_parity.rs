@@ -73,8 +73,7 @@ fn recall_at_10_parity_vs_brute_force() {
 
         // Fast path: goes through UsearchIndex::search → hydrate_hits.
         let fast = db.search("", SearchMode::Vec, Some(&qv), K).unwrap();
-        let fast_ids: std::collections::HashSet<i64> =
-            fast.iter().map(|h| h.id).collect();
+        let fast_ids: std::collections::HashSet<i64> = fast.iter().map(|h| h.id).collect();
 
         // Slow path: brute-force sqlite-vec via raw SQL. Mirrors the
         // `search_vec` fallback body exactly.
@@ -179,7 +178,10 @@ fn self_vector_top1_match() {
         }
     }
     let ratio = mismatches as f64 / N as f64;
-    eprintln!("[self_vector_top1] mismatches={mismatches}/{N} ({:.4})", ratio);
+    eprintln!(
+        "[self_vector_top1] mismatches={mismatches}/{N} ({:.4})",
+        ratio
+    );
     // Allow <= 1% mismatches for ties; usearch is deterministic per insert
     // order, but tied-distance picks may legitimately point to a non-self
     // vector for a handful of cases.

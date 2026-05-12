@@ -51,9 +51,9 @@ pub fn expand_graph_cte(sql: &str) -> Option<String> {
          WHERE t.depth < {depth}\n\
          )\n{rest}",
         start = args.start,
-        et    = args.edge_table,
+        et = args.edge_table,
         depth = args.max_depth,
-        rest  = rest,
+        rest = rest,
     );
     Some(cte)
 }
@@ -65,17 +65,19 @@ fn parse_graph_args(s: &str) -> Option<GraphTraverseArgs> {
 
     for part in s.split(',') {
         let kv: Vec<&str> = part.splitn(2, '=').collect();
-        if kv.len() != 2 { continue; }
+        if kv.len() != 2 {
+            continue;
+        }
         match kv[0].trim().to_ascii_lowercase().as_str() {
-            "start"      => start      = kv[1].trim().parse().ok(),
+            "start" => start = kv[1].trim().parse().ok(),
             "edge_table" => edge_table = Some(kv[1].trim().to_owned()),
-            "max_depth"  => max_depth  = kv[1].trim().parse().unwrap_or(3),
+            "max_depth" => max_depth = kv[1].trim().parse().unwrap_or(3),
             _ => {}
         }
     }
 
     Some(GraphTraverseArgs {
-        start:      start?,
+        start: start?,
         edge_table: edge_table?,
         max_depth,
     })

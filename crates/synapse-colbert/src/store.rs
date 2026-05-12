@@ -6,13 +6,13 @@
 //! Table: colbert_muvera(doc_id INTEGER, fde BLOB) [optional, muvera feature]
 //! fde blob = raw f32-le bytes of FDE vector
 
+use crate::quant::{max_sim_i8, quant_i8};
+use crate::{max_sim, ColbertEmbedder};
 use anyhow::Result;
-use rusqlite::{Connection, params};
-use crate::{ColbertEmbedder, max_sim};
-use crate::quant::{quant_i8, max_sim_i8};
+use rusqlite::{params, Connection};
 
 #[cfg(feature = "muvera")]
-use crate::muvera::{muvera_encode, cosine_sim};
+use crate::muvera::{cosine_sim, muvera_encode};
 
 /// Config for MUVERA two-tier search.
 #[cfg(feature = "muvera")]
@@ -27,7 +27,10 @@ pub struct MuveraConfig {
 #[cfg(feature = "muvera")]
 impl Default for MuveraConfig {
     fn default() -> Self {
-        Self { fde_dim: 1024, seed: 42 }
+        Self {
+            fde_dim: 1024,
+            seed: 42,
+        }
     }
 }
 
@@ -49,7 +52,7 @@ impl<'a> ColbertStore<'a> {
                 doc_id  INTEGER PRIMARY KEY,
                 vecs_i8 BLOB NOT NULL,
                 scales  BLOB NOT NULL
-            );"
+            );",
         )?;
         Ok(Self {
             conn,
@@ -75,7 +78,7 @@ impl<'a> ColbertStore<'a> {
             CREATE TABLE IF NOT EXISTS colbert_muvera (
                 doc_id  INTEGER PRIMARY KEY,
                 fde     BLOB NOT NULL
-            );"
+            );",
         )?;
         Ok(Self {
             conn,
@@ -109,7 +112,10 @@ impl<'a> ColbertStore<'a> {
             params![doc_id],
             |row| row.get(0),
         )?;
-        Ok(bytes.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+        Ok(bytes
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect())
     }
 
     /// Two-tier MUVERA search: FDE-ANN (exhaustive dot-product) → ColBERT max-sim rerank.
@@ -125,27 +131,33 @@ impl<'a> ColbertStore<'a> {
         k: usize,
         fde_top_n: usize,
     ) -> Result<Vec<(i64, f32)>> {
-        let cfg = self.muvera_cfg.as_ref()
+        let cfg = self
+            .muvera_cfg
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("MUVERA not configured — use new_with_muvera()"))?;
 
         let q_fde = muvera_encode(query_token_vecs, cfg.fde_dim, cfg.seed);
 
         // Exhaustive FDE scan
-        let mut stmt = self.conn.prepare("SELECT doc_id, fde FROM colbert_muvera")?;
-        let mut fde_scores: Vec<(i64, f32)> = stmt.query_map([], |row| {
-            let doc_id: i64 = row.get(0)?;
-            let bytes: Vec<u8> = row.get(1)?;
-            Ok((doc_id, bytes))
-        })?
-        .filter_map(|r| r.ok())
-        .map(|(doc_id, bytes)| {
-            let fde: Vec<f32> = bytes.chunks_exact(4)
-                .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
-                .collect();
-            let sim = cosine_sim(&q_fde, &fde);
-            (doc_id, sim)
-        })
-        .collect();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT doc_id, fde FROM colbert_muvera")?;
+        let mut fde_scores: Vec<(i64, f32)> = stmt
+            .query_map([], |row| {
+                let doc_id: i64 = row.get(0)?;
+                let bytes: Vec<u8> = row.get(1)?;
+                Ok((doc_id, bytes))
+            })?
+            .filter_map(|r| r.ok())
+            .map(|(doc_id, bytes)| {
+                let fde: Vec<f32> = bytes
+                    .chunks_exact(4)
+                    .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+                    .collect();
+                let sim = cosine_sim(&q_fde, &fde);
+                (doc_id, sim)
+            })
+            .collect();
 
         fde_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         fde_scores.truncate(fde_top_n);
@@ -153,20 +165,24 @@ impl<'a> ColbertStore<'a> {
         let candidates: Vec<i64> = fde_scores.iter().map(|(id, _)| *id).collect();
 
         // ColBERT max-sim rerank on top-N
-        let mut reranked: Vec<(i64, f32)> = candidates.iter().filter_map(|&doc_id| {
-            // Try i8 first, fall back to f32
-            let score = if let Ok(doc_q) = self.load_vecs_i8(doc_id) {
-                let query_q: Vec<(Vec<i8>, f32)> = query_token_vecs.iter()
-                    .map(|v| crate::quant::quant_i8(v))
-                    .collect();
-                max_sim_i8(&query_q, &doc_q)
-            } else if let Ok(doc_vecs) = self.load_vecs(doc_id) {
-                max_sim(query_token_vecs, &doc_vecs)
-            } else {
-                return None;
-            };
-            Some((doc_id, score))
-        }).collect();
+        let mut reranked: Vec<(i64, f32)> = candidates
+            .iter()
+            .filter_map(|&doc_id| {
+                // Try i8 first, fall back to f32
+                let score = if let Ok(doc_q) = self.load_vecs_i8(doc_id) {
+                    let query_q: Vec<(Vec<i8>, f32)> = query_token_vecs
+                        .iter()
+                        .map(|v| crate::quant::quant_i8(v))
+                        .collect();
+                    max_sim_i8(&query_q, &doc_q)
+                } else if let Ok(doc_vecs) = self.load_vecs(doc_id) {
+                    max_sim(query_token_vecs, &doc_vecs)
+                } else {
+                    return None;
+                };
+                Some((doc_id, score))
+            })
+            .collect();
 
         reranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         reranked.truncate(k);
@@ -200,14 +216,21 @@ impl<'a> ColbertStore<'a> {
     }
 
     /// Rerank using i8 quantized vectors.
-    pub fn colbert_rerank_i8(&self, query_text: &str, candidates: &[i64]) -> Result<Vec<(i64, f32)>> {
+    pub fn colbert_rerank_i8(
+        &self,
+        query_text: &str,
+        candidates: &[i64],
+    ) -> Result<Vec<(i64, f32)>> {
         let query_vecs = self.emb.embed_query(query_text)?;
         let query_q: Vec<(Vec<i8>, f32)> = query_vecs.iter().map(|v| quant_i8(v)).collect();
-        let mut scores: Vec<(i64, f32)> = candidates.iter().filter_map(|&doc_id| {
-            let doc_q = self.load_vecs_i8(doc_id).ok()?;
-            let score = max_sim_i8(&query_q, &doc_q);
-            Some((doc_id, score))
-        }).collect();
+        let mut scores: Vec<(i64, f32)> = candidates
+            .iter()
+            .filter_map(|&doc_id| {
+                let doc_q = self.load_vecs_i8(doc_id).ok()?;
+                let score = max_sim_i8(&query_q, &doc_q);
+                Some((doc_id, score))
+            })
+            .collect();
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(scores)
     }
@@ -223,11 +246,16 @@ impl<'a> ColbertStore<'a> {
             anyhow::bail!("corrupt i8 blob for doc_id={doc_id}");
         }
         let dim = vecs_i8_bytes.len() / n;
-        let result = (0..n).map(|i| {
-            let scale = f32::from_le_bytes(scales_bytes[i*4..i*4+4].try_into().unwrap());
-            let q: Vec<i8> = vecs_i8_bytes[i*dim..(i+1)*dim].iter().map(|&x| x as i8).collect();
-            (q, scale)
-        }).collect();
+        let result = (0..n)
+            .map(|i| {
+                let scale = f32::from_le_bytes(scales_bytes[i * 4..i * 4 + 4].try_into().unwrap());
+                let q: Vec<i8> = vecs_i8_bytes[i * dim..(i + 1) * dim]
+                    .iter()
+                    .map(|&x| x as i8)
+                    .collect();
+                (q, scale)
+            })
+            .collect();
         Ok(result)
     }
 
@@ -259,11 +287,14 @@ impl<'a> ColbertStore<'a> {
     /// Rerank ANN candidates by ColBERT max-sim. Returns sorted (doc_id, score) desc.
     pub fn colbert_rerank(&self, query_text: &str, candidates: &[i64]) -> Result<Vec<(i64, f32)>> {
         let query_vecs = self.emb.embed_query(query_text)?;
-        let mut scores: Vec<(i64, f32)> = candidates.iter().filter_map(|&doc_id| {
-            let doc_vecs = self.load_vecs(doc_id).ok()?;
-            let score = max_sim(&query_vecs, &doc_vecs);
-            Some((doc_id, score))
-        }).collect();
+        let mut scores: Vec<(i64, f32)> = candidates
+            .iter()
+            .filter_map(|&doc_id| {
+                let doc_vecs = self.load_vecs(doc_id).ok()?;
+                let score = max_sim(&query_vecs, &doc_vecs);
+                Some((doc_id, score))
+            })
+            .collect();
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(scores)
     }
@@ -316,7 +347,8 @@ mod tests {
         let top3_ids: Vec<i64> = ranked[..3].iter().map(|(id, _)| *id).collect();
         assert!(
             top3_ids.contains(&2) || top3_ids.contains(&9),
-            "Expected colbert-related docs in top-3, got: {:?}", ranked
+            "Expected colbert-related docs in top-3, got: {:?}",
+            ranked
         );
         // scores descending
         for w in ranked.windows(2) {
@@ -348,8 +380,11 @@ mod tests {
         let ranked = store.colbert_rerank_i8(query, &candidates)?;
         assert_eq!(ranked.len(), 4);
         let top2: Vec<i64> = ranked[..2].iter().map(|(id, _)| *id).collect();
-        assert!(top2.contains(&0) || top2.contains(&1),
-            "Expected colbert docs in top-2, got: {:?}", ranked);
+        assert!(
+            top2.contains(&0) || top2.contains(&1),
+            "Expected colbert docs in top-2, got: {:?}",
+            ranked
+        );
         for w in ranked.windows(2) {
             assert!(w[0].1 >= w[1].1);
         }
@@ -364,9 +399,15 @@ mod tests {
 
         // pre-compute 10 docs, embed them
         let docs: Vec<&str> = vec![
-            "the quick brown fox", "neural retrieval dense", "ColBERT late interaction",
-            "apple banana cherry", "tokio async rust", "matrix multiplication",
-            "deep learning transformer", "database indexing btree", "the cat sat mat",
+            "the quick brown fox",
+            "neural retrieval dense",
+            "ColBERT late interaction",
+            "apple banana cherry",
+            "tokio async rust",
+            "matrix multiplication",
+            "deep learning transformer",
+            "database indexing btree",
+            "the cat sat mat",
             "late interaction colbert score",
         ];
         for (i, doc) in docs.iter().enumerate() {
@@ -379,34 +420,43 @@ mod tests {
         const ITERS: usize = 100;
 
         let t0 = Instant::now();
-        for _ in 0..ITERS { store.colbert_rerank(query, &candidates)?; }
+        for _ in 0..ITERS {
+            store.colbert_rerank(query, &candidates)?;
+        }
         let f32_ms = t0.elapsed().as_secs_f64() * 1000.0 / ITERS as f64;
 
         let t1 = Instant::now();
-        for _ in 0..ITERS { store.colbert_rerank_i8(query, &candidates)?; }
+        for _ in 0..ITERS {
+            store.colbert_rerank_i8(query, &candidates)?;
+        }
         let i8_ms = t1.elapsed().as_secs_f64() * 1000.0 / ITERS as f64;
 
         // accuracy: compare top-3 ordering
         let f32_ranked = store.colbert_rerank(query, &candidates)?;
         let i8_ranked = store.colbert_rerank_i8(query, &candidates)?;
-        let f32_top3: Vec<i64> = f32_ranked[..3].iter().map(|(id,_)| *id).collect();
-        let i8_top3: Vec<i64> = i8_ranked[..3].iter().map(|(id,_)| *id).collect();
+        let f32_top3: Vec<i64> = f32_ranked[..3].iter().map(|(id, _)| *id).collect();
+        let i8_top3: Vec<i64> = i8_ranked[..3].iter().map(|(id, _)| *id).collect();
         let overlap = f32_top3.iter().filter(|id| i8_top3.contains(id)).count();
         // at least 2/3 top-3 must match (NDCG-proxy)
-        assert!(overlap >= 2, "top-3 overlap too low: f32={f32_top3:?} i8={i8_top3:?}");
+        assert!(
+            overlap >= 2,
+            "top-3 overlap too low: f32={f32_top3:?} i8={i8_top3:?}"
+        );
 
-        eprintln!("BENCH f32={f32_ms:.3}ms i8={i8_ms:.3}ms ratio={:.2}× top3-overlap={overlap}/3",
-            f32_ms / i8_ms);
+        eprintln!(
+            "BENCH f32={f32_ms:.3}ms i8={i8_ms:.3}ms ratio={:.2}× top3-overlap={overlap}/3",
+            f32_ms / i8_ms
+        );
         Ok(())
     }
 
     #[cfg(feature = "muvera")]
     #[test]
     fn muvera_two_tier_r10_smoke() -> Result<()> {
-        use std::time::Instant;
         use super::MuveraConfig;
-        use crate::muvera::muvera_encode;
         use crate::kernel::max_sim;
+        use crate::muvera::muvera_encode;
+        use std::time::Instant;
 
         // Build structured synthetic docs: query has dim-0 dominant.
         // Top-K docs have high dim-0; irrelevant docs have high other dims.
@@ -426,26 +476,31 @@ mod tests {
         // Doc token vecs: relevant docs point at dim-0 with score proportional to match
         // irrelevant docs point at dim-1..99 (orthogonal to query)
         let make_doc_vecs = |doc_id: i64| -> Vec<Vec<f32>> {
-            (0..n_tokens).map(|_| {
-                let mut v = vec![0.0f32; dim];
-                if doc_id < 10 {
-                    // relevant: strong dim-0 signal
-                    v[0] = 0.9;
-                    v[(doc_id as usize + 1) % dim] = 0.1;
-                } else {
-                    // irrelevant: orthogonal dims
-                    let d = ((doc_id as usize) % (dim - 1)) + 1;
-                    v[d] = 1.0;
-                }
-                let norm = v.iter().map(|x| x*x).sum::<f32>().sqrt().max(1e-9);
-                v.iter_mut().for_each(|x| *x /= norm);
-                v
-            }).collect()
+            (0..n_tokens)
+                .map(|_| {
+                    let mut v = vec![0.0f32; dim];
+                    if doc_id < 10 {
+                        // relevant: strong dim-0 signal
+                        v[0] = 0.9;
+                        v[(doc_id as usize + 1) % dim] = 0.1;
+                    } else {
+                        // irrelevant: orthogonal dims
+                        let d = ((doc_id as usize) % (dim - 1)) + 1;
+                        v[d] = 1.0;
+                    }
+                    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
+                    v.iter_mut().for_each(|x| *x /= norm);
+                    v
+                })
+                .collect()
         };
 
         // Build store with synthetic vecs directly (bypass embedder)
         let conn = Connection::open_in_memory()?;
-        let cfg = MuveraConfig { fde_dim, seed: fde_seed };
+        let cfg = MuveraConfig {
+            fde_dim,
+            seed: fde_seed,
+        };
         let store = ColbertStore::new_with_muvera(&conn, cfg)?;
 
         for doc_id in 0..n_docs {
@@ -457,25 +512,33 @@ mod tests {
 
         // Full ColBERT rerank (ground truth)
         let t_full = Instant::now();
-        let full_ranked: Vec<(i64, f32)> = all_candidates.iter().filter_map(|&doc_id| {
-            let doc_vecs = store.load_vecs(doc_id).ok()?;
-            let score = max_sim(&q_tok, &doc_vecs);
-            Some((doc_id, score))
-        }).collect::<Vec<_>>().into_iter().collect();
+        let full_ranked: Vec<(i64, f32)> = all_candidates
+            .iter()
+            .filter_map(|&doc_id| {
+                let doc_vecs = store.load_vecs(doc_id).ok()?;
+                let score = max_sim(&q_tok, &doc_vecs);
+                Some((doc_id, score))
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect();
         let mut full_sorted = full_ranked;
-        full_sorted.sort_by(|a,b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        full_sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         let full_ms = t_full.elapsed().as_secs_f64() * 1000.0;
-        let full_top10: Vec<i64> = full_sorted[..10].iter().map(|(id,_)| *id).collect();
+        let full_top10: Vec<i64> = full_sorted[..10].iter().map(|(id, _)| *id).collect();
 
         // MUVERA two-tier: FDE top-30 → ColBERT rerank → top-10
         let fde_top_n = 30usize;
         let t_muv = Instant::now();
         let muv_ranked = store.search_muvera_then_rerank(&q_tok, 10, fde_top_n)?;
         let muv_ms = t_muv.elapsed().as_secs_f64() * 1000.0;
-        let muv_top10: Vec<i64> = muv_ranked.iter().map(|(id,_)| *id).collect();
+        let muv_top10: Vec<i64> = muv_ranked.iter().map(|(id, _)| *id).collect();
 
         // R@10: how many of full top-10 recovered by MUVERA
-        let overlap = muv_top10.iter().filter(|id| full_top10.contains(id)).count();
+        let overlap = muv_top10
+            .iter()
+            .filter(|id| full_top10.contains(id))
+            .count();
         let recall_at_10 = overlap as f32 / 10.0;
 
         eprintln!(

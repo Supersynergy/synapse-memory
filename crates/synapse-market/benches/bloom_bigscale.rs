@@ -123,7 +123,11 @@ fn setup_sqlite(dir: &std::path::Path) -> Connection {
             }
         }
     }
-    eprintln!("SQLite: building WAL DB ({} tickers × {} bars) …", TICKERS.len(), BARS_PER_TICKER);
+    eprintln!(
+        "SQLite: building WAL DB ({} tickers × {} bars) …",
+        TICKERS.len(),
+        BARS_PER_TICKER
+    );
     let conn = Connection::open(&path).unwrap();
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
@@ -211,9 +215,7 @@ fn bench_bloom_bigscale(c: &mut Criterion) {
     group.bench_function("sqlite_wal_neg", |b| {
         b.iter(|| {
             let mut stmt = sqlite_conn
-                .prepare_cached(
-                    "SELECT ts FROM candles WHERE ticker=?1 AND ts>=?2 AND ts<?3",
-                )
+                .prepare_cached("SELECT ts FROM candles WHERE ticker=?1 AND ts>=?2 AND ts<?3")
                 .unwrap();
             for (qi, q) in neg_queries.iter().enumerate() {
                 let ti = (qi % n) as i64;

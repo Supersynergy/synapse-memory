@@ -409,7 +409,11 @@ fn main() -> Result<()> {
             let hits = store.search("", SearchMode::Vec, Some(&q), limit)?;
             print_hits(&hits);
         }
-        Cmd::Hybrid { query, limit, guarantee } => {
+        Cmd::Hybrid {
+            query,
+            limit,
+            guarantee,
+        } => {
             let store = Store::open(&cli.file)?;
             let e = Embedder::new_with_cache::<std::path::PathBuf>(
                 cli.file.parent().map(|p| p.join(".emb-cache")),
@@ -450,7 +454,8 @@ fn main() -> Result<()> {
         }
         Cmd::MergeSnap { peer, out, level } => {
             // Export current brain as a temp snap, then merge with peer.
-            let tmp = std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
+            let tmp =
+                std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
             snap::export(&cli.file, &tmp, level)?;
             snap::merge_packs(&tmp, &peer, &out, level)?;
             let _ = std::fs::remove_file(&tmp);
@@ -464,10 +469,13 @@ fn main() -> Result<()> {
             let hash = blake3::hash(doc.text.as_bytes());
             let sig = sign::sign_bytes(&signing_key, hash.as_bytes());
             // Write signature into the sig column of the existing row
-            store.conn.execute(
-                "UPDATE docs SET sig = ?1 WHERE id = ?2",
-                rusqlite::params![sig.as_ref(), id],
-            ).context("update sig")?;
+            store
+                .conn
+                .execute(
+                    "UPDATE docs SET sig = ?1 WHERE id = ?2",
+                    rusqlite::params![sig.as_ref(), id],
+                )
+                .context("update sig")?;
             println!("ok signed id={}", id);
         }
         Cmd::Shard { action } => match action {
@@ -578,10 +586,18 @@ fn main() -> Result<()> {
                 accepted_doc_id, shard_id
             );
         }
-        Cmd::Backup { db, out, level, encrypt, passphrase } => {
+        Cmd::Backup {
+            db,
+            out,
+            level,
+            encrypt,
+            passphrase,
+        } => {
             let db_path = db.as_ref().unwrap_or(&cli.file);
             if encrypt {
-                let pass = passphrase.as_deref().context("--passphrase required with --encrypt")?;
+                let pass = passphrase
+                    .as_deref()
+                    .context("--passphrase required with --encrypt")?;
                 // Export plain first, then encrypt in-place
                 let tmp = tempfile::NamedTempFile::new()?;
                 snap::export(db_path, tmp.path(), level)?;
@@ -593,9 +609,15 @@ fn main() -> Result<()> {
                 println!("ok backup {} ({} bytes)", out.display(), meta.len());
             }
         }
-        Cmd::DbRestore { pack, db, passphrase } => {
+        Cmd::DbRestore {
+            pack,
+            db,
+            passphrase,
+        } => {
             let db_path = db.as_ref().unwrap_or(&cli.file);
-            if let Some(p) = db_path.parent() { std::fs::create_dir_all(p).ok(); }
+            if let Some(p) = db_path.parent() {
+                std::fs::create_dir_all(p).ok();
+            }
             if let Some(pass) = passphrase.as_deref() {
                 let tmp = tempfile::NamedTempFile::new()?;
                 snap::decrypt_pack(&pack, tmp.path(), pass)?;
@@ -605,18 +627,20 @@ fn main() -> Result<()> {
             }
             // Report doc count
             let store = Store::open(db_path)?;
-            let count: i64 = store.conn.query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))?;
+            let count: i64 = store
+                .conn
+                .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))?;
             println!("ok restore {} docs → {}", count, db_path.display());
         }
         Cmd::DbVerify { db } => {
             let db_path = db.as_ref().unwrap_or(&cli.file);
             let store = Store::open(db_path)?;
-            let mut stmt = store.conn.prepare(
-                "SELECT id, text, blake3 FROM docs ORDER BY id"
-            )?;
-            let rows: Vec<(i64, String, Vec<u8>)> = stmt.query_map([], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-            })?.collect::<rusqlite::Result<_>>()?;
+            let mut stmt = store
+                .conn
+                .prepare("SELECT id, text, blake3 FROM docs ORDER BY id")?;
+            let rows: Vec<(i64, String, Vec<u8>)> = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+                .collect::<rusqlite::Result<_>>()?;
             let total = rows.len();
             let mut bad = 0usize;
             for (id, text, stored_hash) in &rows {
@@ -637,18 +661,29 @@ fn main() -> Result<()> {
             let db_path = db.as_ref().unwrap_or(&cli.file);
             let store = Store::open(db_path)?;
             // Rebuild FTS5
-            store.conn.execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('rebuild')")?;
+            store
+                .conn
+                .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('rebuild')")?;
             // Rebuild vec0 from scratch using put_batch on existing docs
             // Minimal: just report FTS rebuilt; vec index lives in vec0 which is shadow table
-            store.conn.execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('integrity-check')")?;
-            let count: i64 = store.conn.query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))?;
+            store
+                .conn
+                .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('integrity-check')")?;
+            let count: i64 = store
+                .conn
+                .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))?;
             println!("ok repair fts5 rebuilt docs={count}");
         }
         Cmd::Graph { action } => {
             let conn = rusqlite::Connection::open(&cli.file)?;
             synapse_graph::ensure_schema(&conn)?;
             match action {
-                GraphCmd::Relate { from, to, rel, weight } => {
+                GraphCmd::Relate {
+                    from,
+                    to,
+                    rel,
+                    weight,
+                } => {
                     synapse_graph::relate(&conn, from, to, &rel, weight, None)?;
                     println!("{{\"ok\":true,\"from\":{from},\"to\":{to},\"rel\":\"{rel}\",\"weight\":{weight}}}");
                 }
@@ -656,15 +691,26 @@ fn main() -> Result<()> {
                     let top = synapse_graph::algorithms::top_pagerank(&conn, n, damping, iters)?;
                     println!("{}", serde_json::to_string_pretty(&top)?);
                 }
-                GraphCmd::Ppr { seeds_json, alpha, iters, limit } => {
-                    let seeds: std::collections::HashMap<String, f64> = serde_json::from_str(&seeds_json)
-                        .context("parse seeds JSON")?;
-                    let seeds_i: std::collections::HashMap<i64, f64> = seeds.into_iter()
+                GraphCmd::Ppr {
+                    seeds_json,
+                    alpha,
+                    iters,
+                    limit,
+                } => {
+                    let seeds: std::collections::HashMap<String, f64> =
+                        serde_json::from_str(&seeds_json).context("parse seeds JSON")?;
+                    let seeds_i: std::collections::HashMap<i64, f64> = seeds
+                        .into_iter()
                         .filter_map(|(k, v)| k.parse::<i64>().ok().map(|i| (i, v)))
                         .collect();
                     let ranked = synapse_core::ppr::personalized_pagerank(
-                        &conn, &seeds_i, alpha, iters,
-                        synapse_core::ppr::DEFAULT_NEIGHBOR_CAP, limit)?;
+                        &conn,
+                        &seeds_i,
+                        alpha,
+                        iters,
+                        synapse_core::ppr::DEFAULT_NEIGHBOR_CAP,
+                        limit,
+                    )?;
                     println!("{}", serde_json::to_string_pretty(&ranked)?);
                 }
                 GraphCmd::Communities { max_iters, top_n } => {
@@ -674,15 +720,35 @@ fn main() -> Result<()> {
                         .collect();
                     println!("{}", serde_json::to_string_pretty(&top)?);
                 }
-                GraphCmd::Neighbors { node_id, top_k, rel } => {
+                GraphCmd::Neighbors {
+                    node_id,
+                    top_k,
+                    rel,
+                } => {
                     let n = synapse_graph::neighbors(&conn, node_id, rel.as_deref(), top_k)?;
                     println!("{}", serde_json::to_string_pretty(&n)?);
                 }
-                GraphCmd::Traverse { start_id, depth, top_k_per_hop, decay } => {
-                    let t = synapse_graph::traverse(&conn, start_id, depth, top_k_per_hop, decay, None)?;
+                GraphCmd::Traverse {
+                    start_id,
+                    depth,
+                    top_k_per_hop,
+                    decay,
+                } => {
+                    let t = synapse_graph::traverse(
+                        &conn,
+                        start_id,
+                        depth,
+                        top_k_per_hop,
+                        decay,
+                        None,
+                    )?;
                     println!("{}", serde_json::to_string_pretty(&t)?);
                 }
-                GraphCmd::Path { from, to, max_depth } => {
+                GraphCmd::Path {
+                    from,
+                    to,
+                    max_depth,
+                } => {
                     let p = synapse_graph::shortest_path(&conn, from, to, max_depth)?;
                     println!("{}", serde_json::to_string_pretty(&p)?);
                 }
@@ -692,7 +758,13 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Cmd::Ground { query, k, depth, alpha, iters } => {
+        Cmd::Ground {
+            query,
+            k,
+            depth,
+            alpha,
+            iters,
+        } => {
             // Pipeline: hybrid → seeds → PPR → traverse → JSON bundle
             let store = Store::open(&cli.file)?;
             let e = Embedder::new_with_cache::<std::path::PathBuf>(
@@ -710,13 +782,19 @@ fn main() -> Result<()> {
             synapse_graph::ensure_schema(&conn)?;
 
             let ppr_ranked = synapse_core::ppr::personalized_pagerank(
-                &conn, &seeds, alpha, iters,
-                synapse_core::ppr::DEFAULT_NEIGHBOR_CAP, 30,
-            ).unwrap_or_default();
+                &conn,
+                &seeds,
+                alpha,
+                iters,
+                synapse_core::ppr::DEFAULT_NEIGHBOR_CAP,
+                30,
+            )
+            .unwrap_or_default();
 
             let mut expansions: Vec<serde_json::Value> = Vec::new();
             for (sid, _) in seeds.iter().take(8) {
-                if let Ok(traverse_hits) = synapse_graph::traverse(&conn, *sid, depth, 6, 0.7, None) {
+                if let Ok(traverse_hits) = synapse_graph::traverse(&conn, *sid, depth, 6, 0.7, None)
+                {
                     for (to_id, gscore, hop_depth, chain) in traverse_hits {
                         expansions.push(serde_json::json!({
                             "seed_id": sid, "to_id": to_id,

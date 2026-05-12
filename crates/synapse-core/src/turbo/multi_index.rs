@@ -57,19 +57,25 @@ impl MultiIndex {
     pub fn build(rows: Vec<(i64, Vec<f32>)>) -> Self {
         let n = rows.len();
         Self {
-            i8_idx:     InMemoryI8Index::build(rows.clone()),
-            f16_idx:    InMemoryF16Index::build(rows.clone()),
-            ham_idx:    InMemoryHammingIndex::build(rows.clone()),
+            i8_idx: InMemoryI8Index::build(rows.clone()),
+            f16_idx: InMemoryF16Index::build(rows.clone()),
+            ham_idx: InMemoryHammingIndex::build(rows.clone()),
             rabitq_idx: RaBitQIndex::build(rows, 0xBA1B_175E_EDu64),
-            router:     Mutex::new(AdaptiveRouter::new()),
+            router: Mutex::new(AdaptiveRouter::new()),
             n,
         }
     }
 
     /// Row count.
-    #[must_use] pub fn len(&self) -> usize { self.n }
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.n
+    }
     /// Empty probe.
-    #[must_use] pub fn is_empty(&self) -> bool { self.n == 0 }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.n == 0
+    }
 
     /// Ask the router and dispatch. Falls back to [`Strategy::SimSimdI8`]
     /// when the chosen strategy isn't in-memory (e.g. RayonF32, ScalarF32
@@ -92,7 +98,10 @@ impl MultiIndex {
                 let h = self.ham_idx.search(query, k);
                 h.into_iter().map(|(id, d)| (id, -(d as f32))).collect()
             }
-            Strategy::SimSimdF32 | Strategy::MrlSimSimd | Strategy::RayonF32 | Strategy::ScalarF32 => {
+            Strategy::SimSimdF32
+            | Strategy::MrlSimSimd
+            | Strategy::RayonF32
+            | Strategy::ScalarF32 => {
                 // f16 is the closest full-recall path backed here.
                 self.f16_idx.search(query, k)
             }
@@ -111,7 +120,10 @@ impl MultiIndex {
 
     /// Current router posterior — for UIs/dashboards.
     pub fn router_posterior(&self) -> Vec<(Strategy, f64, f64)> {
-        self.router.lock().map(|g| g.posterior_means()).unwrap_or_default()
+        self.router
+            .lock()
+            .map(|g| g.posterior_means())
+            .unwrap_or_default()
     }
 }
 
@@ -128,8 +140,8 @@ mod tests {
     fn build_and_search_returns_top1_exact() {
         let rows = vec![
             (10_i64, unit(vec![1.0, 0.0, 0.0, 0.0])),
-            (20,     unit(vec![0.0, 1.0, 0.0, 0.0])),
-            (30,     unit(vec![0.0, 0.0, 1.0, 0.0])),
+            (20, unit(vec![0.0, 1.0, 0.0, 0.0])),
+            (30, unit(vec![0.0, 0.0, 1.0, 0.0])),
         ];
         let idx = MultiIndex::build(rows);
         let hits = idx.search(&unit(vec![1.0, 0.0, 0.0, 0.0]), SearchHints::default());
@@ -150,7 +162,9 @@ mod tests {
             idx.observe(Strategy::SimSimdI8, 300.0, 0.98);
         }
         let post = idx.router_posterior();
-        let int8_entry = post.iter().find(|(s, _, _)| matches!(s, Strategy::SimSimdI8));
+        let int8_entry = post
+            .iter()
+            .find(|(s, _, _)| matches!(s, Strategy::SimSimdI8));
         assert!(int8_entry.is_some());
     }
 }

@@ -61,15 +61,15 @@ impl AsyncWalBackend for StubBackend {
 #[cfg(feature = "libsql-backend")]
 pub mod batched;
 #[cfg(feature = "libsql-backend")]
-pub mod turbo;
-#[cfg(feature = "libsql-backend")]
 pub mod pool_real;
+#[cfg(feature = "libsql-backend")]
+pub mod turbo;
 #[cfg(feature = "libsql-backend")]
 pub use batched::BatchedLibsqlStore;
 #[cfg(feature = "libsql-backend")]
-pub use turbo::TurboLibsqlStore;
-#[cfg(feature = "libsql-backend")]
 pub use pool_real::RealPoolStore;
+#[cfg(feature = "libsql-backend")]
+pub use turbo::TurboLibsqlStore;
 
 /// Minimal naive LibsqlStore — Mutex<Connection>, no pragmas, no batching.
 /// Used as baseline for benches.
@@ -81,10 +81,14 @@ pub struct LibsqlStore {
 #[cfg(feature = "libsql-backend")]
 impl LibsqlStore {
     pub async fn open_local(path: &str) -> Result<Self, Error> {
-        let db = libsql::Builder::new_local(path).build().await
+        let db = libsql::Builder::new_local(path)
+            .build()
+            .await
             .map_err(|e| Error::Backend(e.to_string()))?;
         let conn = db.connect().map_err(|e| Error::Backend(e.to_string()))?;
-        Ok(Self { conn: tokio::sync::Mutex::new(conn) })
+        Ok(Self {
+            conn: tokio::sync::Mutex::new(conn),
+        })
     }
 }
 
@@ -95,19 +99,38 @@ impl Store for LibsqlStore {
         let conn = self.conn.lock().await;
         let s = sql.trim_start();
         if s.len() >= 6 && s.as_bytes()[..6].eq_ignore_ascii_case(b"SELECT") {
-            let mut rows = conn.query(sql, ()).await
+            let mut rows = conn
+                .query(sql, ())
+                .await
                 .map_err(|e| Error::Backend(e.to_string()))?;
             let mut count = 0u64;
-            while let Some(_) = rows.next().await.map_err(|e| Error::Backend(e.to_string()))? { count += 1; }
-            Ok(QueryResult { affected: count, rows: vec![] })
+            while let Some(_) = rows
+                .next()
+                .await
+                .map_err(|e| Error::Backend(e.to_string()))?
+            {
+                count += 1;
+            }
+            Ok(QueryResult {
+                affected: count,
+                rows: vec![],
+            })
         } else {
-            let n = conn.execute(sql, ()).await.map_err(|e| Error::Backend(e.to_string()))?;
-            Ok(QueryResult { affected: n, rows: vec![] })
+            let n = conn
+                .execute(sql, ())
+                .await
+                .map_err(|e| Error::Backend(e.to_string()))?;
+            Ok(QueryResult {
+                affected: n,
+                rows: vec![],
+            })
         }
     }
     async fn exec(&self, sql: &str) -> Result<u64, Error> {
         let conn = self.conn.lock().await;
-        conn.execute(sql, ()).await.map_err(|e| Error::Backend(e.to_string()))
+        conn.execute(sql, ())
+            .await
+            .map_err(|e| Error::Backend(e.to_string()))
     }
 }
 
@@ -168,13 +191,19 @@ mod tests {
         b.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
             .await
             .unwrap();
-        let n = b.execute("INSERT INTO t (v) VALUES ('hello')").await.unwrap();
+        let n = b
+            .execute("INSERT INTO t (v) VALUES ('hello')")
+            .await
+            .unwrap();
         assert_eq!(n, 1);
     }
 
     #[tokio::test]
     async fn stub_returns_not_enabled() {
         let b = StubBackend;
-        assert!(matches!(b.execute("SELECT 1").await, Err(LibsqlError::NotEnabled)));
+        assert!(matches!(
+            b.execute("SELECT 1").await,
+            Err(LibsqlError::NotEnabled)
+        ));
     }
 }

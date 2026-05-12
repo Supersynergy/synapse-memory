@@ -15,7 +15,9 @@ pub struct AutoloadCache {
 
 impl AutoloadCache {
     pub fn new() -> Self {
-        Self { inner: RwLock::new(HashMap::with_capacity(1024)) }
+        Self {
+            inner: RwLock::new(HashMap::with_capacity(1024)),
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<Vec<u8>> {

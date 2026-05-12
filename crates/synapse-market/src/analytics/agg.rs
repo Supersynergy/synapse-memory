@@ -1,10 +1,16 @@
+use super::neon;
 /// High-level wrappers over column slices from decoded mmap pages.
 use crate::store::page::{Bar, Page};
-use super::neon;
 
 /// Aggregate kind for routed SimdAgg path.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AggKind { Mean, Vwap, Min, Max, Sum }
+pub enum AggKind {
+    Mean,
+    Vwap,
+    Min,
+    Max,
+    Sum,
+}
 
 /// Scalar aggregate result — no bar materialization.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -18,7 +24,11 @@ pub struct AggResult {
 pub fn agg_pages(pages: &[Page], kind: AggKind) -> AggResult {
     let n_bars: usize = pages.iter().map(|p| p.len()).sum();
     if n_bars == 0 {
-        return AggResult { kind, value: 0.0, n_bars: 0 };
+        return AggResult {
+            kind,
+            value: 0.0,
+            n_bars: 0,
+        };
     }
     let value = match kind {
         AggKind::Mean => {
@@ -27,7 +37,11 @@ pub fn agg_pages(pages: &[Page], kind: AggKind) -> AggResult {
                 sum += mean_close_slice(p.closes()) * p.len() as f32;
                 count += p.len();
             }
-            if count == 0 { 0.0 } else { sum / count as f32 }
+            if count == 0 {
+                0.0
+            } else {
+                sum / count as f32
+            }
         }
         AggKind::Vwap => {
             let (mut pv, mut vol) = (0.0f32, 0.0f32);
@@ -36,23 +50,31 @@ pub fn agg_pages(pages: &[Page], kind: AggKind) -> AggResult {
                 let third = 1.0 / 3.0;
                 for i in 0..p.len() {
                     let tp = (p.highs()[i] + p.lows()[i] + p.closes()[i]) * third;
-                    pv  += tp * p.volumes()[i];
+                    pv += tp * p.volumes()[i];
                     vol += p.volumes()[i];
                 }
             }
-            if vol < 1e-12 { 0.0 } else { pv / vol }
+            if vol < 1e-12 {
+                0.0
+            } else {
+                pv / vol
+            }
         }
-        AggKind::Min => pages.iter()
+        AggKind::Min => pages
+            .iter()
             .flat_map(|p| p.closes().iter().copied())
             .fold(f32::MAX, f32::min),
-        AggKind::Max => pages.iter()
+        AggKind::Max => pages
+            .iter()
             .flat_map(|p| p.closes().iter().copied())
             .fold(f32::MIN, f32::max),
-        AggKind::Sum => pages.iter()
-            .flat_map(|p| p.closes().iter().copied())
-            .sum(),
+        AggKind::Sum => pages.iter().flat_map(|p| p.closes().iter().copied()).sum(),
     };
-    AggResult { kind, value, n_bars }
+    AggResult {
+        kind,
+        value,
+        n_bars,
+    }
 }
 
 // Byte offset of `close` field inside Bar: i64(8) + open(4) + high(4) + low(4) = 20
@@ -74,13 +96,17 @@ pub fn mean_close_slice(closes: &[f32]) -> f32 {
 #[inline]
 pub fn vwap(bars: &[Bar]) -> f32 {
     let mut vol_sum = 0.0f32;
-    let mut pv_sum  = 0.0f32;
+    let mut pv_sum = 0.0f32;
     for b in bars {
         let typical = (b.high + b.low + b.close) / 3.0;
-        pv_sum  += typical * b.volume;
+        pv_sum += typical * b.volume;
         vol_sum += b.volume;
     }
-    if vol_sum < 1e-12 { 0.0 } else { pv_sum / vol_sum }
+    if vol_sum < 1e-12 {
+        0.0
+    } else {
+        pv_sum / vol_sum
+    }
 }
 
 /// VWAP from pre-extracted column slices — SIMD vectorized.
@@ -89,29 +115,69 @@ pub fn vwap_slices(high: &[f32], low: &[f32], close: &[f32], volume: &[f32]) -> 
     use wide::f32x8;
     let n = high.len().min(low.len()).min(close.len()).min(volume.len());
     let third = f32x8::splat(1.0 / 3.0);
-    let mut pv_acc  = f32x8::ZERO;
+    let mut pv_acc = f32x8::ZERO;
     let mut vol_acc = f32x8::ZERO;
     let full = n / 8;
     for i in 0..full {
         let b = i * 8;
-        let h = f32x8::from([high[b], high[b+1], high[b+2], high[b+3], high[b+4], high[b+5], high[b+6], high[b+7]]);
-        let l = f32x8::from([low[b],  low[b+1],  low[b+2],  low[b+3],  low[b+4],  low[b+5],  low[b+6],  low[b+7]]);
-        let c = f32x8::from([close[b],close[b+1],close[b+2],close[b+3],close[b+4],close[b+5],close[b+6],close[b+7]]);
-        let v = f32x8::from([volume[b],volume[b+1],volume[b+2],volume[b+3],volume[b+4],volume[b+5],volume[b+6],volume[b+7]]);
+        let h = f32x8::from([
+            high[b],
+            high[b + 1],
+            high[b + 2],
+            high[b + 3],
+            high[b + 4],
+            high[b + 5],
+            high[b + 6],
+            high[b + 7],
+        ]);
+        let l = f32x8::from([
+            low[b],
+            low[b + 1],
+            low[b + 2],
+            low[b + 3],
+            low[b + 4],
+            low[b + 5],
+            low[b + 6],
+            low[b + 7],
+        ]);
+        let c = f32x8::from([
+            close[b],
+            close[b + 1],
+            close[b + 2],
+            close[b + 3],
+            close[b + 4],
+            close[b + 5],
+            close[b + 6],
+            close[b + 7],
+        ]);
+        let v = f32x8::from([
+            volume[b],
+            volume[b + 1],
+            volume[b + 2],
+            volume[b + 3],
+            volume[b + 4],
+            volume[b + 5],
+            volume[b + 6],
+            volume[b + 7],
+        ]);
         let tp = (h + l + c) * third;
-        pv_acc  += tp * v;
+        pv_acc += tp * v;
         vol_acc += v;
     }
-    let arr_pv:  [f32; 8] = pv_acc.into();
+    let arr_pv: [f32; 8] = pv_acc.into();
     let arr_vol: [f32; 8] = vol_acc.into();
-    let mut pv_sum:  f32 = arr_pv.iter().sum();
+    let mut pv_sum: f32 = arr_pv.iter().sum();
     let mut vol_sum: f32 = arr_vol.iter().sum();
-    for i in full*8..n {
+    for i in full * 8..n {
         let typical = (high[i] + low[i] + close[i]) / 3.0;
-        pv_sum  += typical * volume[i];
+        pv_sum += typical * volume[i];
         vol_sum += volume[i];
     }
-    if vol_sum < 1e-12 { 0.0 } else { pv_sum / vol_sum }
+    if vol_sum < 1e-12 {
+        0.0
+    } else {
+        pv_sum / vol_sum
+    }
 }
 
 /// mean(close) from SoA Page — zero alloc.
@@ -135,27 +201,45 @@ pub fn pearson_correlation_pages(a: &Page, b: &Page) -> f32 {
 /// Bar-over-bar log returns, rolling `window` bars.
 pub fn rolling_returns(bars: &[Bar], window: usize) -> Vec<f32> {
     let n = bars.len();
-    if n <= window || window == 0 { return vec![]; }
-    (window..n).map(|i| {
-        let prev = bars[i - window].close;
-        if prev.abs() < 1e-12 { 0.0 } else { (bars[i].close / prev).ln() }
-    }).collect()
+    if n <= window || window == 0 {
+        return vec![];
+    }
+    (window..n)
+        .map(|i| {
+            let prev = bars[i - window].close;
+            if prev.abs() < 1e-12 {
+                0.0
+            } else {
+                (bars[i].close / prev).ln()
+            }
+        })
+        .collect()
 }
 
 /// Log returns from pre-extracted close slice.
 pub fn rolling_returns_slice(closes: &[f32], window: usize) -> Vec<f32> {
     let n = closes.len();
-    if n <= window || window == 0 { return vec![]; }
-    (window..n).map(|i| {
-        let prev = closes[i - window];
-        if prev.abs() < 1e-12 { 0.0 } else { (closes[i] / prev).ln() }
-    }).collect()
+    if n <= window || window == 0 {
+        return vec![];
+    }
+    (window..n)
+        .map(|i| {
+            let prev = closes[i - window];
+            if prev.abs() < 1e-12 {
+                0.0
+            } else {
+                (closes[i] / prev).ln()
+            }
+        })
+        .collect()
 }
 
 /// Pearson correlation between close prices of two Bar slices.
 pub fn pearson_correlation(a: &[Bar], b: &[Bar]) -> f32 {
     let len = a.len().min(b.len());
-    if len < 2 { return 0.0; }
+    if len < 2 {
+        return 0.0;
+    }
     let ac: Vec<f32> = a[..len].iter().map(|b| b.close).collect();
     let bc: Vec<f32> = b[..len].iter().map(|b| b.close).collect();
     neon::correlation_f32(&ac, &bc)
@@ -209,14 +293,16 @@ mod tests {
     use crate::store::page::Bar;
 
     fn make_bars(n: usize) -> Vec<Bar> {
-        (0..n).map(|i| Bar {
-            ts: i as i64 * 900,
-            open: 100.0,
-            high: 101.0,
-            low: 99.0,
-            close: 100.0 + i as f32 * 0.1,
-            volume: 1000.0,
-        }).collect()
+        (0..n)
+            .map(|i| Bar {
+                ts: i as i64 * 900,
+                open: 100.0,
+                high: 101.0,
+                low: 99.0,
+                close: 100.0 + i as f32 * 0.1,
+                volume: 1000.0,
+            })
+            .collect()
     }
 
     #[test]
@@ -245,9 +331,9 @@ mod tests {
     #[test]
     fn vwap_slices_matches() {
         let bars = make_bars(64);
-        let high:   Vec<f32> = bars.iter().map(|b| b.high).collect();
-        let low:    Vec<f32> = bars.iter().map(|b| b.low).collect();
-        let close:  Vec<f32> = bars.iter().map(|b| b.close).collect();
+        let high: Vec<f32> = bars.iter().map(|b| b.high).collect();
+        let low: Vec<f32> = bars.iter().map(|b| b.low).collect();
+        let close: Vec<f32> = bars.iter().map(|b| b.close).collect();
         let volume: Vec<f32> = bars.iter().map(|b| b.volume).collect();
         let v1 = vwap(&bars);
         let v2 = vwap_slices(&high, &low, &close, &volume);

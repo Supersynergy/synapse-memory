@@ -54,9 +54,8 @@ pub fn personalized_pagerank(
 
     // Per-iteration: pull outgoing edges for every active node, distribute mass.
     // We re-fetch edges each iter (SQLite cached prepare → ~µs per query).
-    let mut stmt = conn.prepare_cached(
-        "SELECT dst_id, weight FROM memory_edges WHERE src_id = ?1 LIMIT ?2",
-    )?;
+    let mut stmt =
+        conn.prepare_cached("SELECT dst_id, weight FROM memory_edges WHERE src_id = ?1 LIMIT ?2")?;
 
     for _ in 0..iters {
         let mut next: HashMap<i64, f64> = HashMap::with_capacity(r.len() * 2);
@@ -69,10 +68,9 @@ pub fn personalized_pagerank(
             if score < 1e-9 {
                 continue;
             }
-            let rows = stmt.query_map(
-                rusqlite::params![node, neighbor_cap as i64],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?)),
-            )?;
+            let rows = stmt.query_map(rusqlite::params![node, neighbor_cap as i64], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, f64>(1)?))
+            })?;
             // Collect first to compute weight sum (degree-weighted distribution).
             let neigh: Vec<(i64, f64)> = rows.filter_map(|r| r.ok()).collect();
             if neigh.is_empty() {
@@ -165,7 +163,12 @@ mod tests {
         let map: HashMap<i64, f64> = out.into_iter().collect();
         let s2 = map.get(&2).copied().unwrap_or(0.0);
         let s3 = map.get(&3).copied().unwrap_or(0.0);
-        assert!(s2 > s3, "weight=9 neighbor must outrank weight=1: s2={} s3={}", s2, s3);
+        assert!(
+            s2 > s3,
+            "weight=9 neighbor must outrank weight=1: s2={} s3={}",
+            s2,
+            s3
+        );
     }
 
     #[test]
@@ -177,6 +180,10 @@ mod tests {
         seeds.insert(1, 1.0);
         let out = personalized_pagerank(&c, &seeds, 0.5, 10, 64, 10).unwrap();
         let total: f64 = out.iter().map(|(_, s)| s).sum();
-        assert!((total - 1.0).abs() < 1e-6, "PPR mass must sum to 1.0, got {}", total);
+        assert!(
+            (total - 1.0).abs() < 1e-6,
+            "PPR mass must sum to 1.0, got {}",
+            total
+        );
     }
 }

@@ -31,7 +31,9 @@ fn main() {
     fn make_vec(seed: u64, dim: usize) -> Vec<f32> {
         let mut v: Vec<f32> = (0..dim)
             .map(|i| {
-                let h = seed.wrapping_mul(6364136223846793005).wrapping_add(i as u64 * 1442695040888963407);
+                let h = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(i as u64 * 1442695040888963407);
                 (h as i64 as f32) / (i64::MAX as f32)
             })
             .collect();
@@ -71,7 +73,9 @@ fn main() {
 
     println!("Building corpus: N={N} DIM={DIM}");
     let corpus: Vec<Vec<f32>> = (0..N as u64).map(|s| make_vec(s, DIM)).collect();
-    let queries: Vec<Vec<f32>> = (0..QUERIES as u64).map(|s| make_vec(s + 0xC0_FFEE, DIM)).collect();
+    let queries: Vec<Vec<f32>> = (0..QUERIES as u64)
+        .map(|s| make_vec(s + 0xC0_FFEE, DIM))
+        .collect();
     let truths: Vec<Vec<u64>> = queries.iter().map(|q| brute_top_k(&corpus, q, K)).collect();
 
     // ── usearch HNSW ─────────────────────────────────────────────────────────
@@ -104,7 +108,7 @@ fn main() {
     // ── write data for FAISS leg ──────────────────────────────────────────────
     let npy_path = "/tmp/raw_ann_data.npy";
     let qry_path = "/tmp/raw_ann_queries.npy";
-    let py_path  = "/tmp/raw_ann_faiss.py";
+    let py_path = "/tmp/raw_ann_faiss.py";
 
     write_npy_f32_2d(npy_path, &corpus, DIM);
     write_npy_f32_2d(qry_path, &queries, DIM);
@@ -112,19 +116,30 @@ fn main() {
     write_faiss_script(py_path, N, DIM, K, QUERIES);
 
     // ── invoke python faiss ───────────────────────────────────────────────────
-    let (flat_p50, flat_p99, flat_r10, hnsw_p50, hnsw_p99, hnsw_r10) =
-        run_faiss_script(py_path);
+    let (flat_p50, flat_p99, flat_r10, hnsw_p50, hnsw_p99, hnsw_r10) = run_faiss_script(py_path);
 
     // ── print table ──────────────────────────────────────────────────────────
     println!();
     println!("═══════════════════════════════════════════════════════════════");
     println!("  RAW ANN MICRO-BENCH  N={N}  DIM={DIM}  K={K}  Q={QUERIES}");
     println!("═══════════════════════════════════════════════════════════════");
-    println!("{:<22} {:>10} {:>10} {:>8}", "Backend", "p50 µs", "p99 µs", "R@10");
+    println!(
+        "{:<22} {:>10} {:>10} {:>8}",
+        "Backend", "p50 µs", "p99 µs", "R@10"
+    );
     println!("{}", "─".repeat(55));
-    println!("{:<22} {:>10} {:>10} {:>8.3}", "FAISS-Flat (exact)", flat_p50, flat_p99, flat_r10);
-    println!("{:<22} {:>10} {:>10} {:>8.3}", "FAISS-HNSW", hnsw_p50, hnsw_p99, hnsw_r10);
-    println!("{:<22} {:>10} {:>10} {:>8.3}", "usearch-HNSW (synapse)", us_p50, us_p99, us_r10);
+    println!(
+        "{:<22} {:>10} {:>10} {:>8.3}",
+        "FAISS-Flat (exact)", flat_p50, flat_p99, flat_r10
+    );
+    println!(
+        "{:<22} {:>10} {:>10} {:>8.3}",
+        "FAISS-HNSW", hnsw_p50, hnsw_p99, hnsw_r10
+    );
+    println!(
+        "{:<22} {:>10} {:>10} {:>8.3}",
+        "usearch-HNSW (synapse)", us_p50, us_p99, us_r10
+    );
     println!("{}", "─".repeat(55));
     println!("build_ms={build_ms}  (usearch, N={N})");
     println!("═══════════════════════════════════════════════════════════════");
@@ -133,7 +148,10 @@ fn main() {
     if us_r10 >= 0.95 {
         println!("PARITY: usearch R@10={:.3} ≥ 0.95 ✓", us_r10);
     } else {
-        println!("PARITY: usearch R@10={:.3} < 0.95 ✗  — tune expansion_search", us_r10);
+        println!(
+            "PARITY: usearch R@10={:.3} < 0.95 ✗  — tune expansion_search",
+            us_r10
+        );
     }
     println!();
 
@@ -150,8 +168,11 @@ fn main() {
          Parity claim: usearch R@10={us_r10:.3} {} 0.95\n",
         if us_r10 >= 0.95 { "≥" } else { "<" }
     );
-    std::fs::write("/Users/master/projects/synapse/bench-dashboard/RAW_ANN_BENCH_2026-05-11.md", &doc)
-        .unwrap_or_else(|e| eprintln!("warn: could not write dashboard doc: {e}"));
+    std::fs::write(
+        "/Users/master/projects/synapse/bench-dashboard/RAW_ANN_BENCH_2026-05-11.md",
+        &doc,
+    )
+    .unwrap_or_else(|e| eprintln!("warn: could not write dashboard doc: {e}"));
     println!("Dashboard → bench-dashboard/RAW_ANN_BENCH_2026-05-11.md");
 }
 
@@ -162,9 +183,7 @@ fn write_npy_f32_2d(path: &str, data: &[Vec<f32>], dim: usize) {
     use std::io::Write;
     let rows = data.len();
     // numpy header: shape=(rows, dim), dtype=float32, C order, little-endian
-    let header = format!(
-        "{{'descr': '<f4', 'fortran_order': False, 'shape': ({rows}, {dim}), }}"
-    );
+    let header = format!("{{'descr': '<f4', 'fortran_order': False, 'shape': ({rows}, {dim}), }}");
     // pad header to multiple of 64 (after magic+version+len = 10 bytes)
     let header_bytes = header.as_bytes();
     let prefix_len = 10usize; // magic(6)+ver(2)+len(2)
@@ -258,10 +277,7 @@ print(f"FLAT_P50={{pct(flat_lats,50)}} FLAT_P99={{pct(flat_lats,99)}} "
 #[cfg(feature = "ann-usearch")]
 fn run_faiss_script(py_path: &str) -> (String, String, String, String, String, String) {
     let na = || "N/A".to_string();
-    let out = match std::process::Command::new("python3")
-        .arg(py_path)
-        .output()
-    {
+    let out = match std::process::Command::new("python3").arg(py_path).output() {
         Ok(o) => o,
         Err(_) => return (na(), na(), na(), na(), na(), na()),
     };
@@ -271,7 +287,9 @@ fn run_faiss_script(py_path: &str) -> (String, String, String, String, String, S
         return (na(), na(), na(), na(), na(), na());
     }
     let stdout = String::from_utf8_lossy(&out.stdout);
-    let line = stdout.lines().find(|l| l.contains("FLAT_P50") || l.contains("FAISS_UNAVAILABLE"));
+    let line = stdout
+        .lines()
+        .find(|l| l.contains("FLAT_P50") || l.contains("FAISS_UNAVAILABLE"));
     match line {
         None | Some("FAISS_UNAVAILABLE") => (na(), na(), na(), na(), na(), na()),
         Some(l) => {
@@ -283,9 +301,12 @@ fn run_faiss_script(py_path: &str) -> (String, String, String, String, String, S
                     .to_string()
             };
             (
-                kv("FLAT_P50"), kv("FLAT_P99"),
-                kv("FLAT_R10"), kv("HNSW_P50"),
-                kv("HNSW_P99"), kv("HNSW_R10"),
+                kv("FLAT_P50"),
+                kv("FLAT_P99"),
+                kv("FLAT_R10"),
+                kv("HNSW_P50"),
+                kv("HNSW_P99"),
+                kv("HNSW_R10"),
             )
         }
     }

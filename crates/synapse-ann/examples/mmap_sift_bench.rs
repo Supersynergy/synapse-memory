@@ -23,8 +23,14 @@ fn main() {
     use synapse_ann::usearch_backend::UsearchIndex;
     use synapse_ann::AnnIndex as _;
 
-    let n: usize = std::env::var("N").ok().and_then(|s| s.parse().ok()).unwrap_or(100_000);
-    let dim: usize = std::env::var("DIM").ok().and_then(|s| s.parse().ok()).unwrap_or(128);
+    let n: usize = std::env::var("N")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100_000);
+    let dim: usize = std::env::var("DIM")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(128);
     let q_count: usize = 64;
     let k = 10;
 
@@ -43,7 +49,10 @@ fn main() {
                 f.write_all(&x.to_le_bytes()).unwrap();
             }
         }
-        println!("fvecs write {n} vecs: {:.1}ms", t.elapsed().as_secs_f64() * 1e3);
+        println!(
+            "fvecs write {n} vecs: {:.1}ms",
+            t.elapsed().as_secs_f64() * 1e3
+        );
     }
 
     let bytes_per_vec = 4 + dim * 4; // dim_u32 header + floats
@@ -56,15 +65,19 @@ fn main() {
         let mut out = Vec::with_capacity(n);
         let mut pos = 0;
         while pos + bytes_per_vec <= raw.len() {
-            let d = u32::from_le_bytes(raw[pos..pos+4].try_into().unwrap()) as usize;
+            let d = u32::from_le_bytes(raw[pos..pos + 4].try_into().unwrap()) as usize;
             pos += 4;
             let floats: Vec<f32> = (0..d)
-                .map(|j| f32::from_le_bytes(raw[pos + j*4..pos + j*4+4].try_into().unwrap()))
+                .map(|j| f32::from_le_bytes(raw[pos + j * 4..pos + j * 4 + 4].try_into().unwrap()))
                 .collect();
             pos += d * 4;
             out.push(floats);
         }
-        println!("heap load {}: {:.1}ms", out.len(), t.elapsed().as_secs_f64() * 1e3);
+        println!(
+            "heap load {}: {:.1}ms",
+            out.len(),
+            t.elapsed().as_secs_f64() * 1e3
+        );
         out
     };
 
@@ -76,19 +89,24 @@ fn main() {
         let file = std::fs::OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_RDONLY)
-            .open(&tmp).unwrap();
+            .open(&tmp)
+            .unwrap();
         let mmap = unsafe { memmap2::MmapOptions::new().map(&file).unwrap() };
         // MADV_WILLNEED: hint kernel to prefetch pages.
         #[cfg(target_os = "macos")]
-        unsafe { libc::madvise(mmap.as_ptr() as *mut _, mmap.len(), libc::MADV_WILLNEED); }
+        unsafe {
+            libc::madvise(mmap.as_ptr() as *mut _, mmap.len(), libc::MADV_WILLNEED);
+        }
         #[cfg(target_os = "linux")]
-        unsafe { libc::madvise(mmap.as_ptr() as *mut _, mmap.len(), libc::MADV_WILLNEED); }
+        unsafe {
+            libc::madvise(mmap.as_ptr() as *mut _, mmap.len(), libc::MADV_WILLNEED);
+        }
         // Parse directly from mmap'd memory.
         let mut count = 0usize;
         let mut pos = 0usize;
         let raw: &[u8] = &mmap;
         while pos + bytes_per_vec <= raw.len() {
-            let d = u32::from_le_bytes(raw[pos..pos+4].try_into().unwrap()) as usize;
+            let d = u32::from_le_bytes(raw[pos..pos + 4].try_into().unwrap()) as usize;
             pos += 4 + d * 4;
             count += 1;
         }
@@ -99,7 +117,10 @@ fn main() {
     };
 
     #[cfg(not(target_family = "unix"))]
-    let mmap_load_ms = { println!("mmap: not unix, skipping"); 0.0f64 };
+    let mmap_load_ms = {
+        println!("mmap: not unix, skipping");
+        0.0f64
+    };
 
     // ── 4. HNSW build ────────────────────────────────────────────────────────
     let mut idx = UsearchIndex::new(dim, n).unwrap();
@@ -108,7 +129,10 @@ fn main() {
         idx.insert(i as u64, v).unwrap();
     }
     let build_ms = t.elapsed().as_secs_f64() * 1e3;
-    println!("HNSW build {n}: {build_ms:.1}ms  ({:.0} vecs/ms)", n as f64 / build_ms);
+    println!(
+        "HNSW build {n}: {build_ms:.1}ms  ({:.0} vecs/ms)",
+        n as f64 / build_ms
+    );
 
     // ── 5. Single-query baseline ──────────────────────────────────────────────
     let queries: Vec<Vec<f32>> = (0..q_count as u64)
@@ -116,7 +140,9 @@ fn main() {
         .collect();
 
     let t = std::time::Instant::now();
-    for q in &queries { let _ = idx.search(q, k).unwrap(); }
+    for q in &queries {
+        let _ = idx.search(q, k).unwrap();
+    }
     let single_ms = t.elapsed().as_secs_f64() * 1e3;
     let single_qps = q_count as f64 / (single_ms / 1e3);
     println!("single-query {q_count}q: {single_ms:.2}ms  {single_qps:.0} QPS");
@@ -128,13 +154,18 @@ fn main() {
         let _ = idx.search_batch(&queries, k);
         let batch_ms = t.elapsed().as_secs_f64() * 1e3;
         let batch_qps = q_count as f64 / (batch_ms / 1e3);
-        println!("batch-search {q_count}q: {batch_ms:.2}ms  {batch_qps:.0} QPS  speedup={:.2}×",
-                 batch_qps / single_qps);
+        println!(
+            "batch-search {q_count}q: {batch_ms:.2}ms  {batch_qps:.0} QPS  speedup={:.2}×",
+            batch_qps / single_qps
+        );
         // Run 2 for variance.
         let t = std::time::Instant::now();
         let _ = idx.search_batch(&queries, k);
         let batch_ms2 = t.elapsed().as_secs_f64() * 1e3;
-        println!("batch-search run-2: {batch_ms2:.2}ms  speedup={:.2}×", single_ms / batch_ms2);
+        println!(
+            "batch-search run-2: {batch_ms2:.2}ms  speedup={:.2}×",
+            single_ms / batch_ms2
+        );
     }
     #[cfg(not(feature = "ann-batch"))]
     println!("batch-search: enable --features ann-batch");

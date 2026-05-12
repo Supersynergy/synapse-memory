@@ -3,6 +3,7 @@ name = "synapse-engine"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
+license = "MIT"
 
 [lib]
 name = "synapse_engine"

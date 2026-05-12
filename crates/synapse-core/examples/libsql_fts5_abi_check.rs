@@ -27,7 +27,10 @@ fn main() {
         let rc = libsql::ffi::sqlite3_config(libsql::ffi::SQLITE_CONFIG_SERIALIZED);
         if rc != 0 {
             // SQLITE_MISUSE = 21: already initialized
-            eprintln!("FAIL: sqlite3_config(SQLITE_CONFIG_SERIALIZED) returned {}", rc);
+            eprintln!(
+                "FAIL: sqlite3_config(SQLITE_CONFIG_SERIALIZED) returned {}",
+                rc
+            );
             eprintln!("Root cause: libsql-rusqlite (libsql internal dep) pre-initializes");
             eprintln!("  shared libsql-ffi SQLite with MULTITHREAD before this call.");
             eprintln!("  libsql 0.9.x threading conflict — upstream bug.");
@@ -44,7 +47,9 @@ fn main() {
                 *mut *const i8,
                 *const libsql::ffi::sqlite3_api_routines,
             ) -> i32,
-        >(sqlite_vec::sqlite3_vec_init as *const ())));
+        >(
+            sqlite_vec::sqlite3_vec_init as *const ()
+        )));
     }
 
     tokio::runtime::Builder::new_current_thread()
@@ -61,8 +66,10 @@ async fn async_main() -> anyhow::Result<()> {
     let conn = db.connect()?;
 
     // FTS5 check
-    conn.execute("CREATE VIRTUAL TABLE t USING fts5(body)", ()).await?;
-    conn.execute("INSERT INTO t VALUES ('hello world')", ()).await?;
+    conn.execute("CREATE VIRTUAL TABLE t USING fts5(body)", ())
+        .await?;
+    conn.execute("INSERT INTO t VALUES ('hello world')", ())
+        .await?;
     let mut rows = conn
         .query("SELECT body FROM t WHERE body MATCH 'hello'", ())
         .await?;
