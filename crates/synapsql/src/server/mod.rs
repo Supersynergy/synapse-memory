@@ -3,6 +3,7 @@
 pub mod mysql;
 pub mod pg;
 pub mod http;
+pub mod brain_adapter;
 
 use std::sync::Arc;
 use synapse_libsql::Store;

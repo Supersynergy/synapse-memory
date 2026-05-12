@@ -53,12 +53,20 @@ impl VectorOp {
         Some(VectorOp { column, param, k })
     }
 
-    /// Placeholder executor — calls into synapse-core vec-search.
-    /// TODO: wire real Store::vec_search once API is stable.
-    pub fn execute(&self, _query_vec: &[f32]) -> Vec<(u64, f32)> {
-        // TODO: store.vec_search(self.column, query_vec, self.k)
-        vec![]
+    /// Execute vec-search. Returns Err until embedding pipeline is wired.
+    /// Gap: synapsql has no embedding pipeline at the SQL wire layer; callers
+    /// must resolve `:param` to `&[f32]` before calling this.
+    pub fn execute(&self, _query_vec: &[f32]) -> Result<Vec<(u64, f32)>, VecSearchError> {
+        Err(VecSearchError::EmbeddingPipelineNotWired)
     }
+}
+
+/// Error returned when vec-search cannot proceed.
+#[derive(Debug)]
+pub enum VecSearchError {
+    /// Embedding pipeline not available at the SQL wire layer.
+    /// Wire `Store::search_vec` + an embed model to resolve.
+    EmbeddingPipelineNotWired,
 }
 
 #[cfg(test)]
@@ -77,5 +85,14 @@ mod tests {
     #[test]
     fn no_op_returns_none() {
         assert!(VectorOp::parse("SELECT * FROM docs").is_none());
+    }
+
+    #[test]
+    fn execute_returns_error_not_empty_vec() {
+        let sql = "SELECT id FROM docs WHERE embedding <=> :q LIMIT 5";
+        let op = VectorOp::parse(sql).unwrap();
+        let result = op.execute(&[0.1_f32, 0.2, 0.3]);
+        assert!(result.is_err(), "execute must return Err (not silent vec![]) until embedding pipeline is wired");
+        matches!(result.unwrap_err(), VecSearchError::EmbeddingPipelineNotWired);
     }
 }

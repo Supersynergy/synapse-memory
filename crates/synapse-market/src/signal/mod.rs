@@ -1,5 +1,6 @@
 pub mod embed;
 pub mod similar;
+pub mod turbovec_index;
 
 use serde::{Deserialize, Serialize};
 

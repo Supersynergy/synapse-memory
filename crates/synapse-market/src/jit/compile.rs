@@ -2,6 +2,7 @@ use cranelift_codegen::ir::{
     types, AbiParam, BlockArg, Function, InstBuilder, MemFlags, UserFuncName, Value,
 };
 use cranelift_codegen::Context;
+use cranelift_codegen::settings::Configurable;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module};
@@ -30,7 +31,7 @@ pub fn compile(p: &Predicate) -> anyhow::Result<CompiledFn> {
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
     let flags = cranelift_codegen::settings::Flags::new(flag_builder);
-    let isa = cranelift_jit::host_isa_builder()
+    let isa = cranelift_native::builder()
         .map_err(|e| anyhow::anyhow!("ISA: {e}"))?
         .finish(flags)
         .map_err(|e| anyhow::anyhow!("ISA finish: {e}"))?;
@@ -90,8 +91,7 @@ pub fn compile(p: &Predicate) -> anyhow::Result<CompiledFn> {
             cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
             i, n,
         );
-        b.ins().brif(lt, loop_body, &[], loop_exit, &[count]);
-        b.seal_block(loop_hdr);
+        b.ins().brif(lt, loop_body, &[], loop_exit, &[BlockArg::Value(count)]);
 
         // -- body --
         b.switch_to_block(loop_body);
@@ -113,7 +113,8 @@ pub fn compile(p: &Predicate) -> anyhow::Result<CompiledFn> {
         let new_count = b.ins().iadd(count_v, match_ext);
         let one = b.ins().iconst(ptr, 1);
         let next_i = b.ins().iadd(i_v, one);
-        b.ins().jump(loop_hdr, &[next_i, new_count]);
+        b.ins().jump(loop_hdr, &[BlockArg::Value(next_i), BlockArg::Value(new_count)]);
+        b.seal_block(loop_hdr);
 
         // -- exit --
         b.switch_to_block(loop_exit);

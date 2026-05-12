@@ -27,10 +27,18 @@ wide = "0.7"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 rabitq-rs = "0.9"
 simsimd = "6"
+turbovec = "0.2"
 cranelift-codegen = { version = "0.131", default-features = false, features = ["x86", "arm64"] }
 cranelift-frontend = "0.131"
 cranelift-jit = "0.131"
 cranelift-module = "0.131"
+cranelift-native = "0.131"
+xorf = "0.11"
+fast_hilbert = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.27", features = ["native-tls"] }
+futures-util = "0.3"
+async-trait = "0.1"
 
 [features]
 default = []
@@ -65,6 +73,24 @@ path = "benches/bloom_neglookup.rs"
 harness = false
 
 [[bench]]
+name = "bloom_bigscale"
+path = "benches/bloom_bigscale.rs"
+harness = false
+
+[[bench]]
+name = "scale_curve"
+path = "benches/scale_curve.rs"
+harness = false
+
+[[bin]]
+name = "gen_big_corpus"
+path = "src/bin/gen_big_corpus.rs"
+
+[[bin]]
+name = "stream_smoke"
+path = "src/bin/stream_smoke.rs"
+
+[[bench]]
 name = "amx_minimal"
 path = "benches/amx_minimal.rs"
 harness = false
@@ -72,6 +98,11 @@ harness = false
 [[bench]]
 name = "amx_neon_mlx"
 path = "benches/amx_neon_mlx.rs"
+harness = false
+
+[[bench]]
+name = "xor_vs_bloom"
+path = "benches/xor_vs_bloom.rs"
 harness = false
 
 [[bench]]
@@ -95,6 +126,11 @@ path = "benches/w5_similarity.rs"
 harness = false
 
 [[bench]]
+name = "turbovec_vs_rabitq"
+path = "benches/turbovec_vs_rabitq.rs"
+harness = false
+
+[[bench]]
 name = "router_mixed"
 path = "benches/router_mixed.rs"
 harness = false
@@ -114,9 +150,24 @@ name = "hotset_point"
 path = "benches/hotset_point.rs"
 harness = false
 
+[[bench]]
+name = "jit_filter"
+path = "benches/jit_filter.rs"
+harness = false
+
+[[bench]]
+name = "compression_ratio"
+path = "benches/compression_ratio.rs"
+harness = false
+
 [[example]]
 name = "backtest_demo"
 path = "examples/backtest_demo.rs"
+
+[[bench]]
+name = "online_learner"
+path = "benches/online_learner.rs"
+harness = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]

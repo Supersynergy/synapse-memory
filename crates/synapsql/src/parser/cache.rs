@@ -1,8 +1,12 @@
-//! Blake3-keyed LRU result cache.
+//! Blake3-keyed LRU result + plan cache.
 //!
-//! Pattern: Vitess query-plan cache + DuckDB hot-table-cache.
-//! Write-epoch invalidation: any write bumps the epoch, reads with
-//! stale epoch are cache-miss (conformal invalidation).
+//! Two caches:
+//!   1. `QueryCache` — LRU result cache (Bytes). Epoch-invalidated on writes.
+//!   2. `PlanCache`  — LRU plan cache (RewriteResult). No epoch: plans are
+//!      structural and valid as long as schema doesn't change. Pattern: Vitess
+//!      query-plan cache + ProxySQL prepared-statement reuse.
+//!
+//! Plan cache hit = skip parse+rewrite for hot queries (zero alloc hot path).
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -10,6 +14,7 @@ use parking_lot::Mutex;
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use bytes::Bytes;
+use crate::parser::rewriter::RewriteResult;
 
 /// Cached result entry.
 #[derive(Clone, Debug)]
@@ -75,6 +80,50 @@ impl QueryCache {
     }
 }
 
+/// Thread-safe LRU plan cache, blake3-keyed by fingerprint.
+///
+/// Stores `RewriteResult` (parsed + rewritten plan AST) so hot queries skip
+/// the rewrite pass entirely. Capacity typically 1000 (Vitess default per-conn).
+pub struct PlanCache {
+    inner: Mutex<LruCache<[u8; 32], RewriteResult>>,
+}
+
+impl PlanCache {
+    pub fn new(capacity: usize) -> Self {
+        let cap = NonZeroUsize::new(capacity.max(1)).unwrap();
+        Self { inner: Mutex::new(LruCache::new(cap)) }
+    }
+
+    pub fn key(fingerprint: &str) -> [u8; 32] {
+        *blake3::hash(fingerprint.as_bytes()).as_bytes()
+    }
+
+    /// Get cached plan. Returns `None` on miss.
+    pub fn get(&self, fingerprint: &str) -> Option<RewriteResult> {
+        let k = Self::key(fingerprint);
+        self.inner.lock().get(&k).cloned()
+    }
+
+    /// Store plan for fingerprint.
+    pub fn insert(&self, fingerprint: &str, plan: RewriteResult) {
+        let k = Self::key(fingerprint);
+        self.inner.lock().put(k, plan);
+    }
+
+    /// Evict all plans — call after DDL (schema change invalidates plans).
+    pub fn invalidate_all(&self) {
+        self.inner.lock().clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.lock().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,5 +152,46 @@ mod tests {
         c.insert("q2", Bytes::from_static(b"b"), 1);
         c.insert("q3", Bytes::from_static(b"c"), 1);
         assert_eq!(c.len(), 2);
+    }
+
+    // --- PlanCache tests ---
+
+    #[test]
+    fn plan_cache_hit() {
+        use crate::parser::rewriter::rewrite;
+        let pc = PlanCache::new(100);
+        let fp = "select id from docs where emb <=> ? limit ?";
+        let plan = rewrite("SELECT id FROM docs WHERE emb <=> :q LIMIT 10");
+        pc.insert(fp, plan.clone());
+        let hit = pc.get(fp);
+        assert!(hit.is_some());
+        assert_eq!(hit.unwrap().sql, plan.sql);
+    }
+
+    #[test]
+    fn plan_cache_miss() {
+        let pc = PlanCache::new(100);
+        assert!(pc.get("no such query").is_none());
+    }
+
+    #[test]
+    fn plan_cache_ddl_invalidate() {
+        use crate::parser::rewriter::rewrite;
+        let pc = PlanCache::new(100);
+        let fp = "select id from docs where id = ?";
+        pc.insert(fp, rewrite("SELECT id FROM docs WHERE id = 1"));
+        pc.invalidate_all();
+        assert!(pc.get(fp).is_none());
+    }
+
+    #[test]
+    fn plan_cache_lru_eviction() {
+        use crate::parser::rewriter::rewrite;
+        let pc = PlanCache::new(2);
+        let dummy = rewrite("SELECT 1");
+        pc.insert("q1", dummy.clone());
+        pc.insert("q2", dummy.clone());
+        pc.insert("q3", dummy.clone());
+        assert_eq!(pc.len(), 2);
     }
 }

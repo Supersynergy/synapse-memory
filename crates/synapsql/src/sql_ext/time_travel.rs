@@ -8,7 +8,7 @@
 //!
 //! TODO: wire parsed snapshot into synapse-core crdt::Op log reader.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use chrono::DateTime;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Snapshot {
@@ -35,14 +35,11 @@ pub fn parse_as_of(sql: &str) -> (String, Option<Snapshot>) {
         if let Some(q_start) = rest.find('\'') {
             if let Some(q_end) = rest[q_start + 1..].find('\'') {
                 let ts_str = &rest[q_start + 1..q_start + 1 + q_end];
-                // Best-effort: parse via chrono if available, else stub.
-                let _ = ts_str; // TODO: chrono::DateTime::parse_from_rfc3339
-                let ts = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(); // placeholder — real impl parses ts_str
-                let clean = sql[..pos].to_owned();
-                return (clean, Some(Snapshot::WallClock(ts)));
+                if let Ok(dt) = DateTime::parse_from_rfc3339(ts_str) {
+                    let ts = dt.timestamp() as u64;
+                    let clean = sql[..pos].to_owned();
+                    return (clean, Some(Snapshot::WallClock(ts)));
+                }
             }
         }
     }
@@ -65,5 +62,18 @@ mod tests {
         let (clean, snap) = parse_as_of("SELECT * FROM docs");
         assert!(snap.is_none());
         assert_eq!(clean, "SELECT * FROM docs");
+    }
+
+    #[test]
+    fn wallclock_parses_iso_not_now() {
+        let (clean, snap) = parse_as_of("SELECT * FROM docs AS OF '2026-05-12T10:00:00Z'");
+        assert_eq!(clean.trim(), "SELECT * FROM docs");
+        match snap {
+            Some(Snapshot::WallClock(ts)) => {
+                // 2026-05-12T10:00:00Z = 1778580000
+                assert_eq!(ts, 1778580000, "must parse actual timestamp, not SystemTime::now()");
+            }
+            other => panic!("expected WallClock, got {:?}", other),
+        }
     }
 }

@@ -6,6 +6,11 @@
 //!   3. `HYBRID_RANK(...)` → RRF fusion plan
 //!   4. `WITH RECALL_GUARANTEE alpha` → conformal wrapper
 //!
+//! Optimizations:
+//!   - Predicate Pushdown: scalar `col = val` / `col > val` / `col < val` predicates
+//!     extracted from mixed WHERE clauses so they run BEFORE the vec-search.
+//!     Pattern: TanStack/db optimizer.ts + Apache Hive PredicatePushDown.java
+//!
 //! Architecture stolen from Vitess: AST rewrite before backend dispatch.
 
 use crate::sql_ext::{
@@ -33,6 +38,27 @@ pub enum Extension {
     HybridRank { text_col: String, vec_col: String, query_param: String },
     /// Conformal recall guarantee.
     ConformalRecall { alpha: f64 },
+    /// Predicate pushdown: scalar filters extracted from mixed WHERE clause.
+    /// These run on metadata BEFORE the vec-search to shrink the candidate set.
+    PredicatePushdown { predicates: Vec<ScalarPredicate> },
+}
+
+/// A single scalar predicate extracted via predicate pushdown.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScalarPredicate {
+    pub column: String,
+    pub op: PredicateOp,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PredicateOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
 }
 
 /// Rewrite `sql`, stripping/translating all extensions.
@@ -59,10 +85,15 @@ pub fn rewrite(sql: &str) -> RewriteResult {
         return RewriteResult { sql: working, extensions };
     }
 
-    // 3. Vec operator `<=>`
+    // 3. Vec operator `<=>` — with predicate pushdown
     if let Some(op) = VectorOp::parse(&working) {
+        // Extract scalar predicates before we stub out the WHERE clause.
+        // These fire first (metadata filter), shrinking the ANN candidate set.
+        let pushed = extract_scalar_predicates(&working);
+        if !pushed.is_empty() {
+            extensions.push(Extension::PredicatePushdown { predicates: pushed });
+        }
         extensions.push(Extension::VecSearch(op));
-        // Rewrite to a passthrough SELECT — backend executes ANN, not raw SQL
         working = rewrite_vec_to_stub(&working);
     }
 
@@ -113,6 +144,93 @@ fn parse_match_against(sql: &str) -> Option<(String, String)> {
     Some((col, param))
 }
 
+/// Extract scalar predicates from a WHERE clause that also contains `<=>`.
+///
+/// Pattern (Hive/TanStack): scan tokens between WHERE and the vec operator,
+/// pick `col OP literal` triples where OP ∈ {=,!=,<,<=,>,>=}.
+/// These predicates are emitted as `PredicatePushdown` so the executor can
+/// apply a cheap metadata filter BEFORE running the expensive ANN search.
+pub fn extract_scalar_predicates(sql: &str) -> Vec<ScalarPredicate> {
+    let upper = sql.to_ascii_uppercase();
+    let where_pos = match upper.find("WHERE") {
+        Some(p) => p + 5,
+        None => return vec![],
+    };
+    // Only look before the `<=>` operator
+    let vec_pos = upper.find("<=>").unwrap_or(sql.len());
+    if vec_pos <= where_pos { return vec![]; }
+    let clause = &sql[where_pos..vec_pos];
+
+    let mut results = Vec::new();
+    // Split by AND (case-insensitive); ignore OR (too risky to push through OR)
+    for part in clause.split_ascii_whitespace_and_and(clause) {
+        let part = part.trim();
+        if part.is_empty() { continue; }
+        let part_upper = part.to_ascii_uppercase();
+        // Try operators longest-first to avoid `<` matching `<=`
+        let ops: &[(&str, PredicateOp)] = &[
+            ("!=", PredicateOp::Ne),
+            ("<>", PredicateOp::Ne),
+            ("<=", PredicateOp::Le),
+            (">=", PredicateOp::Ge),
+            ("<",  PredicateOp::Lt),
+            (">",  PredicateOp::Gt),
+            ("=",  PredicateOp::Eq),
+        ];
+        for (sym, op) in ops {
+            if let Some(pos) = part.find(sym) {
+                // Skip if part of `<=>` (vec operator leaking through)
+                if sym == &"<" || sym == &">" {
+                    let next = part.as_bytes().get(pos + sym.len()).copied();
+                    if next == Some(b'=') || next == Some(b'>') { continue; }
+                }
+                let col = part[..pos].trim().to_owned();
+                let val = part[pos + sym.len()..].trim().to_owned();
+                // col must be a simple identifier, val a literal or :param
+                let col_ok = col.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.');
+                let val_ok = !val.is_empty() && !val.to_ascii_uppercase().contains("SELECT");
+                if col_ok && val_ok {
+                    results.push(ScalarPredicate { column: col, op: op.clone(), value: val });
+                }
+                break;
+            }
+        }
+        let _ = part_upper;
+    }
+    results
+}
+
+/// Split a WHERE fragment by AND tokens (case-insensitive).
+trait SplitByAnd {
+    fn split_ascii_whitespace_and_and<'a>(&'a self, s: &'a str) -> Vec<&'a str>;
+}
+
+impl SplitByAnd for str {
+    fn split_ascii_whitespace_and_and<'a>(&'a self, s: &'a str) -> Vec<&'a str> {
+        let upper = s.to_ascii_uppercase();
+        let mut parts = Vec::new();
+        let mut start = 0;
+        let bytes = upper.as_bytes();
+        let len = bytes.len();
+        let mut i = 0;
+        while i + 3 <= len {
+            if &bytes[i..i+3] == b"AND" {
+                let prev_ok = i == 0 || bytes[i-1].is_ascii_whitespace();
+                let next_ok = i + 3 >= len || bytes[i+3].is_ascii_whitespace();
+                if prev_ok && next_ok {
+                    parts.push(s[start..i].trim());
+                    start = i + 3;
+                    i += 3;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        parts.push(s[start..].trim());
+        parts
+    }
+}
+
 /// Replace `<=> :param [< threshold]` with a placeholder that backends ignore.
 fn rewrite_vec_to_stub(sql: &str) -> String {
     // Strip WHERE clause containing <=> down to `WHERE 1=1`
@@ -160,6 +278,40 @@ mod tests {
         let sql = "SELECT id, HYBRID_RANK(body, emb, :q) AS s FROM docs ORDER BY s DESC";
         let r = rewrite(sql);
         assert!(r.extensions.iter().any(|e| matches!(e, Extension::HybridRank { .. })));
+    }
+
+    #[test]
+    fn predicate_pushdown_extracts_scalar() {
+        let sql = "SELECT id FROM docs WHERE tenant_id = 'acme' AND embedding <=> :q LIMIT 10";
+        let r = rewrite(sql);
+        let pushed = r.extensions.iter().find_map(|e| {
+            if let Extension::PredicatePushdown { predicates } = e { Some(predicates) } else { None }
+        });
+        assert!(pushed.is_some(), "expected PredicatePushdown extension");
+        let preds = pushed.unwrap();
+        assert_eq!(preds.len(), 1);
+        assert_eq!(preds[0].column, "tenant_id");
+        assert_eq!(preds[0].op, PredicateOp::Eq);
+        assert_eq!(preds[0].value, "'acme'");
+    }
+
+    #[test]
+    fn predicate_pushdown_multiple() {
+        let sql = "SELECT id FROM docs WHERE score > 0.5 AND lang = 'en' AND emb <=> :q LIMIT 5";
+        let r = rewrite(sql);
+        let pushed = r.extensions.iter().find_map(|e| {
+            if let Extension::PredicatePushdown { predicates } = e { Some(predicates) } else { None }
+        });
+        assert!(pushed.is_some());
+        let preds = pushed.unwrap();
+        assert_eq!(preds.len(), 2);
+    }
+
+    #[test]
+    fn no_pushdown_without_vec() {
+        let sql = "SELECT id FROM docs WHERE tenant_id = 'acme' LIMIT 10";
+        let r = rewrite(sql);
+        assert!(!r.extensions.iter().any(|e| matches!(e, Extension::PredicatePushdown { .. })));
     }
 
     #[test]

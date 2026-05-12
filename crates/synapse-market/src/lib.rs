@@ -5,9 +5,12 @@
 //!  - Regime-vec: per-day feature embeddings → sqlite-vec similarity search
 //!  - News-FTS: FTS5 headline+body, graph edges to tickers
 //!  - Backtest: deterministic replay, Strategy trait, BacktestReport
+//!  - JIT filter: Cranelift-compiled predicates (`jit::FilterCache`) —
+//!    compile Cmp/And/Or/Not trees to native code, cached by predicate hash.
 
 pub mod filter;
-// pub mod jit;  // blocked: cranelift 0.131 BlockArg API churn (see JIT_BLOCKERS.md)
+pub mod jit;
+pub mod learn;
 pub mod book;
 pub mod store;
 pub mod series;
@@ -16,6 +19,7 @@ pub mod analytics;
 pub mod signal;
 pub mod router;
 pub mod ffi;
+pub mod stream;
 
 mod ohlcv;
 mod regime;
@@ -28,6 +32,7 @@ pub use ohlcv::Ohlcv;
 pub use regime::RegimeVec;
 pub use news::NewsStore;
 pub use backtest::{Strategy, Tick, Order, OrderSide, BacktestReport};
+pub use signal::turbovec_index::TurboVecIndex;
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -79,6 +84,17 @@ impl Market {
         regime::search(&self.conn, symbol, date_ts, top_n)
     }
 
+    /// Build a TurboQuant signal-similarity index (recommended default).
+    ///
+    /// 4-bit quantisation, no training required, ~8× memory vs f32.
+    /// Prefer over `signal_index` for new workloads.
+    pub fn signal_index_v2(
+        &self,
+        signals: &[(SignalId, Vec<f32>)],
+    ) -> Result<TurboVecIndex> {
+        TurboVecIndex::build(signals, 4)
+    }
+
     /// Build a RaBitQ signal-similarity index from (id, vec) pairs.
     /// `n_clusters` ~ sqrt(N). Returns shared index; persist with `index.save(path)`.
     pub fn signal_index(
@@ -113,6 +129,40 @@ impl Market {
         }
         let data = correlation_matrix_amx(&mat, rows, cols);
         Ok(CorrMatrix { data, n: cols })
+    }
+
+    /// Consume a `TickStream` of `LiveTick`s and ingest them as OHLCV rows.
+    ///
+    /// Ticks are buffered in batches of 1000 and flushed via `ingest_ohlcv`.
+    /// Each tick maps: `price → open=high=low=close`, `qty → volume`.
+    /// Returns the total number of ticks ingested.
+    pub async fn ingest_stream<S>(
+        &self,
+        ticker: &str,
+        mut stream: S,
+        max_ticks: Option<usize>,
+    ) -> Result<usize>
+    where
+        S: stream::TickStream<Item = stream::LiveTick>,
+    {
+        const BATCH: usize = 1000;
+        let mut buf: Vec<(i64, f64, f64, f64, f64, f64)> = Vec::with_capacity(BATCH);
+        let mut total = 0usize;
+        let limit = max_ticks.unwrap_or(usize::MAX);
+
+        while total < limit {
+            let Some(tick) = stream.next_tick().await else { break };
+            buf.push((tick.ts, tick.price, tick.price, tick.price, tick.price, tick.qty));
+            total += 1;
+            if buf.len() >= BATCH {
+                self.ingest_ohlcv(ticker, &buf)?;
+                buf.clear();
+            }
+        }
+        if !buf.is_empty() {
+            self.ingest_ohlcv(ticker, &buf)?;
+        }
+        Ok(total)
     }
 
     /// Run a full backtest over `symbol` in `[start_ts, end_ts)`.

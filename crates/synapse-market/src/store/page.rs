@@ -14,7 +14,8 @@ pub struct PageHeader {
     pub ts_max: i64,
     pub row_count: u32,
     pub checksum: [u8; 8], // first 8 bytes of blake3
-    _pad: [u8; 36],
+    pub hilbert_curve_id: u8, // 0 = unsorted, 1 = sorted by hilbert_index
+    _pad: [u8; 35],
 }
 
 impl PageHeader {
@@ -22,7 +23,7 @@ impl PageHeader {
         let hash = blake3::hash(body);
         let mut checksum = [0u8; 8];
         checksum.copy_from_slice(&hash.as_bytes()[..8]);
-        Self { ts_min, ts_max, row_count, checksum, _pad: [0u8; 36] }
+        Self { ts_min, ts_max, row_count, checksum, hilbert_curve_id: 0, _pad: [0u8; 35] }
     }
 
     pub fn to_bytes(&self) -> [u8; HEADER_SIZE] {
@@ -31,6 +32,7 @@ impl PageHeader {
         buf[8..16].copy_from_slice(&self.ts_max.to_le_bytes());
         buf[16..20].copy_from_slice(&self.row_count.to_le_bytes());
         buf[20..28].copy_from_slice(&self.checksum);
+        buf[28] = self.hilbert_curve_id;
         buf
     }
 
@@ -40,7 +42,8 @@ impl PageHeader {
         let row_count = u32::from_le_bytes(b[16..20].try_into().unwrap());
         let mut checksum = [0u8; 8];
         checksum.copy_from_slice(&b[20..28]);
-        Self { ts_min, ts_max, row_count, checksum, _pad: [0u8; 36] }
+        let hilbert_curve_id = b[28];
+        Self { ts_min, ts_max, row_count, checksum, hilbert_curve_id, _pad: [0u8; 35] }
     }
 }
 
@@ -53,6 +56,20 @@ pub struct Bar {
     pub low: f32,
     pub close: f32,
     pub volume: f32,
+}
+
+/// True Hilbert index via fast-hilbert crate for (timestamp, log-price) → u64 curve position.
+pub fn hilbert_index(
+    ts: i64,
+    price: f32,
+    ts_origin: i64,
+    price_origin: f32,
+    ts_scale: f64,
+    price_scale: f64,
+) -> u64 {
+    let t = ((ts - ts_origin) as f64 / ts_scale).clamp(0.0, u32::MAX as f64) as u32;
+    let p_log = ((price / price_origin).ln() / price_scale).clamp(0.0, u32::MAX as f64) as u32;
+    fast_hilbert::xy2h::<u32>(t, p_log, 32)
 }
 
 /// Hilbert-curve order key for (ts_bucket, price_zone) — used to sort rows within a page
@@ -76,10 +93,26 @@ fn interleave_bits(mut x: u32, mut y: u32) -> u32 {
 }
 
 /// Encode a slice of bars into a page buffer (header + columnar body).
-/// Returns the filled buffer (exactly PAGE_SIZE bytes).
+/// Bars are sorted by hilbert_index before encoding. Returns the filled buffer (PAGE_SIZE bytes).
 pub fn encode_page(bars: &[Bar]) -> Vec<u8> {
     assert!(!bars.is_empty());
     assert!(bars.len() <= MAX_ROWS);
+
+    // Sort by hilbert index for spatial locality
+    let mut sorted: Vec<Bar> = bars.to_vec();
+    let ts_origin = sorted.iter().map(|b| b.ts).min().unwrap();
+    let price_origin = sorted.iter().map(|b| b.close).fold(f32::INFINITY, f32::min);
+    let ts_range = (sorted.iter().map(|b| b.ts).max().unwrap() - ts_origin).max(1);
+    let price_max = sorted.iter().map(|b| b.close).fold(f32::NEG_INFINITY, f32::max);
+    let price_log_max = (price_max / price_origin).ln().max(1e-9_f64 as f32) as f64;
+    let ts_scale = ts_range as f64 / u32::MAX as f64;
+    let price_scale = price_log_max / u32::MAX as f64;
+    let ts_scale = if ts_scale == 0.0 { 1.0 } else { ts_scale };
+    let price_scale = if price_scale == 0.0 { 1.0 } else { price_scale };
+    sorted.sort_unstable_by_key(|b| {
+        hilbert_index(b.ts, b.close, ts_origin, price_origin, ts_scale, price_scale)
+    });
+    let bars = sorted.as_slice();
 
     let n = bars.len();
     let ts_base = bars[0].ts;
@@ -107,7 +140,8 @@ pub fn encode_page(bars: &[Bar]) -> Vec<u8> {
 
     let ts_min = bars.iter().map(|b| b.ts).min().unwrap();
     let ts_max = bars.iter().map(|b| b.ts).max().unwrap();
-    let header = PageHeader::new(ts_min, ts_max, n as u32, &body);
+    let mut header = PageHeader::new(ts_min, ts_max, n as u32, &body);
+    header.hilbert_curve_id = 1;
 
     let mut page = vec![0u8; PAGE_SIZE];
     page[..HEADER_SIZE].copy_from_slice(&header.to_bytes());
@@ -129,14 +163,28 @@ pub struct Page {
 
 impl Page {
     pub fn from_bars(bars: &[Bar]) -> Self {
-        let n = bars.len();
+        let mut sorted: Vec<Bar> = bars.to_vec();
+        if !sorted.is_empty() {
+            let ts_origin = sorted.iter().map(|b| b.ts).min().unwrap();
+            let price_origin = sorted.iter().map(|b| b.close).fold(f32::INFINITY, f32::min);
+            let price_origin = if price_origin <= 0.0 { 1.0_f32 } else { price_origin };
+            let ts_range = (sorted.iter().map(|b| b.ts).max().unwrap() - ts_origin).max(1);
+            let price_max = sorted.iter().map(|b| b.close).fold(f32::NEG_INFINITY, f32::max);
+            let price_log_max = (price_max / price_origin).ln().max(1e-9) as f64;
+            let ts_scale = (ts_range as f64 / u32::MAX as f64).max(1.0);
+            let price_scale = price_log_max.max(1e-9) / u32::MAX as f64;
+            sorted.sort_unstable_by_key(|b| {
+                hilbert_index(b.ts, b.close, ts_origin, price_origin, ts_scale, price_scale)
+            });
+        }
+        let n = sorted.len();
         let mut ts     = Vec::with_capacity(n);
         let mut open   = Vec::with_capacity(n);
         let mut high   = Vec::with_capacity(n);
         let mut low    = Vec::with_capacity(n);
         let mut close  = Vec::with_capacity(n);
         let mut volume = Vec::with_capacity(n);
-        for b in bars {
+        for b in &sorted {
             ts.push(b.ts);
             open.push(b.open);
             high.push(b.high);

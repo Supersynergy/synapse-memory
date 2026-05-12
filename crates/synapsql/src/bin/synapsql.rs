@@ -12,8 +12,8 @@
 
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use synapsql::Service;
+use synapsql::server::brain_adapter::BrainAdapter;
 
 #[derive(Parser)]
 #[command(name = "synapsql", about = "SynapsQL — MySQL/PG-wire + Vector + FTS. One binary. Zero config.")]
@@ -67,7 +67,9 @@ async fn main() -> std::io::Result<()> {
         _ => {}
     }
 
-    let store: Arc<dyn synapse_libsql::Store> = Arc::new(SynapsStore::new());
+    let adapter = BrainAdapter::open(&cli.db)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    let store: Arc<dyn synapse_libsql::Store> = Arc::new(adapter);
 
     // Spawn QPS reporter (logs every 5s)
     tokio::spawn(qps_reporter());
@@ -94,25 +96,3 @@ async fn qps_reporter() {
     }
 }
 
-/// Production SynapsStore wrapping future synapse-core::Brain.
-/// TODO: replace with Brain::open(path) once synapse-core API is wired.
-struct SynapsStore {
-    queries: AtomicU64,
-}
-
-impl SynapsStore {
-    fn new() -> Self { Self { queries: AtomicU64::new(0) } }
-}
-
-#[async_trait::async_trait]
-impl synapse_libsql::Store for SynapsStore {
-    async fn query(&self, sql: &str) -> Result<synapse_libsql::QueryResult, synapse_libsql::Error> {
-        self.queries.fetch_add(1, Ordering::Relaxed);
-        tracing::debug!("query: {sql}");
-        Ok(synapse_libsql::QueryResult::default())
-    }
-    async fn exec(&self, sql: &str) -> Result<u64, synapse_libsql::Error> {
-        tracing::debug!("exec: {sql}");
-        Ok(0)
-    }
-}
