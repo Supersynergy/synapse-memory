@@ -26,6 +26,18 @@ jobs:
         env:
           RUSTDOCFLAGS: "--cfg docsrs"
 
+      - name: Generate crate index
+        run: |
+          python3 - <<'PYEOF'
+          import os, pathlib
+          doc_dir = pathlib.Path("target/doc")
+          crates = sorted(p.name for p in doc_dir.iterdir() if p.is_dir() and not p.name.startswith(".") and (p / "index.html").exists())
+          lines = ["# Synapse Crate Index\n", f"Generated from {len(crates)} crates.\n\n"]
+          for c in crates:
+              lines.append(f"- [{c}]({c}/index.html)\n")
+          (doc_dir / "INDEX.md").write_text("".join(lines))
+          PYEOF
+
       - name: Add index redirect
         run: |
           cat > target/doc/index.html <<'EOF'

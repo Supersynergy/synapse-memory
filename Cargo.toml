@@ -94,7 +94,7 @@ experimental-members = [
 ]
 
 [workspace.package]
-version = "1.0.1"
+version = "1.0.1-rc.1"
 edition = "2021"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "synapse-rs"
-version = "0.1.0"
+version = "1.0.1rc1"
 requires-python = ">=3.9"
 classifiers = [
     "License :: OSI Approved :: MIT License",
