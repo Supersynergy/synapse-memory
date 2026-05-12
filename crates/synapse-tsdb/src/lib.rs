@@ -8,7 +8,7 @@ mod arrow_backend;
 #[cfg(feature = "tsdb")]
 pub use arrow_backend::{TsdbStore, AggOp};
 
-mod fallback;
+pub mod fallback;
 #[cfg(not(feature = "tsdb"))]
 pub use fallback::{TsdbStore, AggOp};
 

@@ -24,6 +24,8 @@ pub mod signal;
 pub mod router;
 pub mod ffi;
 pub mod stream;
+#[cfg(feature = "tsdb-export")]
+pub mod tsdb_export;
 
 mod ohlcv;
 pub mod regime;

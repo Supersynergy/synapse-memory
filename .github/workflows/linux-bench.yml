@@ -1,0 +1,143 @@
+name: linux-bench
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # weekly Wednesday 03:00 UTC
+    - cron: "0 3 * * 3"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: 3
+  # Colima/Linux aarch64: GCC 12 doesn't support armv8.2-a dotprod via intrinsics inline.
+  # Pass -march=armv8-a to prevent numkong/usearch from enabling NEONSDOT on build hosts
+  # that don't have dotprod in their instruction set (QEMU / Colima VM / CI arm64 runners).
+  CFLAGS: "-march=armv8-a"
+  CXXFLAGS: "-march=armv8-a"
+
+jobs:
+  bench-linux-amd64:
+    name: bench / linux-amd64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y pkg-config libssl-dev libsqlite3-dev clang lld cmake python3 python3-numpy
+
+      - name: Install faiss-cpu (best-effort)
+        run: pip3 install faiss-cpu --break-system-packages 2>/dev/null || true
+
+      - name: Build bench targets
+        run: |
+          cargo build --release -p synapse-ann --features ann-usearch --example raw_ann_microbench
+          cargo build --release -p synapse-fts
+          cargo build --release -p synapse-core
+
+      - name: raw_ann_microbench
+        run: cargo run --release -p synapse-ann --features ann-usearch --example raw_ann_microbench 2>&1 | tee /tmp/raw_ann_linux_amd64.txt
+
+      - name: fts_compare bench
+        run: cargo bench -p synapse-fts --bench fts_compare 2>&1 | grep 'time:' | tee /tmp/fts_compare_linux_amd64.txt
+
+      - name: rrf_neon bench
+        run: cargo bench -p synapse-core --bench rrf_neon 2>&1 | grep 'time:' | tee /tmp/rrf_neon_linux_amd64.txt
+
+      - name: workspace tests
+        run: |
+          cargo test --release --quiet \
+            -p synapse-kernel -p synapse-core -p synapse-ann \
+            -p synapse-fts -p synapse-rerank -p synapse-space \
+            -p synapse-tier -p synapse-quant -p synapse-fusion \
+            2>&1 | tail -20
+
+      - name: Upload bench results
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-bench-amd64-${{ github.run_id }}
+          path: /tmp/*_linux_amd64.txt
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## Linux amd64 bench results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "=== raw_ann_microbench ===" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/raw_ann_linux_amd64.txt >> $GITHUB_STEP_SUMMARY
+          echo "=== fts_compare ===" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/fts_compare_linux_amd64.txt >> $GITHUB_STEP_SUMMARY
+          echo "=== rrf_neon ===" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/rrf_neon_linux_amd64.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  bench-linux-arm64:
+    name: bench / linux-arm64
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y pkg-config libssl-dev libsqlite3-dev clang lld cmake python3 python3-numpy
+
+      - name: Install faiss-cpu (best-effort)
+        run: pip3 install faiss-cpu --break-system-packages 2>/dev/null || true
+
+      - name: Build bench targets
+        run: |
+          cargo build --release -p synapse-ann --features ann-usearch --example raw_ann_microbench
+          cargo build --release -p synapse-fts
+          cargo build --release -p synapse-core
+
+      - name: raw_ann_microbench
+        run: cargo run --release -p synapse-ann --features ann-usearch --example raw_ann_microbench 2>&1 | tee /tmp/raw_ann_linux_arm64.txt
+
+      - name: fts_compare bench
+        run: cargo bench -p synapse-fts --bench fts_compare 2>&1 | grep 'time:' | tee /tmp/fts_compare_linux_arm64.txt
+
+      - name: rrf_neon bench
+        run: cargo bench -p synapse-core --bench rrf_neon 2>&1 | grep 'time:' | tee /tmp/rrf_neon_linux_arm64.txt
+
+      - name: workspace tests
+        run: |
+          cargo test --release --quiet \
+            -p synapse-kernel -p synapse-core -p synapse-ann \
+            -p synapse-fts -p synapse-rerank -p synapse-space \
+            -p synapse-tier -p synapse-quant -p synapse-fusion \
+            2>&1 | tail -20
+
+      - name: Upload bench results
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-bench-arm64-${{ github.run_id }}
+          path: /tmp/*_linux_arm64.txt
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## Linux arm64 bench results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "=== raw_ann_microbench ===" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/raw_ann_linux_arm64.txt >> $GITHUB_STEP_SUMMARY
+          echo "=== fts_compare ===" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/fts_compare_linux_arm64.txt >> $GITHUB_STEP_SUMMARY
+          echo "=== rrf_neon ===" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/rrf_neon_linux_arm64.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

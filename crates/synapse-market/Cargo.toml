@@ -42,12 +42,15 @@ futures-util = "0.3"
 async-trait = "0.1"
 rumqttc = { version = "0.24", optional = true }
 opensrv-mysql = { git = "https://github.com/databendlabs/opensrv.git", tag = "v0.10.0", optional = true }
+synapse-tsdb = { path = "../synapse-tsdb", features = ["tsdb"], optional = true }
+arrow = { version = "53", features = ["ipc"], optional = true }
 
 [features]
 default = []
 mqtt = ["dep:rumqttc"]
 smx-mysql = ["dep:opensrv-mysql"]
 polars = ["dep:polars-core", "dep:polars-io"]
+tsdb-export = ["dep:synapse-tsdb", "dep:arrow"]
 
 [dependencies.polars-core]
 version = "0.46"

@@ -82,10 +82,16 @@ members = [
     "crates/synapse-market-ts",
     # DuckDB-embedded OLAP engine — feature-gated `olap` (duckdb bundled, heavy)
     "crates/synapse-olap",
+    # MLX Metal GPU vectorized OLAP (candle-core Metal, feature-gated `mlx-olap`)
+    "crates/synapse-mlx-olap",
     # CDC + continuous-query streaming layer
     "crates/synapse-stream",
     # GreptimeDB-pattern lite time-series columnar store (Arrow/Parquet, feature-gated)
     "crates/synapse-tsdb",
+    # io_uring storage engine — Linux only, TigerBeetle-pattern (feature: io-uring)
+    "crates/synapse-iouring",
+    # Cranelift-JIT query compiler (feature-gated `jit`)
+    "crates/synapse-jit",
 ]
 
 [workspace.metadata]

@@ -1,0 +1,46 @@
+[package]
+name = "synapse-iouring"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "io_uring storage engine for Synapse — Linux only, TigerBeetle-pattern"
+
+# io_uring is Linux-only. macOS/Windows: compile but runtime = UnsupportedPlatform.
+# Enable real io_uring: `cargo build -p synapse-iouring --features io-uring`
+# Linux CI: `--features io-uring --target x86_64-unknown-linux-gnu`
+
+[features]
+default = []
+io-uring = ["dep:io-uring", "dep:libc", "dep:rusqlite"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["full"] }
+crossbeam-skiplist = "0.1"
+crossbeam-queue = "0.3"
+blake3 = "1"
+
+# Only pulled on --features io-uring (Linux)
+io-uring = { version = "0.7", optional = true }
+libc = { version = "0.2", optional = true }
+# Bench binary (SQLite baseline comparison)
+rusqlite = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["full", "test-util"] }
+
+[[bin]]
+name = "bench_iouring"
+path = "src/bin/bench_iouring.rs"
+required-features = ["io-uring"]
+
+[lib]
+name = "synapse_iouring"
+path = "src/lib.rs"

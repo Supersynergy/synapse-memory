@@ -150,27 +150,113 @@ impl DatalogEngine {
 
     /// Semi-naive bottom-up evaluation to fixed point.
     pub fn semi_naive(&mut self) {
-        // seed IDB with existing facts for IDB predicates
+        // Collect IDB predicate names (heads of rules).
+        let idb_preds: HashSet<String> = self.rules.iter().map(|(h, _)| h.name.clone()).collect();
+
+        // Initial delta = whatever is already in IDB slots (may be empty).
+        let mut delta: HashMap<String, HashSet<Tuple>> = idb_preds
+            .iter()
+            .map(|p| (p.clone(), self.facts.get(p).cloned().unwrap_or_default()))
+            .collect();
+
         loop {
-            let mut added = false;
+            let mut new_delta: HashMap<String, HashSet<Tuple>> = HashMap::new();
+
             for (head, body) in &self.rules {
-                let new_tuples = self.derive_rule(head, body);
-                let entry = self.facts.entry(head.name.clone()).or_default();
-                for t in new_tuples {
-                    if entry.insert(t) { added = true; }
+                // Determine which body literals are IDB (can participate as delta).
+                let idb_positions: Vec<usize> = body.iter().enumerate()
+                    .filter(|(_, p)| idb_preds.contains(&p.name))
+                    .map(|(i, _)| i)
+                    .collect();
+
+                let candidates = if idb_positions.is_empty() {
+                    // Pure EDB rule: derive once using full relations.
+                    self.derive_rule(head, body)
+                } else {
+                    // For each IDB literal, use its delta; others use full relation.
+                    let mut all: Vec<Tuple> = Vec::new();
+                    for pos in &idb_positions {
+                        let dp = &body[*pos].name;
+                        if let Some(dt) = delta.get(dp.as_str()) {
+                            if dt.is_empty() { continue; }
+                            // Build a body where this literal uses delta, rest full.
+                            let new_tuples = self.derive_rule_delta_at(head, body, *pos, dt);
+                            all.extend(new_tuples);
+                        }
+                    }
+                    all
+                };
+
+                let full = self.facts.entry(head.name.clone()).or_default();
+                for t in candidates {
+                    if full.insert(t.clone()) {
+                        new_delta.entry(head.name.clone()).or_default().insert(t);
+                    }
                 }
             }
-            if !added { break; }
+
+            if new_delta.values().all(|s| s.is_empty()) { break; }
+            delta = new_delta;
         }
     }
 
-    fn derive_rule(&self, head: &Predicate, body: &[Predicate]) -> Vec<Tuple> {
+    /// Derive using delta only at `delta_pos` body literal; rest use full facts.
+    fn derive_rule_delta_at(
+        &self,
+        head: &Predicate,
+        body: &[Predicate],
+        delta_pos: usize,
+        delta_set: &HashSet<Tuple>,
+    ) -> Vec<Tuple> {
+        let empty: HashSet<Tuple> = HashSet::new();
         let mut bindings: Vec<Binding> = vec![HashMap::new()];
-        for pred in body {
-            let tuples = self.facts.get(&pred.name).cloned().unwrap_or_default();
+        for (i, pred) in body.iter().enumerate() {
+            let tuples: &HashSet<Tuple> = if i == delta_pos {
+                delta_set
+            } else {
+                self.facts.get(&pred.name).unwrap_or(&empty)
+            };
             let mut next: Vec<Binding> = Vec::new();
             for b in &bindings {
-                for t in &tuples {
+                for t in tuples {
+                    if let Some(nb) = match_args(&pred.args, t) {
+                        if let Some(merged) = merge_bindings(b, &nb) {
+                            next.push(merged);
+                        }
+                    }
+                }
+            }
+            bindings = next;
+        }
+        bindings.iter()
+            .filter_map(|b| apply_binding(&head.args, b))
+            .collect()
+    }
+
+    fn derive_rule(&self, head: &Predicate, body: &[Predicate]) -> Vec<Tuple> {
+        self.derive_rule_with_delta(head, body, None)
+    }
+
+    /// Derive new tuples using semi-naive delta: at least one body literal must
+    /// come from `delta_pred` (the IDB predicate being iterated) hitting `delta`.
+    /// If `delta` is None, derive from full relations (used for EDB-only rules).
+    fn derive_rule_with_delta<'a>(
+        &'a self,
+        head: &Predicate,
+        body: &[Predicate],
+        delta: Option<(&'a str, &'a HashSet<Tuple>)>,
+    ) -> Vec<Tuple> {
+        let empty: HashSet<Tuple> = HashSet::new();
+        let mut bindings: Vec<Binding> = vec![HashMap::new()];
+        for pred in body {
+            let tuples: &HashSet<Tuple> = if let Some((dp, dt)) = delta {
+                if pred.name == dp { dt } else { self.facts.get(&pred.name).unwrap_or(&empty) }
+            } else {
+                self.facts.get(&pred.name).unwrap_or(&empty)
+            };
+            let mut next: Vec<Binding> = Vec::new();
+            for b in &bindings {
+                for t in tuples {
                     if let Some(nb) = match_args(&pred.args, t) {
                         if let Some(merged) = merge_bindings(b, &nb) {
                             next.push(merged);
@@ -287,5 +373,36 @@ mod tests {
         let rows = eng.aggregate("score", 0, 1, Op::Sum);
         let alice = rows.iter().find(|r| r.group_key == "alice").unwrap();
         assert_eq!(alice.value, 30.0);
+    }
+
+    #[test]
+    fn ancestor_100_chain_perf() {
+        let n = 100usize;
+        let mut eng = DatalogEngine::new();
+        for i in 0..n - 1 {
+            let a = i.to_string();
+            let b = (i + 1).to_string();
+            eng.fact("parent", &[a.as_str(), b.as_str()]);
+        }
+        eng.add_rule(
+            Predicate { name: "ancestor".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] },
+            vec![Predicate { name: "parent".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] }],
+        );
+        eng.add_rule(
+            Predicate { name: "ancestor".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] },
+            vec![
+                Predicate { name: "parent".into(),   args: vec![Term::Var("X".into()), Term::Var("Z".into())] },
+                Predicate { name: "ancestor".into(), args: vec![Term::Var("Z".into()), Term::Var("Y".into())] },
+            ],
+        );
+        let t0 = std::time::Instant::now();
+        eng.semi_naive();
+        let elapsed = t0.elapsed();
+        let results = eng.query("ancestor", 2);
+        let expected = n * (n - 1) / 2;
+        assert_eq!(results.len(), expected, "wrong ancestor count");
+        // Must complete well under 1s (old code took 7131ms for this case)
+        assert!(elapsed.as_millis() < 1000, "too slow: {}ms", elapsed.as_millis());
+        eprintln!("ancestor_100_chain: {}ms, {} tuples", elapsed.as_millis(), results.len());
     }
 }
