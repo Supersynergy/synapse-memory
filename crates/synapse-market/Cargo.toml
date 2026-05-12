@@ -1,0 +1,45 @@
+[package]
+name = "synapse-market"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Embedded HFT/backtest engine on Synapse: OHLCV timeseries + regime-vec + news-FTS + graph-entity."
+keywords = ["finance", "backtest", "timeseries", "trading", "hft"]
+categories = ["database", "simulation"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+tracing.workspace = true
+synapse-core = { path = "../synapse-core" }
+
+[features]
+default = []
+# Enable CSV/Parquet ingestion via Polars
+polars = ["dep:polars-core", "dep:polars-io"]
+
+[dependencies.polars-core]
+version = "0.46"
+optional = true
+default-features = false
+
+[dependencies.polars-io]
+version = "0.46"
+optional = true
+default-features = false
+features = ["csv", "parquet"]
+
+[dev-dependencies]
+tempfile = "3"
+
+[[example]]
+name = "backtest_demo"
+path = "examples/backtest_demo.rs"
+
+[lib]
+doctest = false

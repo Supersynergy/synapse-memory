@@ -61,3 +61,6 @@ pub mod hyde;
 /// Auto-tiered index: RAM MultiIndex + SPANN disk-tier when corpus > threshold.
 /// Feature-gated `spann-tier` — without the feature, disk path compiled out.
 pub mod tiered;
+
+/// RAM optimization utilities: mlock, madvise, huge-pages, thread-local query buffers.
+pub mod ram;

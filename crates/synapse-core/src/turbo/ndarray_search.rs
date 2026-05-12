@@ -50,6 +50,12 @@ impl NdArraySearch {
         };
         s.normalize_rows();
         s.build_binary_matrix();
+        // Hint OS: HNSW-style random access pattern across the vector matrix.
+        {
+            let ptr = s.matrix.as_ptr() as *mut u8;
+            let len = s.n_vectors * s.dim * std::mem::size_of::<f32>();
+            crate::turbo::ram::madvise_random(ptr, len);
+        }
         Ok(s)
     }
 

@@ -1,8 +1,16 @@
 //! Binary Hamming via XOR + count_ones. Target: <0.5 ns / 256-bit vec.
 //! Compiler maps count_ones() → CNT (NEON) on aarch64; competitive with hand-asm.
 
-#[inline]
-pub fn hamming_u64(a: &[u64], b: &[u64]) -> u32 {
+/// NEON-hinted dispatch: #[target_feature(enable="neon")] lets the compiler
+/// emit `cnt` + `addv` vectorized popcount on aarch64 without unsafe intrinsics.
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn hamming_u64_neon(a: &[u64], b: &[u64]) -> u32 {
+    hamming_u64_inner(a, b)
+}
+
+#[inline(always)]
+fn hamming_u64_inner(a: &[u64], b: &[u64]) -> u32 {
     debug_assert_eq!(a.len(), b.len());
     let mut acc = 0u32;
     let n = a.len();
@@ -19,6 +27,15 @@ pub fn hamming_u64(a: &[u64], b: &[u64]) -> u32 {
         i += 1;
     }
     acc
+}
+
+#[inline(always)]
+pub fn hamming_u64(a: &[u64], b: &[u64]) -> u32 {
+    #[cfg(target_arch = "aarch64")]
+    // SAFETY: NEON is always available on ARMv8-A / Apple Silicon.
+    unsafe { hamming_u64_neon(a, b) }
+    #[cfg(not(target_arch = "aarch64"))]
+    hamming_u64_inner(a, b)
 }
 
 #[cfg(test)]

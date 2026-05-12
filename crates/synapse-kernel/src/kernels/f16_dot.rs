@@ -33,7 +33,7 @@ pub fn dot_f16_scalar(a: &[f16], b: &[f16]) -> f32 {
 }
 
 /// NEON: transmute u16→float16x4_t, vcvt_f32_f16 (stable), then vmlaq_f32.
-/// 8 f16 per iteration via 2 × float16x4_t loads.
+/// 16 f16 per main loop (4 accumulators), 8-wide tail.
 #[cfg(all(target_arch = "aarch64", feature = "neon"))]
 #[inline]
 pub fn dot_f16_neon(a: &[f16], b: &[f16]) -> f32 {
@@ -45,23 +45,54 @@ pub fn dot_f16_neon(a: &[f16], b: &[f16]) -> f32 {
     let mut acc0: float32x4_t = unsafe { vdupq_n_f32(0.0) };
     let mut acc1: float32x4_t = unsafe { vdupq_n_f32(0.0) };
 
-    // 8 f16 per iteration: 2 × 4-lane chunks
-    while i + 8 <= n {
+    let mut acc2: float32x4_t = unsafe { vdupq_n_f32(0.0) };
+    let mut acc3: float32x4_t = unsafe { vdupq_n_f32(0.0) };
+
+    // 16 f16 per iteration: 4 × 4-lane chunks — doubles throughput vs 8-wide
+    while i + 16 <= n {
         unsafe {
             let ap = a.as_ptr().add(i) as *const u16;
             let bp = b.as_ptr().add(i) as *const u16;
 
-            // Load 4×u16 and transmute to float16x4_t (stable)
             let au0: uint16x4_t = vld1_u16(ap);
             let bu0: uint16x4_t = vld1_u16(bp);
             let au1: uint16x4_t = vld1_u16(ap.add(4));
             let bu1: uint16x4_t = vld1_u16(bp.add(4));
+            let au2: uint16x4_t = vld1_u16(ap.add(8));
+            let bu2: uint16x4_t = vld1_u16(bp.add(8));
+            let au3: uint16x4_t = vld1_u16(ap.add(12));
+            let bu3: uint16x4_t = vld1_u16(bp.add(12));
 
             let af0: float32x4_t = vcvt_f32_f16(std::mem::transmute(au0));
             let bf0: float32x4_t = vcvt_f32_f16(std::mem::transmute(bu0));
             let af1: float32x4_t = vcvt_f32_f16(std::mem::transmute(au1));
             let bf1: float32x4_t = vcvt_f32_f16(std::mem::transmute(bu1));
+            let af2: float32x4_t = vcvt_f32_f16(std::mem::transmute(au2));
+            let bf2: float32x4_t = vcvt_f32_f16(std::mem::transmute(bu2));
+            let af3: float32x4_t = vcvt_f32_f16(std::mem::transmute(au3));
+            let bf3: float32x4_t = vcvt_f32_f16(std::mem::transmute(bu3));
 
+            acc0 = vmlaq_f32(acc0, af0, bf0);
+            acc1 = vmlaq_f32(acc1, af1, bf1);
+            acc2 = vmlaq_f32(acc2, af2, bf2);
+            acc3 = vmlaq_f32(acc3, af3, bf3);
+        }
+        i += 16;
+    }
+
+    // 8-wide tail
+    while i + 8 <= n {
+        unsafe {
+            let ap = a.as_ptr().add(i) as *const u16;
+            let bp = b.as_ptr().add(i) as *const u16;
+            let au0: uint16x4_t = vld1_u16(ap);
+            let bu0: uint16x4_t = vld1_u16(bp);
+            let au1: uint16x4_t = vld1_u16(ap.add(4));
+            let bu1: uint16x4_t = vld1_u16(bp.add(4));
+            let af0: float32x4_t = vcvt_f32_f16(std::mem::transmute(au0));
+            let bf0: float32x4_t = vcvt_f32_f16(std::mem::transmute(bu0));
+            let af1: float32x4_t = vcvt_f32_f16(std::mem::transmute(au1));
+            let bf1: float32x4_t = vcvt_f32_f16(std::mem::transmute(bu1));
             acc0 = vmlaq_f32(acc0, af0, bf0);
             acc1 = vmlaq_f32(acc1, af1, bf1);
         }
@@ -69,7 +100,9 @@ pub fn dot_f16_neon(a: &[f16], b: &[f16]) -> f32 {
     }
 
     // merge accumulators
-    let acc = unsafe { vaddq_f32(acc0, acc1) };
+    let acc01 = unsafe { vaddq_f32(acc0, acc1) };
+    let acc23 = unsafe { vaddq_f32(acc2, acc3) };
+    let acc = unsafe { vaddq_f32(acc01, acc23) };
     let mut result: f32 = unsafe { vaddvq_f32(acc) };
 
     // scalar tail

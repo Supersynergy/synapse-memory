@@ -9,6 +9,7 @@ name = "synapse"
 path = "src/main.rs"
 
 [dependencies]
+tikv-jemallocator = { version = "0.6", optional = true }
 anyhow.workspace = true
 clap.workspace = true
 serde_json.workspace = true
@@ -24,8 +25,10 @@ synapse-core = { path = "../synapse-core" }
 tempfile = "3"
 
 [features]
-# default: static ORT linked at build time. Works on mac and native linux.
-default = ["static-ort"]
+# default: static ORT + jemalloc (lower fragmentation, better throughput for alloc-heavy HNSW workloads).
+default = ["static-ort", "jemalloc"]
+# jemalloc: replace system allocator with jemalloc for release binary.
+jemalloc = ["dep:tikv-jemallocator"]
 # static-ort: enable synapse-core's `embed` feature (ORT linked statically).
 static-ort = ["synapse-core/embed"]
 # cross-linux: enable synapse-core's `embed-dynamic` feature (ORT via dlopen at runtime).

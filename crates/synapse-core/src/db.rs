@@ -166,9 +166,17 @@ pub fn rrf_merge_neon(lex: Vec<Hit>, vec: Vec<Hit>, limit: usize) -> Vec<Hit> {
         pi = j;
     }
 
-    // Sort by score desc
+    // Partial-sort: O(N + k log k) vs O(N log N) full sort.
+    // select_nth_unstable_by guarantees element[limit-1] is correct pivot;
+    // elements [0..limit] are the top-k (unsorted), then we sort only those.
+    let k = limit.min(merged.len());
+    if k < merged.len() {
+        merged.select_nth_unstable_by(k - 1, |a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        merged.truncate(k);
+    }
     merged.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    merged.truncate(limit);
 
     // Reconstruct Hit vec using direct index into source arrays — no HashMap.
     // Each merged entry stores (id, score, first_seen_idx, first_seen_tag).
@@ -191,6 +199,13 @@ pub fn rrf_merge_neon(lex: Vec<Hit>, vec: Vec<Hit>, limit: usize) -> Vec<Hit> {
         }
     }
     out
+}
+
+/// Batched RRF for N independent (lex, vec) query pairs.
+/// Amortizes state-machine init: score-buf alloc + sort shared per call.
+/// Returns one merged result vec per query, each truncated to `limit`.
+pub fn rrf_merge_batch(queries: Vec<(Vec<Hit>, Vec<Hit>)>, limit: usize) -> Vec<Vec<Hit>> {
+    queries.into_iter().map(|(lex, vec)| rrf_merge_neon(lex, vec, limit)).collect()
 }
 
 impl Store {
@@ -299,7 +314,27 @@ impl Store {
         };
         #[cfg(feature = "tantivy-fts")]
         s.init_tantivy_warm_start()?;
+        // Prefetch tantivy index pages into OS page-cache in background.
+        // Uses MADV_SEQUENTIAL under the hood; zero-cost if tantivy_path doesn't exist yet.
+        #[cfg(feature = "tantivy-fts")]
+        {
+            let tp = s.tantivy_path.clone();
+            if tp.exists() {
+                crate::turbo::ram::prefetch_dir_bg(tp);
+            }
+        }
         Ok(s)
+    }
+
+    /// Touch all in-memory HNSW/ndarray pages and SQLite page-cache to ensure
+    /// warm residency before the first query.  Call once at startup.
+    pub fn warm_cache(&self) {
+        // SQLite: issue a trivial query to pull WAL + B-tree root pages into cache.
+        let _ = self.conn.query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0));
+        // Turbo ndarray: eagerly build if not yet warm.
+        #[cfg(feature = "turbo")]
+        self.warm_turbo();
+        tracing::info!("warm_cache: complete");
     }
 
     /// Open or create an encrypted (SQLCipher) database.

@@ -37,8 +37,18 @@ pub trait AnnIndex: Send + Sync {
     ) -> Result<Vec<(u64, f32)>, AnnError> {
         let m = mult.clamp(2, 100);
         let mut hits = self.search(query, k.saturating_mul(m))?;
-        hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        let len = hits.len();
+        if len <= k {
+            hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            return Ok(hits);
+        }
+        // Partial sort: O(n) select + O(k log k) sort of top-k only.
+        let k_idx = k.min(len) - 1;
+        hits.select_nth_unstable_by(k_idx, |a, b| {
+            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
         hits.truncate(k);
+        hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
         Ok(hits)
     }
 

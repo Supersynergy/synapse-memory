@@ -72,6 +72,8 @@ members = [
     "crates/synapse-spann",
     # JS/TS SDK via napi-rs — `bun add @supersynergy/synapse`
     "crates/synapse-js",
+    # Embedded HFT/backtest engine: OHLCV + regime-vec + news-FTS + graph-entity
+    "crates/synapse-market",
 ]
 
 [workspace.package]
@@ -126,6 +128,7 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "j
 opt-level = 3
 lto = "thin"
 codegen-units = 1
+panic = "abort"
 debug = 1
 
 [profile.release-hardened]

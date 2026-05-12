@@ -1,3 +1,9 @@
+// jemalloc: replace system allocator — reduces fragmentation under alloc-heavy
+// HNSW/ndarray workloads. Feature-gated so tests / cross-compile can opt out.
+#[cfg(feature = "jemalloc")]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use rusqlite;

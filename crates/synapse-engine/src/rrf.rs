@@ -15,7 +15,48 @@ pub fn rrf_fuse(ranks_a: &[f64], ranks_b: &[f64], k: f64) -> Vec<f64> {
 
 #[inline]
 pub fn distance_to_score(distances: &[f32]) -> Vec<f32> {
-    distances.iter().map(|d| 1.0_f32 / (1.0_f32 + d)).collect()
+    let mut out = Vec::with_capacity(distances.len());
+    // SAFETY: out has capacity == distances.len(); we write all elements before set_len.
+    unsafe { out.set_len(distances.len()); }
+    distance_to_score_inplace(distances, &mut out);
+    out
+}
+
+/// Zero-alloc variant: write scores into pre-allocated `out` slice.
+/// NEON path: vrecpeq_f32 + 2×NR → ~23-bit accurate reciprocal of (1+d).
+/// Caller must ensure `out.len() >= distances.len()`.
+#[inline]
+pub fn distance_to_score_inplace(distances: &[f32], out: &mut [f32]) {
+    debug_assert!(out.len() >= distances.len());
+    let n = distances.len();
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        use std::arch::aarch64::*;
+        let mut i = 0usize;
+        let one = unsafe { vdupq_n_f32(1.0) };
+        while i + 4 <= n {
+            unsafe {
+                let d = vld1q_f32(distances.as_ptr().add(i));
+                let denom = vaddq_f32(one, d); // 1 + d
+                let est = vrecpeq_f32(denom);
+                let est = vmulq_f32(est, vrecpsq_f32(denom, est));
+                let est = vmulq_f32(est, vrecpsq_f32(denom, est));
+                vst1q_f32(out.as_mut_ptr().add(i), est);
+            }
+            i += 4;
+        }
+        while i < n {
+            out[i] = 1.0 / (1.0 + distances[i]);
+            i += 1;
+        }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        for (o, d) in out[..n].iter_mut().zip(distances.iter()) {
+            *o = 1.0_f32 / (1.0_f32 + d);
+        }
+    }
 }
 
 #[cfg(test)]
