@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synapse-config
+  namespace: synapse
+  labels:
+    app: synapse
+data:
+  SYNAPSE_LOG_LEVEL: "info"
+  SYNAPSE_BIND: "0.0.0.0:9477"
+  SYNAPSE_METRICS_BIND: "0.0.0.0:9478"
+  SYNAPSE_DB_PATH: "/data/synapse.db"

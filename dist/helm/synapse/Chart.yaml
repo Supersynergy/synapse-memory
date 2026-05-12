@@ -1,0 +1,16 @@
+apiVersion: v2
+name: synapse
+description: Synapse vector search daemon
+type: application
+version: 0.1.0
+appVersion: "2.1.0"
+keywords:
+  - vector-search
+  - embeddings
+  - synapse
+home: https://github.com/supersynergy/synapse
+sources:
+  - https://github.com/supersynergy/synapse
+maintainers:
+  - name: Supersynergy
+    email: true@supersynergy.de

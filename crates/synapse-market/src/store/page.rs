@@ -116,6 +116,61 @@ pub fn encode_page(bars: &[Bar]) -> Vec<u8> {
     page
 }
 
+/// SoA in-memory page — parallel column Vecs, no per-row structs.
+/// Build from a `&[Bar]` slice; public Bar struct unchanged.
+pub struct Page {
+    ts:     Vec<i64>,
+    open:   Vec<f32>,
+    high:   Vec<f32>,
+    low:    Vec<f32>,
+    close:  Vec<f32>,
+    volume: Vec<f32>,
+}
+
+impl Page {
+    pub fn from_bars(bars: &[Bar]) -> Self {
+        let n = bars.len();
+        let mut ts     = Vec::with_capacity(n);
+        let mut open   = Vec::with_capacity(n);
+        let mut high   = Vec::with_capacity(n);
+        let mut low    = Vec::with_capacity(n);
+        let mut close  = Vec::with_capacity(n);
+        let mut volume = Vec::with_capacity(n);
+        for b in bars {
+            ts.push(b.ts);
+            open.push(b.open);
+            high.push(b.high);
+            low.push(b.low);
+            close.push(b.close);
+            volume.push(b.volume);
+        }
+        Self { ts, open, high, low, close, volume }
+    }
+
+    #[inline] pub fn closes(&self)     -> &[f32] { &self.close }
+    #[inline] pub fn opens(&self)      -> &[f32] { &self.open }
+    #[inline] pub fn highs(&self)      -> &[f32] { &self.high }
+    #[inline] pub fn lows(&self)       -> &[f32] { &self.low }
+    #[inline] pub fn volumes(&self)    -> &[f32] { &self.volume }
+    #[inline] pub fn timestamps(&self) -> &[i64] { &self.ts }
+    #[inline] pub fn len(&self)        -> usize  { self.ts.len() }
+    #[inline] pub fn is_empty(&self)   -> bool   { self.ts.is_empty() }
+}
+
+/// Column selector for range_columns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Col { Ts, Open, High, Low, Close, Volume }
+
+/// Returned by range_columns — parallel column vecs, same length.
+pub struct ColumnSlices {
+    pub ts:     Vec<i64>,
+    pub open:   Option<Vec<f32>>,
+    pub high:   Option<Vec<f32>>,
+    pub low:    Option<Vec<f32>>,
+    pub close:  Option<Vec<f32>>,
+    pub volume: Option<Vec<f32>>,
+}
+
 /// Decode all bars from a page buffer.
 pub fn decode_page(page: &[u8]) -> (PageHeader, Vec<Bar>) {
     let hdr_bytes: [u8; HEADER_SIZE] = page[..HEADER_SIZE].try_into().unwrap();

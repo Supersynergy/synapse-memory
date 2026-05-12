@@ -113,3 +113,9 @@ pub use usearch_backend::UsearchIndex;
 // TODO(PR-A2): pub mod ivfpq;
 
 pub mod cascade;
+
+#[cfg(feature = "glass-backend")]
+pub mod glass;
+
+#[cfg(feature = "glass-backend")]
+pub use glass::GlassIndex;

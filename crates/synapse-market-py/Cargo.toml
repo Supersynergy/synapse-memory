@@ -1,0 +1,17 @@
+[package]
+name = "synapse-market-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Python bindings for synapse-market via PyO3"
+
+[lib]
+name = "synapse_market"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+synapse-market = { path = "../synapse-market" }
+anyhow.workspace = true

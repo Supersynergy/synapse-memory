@@ -6,8 +6,13 @@
 //!  - News-FTS: FTS5 headline+body, graph edges to tickers
 //!  - Backtest: deterministic replay, Strategy trait, BacktestReport
 
+pub mod book;
 pub mod store;
 pub mod series;
+pub mod analytics;
+pub mod signal;
+pub mod router;
+pub mod ffi;
 
 mod ohlcv;
 mod regime;
@@ -23,6 +28,8 @@ pub use backtest::{Strategy, Tick, Order, OrderSide, BacktestReport};
 
 use rusqlite::Connection;
 use std::path::Path;
+use signal::similar::RabitqSignalIndex;
+use signal::SignalId;
 
 /// Main entry point — wraps a rusqlite Connection + Synapse Store.
 pub struct Market {
@@ -65,6 +72,16 @@ impl Market {
     /// Similarity via dot-product over stored f32 blobs (brute-force, <1ms @ 10k days).
     pub fn regime_search(&self, symbol: &str, date_ts: i64, top_n: usize) -> Result<Vec<(i64, f32)>> {
         regime::search(&self.conn, symbol, date_ts, top_n)
+    }
+
+    /// Build a RaBitQ signal-similarity index from (id, vec) pairs.
+    /// `n_clusters` ~ sqrt(N). Returns shared index; persist with `index.save(path)`.
+    pub fn signal_index(
+        &self,
+        signals: &[(SignalId, Vec<f32>)],
+        n_clusters: usize,
+    ) -> Result<RabitqSignalIndex> {
+        RabitqSignalIndex::build(signals, n_clusters)
     }
 
     /// Run a full backtest over `symbol` in `[start_ts, end_ts)`.

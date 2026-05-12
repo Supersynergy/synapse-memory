@@ -8,6 +8,7 @@ use std::ops::Range;
 
 use crate::store::mmap::MmapFile;
 use crate::store::page::{encode_page, decode_page, Bar, MAX_ROWS};
+use crate::router::{Plan, QueryKey, QueryKind, PlanCache};
 
 pub struct Series {
     mmap: MmapFile,
@@ -116,6 +117,29 @@ impl Series {
     /// Total bars (approximate — counts flushed only).
     pub fn flushed_page_count(&self) -> usize {
         self.index.len()
+    }
+
+    /// Routed range — uses PlanCache to pick execution strategy, records latency.
+    pub fn range_routed(&mut self, range: std::ops::Range<i64>, cache: &mut PlanCache) -> std::io::Result<Vec<Bar>> {
+        let range_bars = ((range.end - range.start) / 900).max(0) as usize;
+        let n_pages = self.index.len();
+        let key = QueryKey {
+            kind: QueryKind::CandleRange,
+            range_bars,
+            n_pages,
+            has_filter: false,
+        };
+        let candidates = if range_bars < 500 {
+            vec![Plan::MmapScanSkipped, Plan::MmapScanFull]
+        } else {
+            vec![Plan::MmapScanFull, Plan::MmapScanSkipped]
+        };
+        let plan = cache.choose(&key, &candidates);
+        let t0 = std::time::Instant::now();
+        let result = self.range(range)?;
+        let elapsed_us = t0.elapsed().as_micros() as u64;
+        cache.record(key, plan, elapsed_us);
+        Ok(result)
     }
 }
 

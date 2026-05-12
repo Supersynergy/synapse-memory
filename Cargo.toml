@@ -72,6 +72,9 @@ members = [
     "crates/synapse-js",
     # Embedded HFT/backtest engine: OHLCV + regime-vec + news-FTS + graph-entity
     "crates/synapse-market",
+    # Distribution bindings: Python (pyo3/maturin), TS/Bun (FFI cdylib)
+    "crates/synapse-market-py",
+    "crates/synapse-market-ts",
 ]
 
 [workspace.metadata]

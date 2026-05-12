@@ -4,10 +4,10 @@
 
 | impl | p50 µs | p95 µs | mean µs |
 |---|---:|---:|---:|
-| SQLite WITHOUT ROWID | 190 | 209 | 191 |
-| Synapse-X mmap-pages | 53 | 62 | 54 |
+| SQLite WITHOUT ROWID | 193 | 213 | 194 |
+| Synapse-X mmap-pages | 50 | 62 | 51 |
 
-**Speedup p50: 3.6×  (mean: 3.5×)**
+**Speedup p50: 3.9×  (mean: 3.8×)**
 
 Gate: ORANGE ⚠️
 

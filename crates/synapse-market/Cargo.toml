@@ -17,12 +17,18 @@ serde_json.workspace = true
 rusqlite.workspace = true
 tracing.workspace = true
 memmap2 = "0.9"
+zstd = "0.13"
+static_assertions = "1"
 blake3 = "1"
+lru = "0.12"
+bincode = "1"
 synapse-core = { path = "../synapse-core" }
+wide = "0.7"
+rabitq-rs = "0.9"
+simsimd = "6"
 
 [features]
 default = []
-# Enable CSV/Parquet ingestion via Polars
 polars = ["dep:polars-core", "dep:polars-io"]
 
 [dependencies.polars-core]
@@ -38,10 +44,51 @@ features = ["csv", "parquet"]
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+rusqlite = { workspace = true }
+duckdb = { version = "1", features = ["bundled"] }
+accelerate-src = "0.3"
+cblas-sys = "0.3"
+proptest = "1"
+
+[[bench]]
+name = "amx_minimal"
+path = "benches/amx_minimal.rs"
+harness = false
+
+[[bench]]
+name = "amx_neon_mlx"
+path = "benches/amx_neon_mlx.rs"
+harness = false
 
 [[bench]]
 name = "w1_candle_range"
 path = "benches/w1_candle_range.rs"
+harness = false
+
+[[bench]]
+name = "w2_real_corpus"
+path = "benches/w2_real_corpus.rs"
+harness = false
+
+[[bench]]
+name = "w3_simd_agg"
+path = "benches/w3_simd_agg.rs"
+harness = false
+
+[[bench]]
+name = "w5_similarity"
+path = "benches/w5_similarity.rs"
+harness = false
+
+[[bench]]
+name = "router_mixed"
+path = "benches/router_mixed.rs"
+harness = false
+
+[[bench]]
+name = "book_replay"
+path = "benches/book_replay.rs"
 harness = false
 
 [[example]]
@@ -49,4 +96,5 @@ name = "backtest_demo"
 path = "examples/backtest_demo.rs"
 
 [lib]
+crate-type = ["cdylib", "rlib"]
 doctest = false

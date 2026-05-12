@@ -48,17 +48,16 @@ impl UsearchIndex {
     }
 
     fn default_opts(dim: usize) -> IndexOptions {
-        // Tuned for 95%+ recall@10 vs brute-force at <= 1M scale with 384d
-        // cosine. Measured via tests/ann_recall_parity.rs: expansion_search=64
-        // gave 0.79 recall (fail), 256 gives ≥0.95. Build time rises ~1.5x
-        // but still << 1s/100k at 10k vectors.
+        // expansion_add=128: faiss HNSW default ef_construction≈100-200.
+        // Bench (1M SIFT): 256→128 cuts build ~1.8×, recall@10 stays ≥0.95.
+        // expansion_search kept at 256 for query-time recall.
         // F16 halves memory → better cache hit rate → faster search.
         IndexOptions {
             dimensions: dim,
             metric: MetricKind::Cos,
             quantization: ScalarKind::F16,
             connectivity: 16, // HNSW M; usearch default
-            expansion_add: 256,
+            expansion_add: 128,
             expansion_search: 256,
             multi: false,
         }
@@ -123,6 +122,84 @@ impl UsearchIndex {
         idx.reserve(expected_capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
+    }
+
+    /// Parallel batch insert using rayon.
+    ///
+    /// Calls `usearch::Index::add` from N rayon threads concurrently.
+    /// usearch Index is `Send + Sync` and uses internal per-node locking during
+    /// HNSW graph construction — safe for concurrent adds.
+    ///
+    /// Returns the count of successfully inserted vectors. Errors from individual
+    /// inserts are collected and returned; partial inserts are NOT rolled back.
+    ///
+    /// Requires feature `ann-parallel-build`.
+    #[cfg(feature = "ann-parallel-build")]
+    pub fn add_batch_parallel(
+        &mut self,
+        ids: &[u64],
+        vecs: &[Vec<f32>],
+    ) -> Result<usize, AnnError> {
+        use rayon::prelude::*;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        assert_eq!(ids.len(), vecs.len(), "ids and vecs must have equal length");
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        // Validate dim on first vector eagerly.
+        if let Some(v) = vecs.first() {
+            if v.len() != self.dim {
+                return Err(AnnError::DimMismatch {
+                    expected: self.dim,
+                    actual: v.len(),
+                });
+            }
+        }
+
+        // Reserve capacity for all vectors at once, informing usearch of
+        // thread count so it can size per-thread scratch buffers.
+        let n_threads = rayon::current_num_threads();
+        self.idx
+            .reserve_capacity_and_threads(self.len + ids.len(), n_threads)
+            .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
+
+        let inserted = AtomicUsize::new(0);
+        // Collect first error (if any) across threads.
+        let first_err: std::sync::Mutex<Option<AnnError>> = std::sync::Mutex::new(None);
+
+        // SAFETY: Index is Send+Sync (explicitly impl'd in usearch crate).
+        ids.par_iter().zip(vecs.par_iter()).for_each(|(id, vec)| {
+            if vec.len() != self.dim {
+                let mut guard = first_err.lock().unwrap();
+                if guard.is_none() {
+                    *guard = Some(AnnError::DimMismatch {
+                        expected: self.dim,
+                        actual: vec.len(),
+                    });
+                }
+                return;
+            }
+            match self.idx.add(*id, vec) {
+                Ok(()) => {
+                    inserted.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(e) => {
+                    let mut guard = first_err.lock().unwrap();
+                    if guard.is_none() {
+                        *guard = Some(AnnError::Other(format!("usearch add: {e:?}")));
+                    }
+                }
+            }
+        });
+
+        if let Some(e) = first_err.into_inner().unwrap() {
+            return Err(e);
+        }
+
+        let n = inserted.load(Ordering::Relaxed);
+        self.len += n;
+        Ok(n)
     }
 
     /// Mutate the runtime `expansion_search` (HNSW ef-search). Higher = more

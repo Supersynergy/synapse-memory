@@ -1,0 +1,15 @@
+[package]
+name = "synapse-market-ts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "C-ABI dylib for Bun:FFI bindings to synapse-market"
+
+[lib]
+name = "synapse_market_ffi"
+crate-type = ["cdylib"]
+
+[dependencies]
+synapse-market = { path = "../synapse-market" }

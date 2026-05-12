@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: synapse
+  namespace: synapse
+  labels:
+    app: synapse
+spec:
+  type: ClusterIP
+  selector:
+    app: synapse
+  ports:
+    - name: daemon
+      port: 9477
+      targetPort: 9477
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: synapse-metrics
+  namespace: synapse
+  labels:
+    app: synapse
+spec:
+  type: LoadBalancer
+  selector:
+    app: synapse
+  ports:
+    - name: metrics
+      port: 9478
+      targetPort: 9478
+      protocol: TCP

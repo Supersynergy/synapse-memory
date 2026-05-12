@@ -1,0 +1,44 @@
+replicaCount: 3
+
+image:
+  repository: ghcr.io/supersynergy/synapse
+  tag: latest
+  pullPolicy: Always
+
+service:
+  daemon:
+    type: ClusterIP
+    port: 9477
+  metrics:
+    type: LoadBalancer
+    port: 9478
+
+env:
+  SYNAPSE_LOG_LEVEL: info
+  SYNAPSE_BIND: "0.0.0.0:9477"
+  SYNAPSE_METRICS_BIND: "0.0.0.0:9478"
+  SYNAPSE_DB_PATH: /data/synapse.db
+
+persistence:
+  enabled: true
+  storageClass: standard
+  size: 10Gi
+  accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilization: 70
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

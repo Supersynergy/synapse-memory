@@ -1,0 +1,23 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "../../Dockerfile"
+
+[deploy]
+startCommand = "synapsed"
+healthcheckPath = "/metrics"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[[services]]
+name = "synapse"
+
+[services.variables]
+SYNAPSE_LOG_LEVEL = "info"
+SYNAPSE_BIND = "0.0.0.0:9477"
+SYNAPSE_METRICS_BIND = "0.0.0.0:9478"
+SYNAPSE_DB_PATH = "/data/synapse.db"
+
+[[volumes]]
+mountPath = "/data"
+name = "synapse-data"

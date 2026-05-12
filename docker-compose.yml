@@ -1,0 +1,90 @@
+version: "3.9"
+
+# Single-node
+services:
+  synapse:
+    build: .
+    image: ghcr.io/supersynergy/synapse:latest
+    profiles: ["single"]
+    ports:
+      - "9477:9477"
+      - "9478:9478"
+    volumes:
+      - synapse-data:/data
+    environment:
+      SYNAPSE_DB_PATH: /data/synapse.db
+      SYNAPSE_LOG_LEVEL: info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9478/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # 3-node CRDT cluster
+  synapse-node1:
+    build: .
+    image: ghcr.io/supersynergy/synapse:latest
+    profiles: ["cluster"]
+    ports:
+      - "9477:9477"
+      - "9478:9478"
+    volumes:
+      - synapse-node1-data:/data
+    environment:
+      SYNAPSE_DB_PATH: /data/synapse.db
+      SYNAPSE_LOG_LEVEL: info
+      SYNAPSE_NODE_ID: node1
+      SYNAPSE_GOSSIP_PEERS: synapse-node2:9479,synapse-node3:9479
+      SYNAPSE_GOSSIP_BIND: 0.0.0.0:9479
+    networks:
+      - synapse-cluster
+    restart: unless-stopped
+
+  synapse-node2:
+    build: .
+    image: ghcr.io/supersynergy/synapse:latest
+    profiles: ["cluster"]
+    ports:
+      - "9487:9477"
+      - "9488:9478"
+    volumes:
+      - synapse-node2-data:/data
+    environment:
+      SYNAPSE_DB_PATH: /data/synapse.db
+      SYNAPSE_LOG_LEVEL: info
+      SYNAPSE_NODE_ID: node2
+      SYNAPSE_GOSSIP_PEERS: synapse-node1:9479,synapse-node3:9479
+      SYNAPSE_GOSSIP_BIND: 0.0.0.0:9479
+    networks:
+      - synapse-cluster
+    restart: unless-stopped
+
+  synapse-node3:
+    build: .
+    image: ghcr.io/supersynergy/synapse:latest
+    profiles: ["cluster"]
+    ports:
+      - "9497:9477"
+      - "9498:9478"
+    volumes:
+      - synapse-node3-data:/data
+    environment:
+      SYNAPSE_DB_PATH: /data/synapse.db
+      SYNAPSE_LOG_LEVEL: info
+      SYNAPSE_NODE_ID: node3
+      SYNAPSE_GOSSIP_PEERS: synapse-node1:9479,synapse-node2:9479
+      SYNAPSE_GOSSIP_BIND: 0.0.0.0:9479
+    networks:
+      - synapse-cluster
+    restart: unless-stopped
+
+volumes:
+  synapse-data:
+  synapse-node1-data:
+  synapse-node2-data:
+  synapse-node3-data:
+
+networks:
+  synapse-cluster:
+    driver: bridge

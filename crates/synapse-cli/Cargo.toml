@@ -20,9 +20,9 @@ synapse-learn = { path = "../synapse-learn" }
 synapse-graph = { path = "../synapse-graph" }
 # synapse-core base (no embed features) — embed variant selected via [features] below.
 synapse-core = { path = "../synapse-core" }
+tempfile = "3"
 
 [dev-dependencies]
-tempfile = "3"
 
 [features]
 # default: static ORT + jemalloc (lower fragmentation, better throughput for alloc-heavy HNSW workloads).

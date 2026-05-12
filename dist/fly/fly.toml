@@ -1,0 +1,51 @@
+app = "synapse"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../../Dockerfile"
+
+[env]
+  SYNAPSE_LOG_LEVEL = "info"
+  SYNAPSE_BIND = "0.0.0.0:9477"
+  SYNAPSE_METRICS_BIND = "0.0.0.0:9478"
+  SYNAPSE_DB_PATH = "/data/synapse.db"
+
+[[mounts]]
+  source = "synapse_data"
+  destination = "/data"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 9477
+
+  [[services.ports]]
+    port = 9477
+    handlers = ["tcp"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 512
+    soft_limit = 256
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 9478
+
+  [[services.ports]]
+    port = 9478
+    handlers = ["tcp"]
+
+[checks]
+  [checks.alive]
+    grace_period = "10s"
+    interval = "30s"
+    method = "get"
+    path = "/metrics"
+    port = 9478
+    protocol = "http"
+    timeout = "5s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

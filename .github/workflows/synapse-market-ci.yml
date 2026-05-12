@@ -1,0 +1,54 @@
+name: synapse-market CI
+
+on:
+  push:
+    paths:
+      - "crates/synapse-market/**"
+      - ".github/workflows/synapse-market-ci.yml"
+  pull_request:
+    paths:
+      - "crates/synapse-market/**"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  test:
+    name: nextest + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install cargo-nextest
+        run: cargo install cargo-nextest --locked
+
+      - name: clippy
+        run: cargo clippy -p synapse-market --tests -- -D warnings
+
+      - name: nextest
+        run: cargo nextest run -p synapse-market --no-fail-fast
+
+  bench-smoke:
+    name: bench compile check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build benches (no run)
+        run: cargo build --benches -p synapse-market
