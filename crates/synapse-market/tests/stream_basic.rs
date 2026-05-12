@@ -1,4 +1,4 @@
-use synapse_market::stream::{LiveTick, Parser, TickStream};
+use synapse_market::stream::{TickStream, LiveTick, Parser};
 
 /// Mock stream backed by a pre-filled Vec.
 struct MockStream {
@@ -8,11 +8,7 @@ struct MockStream {
 impl MockStream {
     fn new(n: usize) -> Self {
         let ticks = (0..n)
-            .map(|i| LiveTick {
-                ts: i as i64,
-                price: 100.0 + i as f64 * 0.01,
-                qty: 1.0,
-            })
+            .map(|i| LiveTick { ts: i as i64, price: 100.0 + i as f64 * 0.01, qty: 1.0 })
             .collect();
         Self { ticks }
     }
@@ -33,8 +29,7 @@ async fn ingest_10k_ticks() {
     assert_eq!(n, 10_000);
 
     // Verify rows landed in ohlcv table
-    let count: i64 = mkt
-        .conn
+    let count: i64 = mkt.conn
         .query_row("SELECT COUNT(*) FROM ohlcv_TEST", [], |r| r.get(0))
         .unwrap();
     assert_eq!(count, 10_000);
@@ -81,9 +76,7 @@ fn parser_polygon_three_samples() {
         assert!(Parser::PolygonV3.parse(s).is_some(), "failed: {s}");
     }
     // Non-trade skipped
-    assert!(Parser::PolygonV3
-        .parse(r#"[{"ev":"Q","sym":"X","t":1,"p":1.0,"s":1}]"#)
-        .is_none());
+    assert!(Parser::PolygonV3.parse(r#"[{"ev":"Q","sym":"X","t":1,"p":1.0,"s":1}]"#).is_none());
 }
 
 #[test]
@@ -96,7 +89,5 @@ fn parser_tradier_three_samples() {
     for s in &samples {
         assert!(Parser::TradierV1.parse(s).is_some(), "failed: {s}");
     }
-    assert!(Parser::TradierV1
-        .parse(r#"{"type":"quote","symbol":"X","price":1.0,"size":1,"timestamp":1}"#)
-        .is_none());
+    assert!(Parser::TradierV1.parse(r#"{"type":"quote","symbol":"X","price":1.0,"size":1,"timestamp":1}"#).is_none());
 }

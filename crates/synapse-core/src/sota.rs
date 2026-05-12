@@ -382,9 +382,10 @@ pub fn multi_hop_neighbors(
         }
         let sql = "SELECT dst_id FROM memory_edges WHERE src_id = ?1 LIMIT ?2";
         let mut stmt = conn.prepare_cached(sql)?;
-        let rows = stmt.query_map(rusqlite::params![node, per_hop_cap as i64], |r| {
-            r.get::<_, i64>(0)
-        })?;
+        let rows = stmt.query_map(
+            rusqlite::params![node, per_hop_cap as i64],
+            |r| r.get::<_, i64>(0),
+        )?;
         for row in rows {
             let dst = row?;
             if !dist.contains_key(&dst) {
@@ -453,13 +454,14 @@ pub fn find_evolve_target(
 ) -> Result<Option<i64>> {
     let mut best: Option<(i64, f64)> = None;
     for doc_id in candidate_doc_ids {
-        let txt: String =
-            match conn.query_row("SELECT text FROM docs WHERE id = ?1", [doc_id], |r| {
-                r.get::<_, String>(0)
-            }) {
-                Ok(t) => t,
-                Err(_) => continue,
-            };
+        let txt: String = match conn.query_row(
+            "SELECT text FROM docs WHERE id = ?1",
+            [doc_id],
+            |r| r.get::<_, String>(0),
+        ) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
         let score = if let Some(_q) = new_emb {
             // Embedding-based cosine path: caller would pass per-doc embeddings via
             // a sidecar table. For now we approximate via Jaccard so the function
@@ -494,9 +496,7 @@ pub fn cluster_for_compact(
                LIMIT ?1";
     let mut stmt = conn.prepare(sql)?;
     let rows: Vec<(i64, String)> = stmt
-        .query_map([max_rows as i64], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
-        })?
+        .query_map([max_rows as i64], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let n = rows.len();
     let mut parent: Vec<usize> = (0..n).collect();
@@ -609,8 +609,7 @@ impl Store {
         let pool = (params.k.max(params.rerank_top) * 4).max(40);
         let base_hits = if let Some(emb) = query_emb {
             let vec_hits = self.search_vec_with_backend(emb, pool, backend)?;
-            let lex_hits = self
-                .search(&effective_query, SearchMode::Lex, None, pool)
+            let lex_hits = self.search(&effective_query, SearchMode::Lex, None, pool)
                 .unwrap_or_default();
             // Fuse lex + vec via RRF (same as search_hybrid but with backend control).
             let rrf_k = params.rrf_k;
@@ -618,30 +617,17 @@ impl Store {
                 std::collections::HashMap::new();
             for (i, h) in lex_hits.into_iter().enumerate() {
                 let s = 1.0 / (rrf_k + (i + 1) as f64);
-                scores
-                    .entry(h.id)
-                    .and_modify(|e| e.0 += s)
-                    .or_insert((s, h));
+                scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
             }
             for (i, h) in vec_hits.into_iter().enumerate() {
                 let s = 1.0 / (rrf_k + (i + 1) as f64);
-                scores
-                    .entry(h.id)
-                    .and_modify(|e| e.0 += s)
-                    .or_insert((s, h));
+                scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
             }
             let mut merged: Vec<crate::types::Hit> = scores
                 .into_values()
-                .map(|(s, mut h)| {
-                    h.score = s;
-                    h
-                })
+                .map(|(s, mut h)| { h.score = s; h })
                 .collect();
-            merged.sort_by(|a, b| {
-                b.score
-                    .partial_cmp(&a.score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
+            merged.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
             merged.truncate(pool);
             merged
         } else {
@@ -859,8 +845,10 @@ mod tests {
     fn open_mem() -> Connection {
         let c = Connection::open_in_memory().unwrap();
         // Minimal docs table so FK constraints are satisfied for tests.
-        c.execute_batch("CREATE TABLE docs (id INTEGER PRIMARY KEY, text TEXT NOT NULL);")
-            .unwrap();
+        c.execute_batch(
+            "CREATE TABLE docs (id INTEGER PRIMARY KEY, text TEXT NOT NULL);",
+        )
+        .unwrap();
         c
     }
 
@@ -1045,10 +1033,7 @@ mod tests {
         // Both doc_a and doc_b should surface (direct hit + 1-hop).
         let ids: Vec<i64> = hits.iter().map(|h| h.hit.id).collect();
         assert!(ids.contains(&id_a), "doc_a must be in results");
-        assert!(
-            ids.contains(&id_b),
-            "doc_b must surface via 1-hop expansion"
-        );
+        assert!(ids.contains(&id_b), "doc_b must surface via 1-hop expansion");
     }
 
     // --- auto_route / SearchBackend tests ---

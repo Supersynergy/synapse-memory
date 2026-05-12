@@ -64,11 +64,7 @@ fn load_gt(path: &str, k: usize) -> Vec<Vec<i64>> {
 
 fn recall_at_10(result_ids: &[i64], gt: &[i64]) -> f64 {
     let gt_set: HashSet<i64> = gt.iter().copied().collect();
-    let hits = result_ids
-        .iter()
-        .take(10)
-        .filter(|id| gt_set.contains(id))
-        .count();
+    let hits = result_ids.iter().take(10).filter(|id| gt_set.contains(id)).count();
     hits as f64 / gt.len().min(10) as f64
 }
 
@@ -92,8 +88,8 @@ fn main() {
     eprintln!("Building NdArraySearch ({n_corpus} × {dim})…");
     use synapse_core::turbo::ndarray_search::NdArraySearch;
     let t_build = Instant::now();
-    let idx =
-        NdArraySearch::from_vecs(corpus_ids.clone(), corpus_data.clone(), dim).expect("from_vecs");
+    let idx = NdArraySearch::from_vecs(corpus_ids.clone(), corpus_data.clone(), dim)
+        .expect("from_vecs");
     eprintln!("Build: {:.2}s", t_build.elapsed().as_secs_f64());
 
     let k = 10usize;
@@ -116,17 +112,13 @@ fn main() {
     let elapsed_full = t0.elapsed().as_secs_f64();
     let qps_full = n_queries as f64 / elapsed_full;
     let recall_full = recalls_full.iter().sum::<f64>() / recalls_full.len() as f64;
-    println!(
-        "full_scan  | QPS={qps_full:8.0} | R@10={recall_full:.4} | p50={:.2}ms",
-        1000.0 * elapsed_full / n_queries as f64
-    );
+    println!("full_scan  | QPS={qps_full:8.0} | R@10={recall_full:.4} | p50={:.2}ms",
+        1000.0 * elapsed_full / n_queries as f64);
 
     // ── Cascade bench — various binary_k values ──────────────────────────────
     eprintln!("\n=== Binary cascade (search_cascade) ===");
     for binary_k in [512, 1024, 2048, 4096, 8192] {
-        if binary_k > n_corpus {
-            continue;
-        }
+        if binary_k > n_corpus { continue; }
         // warmup
         for i in 0..n_warmup {
             let q = &query_data[i * dim..(i + 1) * dim];
@@ -143,9 +135,7 @@ fn main() {
         let elapsed = t0.elapsed().as_secs_f64();
         let qps = n_queries as f64 / elapsed;
         let recall = recalls.iter().sum::<f64>() / recalls.len() as f64;
-        println!(
-            "cascade-{binary_k:<5} | QPS={qps:8.0} | R@10={recall:.4} | p50={:.2}ms",
-            1000.0 * elapsed / n_queries as f64
-        );
+        println!("cascade-{binary_k:<5} | QPS={qps:8.0} | R@10={recall:.4} | p50={:.2}ms",
+            1000.0 * elapsed / n_queries as f64);
     }
 }

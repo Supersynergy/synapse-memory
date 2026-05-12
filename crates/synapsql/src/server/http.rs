@@ -3,5 +3,6 @@
 
 pub async fn serve(addr: &str) -> std::io::Result<()> {
     eprintln!("synapsql http: not implemented in v1.0.1-rc (addr={addr}); skipping");
-    Ok(())
+    // Park forever so tokio::select! in Service::run doesn't exit on this arm.
+    std::future::pending().await
 }

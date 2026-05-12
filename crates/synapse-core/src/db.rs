@@ -1,8 +1,8 @@
-use crate::error::{Error, Result};
-use crate::sota::SearchBackend;
 #[cfg(feature = "turbo")]
 #[allow(unused_imports)]
 use crate::turbo::rrf_simd::distance_to_score;
+use crate::error::{Error, Result};
+use crate::sota::SearchBackend;
 use crate::types::{Doc, Hit, MetadataPredicate, PutRequest, SearchMode, SearchOptions, EMBED_DIM};
 #[cfg(feature = "encryption")]
 use base64::Engine as _;
@@ -205,10 +205,7 @@ pub fn rrf_merge_neon(lex: Vec<Hit>, vec: Vec<Hit>, limit: usize) -> Vec<Hit> {
 /// Amortizes state-machine init: score-buf alloc + sort shared per call.
 /// Returns one merged result vec per query, each truncated to `limit`.
 pub fn rrf_merge_batch(queries: Vec<(Vec<Hit>, Vec<Hit>)>, limit: usize) -> Vec<Vec<Hit>> {
-    queries
-        .into_iter()
-        .map(|(lex, vec)| rrf_merge_neon(lex, vec, limit))
-        .collect()
+    queries.into_iter().map(|(lex, vec)| rrf_merge_neon(lex, vec, limit)).collect()
 }
 
 impl Store {
@@ -235,12 +232,7 @@ impl Store {
         let tantivy_path = {
             let stem = db_path.with_extension("");
             stem.parent()
-                .map(|p| {
-                    p.join(format!(
-                        "{}_tantivy",
-                        stem.file_name().unwrap_or_default().to_string_lossy()
-                    ))
-                })
+                .map(|p| p.join(format!("{}_tantivy", stem.file_name().unwrap_or_default().to_string_lossy())))
                 .unwrap_or_else(|| db_path.with_extension("tantivy"))
         };
         Self {
@@ -271,8 +263,8 @@ impl Store {
         // Key finding: batch_size dominates insert throughput (210k ops/s spread); page_size/cache secondary.
         conn.pragma_update(None, "mmap_size", 1_073_741_824_i64)?;
         conn.pragma_update(None, "cache_size", -262_144_i64)?; // 256 MB
-                                                               // Disable automatic WAL checkpoint. Manual checkpoint only — avoids
-                                                               // stall under concurrent write load (8+ threads).
+        // Disable automatic WAL checkpoint. Manual checkpoint only — avoids
+        // stall under concurrent write load (8+ threads).
         conn.pragma_update(None, "wal_autocheckpoint", 0_i64)?;
         // Pre-allocate page-cache slots, reduce first-access allocation stalls.
         conn.pragma_update(None, "page_size", 8192_i64)?; // auto-tune winner: 8192 > 4096
@@ -281,13 +273,9 @@ impl Store {
         let mut s = {
             let mut store = {
                 #[cfg(feature = "tantivy-fts")]
-                {
-                    Self::from_conn_at(conn, &db_path)
-                }
+                { Self::from_conn_at(conn, &db_path) }
                 #[cfg(not(feature = "tantivy-fts"))]
-                {
-                    Self::from_conn(conn)
-                }
+                { Self::from_conn(conn) }
             };
             store.migrate()?;
             // Try to load sidecar; if missing/corrupt, rebuild from docs_vec.
@@ -305,11 +293,7 @@ impl Store {
                 // Sidecar outdated (telepathy/concurrent-puts since last persist).
                 // Inject only the missing tail rows by id > max_loaded_id to avoid
                 // "duplicate keys" crash from re-inserting already-loaded entries.
-                tracing::info!(
-                    "ann sidecar diff: loaded={} db={}, injecting tail",
-                    ann.len(),
-                    row_count
-                );
+                tracing::info!("ann sidecar diff: loaded={} db={}, injecting tail", ann.len(), row_count);
                 store.rebuild_ann_tail(&ann)?;
             }
             store.ann = Some(ann);
@@ -320,13 +304,9 @@ impl Store {
         let mut s = {
             let mut store = {
                 #[cfg(feature = "tantivy-fts")]
-                {
-                    Self::from_conn_at(conn, &db_path)
-                }
+                { Self::from_conn_at(conn, &db_path) }
                 #[cfg(not(feature = "tantivy-fts"))]
-                {
-                    Self::from_conn(conn)
-                }
+                { Self::from_conn(conn) }
             };
             store.migrate()?;
             store.sota_migrate()?;
@@ -350,9 +330,7 @@ impl Store {
     /// warm residency before the first query.  Call once at startup.
     pub fn warm_cache(&self) {
         // SQLite: issue a trivial query to pull WAL + B-tree root pages into cache.
-        let _ = self
-            .conn
-            .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0));
+        let _ = self.conn.query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0));
         // Turbo ndarray: eagerly build if not yet warm.
         #[cfg(feature = "turbo")]
         self.warm_turbo();
@@ -455,17 +433,12 @@ impl Store {
             fts.add(id as u64, &combined)
                 .map_err(|e| Error::Other(format!("tantivy add: {e}")))?;
         }
-        fts.commit()
-            .map_err(|e| Error::Other(format!("tantivy commit: {e}")))?;
+        fts.commit().map_err(|e| Error::Other(format!("tantivy commit: {e}")))?;
         if new_max > last_id {
             fts.set_last_indexed_doc_id(new_max)
                 .map_err(|e| Error::Other(format!("tantivy meta: {e}")))?;
         }
-        tracing::info!(
-            "tantivy warm-start: last_id={} -> new_max={}",
-            last_id,
-            new_max
-        );
+        tracing::info!("tantivy warm-start: last_id={} -> new_max={}", last_id, new_max);
         *self.tantivy_fts.lock() = Some(fts);
         Ok(())
     }
@@ -602,10 +575,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let res = self.put_inner(req, None, None);
         crate::obs::record_query_duration("put", _t.elapsed().as_secs_f64());
         if res.is_ok() {
-            if let Ok(n) = self
-                .conn
-                .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0))
-            {
+            if let Ok(n) = self.conn.query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0)) {
                 crate::obs::set_index_size(n);
             }
         }
@@ -688,9 +658,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         #[cfg(feature = "ann-usearch")]
         if let (Some(ref ann), Some(emb)) = (self.ann.as_ref(), req.embedding.as_ref()) {
             if let Err(e) = ann.insert(id, emb) {
-                tracing::warn!(
-                    "ann insert failed for id {id}: {e}; sidecar will rebuild on next open"
-                );
+                tracing::warn!("ann insert failed for id {id}: {e}; sidecar will rebuild on next open");
             }
         }
         // tantivy-fts: mirror new doc into tantivy index iff already built.
@@ -887,12 +855,13 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         self.conn.pragma_update(None, "synchronous", "OFF")?;
         let result = (|| -> Result<Vec<i64>> {
             // Drop the AFTER INSERT trigger so FTS5 is not updated per-row.
-            self.conn.execute_batch("DROP TRIGGER IF EXISTS docs_ai;")?;
+            self.conn
+                .execute_batch("DROP TRIGGER IF EXISTS docs_ai;")?;
 
             let mut ids = Vec::with_capacity(docs.len());
             let tx = self.conn.transaction()?;
-            let max_before: i64 =
-                tx.query_row("SELECT COALESCE(MAX(id),0) FROM docs", [], |r| r.get(0))?;
+            let max_before: i64 = tx
+                .query_row("SELECT COALESCE(MAX(id),0) FROM docs", [], |r| r.get(0))?;
             {
                 let mut stmt_chk = tx.prepare("SELECT id FROM docs WHERE blake3 = ?1")?;
                 let mut stmt_ins = tx.prepare(
@@ -1062,9 +1031,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let mut inserted = 0usize;
         for row in rows {
             let (id, bytes) = row?;
-            if bytes.len() != EMBED_DIM * 4 {
-                continue;
-            }
+            if bytes.len() != EMBED_DIM * 4 { continue; }
             let mut v = Vec::with_capacity(EMBED_DIM);
             for chunk in bytes.chunks_exact(4) {
                 v.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
@@ -1166,20 +1133,15 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     /// oversample_k = limit * ef_mult.
     ///
     /// When `opts.filter` is None this is identical to `search_vec`.
-    pub fn search_vec_filtered(
-        &self,
-        emb: &[f32],
-        limit: usize,
-        opts: &SearchOptions,
-    ) -> Result<Vec<Hit>> {
+    pub fn search_vec_filtered(&self, emb: &[f32], limit: usize, opts: &SearchOptions) -> Result<Vec<Hit>> {
         let pred = match &opts.filter {
             None => return self.search_vec(emb, limit),
             Some(p) => p,
         };
         let selectivity = pred.estimated_selectivity().max(0.01);
-        let ef_mult = opts
-            .ef_multiplier
-            .unwrap_or_else(|| ((1.0 / selectivity).ceil() as usize).clamp(2, 32));
+        let ef_mult = opts.ef_multiplier.unwrap_or_else(|| {
+            ((1.0 / selectivity).ceil() as usize).clamp(2, 32)
+        });
         let oversample_k = (limit * ef_mult).max(limit + 1);
 
         // ANN oversample with ef boost.
@@ -1190,21 +1152,15 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     }
 
     /// Like `search_filtered` but for hybrid mode (lex+vec with filter).
-    pub fn search_hybrid_filtered(
-        &self,
-        q: &str,
-        emb: &[f32],
-        limit: usize,
-        opts: &SearchOptions,
-    ) -> Result<Vec<Hit>> {
+    pub fn search_hybrid_filtered(&self, q: &str, emb: &[f32], limit: usize, opts: &SearchOptions) -> Result<Vec<Hit>> {
         let pred = match &opts.filter {
             None => return self.search_hybrid(q, emb, limit),
             Some(p) => p,
         };
         let selectivity = pred.estimated_selectivity().max(0.01);
-        let ef_mult = opts
-            .ef_multiplier
-            .unwrap_or_else(|| ((1.0 / selectivity).ceil() as usize).clamp(2, 32));
+        let ef_mult = opts.ef_multiplier.unwrap_or_else(|| {
+            ((1.0 / selectivity).ceil() as usize).clamp(2, 32)
+        });
         let oversample_k = (limit * ef_mult).max(limit + 1);
         let k = oversample_k;
         let lex = self.search_lex(q, k).unwrap_or_default();
@@ -1214,13 +1170,9 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         // now filter
         let ids: Vec<i64> = merged.iter().map(|h| h.id).collect();
         let meta_map = self.fetch_meta_by_ids(&ids)?;
-        let out: Vec<Hit> = merged
-            .into_iter()
+        let out: Vec<Hit> = merged.into_iter()
             .filter(|h| {
-                let meta_val = meta_map
-                    .get(&h.id)
-                    .and_then(|s| s.as_ref())
-                    .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
+                let meta_val = meta_map.get(&h.id).and_then(|s| s.as_ref()).and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
                 pred.matches(meta_val.as_ref())
             })
             .take(limit)
@@ -1245,15 +1197,14 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 // For lex: post-filter after oversample.
                 let pred = opts.filter.as_ref().unwrap();
                 let selectivity = pred.estimated_selectivity().max(0.01);
-                let ef_mult = opts
-                    .ef_multiplier
-                    .unwrap_or_else(|| ((1.0 / selectivity).ceil() as usize).clamp(2, 32));
+                let ef_mult = opts.ef_multiplier.unwrap_or_else(|| {
+                    ((1.0 / selectivity).ceil() as usize).clamp(2, 32)
+                });
                 let candidates = self.search_lex(q, limit * ef_mult)?;
                 self.filter_hits_by_meta(candidates, pred, limit)
             }
             SearchMode::Vec => {
-                let emb =
-                    query_emb.ok_or_else(|| Error::Other("vec search needs embedding".into()))?;
+                let emb = query_emb.ok_or_else(|| Error::Other("vec search needs embedding".into()))?;
                 self.search_vec_filtered(emb, limit, opts)
             }
             SearchMode::Hybrid => {
@@ -1264,17 +1215,9 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     }
 
     /// Oversample via ANN/vec with boosted ef, return `Hit`s.
-    fn search_vec_oversampled(
-        &self,
-        emb: &[f32],
-        k: usize,
-        #[cfg_attr(not(feature = "ann-usearch"), allow(unused_variables))] ef_mult: usize,
-    ) -> Result<Vec<Hit>> {
+    fn search_vec_oversampled(&self, emb: &[f32], k: usize, #[cfg_attr(not(feature = "ann-usearch"), allow(unused_variables))] ef_mult: usize) -> Result<Vec<Hit>> {
         if emb.len() != EMBED_DIM {
-            return Err(Error::DimMismatch {
-                expected: EMBED_DIM,
-                got: emb.len(),
-            });
+            return Err(Error::DimMismatch { expected: EMBED_DIM, got: emb.len() });
         }
 
         #[cfg(feature = "ann-usearch")]
@@ -1315,21 +1258,14 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 
     /// Fetch `meta` column (raw JSON string) for a list of doc ids.
     /// Returns a map id → Option<String>.
-    fn fetch_meta_by_ids(
-        &self,
-        ids: &[i64],
-    ) -> Result<std::collections::HashMap<i64, Option<String>>> {
+    fn fetch_meta_by_ids(&self, ids: &[i64]) -> Result<std::collections::HashMap<i64, Option<String>>> {
         if ids.is_empty() {
             return Ok(Default::default());
         }
-        let placeholders = (0..ids.len())
-            .map(|i| format!("?{}", i + 1))
-            .collect::<Vec<_>>()
-            .join(",");
+        let placeholders = (0..ids.len()).map(|i| format!("?{}", i + 1)).collect::<Vec<_>>().join(",");
         let sql = format!("SELECT id, meta FROM docs WHERE id IN ({placeholders})");
         let mut stmt = self.conn.prepare(&sql)?;
-        let params_iter: Vec<&dyn rusqlite::ToSql> =
-            ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
+        let params_iter: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
         let rows = stmt.query_map(params_iter.as_slice(), |r| {
             Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?))
         })?;
@@ -1343,19 +1279,12 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 
     /// Given a set of candidate Hits, fetch their meta and keep only those
     /// matching `pred`, up to `limit`.
-    fn filter_hits_by_meta(
-        &self,
-        candidates: Vec<Hit>,
-        pred: &MetadataPredicate,
-        limit: usize,
-    ) -> Result<Vec<Hit>> {
+    fn filter_hits_by_meta(&self, candidates: Vec<Hit>, pred: &MetadataPredicate, limit: usize) -> Result<Vec<Hit>> {
         let ids: Vec<i64> = candidates.iter().map(|h| h.id).collect();
         let meta_map = self.fetch_meta_by_ids(&ids)?;
-        let out = candidates
-            .into_iter()
+        let out = candidates.into_iter()
             .filter(|h| {
-                let meta_val = meta_map
-                    .get(&h.id)
+                let meta_val = meta_map.get(&h.id)
                     .and_then(|s| s.as_ref())
                     .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
                 pred.matches(meta_val.as_ref())
@@ -1375,11 +1304,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 // Open persistent index if it exists, else in-RAM.
                 let fts_path = &self.tantivy_path;
                 let ram_path = std::path::Path::new(":memory:");
-                let use_path = if fts_path.exists() {
-                    fts_path.as_path()
-                } else {
-                    ram_path
-                };
+                let use_path = if fts_path.exists() { fts_path.as_path() } else { ram_path };
                 let mut fts = synapse_fts::FtsIndex::new(use_path)
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let last_id = fts.last_indexed_doc_id();
@@ -1387,9 +1312,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                     .conn
                     .prepare("SELECT id, title, text FROM docs WHERE id > ?1 ORDER BY id ASC")?;
                 let rows: Vec<(i64, Option<String>, String)> = stmt
-                    .query_map(params![last_id as i64], |r| {
-                        Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-                    })?
+                    .query_map(params![last_id as i64], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
                     .collect::<rusqlite::Result<_>>()?;
                 let new_max = rows.last().map(|(id, _, _)| *id as u64).unwrap_or(last_id);
                 for (id, title, text) in rows {
@@ -1410,8 +1333,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             }
             // Persist the max indexed doc_id after commit.
             {
-                let max_id: i64 = self
-                    .conn
+                let max_id: i64 = self.conn
                     .query_row("SELECT COALESCE(MAX(id),0) FROM docs", [], |r| r.get(0))
                     .unwrap_or(0);
                 if max_id > 0 {
@@ -1519,10 +1441,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                         if !pairs.is_empty() {
                             crate::obs::inc_cache_hit();
                             crate::obs::record_visited_nodes(pairs.len() as u64);
-                            crate::obs::record_query_duration(
-                                "search_vec",
-                                _t.elapsed().as_secs_f64(),
-                            );
+                            crate::obs::record_query_duration("search_vec", _t.elapsed().as_secs_f64());
                             return self.hydrate_hits_by_id_dist(&pairs);
                         }
                     }
@@ -1533,18 +1452,27 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 let mut guard = self.ndarray_search.write().unwrap();
                 if guard.is_none() {
                     crate::obs::inc_cache_miss();
-                    match crate::turbo::ndarray_search::NdArraySearch::from_connection(&self.conn) {
+                    match crate::turbo::ndarray_search::NdArraySearch::from_connection(
+                        &self.conn,
+                    ) {
                         Ok(idx) => {
-                            tracing::info!("turbo ndarray_search built: {} vectors", idx.len());
+                            tracing::info!(
+                                "turbo ndarray_search built: {} vectors",
+                                idx.len()
+                            );
                             *guard = Some(idx);
                         }
                         Err(e) => {
                             // Empty DB or other failure — install empty index so we
                             // do not retry on every call. Falls through to sqlite-vec.
-                            tracing::debug!("turbo ndarray_search build skipped: {e}");
-                            *guard = Some(crate::turbo::ndarray_search::NdArraySearch::empty(
-                                EMBED_DIM,
-                            ));
+                            tracing::debug!(
+                                "turbo ndarray_search build skipped: {e}"
+                            );
+                            *guard = Some(
+                                crate::turbo::ndarray_search::NdArraySearch::empty(
+                                    EMBED_DIM,
+                                ),
+                            );
                         }
                     }
                 }
@@ -1597,12 +1525,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     ///
     /// Falls back to `search_vec` (Cascade) when turbo is disabled or the
     /// index is not loaded yet.
-    pub fn search_vec_with_backend(
-        &self,
-        emb: &[f32],
-        limit: usize,
-        #[cfg_attr(not(feature = "turbo"), allow(unused_variables))] backend: SearchBackend,
-    ) -> Result<Vec<Hit>> {
+    pub fn search_vec_with_backend(&self, emb: &[f32], limit: usize, #[cfg_attr(not(feature = "turbo"), allow(unused_variables))] backend: SearchBackend) -> Result<Vec<Hit>> {
         #[cfg(feature = "turbo")]
         {
             let guard = self.ndarray_search.read().unwrap();
@@ -1697,13 +1620,17 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             .map(|i| format!("?{}", i + 1))
             .collect::<Vec<_>>()
             .join(",");
-        let sql = format!("SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})");
+        let sql = format!(
+            "SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})"
+        );
         let mut stmt = self.conn.prepare(&sql)?;
         let ids: Vec<i64> = ann_hits.iter().map(|(i, _)| *i).collect();
         let params_iter: Vec<&dyn rusqlite::ToSql> =
             ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
-        let mut by_id: std::collections::HashMap<i64, (Option<String>, Option<String>, String)> =
-            Default::default();
+        let mut by_id: std::collections::HashMap<
+            i64,
+            (Option<String>, Option<String>, String),
+        > = Default::default();
         let rows = stmt.query_map(params_iter.as_slice(), |r| {
             Ok((
                 r.get::<_, i64>(0)?,
@@ -1748,13 +1675,16 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             .map(|i| format!("?{}", i + 1))
             .collect::<Vec<_>>()
             .join(",");
-        let sql = format!("SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})");
+        let sql =
+            format!("SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})");
         let mut stmt = self.conn.prepare(&sql)?;
         let ids: Vec<i64> = pairs.iter().map(|(i, _)| *i).collect();
         let params_iter: Vec<&dyn rusqlite::ToSql> =
             ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
-        let mut by_id: std::collections::HashMap<i64, (Option<String>, Option<String>, String)> =
-            Default::default();
+        let mut by_id: std::collections::HashMap<
+            i64,
+            (Option<String>, Option<String>, String),
+        > = Default::default();
         let rows = stmt.query_map(params_iter.as_slice(), |r| {
             Ok((
                 r.get::<_, i64>(0)?,
@@ -1818,14 +1748,16 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             .collect();
 
         // 2. Graph PPR over KG.
-        let hippo = hippo_retrieve(&self.conn, q, k, alpha_graph, 10).unwrap_or_default();
+        let hippo = hippo_retrieve(&self.conn, q, k, alpha_graph, 10)
+            .unwrap_or_default();
 
         // 3. RRF merge.
         let merged = rrf_hippo(&hybrid, &hippo, alpha_graph, limit);
 
         // 4. Fetch Hit payloads for merged doc_ids.
         let ids: Vec<i64> = merged.iter().map(|(id, _)| *id).collect();
-        let score_map: std::collections::HashMap<i64, f64> = merged.into_iter().collect();
+        let score_map: std::collections::HashMap<i64, f64> =
+            merged.into_iter().collect();
 
         let mut out: Vec<Hit> = Vec::with_capacity(ids.len());
         for id in &ids {
@@ -1846,11 +1778,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 out.push(Hit { score, ..row });
             }
         }
-        out.sort_by(|a, b| {
-            b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         Ok(out)
     }
 
@@ -2082,7 +2010,9 @@ mod tests {
         // Reopen with same key — must find the document
         {
             let s = Store::open_with_brain_key(&path, &key).unwrap();
-            let hits = s.search("brain key", SearchMode::Lex, None, 5).unwrap();
+            let hits = s
+                .search("brain key", SearchMode::Lex, None, 5)
+                .unwrap();
             assert_eq!(hits.len(), 1, "should find the stored doc on reopen");
         }
 
@@ -2126,9 +2056,7 @@ mod tests {
             "expected >{floor:.0} docs/sec, got {docs_per_sec:.0}"
         );
         // Verify FTS5 is usable immediately
-        let hits = s
-            .search("unique content", SearchMode::Lex, None, 5)
-            .unwrap();
+        let hits = s.search("unique content", SearchMode::Lex, None, 5).unwrap();
         assert!(!hits.is_empty());
         // Verify embedding rejection
         let bad = vec![PutRequest {
@@ -2175,10 +2103,7 @@ mod tests {
         let hits = s
             .search("unique searchable content", SearchMode::Lex, None, 5)
             .unwrap();
-        assert!(
-            !hits.is_empty(),
-            "FTS5 must be queryable after deferred merge"
-        );
+        assert!(!hits.is_empty(), "FTS5 must be queryable after deferred merge");
         // Verify trigger is restored — a normal put should also appear in FTS5
         let extra = PutRequest {
             text: "triggerrestoredcheck unique beacon text xyzzy".into(),
@@ -2252,14 +2177,12 @@ mod tests {
         for i in 0..n {
             let cat = if i % 2 == 0 { "A" } else { "B" };
             let meta = serde_json::json!({ "category": cat });
-            let id = s
-                .put(&PutRequest {
-                    text: format!("doc {i}"),
-                    embedding: Some(fake_emb((i % 251) as u8)),
-                    meta: Some(meta),
-                    ..Default::default()
-                })
-                .unwrap();
+            let id = s.put(&PutRequest {
+                text: format!("doc {i}"),
+                embedding: Some(fake_emb((i % 251) as u8)),
+                meta: Some(meta),
+                ..Default::default()
+            }).unwrap();
             if i % 2 == 0 {
                 category_a_ids.insert(id);
             }
@@ -2270,10 +2193,7 @@ mod tests {
 
         // Baseline: no filter
         let base_hits = s.search_vec(&query_emb, k).unwrap();
-        let unfiltered_a_count = base_hits
-            .iter()
-            .filter(|h| category_a_ids.contains(&h.id))
-            .count();
+        let unfiltered_a_count = base_hits.iter().filter(|h| category_a_ids.contains(&h.id)).count();
 
         // Filtered search
         let opts = SearchOptions {
@@ -2288,11 +2208,7 @@ mod tests {
 
         // All hits must be category=A
         for hit in &filtered_hits {
-            assert!(
-                category_a_ids.contains(&hit.id),
-                "hit {} is not category=A",
-                hit.id
-            );
+            assert!(category_a_ids.contains(&hit.id), "hit {} is not category=A", hit.id);
         }
 
         // Must return K hits
@@ -2301,9 +2217,7 @@ mod tests {
         // Filtered recall >= unfiltered recall (oversampling should find at least as many A docs)
         assert!(
             filtered_hits.len() >= unfiltered_a_count,
-            "filtered recall={} < baseline recall={}",
-            filtered_hits.len(),
-            unfiltered_a_count
+            "filtered recall={} < baseline recall={}", filtered_hits.len(), unfiltered_a_count
         );
     }
 
@@ -2320,8 +2234,7 @@ mod tests {
                 embedding: Some(fake_emb((i % 251) as u8)),
                 meta: Some(serde_json::json!({ "category": cat })),
                 ..Default::default()
-            })
-            .unwrap();
+            }).unwrap();
         }
         let query_emb = fake_emb(42);
         let k = 10usize;
@@ -2329,9 +2242,7 @@ mod tests {
 
         // Baseline (no filter)
         let t0 = std::time::Instant::now();
-        for _ in 0..iters {
-            s.search_vec(&query_emb, k).unwrap();
-        }
+        for _ in 0..iters { s.search_vec(&query_emb, k).unwrap(); }
         let base_us = t0.elapsed().as_micros() / iters as u128;
 
         // With filter
@@ -2344,25 +2255,15 @@ mod tests {
             ..Default::default()
         };
         let t1 = std::time::Instant::now();
-        for _ in 0..iters {
-            s.search_vec_filtered(&query_emb, k, &opts).unwrap();
-        }
+        for _ in 0..iters { s.search_vec_filtered(&query_emb, k, &opts).unwrap(); }
         let filt_us = t1.elapsed().as_micros() / iters as u128;
 
-        eprintln!(
-            "filter_bench: base={base_us}µs filter={filt_us}µs overhead=+{}µs ({:.0}%)",
+        eprintln!("filter_bench: base={base_us}µs filter={filt_us}µs overhead=+{}µs ({:.0}%)",
             filt_us.saturating_sub(base_us),
-            if base_us > 0 {
-                (filt_us as f64 / base_us as f64 - 1.0) * 100.0
-            } else {
-                0.0
-            }
+            if base_us > 0 { (filt_us as f64 / base_us as f64 - 1.0) * 100.0 } else { 0.0 }
         );
         // Sanity: filter should not be more than 20× slower than no-filter
-        assert!(
-            filt_us < base_us * 20,
-            "filter overhead too high: {filt_us}µs vs {base_us}µs base"
-        );
+        assert!(filt_us < base_us * 20, "filter overhead too high: {filt_us}µs vs {base_us}µs base");
     }
 
     /// Compound AND: category=A AND price<100
@@ -2378,18 +2279,11 @@ mod tests {
                 embedding: Some(fake_emb((i % 251) as u8)),
                 meta: Some(serde_json::json!({ "category": cat, "price": i })),
                 ..Default::default()
-            })
-            .unwrap();
+            }).unwrap();
         }
         let pred = MetadataPredicate::And(vec![
-            MetadataPredicate::Eq {
-                key: "category".into(),
-                value: serde_json::json!("A"),
-            },
-            MetadataPredicate::Lt {
-                key: "price".into(),
-                value: 100.0,
-            },
+            MetadataPredicate::Eq { key: "category".into(), value: serde_json::json!("A") },
+            MetadataPredicate::Lt { key: "price".into(), value: 100.0 },
         ]);
         // Test matches() directly
         for i in 0..1000usize {
@@ -2399,10 +2293,7 @@ mod tests {
             assert_eq!(pred.matches(Some(&meta)), expected, "i={i}");
         }
         // Test via search
-        let opts = SearchOptions {
-            filter: Some(pred),
-            ..Default::default()
-        };
+        let opts = SearchOptions { filter: Some(pred), ..Default::default() };
         let hits = s.search_vec_filtered(&fake_emb(1), 20, &opts).unwrap();
         for h in &hits {
             let meta = s.get(h.id).unwrap().meta.unwrap();
@@ -2424,18 +2315,11 @@ mod tests {
                 embedding: Some(fake_emb((i % 251) as u8)),
                 meta: Some(serde_json::json!({ "tag": tag })),
                 ..Default::default()
-            })
-            .unwrap();
+            }).unwrap();
         }
         let pred = MetadataPredicate::Or(vec![
-            MetadataPredicate::Eq {
-                key: "tag".into(),
-                value: serde_json::json!("foo"),
-            },
-            MetadataPredicate::Eq {
-                key: "tag".into(),
-                value: serde_json::json!("bar"),
-            },
+            MetadataPredicate::Eq { key: "tag".into(), value: serde_json::json!("foo") },
+            MetadataPredicate::Eq { key: "tag".into(), value: serde_json::json!("bar") },
         ]);
         for i in 0..1000usize {
             let tag = tags[i % 4];
@@ -2443,10 +2327,7 @@ mod tests {
             let expected = tag == "foo" || tag == "bar";
             assert_eq!(pred.matches(Some(&meta)), expected, "i={i} tag={tag}");
         }
-        let opts = SearchOptions {
-            filter: Some(pred),
-            ..Default::default()
-        };
+        let opts = SearchOptions { filter: Some(pred), ..Default::default() };
         let hits = s.search_vec_filtered(&fake_emb(1), 20, &opts).unwrap();
         for h in &hits {
             let meta = s.get(h.id).unwrap().meta.unwrap();
@@ -2466,27 +2347,17 @@ mod tests {
                 embedding: Some(fake_emb((i % 251) as u8)),
                 meta: Some(serde_json::json!({ "price": i })),
                 ..Default::default()
-            })
-            .unwrap();
+            }).unwrap();
         }
         let pred = MetadataPredicate::And(vec![
-            MetadataPredicate::Gte {
-                key: "price".into(),
-                value: 50.0,
-            },
-            MetadataPredicate::Lte {
-                key: "price".into(),
-                value: 200.0,
-            },
+            MetadataPredicate::Gte { key: "price".into(), value: 50.0 },
+            MetadataPredicate::Lte { key: "price".into(), value: 200.0 },
         ]);
         for i in 0..1000usize {
             let meta = serde_json::json!({ "price": i });
             assert_eq!(pred.matches(Some(&meta)), i >= 50 && i <= 200, "i={i}");
         }
-        let opts = SearchOptions {
-            filter: Some(pred),
-            ..Default::default()
-        };
+        let opts = SearchOptions { filter: Some(pred), ..Default::default() };
         let hits = s.search_vec_filtered(&fake_emb(1), 20, &opts).unwrap();
         for h in &hits {
             let meta = s.get(h.id).unwrap().meta.unwrap();
@@ -2498,10 +2369,9 @@ mod tests {
     /// NOT predicate
     #[test]
     fn not_filter() {
-        let pred = MetadataPredicate::Not(Box::new(MetadataPredicate::Eq {
-            key: "status".into(),
-            value: serde_json::json!("deleted"),
-        }));
+        let pred = MetadataPredicate::Not(Box::new(
+            MetadataPredicate::Eq { key: "status".into(), value: serde_json::json!("deleted") },
+        ));
         let active = serde_json::json!({ "status": "active" });
         let deleted = serde_json::json!({ "status": "deleted" });
         assert!(pred.matches(Some(&active)));
@@ -2568,25 +2438,10 @@ mod tests {
         let t1 = std::time::Instant::now();
         let _ = Store::open(&db_path2).unwrap();
         let cold_ms = t1.elapsed().as_millis();
-        eprintln!(
-            "tantivy cold-rebuild (10k docs, no prior persist): {}ms",
-            cold_ms
-        );
+        eprintln!("tantivy cold-rebuild (10k docs, no prior persist): {}ms", cold_ms);
 
-        assert!(
-            warm_ms < 100,
-            "warm-start must be <100ms, got {}ms",
-            warm_ms
-        );
-        eprintln!(
-            "speedup: cold={}ms warm={}ms ratio={:.1}×",
-            cold_ms,
-            warm_ms,
-            if warm_ms > 0 {
-                cold_ms as f64 / warm_ms as f64
-            } else {
-                f64::INFINITY
-            }
-        );
+        assert!(warm_ms < 100, "warm-start must be <100ms, got {}ms", warm_ms);
+        eprintln!("speedup: cold={}ms warm={}ms ratio={:.1}×", cold_ms, warm_ms,
+            if warm_ms > 0 { cold_ms as f64 / warm_ms as f64 } else { f64::INFINITY });
     }
 }

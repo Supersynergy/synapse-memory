@@ -10,10 +10,9 @@ pub fn quant_i8(vec: &[f32]) -> (Vec<i8>, f32) {
         return (vec![0i8; vec.len()], 1.0);
     }
     let scale = max_abs / 127.0;
-    let q = vec
-        .iter()
-        .map(|&v| (v / scale).round().clamp(-127.0, 127.0) as i8)
-        .collect();
+    let q = vec.iter().map(|&v| {
+        (v / scale).round().clamp(-127.0, 127.0) as i8
+    }).collect();
     (q, scale)
 }
 
@@ -25,22 +24,21 @@ pub fn dequant_i8(q: &[i8], scale: f32) -> Vec<f32> {
 /// ColBERT max-sim over i8 quantized token vectors.
 /// query_vecs: Vec<(i8 tokens, scale)>, doc_vecs: same.
 /// Returns f32 score (dequantized).
-pub fn max_sim_i8(query_vecs: &[(Vec<i8>, f32)], doc_vecs: &[(Vec<i8>, f32)]) -> f32 {
+pub fn max_sim_i8(
+    query_vecs: &[(Vec<i8>, f32)],
+    doc_vecs: &[(Vec<i8>, f32)],
+) -> f32 {
     if query_vecs.is_empty() || doc_vecs.is_empty() {
         return 0.0;
     }
-    query_vecs
-        .iter()
-        .map(|(qv, qs)| {
-            doc_vecs
-                .iter()
-                .map(|(dv, ds)| {
-                    let raw = dot_i8(qv, dv);
-                    raw as f32 * qs * ds
-                })
-                .fold(f32::NEG_INFINITY, f32::max)
-        })
-        .sum()
+    query_vecs.iter().map(|(qv, qs)| {
+        doc_vecs.iter()
+            .map(|(dv, ds)| {
+                let raw = dot_i8(qv, dv);
+                raw as f32 * qs * ds
+            })
+            .fold(f32::NEG_INFINITY, f32::max)
+    }).sum()
 }
 
 #[cfg(test)]
@@ -52,11 +50,7 @@ mod tests {
         let v: Vec<f32> = (0..128).map(|i| (i as f32 - 64.0) / 64.0).collect();
         let (q, scale) = quant_i8(&v);
         let v2 = dequant_i8(&q, scale);
-        let max_err = v
-            .iter()
-            .zip(&v2)
-            .map(|(a, b)| (a - b).abs())
-            .fold(0f32, f32::max);
+        let max_err = v.iter().zip(&v2).map(|(a, b)| (a - b).abs()).fold(0f32, f32::max);
         // max error should be < 1 LSB = scale
         assert!(max_err <= scale + 1e-6, "max_err={max_err} scale={scale}");
     }

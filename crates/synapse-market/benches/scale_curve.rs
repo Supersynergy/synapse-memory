@@ -71,23 +71,31 @@ fn bench_scale_curve(c: &mut Criterion) {
         let p = *pages;
         let queries = neg_queries(p);
 
-        group.bench_with_input(BenchmarkId::new("smx_bloom", p), &p, |b, _| {
-            b.iter(|| {
-                for q in &queries {
-                    let r = s.range_filter(q.clone()).unwrap();
-                    criterion::black_box(r);
-                }
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("smx_bloom", p),
+            &p,
+            |b, _| {
+                b.iter(|| {
+                    for q in &queries {
+                        let r = s.range_filter(q.clone()).unwrap();
+                        criterion::black_box(r);
+                    }
+                })
+            },
+        );
 
-        group.bench_with_input(BenchmarkId::new("smx_noBloom", p), &p, |b, _| {
-            b.iter(|| {
-                for q in &queries {
-                    let r = s.range(q.clone()).unwrap();
-                    criterion::black_box(r);
-                }
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("smx_noBloom", p),
+            &p,
+            |b, _| {
+                b.iter(|| {
+                    for q in &queries {
+                        let r = s.range(q.clone()).unwrap();
+                        criterion::black_box(r);
+                    }
+                })
+            },
+        );
     }
 
     group.finish();

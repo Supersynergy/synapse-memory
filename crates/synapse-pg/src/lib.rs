@@ -1,5 +1,7 @@
 //! synapsql-pg — Postgres wire-protocol via pgwire 0.40.
 
+use std::fmt::Debug;
+use std::sync::Arc;
 use async_trait::async_trait;
 use futures::{stream, Sink};
 use pgwire::api::query::SimpleQueryHandler;
@@ -10,10 +12,8 @@ use pgwire::error::PgWireResult;
 use pgwire::messages::data::DataRow;
 use pgwire::messages::PgWireBackendMessage;
 use pgwire::tokio::process_socket;
-use std::fmt::Debug;
-use std::sync::Arc;
-use synapse_libsql::Store;
 use tokio::net::TcpListener;
+use synapse_libsql::Store;
 
 pub struct Processor {
     pub store: Arc<dyn Store>,

@@ -111,11 +111,6 @@ path = "benches/w1_candle_range.rs"
 harness = false
 
 [[bench]]
-name = "w2_real_corpus"
-path = "benches/w2_real_corpus.rs"
-harness = false
-
-[[bench]]
 name = "w3_simd_agg"
 path = "benches/w3_simd_agg.rs"
 harness = false
@@ -167,11 +162,6 @@ path = "examples/backtest_demo.rs"
 [[bench]]
 name = "online_learner"
 path = "benches/online_learner.rs"
-harness = false
-
-[[bench]]
-name = "hilbert_locality"
-path = "benches/hilbert_locality.rs"
 harness = false
 
 [lib]

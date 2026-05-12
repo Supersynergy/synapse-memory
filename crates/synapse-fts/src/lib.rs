@@ -27,8 +27,10 @@ struct FtsSchema {
 impl FtsIndex {
     pub fn new(path: &Path) -> Result<Self> {
         let mut schema_builder = Schema::builder();
-        let doc_id =
-            schema_builder.add_u64_field("doc_id", NumericOptions::default() | STORED | FAST);
+        let doc_id = schema_builder.add_u64_field(
+            "doc_id",
+            NumericOptions::default() | STORED | FAST,
+        );
         let text = schema_builder.add_text_field(
             "text",
             TextOptions::default().set_indexing_options(
@@ -58,11 +60,7 @@ impl FtsIndex {
             index,
             writer,
             reader,
-            schema: FtsSchema {
-                schema,
-                doc_id,
-                text,
-            },
+            schema: FtsSchema { schema, doc_id, text },
             index_path,
         })
     }
@@ -94,16 +92,10 @@ impl FtsIndex {
 
     /// Read the last persisted doc_id. Returns 0 if not yet written.
     pub fn last_indexed_doc_id(&self) -> u64 {
-        let Some(ref p) = self.index_path else {
-            return 0;
-        };
+        let Some(ref p) = self.index_path else { return 0 };
         let meta_path = p.join(META_FILE);
-        let Ok(bytes) = std::fs::read(&meta_path) else {
-            return 0;
-        };
-        let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-            return 0;
-        };
+        let Ok(bytes) = std::fs::read(&meta_path) else { return 0 };
+        let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return 0 };
         v["last_indexed_doc_id"].as_u64().unwrap_or(0)
     }
 

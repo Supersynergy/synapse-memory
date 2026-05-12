@@ -1,4 +1,4 @@
-use synapse_market::router::{Plan, PlanCache, QueryKey, QueryKind};
+use synapse_market::router::{Plan, QueryKey, QueryKind, PlanCache};
 use tempfile::TempDir;
 
 #[test]
@@ -33,11 +33,7 @@ fn save_load_roundtrip_preserves_stats() {
         if plan == Plan::SimdAgg {
             simd_picks += 1;
         }
-        loaded.record(
-            key.clone(),
-            plan,
-            if plan == Plan::SimdAgg { 30 } else { 90 },
-        );
+        loaded.record(key.clone(), plan, if plan == Plan::SimdAgg { 30 } else { 90 });
     }
     assert!(
         simd_picks >= 40,

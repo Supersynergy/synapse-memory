@@ -168,13 +168,13 @@ struct Question {
 /// token if everything is filtered. Stopwords are pruned to keep selectivity.
 fn fts5_sanitize(q: &str) -> String {
     const STOP: &[&str] = &[
-        "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was", "one",
-        "our", "out", "day", "get", "has", "him", "his", "how", "man", "new", "now", "old", "see",
-        "two", "way", "who", "boy", "did", "its", "let", "put", "say", "she", "too", "use", "what",
-        "when", "where", "which", "this", "that", "with", "from", "have", "your", "they", "their",
-        "would", "could", "should", "about", "into", "than", "then", "been", "were", "will",
-        "much", "many", "some", "such", "only", "very", "just", "also", "make", "made", "does",
-        "doing", "didnt",
+        "the", "and", "for", "are", "but", "not", "you", "all", "can", "had", "her", "was",
+        "one", "our", "out", "day", "get", "has", "him", "his", "how", "man", "new", "now",
+        "old", "see", "two", "way", "who", "boy", "did", "its", "let", "put", "say", "she",
+        "too", "use", "what", "when", "where", "which", "this", "that", "with", "from", "have",
+        "your", "they", "their", "would", "could", "should", "about", "into", "than", "then",
+        "been", "were", "will", "much", "many", "some", "such", "only", "very", "just", "also",
+        "make", "made", "does", "doing", "didnt",
     ];
     let toks: Vec<String> = q
         .to_lowercase()
@@ -263,8 +263,10 @@ fn answer_in_any(answer: &str, docs: &[&str]) -> bool {
 /// `min_tok` enforces ≥3-char content tokens. `thr` typical 0.6-0.8.
 fn answer_in_any_fuzzy(answer: &str, docs: &[&str], thr: f64) -> bool {
     let na = normalize(answer);
-    let a_toks: std::collections::HashSet<&str> =
-        na.split_whitespace().filter(|t| t.len() >= 3).collect();
+    let a_toks: std::collections::HashSet<&str> = na
+        .split_whitespace()
+        .filter(|t| t.len() >= 3)
+        .collect();
     if a_toks.is_empty() {
         return false;
     }
@@ -291,18 +293,9 @@ fn run_question<H: PipelineHooks>(
     pre_extractor: Option<&dyn synapse_extract::Extractor>,
     rrf_k: f64,
     rerank_top: usize,
-    #[cfg(feature = "hyde")] hyde_cfg: Option<&synapse_core::turbo::hyde::HydeConfig>,
-) -> Result<(
-    bool,
-    bool,
-    bool,
-    bool,
-    u128,
-    usize,
-    Vec<String>,
-    Vec<String>,
-    u128,
-)> {
+    #[cfg(feature = "hyde")]
+    hyde_cfg: Option<&synapse_core::turbo::hyde::HydeConfig>,
+) -> Result<(bool, bool, bool, bool, u128, usize, Vec<String>, Vec<String>, u128)> {
     // Fresh tempfile-backed store per question (Store::open requires a path).
     let tmp = tempfile_path(&q.question_id)?;
     // Make sure no leftover.
@@ -330,7 +323,7 @@ fn run_question<H: PipelineHooks>(
     // (no new deps). DB writes still serial. With ~47 docs and 8 worker threads,
     // total cost ≈ ceil(47/8) × per-call latency ≈ 6 × 1.5s ≈ 9s instead of 47×6s.
     if let Some(ext) = pre_extractor {
-        use synapse_extract::{enqueue_extraction_helper, ExtractedMemory};
+        use synapse_extract::{ExtractedMemory, enqueue_extraction_helper};
         // 1) extract in parallel.
         let n = docs.len();
         let results: Vec<(i64, Vec<ExtractedMemory>)> = std::thread::scope(|s| {
@@ -340,9 +333,7 @@ fn run_question<H: PipelineHooks>(
             for w in 0..workers {
                 let start = w * chunk;
                 let end = ((w + 1) * chunk).min(n);
-                if start >= end {
-                    continue;
-                }
+                if start >= end { continue; }
                 let docs_ref = &docs;
                 let ext_ref = ext;
                 handles.push(s.spawn(move || {
@@ -358,9 +349,7 @@ fn run_question<H: PipelineHooks>(
                 }));
             }
             let mut all = Vec::with_capacity(n);
-            for h in handles {
-                all.extend(h.join().unwrap_or_default());
-            }
+            for h in handles { all.extend(h.join().unwrap_or_default()); }
             all
         });
         // 2) write serially.
@@ -398,7 +387,7 @@ fn run_question<H: PipelineHooks>(
     // store has no extracted memories yet (extraction pipeline not in bench).
     params.heat = false;
     params.entity_expand = pre_extractor.is_some(); // only meaningful with extracted memories
-    params.ppr = ppr && pre_extractor.is_some(); // PPR needs edges
+    params.ppr = ppr && pre_extractor.is_some();    // PPR needs edges
     params.rrf_k = rrf_k;
     params.rerank_top = if reranker.is_some() { rerank_top } else { 0 };
     let mut hits = pipeline_recall(
@@ -411,17 +400,12 @@ fn run_question<H: PipelineHooks>(
     )?;
     if let Some(r) = reranker {
         let cand: Vec<synapse_core::Hit> = hits.iter().map(|h| h.hit.clone()).collect();
-        let rer = r
-            .rerank(&q.question, cand, params.k)
+        let rer = r.rerank(&q.question, cand, params.k)
             .unwrap_or_else(|_| hits.iter().map(|h| h.hit.clone()).collect());
         // Re-key reranked hits back into RecallHit (memory_id/type lost — fine for bench).
         hits = rer
             .into_iter()
-            .map(|h| synapse_core::sota::RecallHit {
-                hit: h,
-                memory_id: None,
-                memory_type: None,
-            })
+            .map(|h| synapse_core::sota::RecallHit { hit: h, memory_id: None, memory_type: None })
             .collect();
     }
     let elapsed = t.elapsed().as_micros();
@@ -437,12 +421,7 @@ fn run_question<H: PipelineHooks>(
     if std::env::var("LME_DEBUG_TOP5").ok().as_deref() == Some("1") {
         for (i, t) in top5.iter().enumerate() {
             let head: String = t.chars().take(140).collect();
-            eprintln!(
-                "[dbg q={}] top5[{}]: {}",
-                q.question_id,
-                i,
-                head.replace('\n', " ")
-            );
+            eprintln!("[dbg q={}] top5[{}]: {}", q.question_id, i, head.replace('\n', " "));
         }
     }
 
@@ -450,17 +429,7 @@ fn run_question<H: PipelineHooks>(
     let _ = std::fs::remove_file(&tmp);
     let _ = std::fs::remove_file(format!("{}-wal", tmp.display()));
     let _ = std::fs::remove_file(format!("{}-shm", tmp.display()));
-    Ok((
-        r5,
-        r10,
-        f5,
-        f10,
-        elapsed,
-        n_docs,
-        top5_owned,
-        top10_owned,
-        hyde_latency_us,
-    ))
+    Ok((r5, r10, f5, f10, elapsed, n_docs, top5_owned, top10_owned, hyde_latency_us))
 }
 
 fn tempfile_path(qid: &str) -> Result<PathBuf> {
@@ -491,18 +460,10 @@ fn main() -> Result<()> {
     #[cfg(feature = "minimax")]
     let minimax_hooks: Option<synapse_extract::minimax::MinimaxHooks> = if args.use_minimax {
         match synapse_extract::minimax::MinimaxHooks::from_env() {
-            Ok(h) => {
-                println!("Hooks: MiniMax-M2.7-highspeed (HTTP)");
-                Some(h)
-            }
-            Err(e) => {
-                eprintln!("WARN: minimax init failed: {} — falling back to Rule", e);
-                None
-            }
+            Ok(h) => { println!("Hooks: MiniMax-M2.7-highspeed (HTTP)"); Some(h) }
+            Err(e) => { eprintln!("WARN: minimax init failed: {} — falling back to Rule", e); None }
         }
-    } else {
-        None
-    };
+    } else { None };
     #[cfg(not(feature = "minimax"))]
     let minimax_hooks: Option<()> = None;
 
@@ -514,10 +475,7 @@ fn main() -> Result<()> {
                 // ColBERT scaffold — logs warning when no model path provided
                 let r = synapse_rerank::ColbertReranker::new(None);
                 if r.is_loaded() {
-                    println!(
-                        "Reranker: jina-colbert (ColBERT MaxSim, top={})",
-                        args.rerank_top
-                    );
+                    println!("Reranker: jina-colbert (ColBERT MaxSim, top={})", args.rerank_top);
                 } else {
                     eprintln!("WARN: jina-colbert model not cached — ColbertReranker scaffold (identity-rerank, order preserved). Set HF model path or ALLOW_BIG_DOWNLOAD=1 to download.");
                 }
@@ -526,66 +484,34 @@ fn main() -> Result<()> {
             RerankModelArg::JinaCrossEncoder => {
                 // JINA reranker-v2-multilingual via fastembed ONNX (~140MB).
                 // fastembed will download on first use — only proceed with ALLOW_BIG_DOWNLOAD=1.
-                let allow_dl = std::env::var("ALLOW_BIG_DOWNLOAD")
-                    .map(|v| v == "1")
-                    .unwrap_or(false);
+                let allow_dl = std::env::var("ALLOW_BIG_DOWNLOAD").map(|v| v == "1").unwrap_or(false);
                 if allow_dl {
                     match synapse_rerank::onnx::OnnxCrossEncoder::new_jina_v2() {
-                        Ok(r) => {
-                            println!("Reranker: JINA-reranker-v2-base-multilingual (ONNX cross-encoder, top={})", args.rerank_top);
-                            Some(Box::new(r))
-                        }
+                        Ok(r) => { println!("Reranker: JINA-reranker-v2-base-multilingual (ONNX cross-encoder, top={})", args.rerank_top); Some(Box::new(r)) }
                         Err(e) => {
                             eprintln!("WARN: jina-cross-encoder init failed: {} — falling back to BGE baseline", e);
                             match synapse_rerank::onnx::OnnxCrossEncoder::new() {
-                                Ok(r) => {
-                                    println!(
-                                        "Reranker (fallback): BGE-reranker-v2-m3 (top={})",
-                                        args.rerank_top
-                                    );
-                                    Some(Box::new(r))
-                                }
-                                Err(e2) => {
-                                    eprintln!("WARN: fallback also failed: {} — rerank-off", e2);
-                                    None
-                                }
+                                Ok(r) => { println!("Reranker (fallback): BGE-reranker-v2-m3 (top={})", args.rerank_top); Some(Box::new(r)) }
+                                Err(e2) => { eprintln!("WARN: fallback also failed: {} — rerank-off", e2); None }
                             }
                         }
                     }
                 } else {
                     eprintln!("WARN: --rerank-model jina-cross-encoder requires ALLOW_BIG_DOWNLOAD=1 (model ~140MB). Falling back to BGE baseline.");
                     match synapse_rerank::onnx::OnnxCrossEncoder::new() {
-                        Ok(r) => {
-                            println!(
-                                "Reranker (fallback): BGE-reranker-v2-m3 (top={})",
-                                args.rerank_top
-                            );
-                            Some(Box::new(r))
-                        }
-                        Err(e) => {
-                            eprintln!("WARN: fallback reranker init failed: {} — rerank-off", e);
-                            None
-                        }
+                        Ok(r) => { println!("Reranker (fallback): BGE-reranker-v2-m3 (top={})", args.rerank_top); Some(Box::new(r)) }
+                        Err(e) => { eprintln!("WARN: fallback reranker init failed: {} — rerank-off", e); None }
                     }
                 }
             }
-            RerankModelArg::Baseline => match synapse_rerank::onnx::OnnxCrossEncoder::new() {
-                Ok(r) => {
-                    println!(
-                        "Reranker: BGE-reranker-v2-m3 (568M ONNX cross-encoder, top={})",
-                        args.rerank_top
-                    );
-                    Some(Box::new(r))
+            RerankModelArg::Baseline => {
+                match synapse_rerank::onnx::OnnxCrossEncoder::new() {
+                    Ok(r) => { println!("Reranker: BGE-reranker-v2-m3 (568M ONNX cross-encoder, top={})", args.rerank_top); Some(Box::new(r)) }
+                    Err(e) => { eprintln!("WARN: reranker init failed: {} — running rerank-off", e); None }
                 }
-                Err(e) => {
-                    eprintln!("WARN: reranker init failed: {} — running rerank-off", e);
-                    None
-                }
-            },
+            }
         }
-    } else {
-        None
-    };
+    } else { None };
     #[cfg(not(feature = "rerank"))]
     let reranker_box: Option<Box<dyn synapse_rerank::Reranker>> = None;
     let reranker_ref = reranker_box.as_deref();
@@ -601,31 +527,18 @@ fn main() -> Result<()> {
     let pre_extractor_box: Option<Box<dyn synapse_extract::Extractor>> = if args.pre_extract {
         if args.use_minimax {
             match synapse_extract::minimax::MinimaxExtractor::from_env() {
-                Ok(e) => {
-                    println!("Pre-extract: MiniMax-M2 hierarchical (Mem0-v3)");
-                    Some(Box::new(e))
-                }
-                Err(e) => {
-                    eprintln!(
-                        "WARN: pre_extract minimax init failed: {} — falling back to rule",
-                        e
-                    );
-                    Some(Box::new(synapse_extract::RuleExtractor))
-                }
+                Ok(e) => { println!("Pre-extract: MiniMax-M2 hierarchical (Mem0-v3)"); Some(Box::new(e)) }
+                Err(e) => { eprintln!("WARN: pre_extract minimax init failed: {} — falling back to rule", e); Some(Box::new(synapse_extract::RuleExtractor)) }
             }
         } else {
             println!("Pre-extract: RuleExtractor (fast, no LLM)");
             Some(Box::new(synapse_extract::RuleExtractor))
         }
-    } else {
-        None
-    };
+    } else { None };
     #[cfg(not(feature = "minimax"))]
     let pre_extractor_box: Option<Box<dyn synapse_extract::Extractor>> = if args.pre_extract {
         Some(Box::new(synapse_extract::RuleExtractor))
-    } else {
-        None
-    };
+    } else { None };
     let pre_extractor_ref: Option<&dyn synapse_extract::Extractor> = pre_extractor_box.as_deref();
 
     // When both embed-768 and rerank features are active, default to arctic-m
@@ -637,8 +550,7 @@ fn main() -> Result<()> {
     }
 
     let embedder = if args.embed {
-        let model_name =
-            std::env::var("SYNAPSE_EMBED_MODEL").unwrap_or_else(|_| "bge-small".into());
+        let model_name = std::env::var("SYNAPSE_EMBED_MODEL").unwrap_or_else(|_| "bge-small".into());
         let desc = match model_name.to_lowercase().as_str() {
             "arctic-m" => "Snowflake Arctic Embed M (768-dim, MTEB 62.5)",
             "arctic-s" => "Snowflake Arctic Embed S (384-dim, MTEB 60.0)",
@@ -674,10 +586,7 @@ fn main() -> Result<()> {
                 model: args.hyde_model.clone(),
                 ..Default::default()
             };
-            println!(
-                "HyDE: Ollama model={} max_tokens={}",
-                cfg.model, cfg.max_tokens
-            );
+            println!("HyDE: Ollama model={} max_tokens={}", cfg.model, cfg.max_tokens);
             Some(cfg)
         }
     } else {
@@ -714,36 +623,9 @@ fn main() -> Result<()> {
         macro_rules! rq {
             ($hooks:expr) => {{
                 #[cfg(feature = "hyde")]
-                {
-                    run_question(
-                        q,
-                        $hooks,
-                        args.relevance_floor,
-                        args.hyde_threshold,
-                        embedder_ref,
-                        reranker_ref,
-                        args.ppr,
-                        pre_extractor_ref,
-                        args.rrf_k,
-                        args.rerank_top,
-                        hyde_cfg_ref,
-                    )
-                }
+                { run_question(q, $hooks, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top, hyde_cfg_ref) }
                 #[cfg(not(feature = "hyde"))]
-                {
-                    run_question(
-                        q,
-                        $hooks,
-                        args.relevance_floor,
-                        args.hyde_threshold,
-                        embedder_ref,
-                        reranker_ref,
-                        args.ppr,
-                        pre_extractor_ref,
-                        args.rrf_k,
-                        args.rerank_top,
-                    )
-                }
+                { run_question(q, $hooks, args.relevance_floor, args.hyde_threshold, embedder_ref, reranker_ref, args.ppr, pre_extractor_ref, args.rrf_k, args.rerank_top) }
             }};
         }
         #[cfg(feature = "minimax")]
@@ -844,30 +726,12 @@ fn main() -> Result<()> {
     let f10 = f10_hits as f64 / n;
     println!("Recall@5     : {:.3}  ({}/{})", r5, r5_hits, qs.len());
     println!("Recall@10    : {:.3}  ({}/{})", r10, r10_hits, qs.len());
-    println!(
-        "Fuzzy-R@5    : {:.3}  ({}/{})  [token-set 0.6]",
-        f5,
-        f5_hits,
-        qs.len()
-    );
-    println!(
-        "Fuzzy-R@10   : {:.3}  ({}/{})  [token-set 0.6]",
-        f10,
-        f10_hits,
-        qs.len()
-    );
+    println!("Fuzzy-R@5    : {:.3}  ({}/{})  [token-set 0.6]", f5, f5_hits, qs.len());
+    println!("Fuzzy-R@10   : {:.3}  ({}/{})  [token-set 0.6]", f10, f10_hits, qs.len());
     if args.judge {
         let denom = qs.len() as f64;
-        let jr5 = if denom > 0.0 {
-            judge_r5_hits as f64 / denom
-        } else {
-            0.0
-        };
-        let jr10 = if denom > 0.0 {
-            judge_r10_hits as f64 / denom
-        } else {
-            0.0
-        };
+        let jr5 = if denom > 0.0 { judge_r5_hits as f64 / denom } else { 0.0 };
+        let jr10 = if denom > 0.0 { judge_r10_hits as f64 / denom } else { 0.0 };
         println!(
             "Judge-R@5    : {:.3}  ({}/{} evaluated, {} total)",
             jr5,
@@ -877,23 +741,15 @@ fn main() -> Result<()> {
         );
         println!(
             "Judge-R@10   : {:.3}  ({}/{})",
-            jr10,
-            judge_r10_hits,
-            qs.len()
+            jr10, judge_r10_hits, qs.len()
         );
     }
-    println!(
-        "Latency avg  : {:.2} ms (recall only, ingest excluded)",
-        avg_ms / 1000.0
-    );
+    println!("Latency avg  : {:.2} ms (recall only, ingest excluded)", avg_ms / 1000.0);
     println!("Avg docs/Q   : {:.1}", avg_docs);
     #[cfg(feature = "hyde")]
     if total_hyde_us > 0 {
         let avg_hyde_ms = total_hyde_us as f64 / (qs.len() as f64) / 1000.0;
-        println!(
-            "HyDE overhead: {:.1} ms avg per query (Ollama expand only)",
-            avg_hyde_ms
-        );
+        println!("HyDE overhead: {:.1} ms avg per query (Ollama expand only)", avg_hyde_ms);
     }
     Ok(())
 }

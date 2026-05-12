@@ -51,23 +51,32 @@ fn get_rotation_matrix(dim: usize) -> &'static Vec<f32> {
         let seed: u64 = 0xDEAD_BEEF_CAFE_1337;
         let mut rng_state = seed;
         let n = dim * dim;
-        let mut mat: Vec<f32> = (0..n).map(|_| {
-            rng_state ^= rng_state << 13;
-            rng_state ^= rng_state >> 7;
-            rng_state ^= rng_state << 17;
-            (rng_state as i64 as f32) / (i64::MAX as f32)
-        }).collect();
+        let mut mat: Vec<f32> = (0..n)
+            .map(|_| {
+                rng_state ^= rng_state << 13;
+                rng_state ^= rng_state >> 7;
+                rng_state ^= rng_state << 17;
+                (rng_state as i64 as f32) / (i64::MAX as f32)
+            })
+            .collect();
         // Gram-Schmidt orthogonalize columns (one-time cost, ~384^3 ops)
         for i in 0..dim {
             // normalize column i
-            let norm: f32 = (0..dim).map(|k| mat[i * dim + k] * mat[i * dim + k]).sum::<f32>().sqrt();
+            let norm: f32 = (0..dim)
+                .map(|k| mat[i * dim + k] * mat[i * dim + k])
+                .sum::<f32>()
+                .sqrt();
             if norm > 1e-10 {
-                for k in 0..dim { mat[i * dim + k] /= norm; }
+                for k in 0..dim {
+                    mat[i * dim + k] /= norm;
+                }
             }
             // subtract projection from subsequent columns
             for j in (i + 1)..dim {
                 let dot: f32 = (0..dim).map(|k| mat[i * dim + k] * mat[j * dim + k]).sum();
-                for k in 0..dim { mat[j * dim + k] -= dot * mat[i * dim + k]; }
+                for k in 0..dim {
+                    mat[j * dim + k] -= dot * mat[i * dim + k];
+                }
             }
         }
         mat
@@ -79,9 +88,9 @@ pub fn pack_signs_rotated(v: &[f32]) -> Vec<u8> {
     let dim = v.len();
     assert_eq!(dim, 384);
     let r = get_rotation_matrix(dim);
-    let rotated: Vec<f32> = (0..dim).map(|i| {
-        (0..dim).map(|j| r[i * dim + j] * v[j]).sum()
-    }).collect();
+    let rotated: Vec<f32> = (0..dim)
+        .map(|i| (0..dim).map(|j| r[i * dim + j] * v[j]).sum())
+        .collect();
     pack_signs(&rotated)
 }
 
@@ -141,10 +150,13 @@ mod tests {
         let vecs: Vec<Vec<f32>> = (0..n).map(|_| (0..dim).map(|_| next()).collect()).collect();
 
         // Normalize
-        let vecs: Vec<Vec<f32>> = vecs.into_iter().map(|v| {
-            let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-            v.into_iter().map(|x| x / norm).collect()
-        }).collect();
+        let vecs: Vec<Vec<f32>> = vecs
+            .into_iter()
+            .map(|v| {
+                let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+                v.into_iter().map(|x| x / norm).collect()
+            })
+            .collect();
 
         // Build packed matrices
         let plain: Vec<Vec<u8>> = vecs.iter().map(|v| pack_signs(v)).collect();
@@ -160,23 +172,34 @@ mod tests {
             let qv = &vecs[qi];
 
             // Ground truth: top-k by dot product (vectors are normalized)
-            let mut scores: Vec<(usize, f32)> = vecs.iter().enumerate()
+            let mut scores: Vec<(usize, f32)> = vecs
+                .iter()
+                .enumerate()
                 .map(|(i, v)| (i, v.iter().zip(qv).map(|(a, b)| a * b).sum::<f32>()))
                 .collect();
             scores.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            let gt: std::collections::HashSet<usize> = scores[..k].iter().map(|(i, _)| *i).collect();
+            let gt: std::collections::HashSet<usize> =
+                scores[..k].iter().map(|(i, _)| *i).collect();
 
             // Plain hamming top-k
-            let mut ph: Vec<(usize, u32)> = plain.iter().enumerate()
-                .map(|(i, p)| (i, hamming_distance(&plain[qi], p))).collect();
+            let mut ph: Vec<(usize, u32)> = plain
+                .iter()
+                .enumerate()
+                .map(|(i, p)| (i, hamming_distance(&plain[qi], p)))
+                .collect();
             ph.sort_unstable_by_key(|x| x.1);
-            let plain_hits: std::collections::HashSet<usize> = ph[..k].iter().map(|(i, _)| *i).collect();
+            let plain_hits: std::collections::HashSet<usize> =
+                ph[..k].iter().map(|(i, _)| *i).collect();
 
             // Rotated hamming top-k
-            let mut rh: Vec<(usize, u32)> = rotated.iter().enumerate()
-                .map(|(i, r)| (i, hamming_distance(&rotated[qi], r))).collect();
+            let mut rh: Vec<(usize, u32)> = rotated
+                .iter()
+                .enumerate()
+                .map(|(i, r)| (i, hamming_distance(&rotated[qi], r)))
+                .collect();
             rh.sort_unstable_by_key(|x| x.1);
-            let rot_hits: std::collections::HashSet<usize> = rh[..k].iter().map(|(i, _)| *i).collect();
+            let rot_hits: std::collections::HashSet<usize> =
+                rh[..k].iter().map(|(i, _)| *i).collect();
 
             plain_recall_total += plain_hits.intersection(&gt).count();
             rot_recall_total += rot_hits.intersection(&gt).count();

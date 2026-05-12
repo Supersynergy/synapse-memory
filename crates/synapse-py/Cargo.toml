@@ -19,7 +19,7 @@ name = "synapse_py"
 crate-type = ["rlib"]
 
 [dependencies]
-pyo3         = { version = "0.24", features = ["extension-module"] }
+pyo3         = { version = "0.24", features = ["extension-module", "abi3-py39"] }
 serde_json   = "1"
 synapse-core = { path = "../synapse-core", default-features = false, features = ["turbo"] }
 

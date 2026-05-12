@@ -12,13 +12,10 @@ pub fn rrf_fuse_safe(a: &[f64], b: &[f64], k: f64) -> Vec<f64> {
     }
     let n = unsafe {
         abi::synapse_engine_rrf_fuse(
-            a.as_ptr(),
-            a.len(),
-            b.as_ptr(),
-            b.len(),
+            a.as_ptr(), a.len(),
+            b.as_ptr(), b.len(),
             k,
-            out.as_mut_ptr(),
-            cap,
+            out.as_mut_ptr(), cap,
         )
     };
     out.truncate(n.max(0) as usize);

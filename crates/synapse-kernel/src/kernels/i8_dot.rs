@@ -15,17 +15,15 @@ pub fn dot_i8_scalar(a: &[i8], b: &[i8]) -> i32 {
     let mut i = 0;
     while i + 4 <= n {
         unsafe {
-            acc0 += *a.get_unchecked(i) as i32 * *b.get_unchecked(i) as i32;
-            acc1 += *a.get_unchecked(i + 1) as i32 * *b.get_unchecked(i + 1) as i32;
-            acc2 += *a.get_unchecked(i + 2) as i32 * *b.get_unchecked(i + 2) as i32;
-            acc3 += *a.get_unchecked(i + 3) as i32 * *b.get_unchecked(i + 3) as i32;
+            acc0 += *a.get_unchecked(i)   as i32 * *b.get_unchecked(i)   as i32;
+            acc1 += *a.get_unchecked(i+1) as i32 * *b.get_unchecked(i+1) as i32;
+            acc2 += *a.get_unchecked(i+2) as i32 * *b.get_unchecked(i+2) as i32;
+            acc3 += *a.get_unchecked(i+3) as i32 * *b.get_unchecked(i+3) as i32;
         }
         i += 4;
     }
     while i < n {
-        unsafe {
-            acc0 += *a.get_unchecked(i) as i32 * *b.get_unchecked(i) as i32;
-        }
+        unsafe { acc0 += *a.get_unchecked(i) as i32 * *b.get_unchecked(i) as i32; }
         i += 1;
     }
     (acc0 + acc1) + (acc2 + acc3)
@@ -69,9 +67,7 @@ pub fn dot_i8_neon(a: &[i8], b: &[i8]) -> i32 {
 
     // scalar tail
     while i < n {
-        unsafe {
-            result += *a.get_unchecked(i) as i32 * *b.get_unchecked(i) as i32;
-        }
+        unsafe { result += *a.get_unchecked(i) as i32 * *b.get_unchecked(i) as i32; }
         i += 1;
     }
     result
@@ -107,7 +103,7 @@ mod tests {
         let a: Vec<i8> = (0..128).map(|i: i32| (i % 127) as i8).collect();
         let b: Vec<i8> = (0..128).map(|i: i32| ((127 - i) % 127) as i8).collect();
         let scalar = dot_i8_scalar(&a, &b);
-        let neon = dot_i8(&a, &b);
+        let neon   = dot_i8(&a, &b);
         assert_eq!(scalar, neon, "scalar={scalar} neon={neon}");
     }
 
@@ -116,16 +112,16 @@ mod tests {
         let a: Vec<i8> = (0i32..256).map(|i| (i % 100 - 50) as i8).collect();
         let b: Vec<i8> = (0i32..256).map(|i| ((i * 3) % 100 - 50) as i8).collect();
         let scalar = dot_i8_scalar(&a, &b);
-        let neon = dot_i8(&a, &b);
+        let neon   = dot_i8(&a, &b);
         assert_eq!(scalar, neon, "scalar={scalar} neon={neon}");
     }
 
     #[test]
     fn negative_values() {
         let a = vec![-1i8, -2, 3, -4, 5, -6, 7, -8, 1, 2, 3, 4, 5, 6, 7, 8];
-        let b = vec![8i8, 7, 6, 5, 4, 3, 2, 1, 8, 7, 6, 5, 4, 3, 2, 1];
+        let b = vec![ 8i8,  7, 6,  5, 4,  3, 2,  1, 8, 7, 6, 5, 4, 3, 2, 1];
         let scalar = dot_i8_scalar(&a, &b);
-        let neon = dot_i8(&a, &b);
+        let neon   = dot_i8(&a, &b);
         assert_eq!(scalar, neon);
     }
 

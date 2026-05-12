@@ -1,7 +1,7 @@
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 const BITS: usize = 128 * 1024; // 128K bits = 16KB
-const BYTES: usize = BITS / 8; // 16384
+const BYTES: usize = BITS / 8;  // 16384
 
 pub struct Bloom {
     bits: Box<[u8; BYTES]>,

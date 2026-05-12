@@ -1,8 +1,8 @@
-pub mod compile;
 pub mod predicate;
+pub mod compile;
 
-pub use compile::{compile, CompiledFilter, CompiledFn};
 pub use predicate::{Col, Op, Predicate};
+pub use compile::{CompiledFilter, CompiledFn, compile};
 
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -14,9 +14,7 @@ pub struct FilterCache {
 
 impl FilterCache {
     pub fn new() -> Self {
-        Self {
-            inner: HashMap::new(),
-        }
+        Self { inner: HashMap::new() }
     }
 
     pub fn get_or_compile(&mut self, p: &Predicate) -> anyhow::Result<&CompiledFn> {

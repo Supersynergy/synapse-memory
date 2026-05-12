@@ -84,10 +84,7 @@ impl NdArraySearch {
     /// Hamming distance between two packed binary rows (popcount of XOR).
     #[inline]
     fn hamming(a: &[u64], b: &[u64]) -> u32 {
-        a.iter()
-            .zip(b.iter())
-            .map(|(x, y)| (x ^ y).count_ones())
-            .sum()
+        a.iter().zip(b.iter()).map(|(x, y)| (x ^ y).count_ones()).sum()
     }
 
     /// Binary pre-filter + f32 rerank cascade.
@@ -176,11 +173,7 @@ impl NdArraySearch {
             ids.push(id);
             all_bytes.extend_from_slice(&emb);
         }
-        tracing::info!(
-            "ndarray_search: {} rows collected, {} bytes, starting f32 conversion",
-            ids.len(),
-            all_bytes.len()
-        );
+        tracing::info!("ndarray_search: {} rows collected, {} bytes, starting f32 conversion", ids.len(), all_bytes.len());
 
         if all_bytes.is_empty() {
             return Err(Error::Other("no vectors found".into()));
@@ -311,9 +304,7 @@ impl NdArraySearch {
                 idx.clear();
                 idx.extend(0..self.n_vectors);
                 idx.select_nth_unstable_by(k - 1, |a, b| {
-                    sims[*b]
-                        .partial_cmp(&sims[*a])
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    sims[*b].partial_cmp(&sims[*a]).unwrap_or(std::cmp::Ordering::Equal)
                 });
                 idx.truncate(k);
                 let mut out: Vec<(i64, f32)> =
@@ -387,8 +378,9 @@ impl NdArraySearch {
         let packed = Self::pack_binary(&normalized, words);
         let row = Array2::from_shape_vec((1, self.dim), normalized)
             .map_err(|e| Error::Other(format!("ndarray add_row shape: {e}")))?;
-        let new_matrix = ndarray::concatenate(ndarray::Axis(0), &[self.matrix.view(), row.view()])
-            .map_err(|e| Error::Other(format!("ndarray concatenate: {e}")))?;
+        let new_matrix =
+            ndarray::concatenate(ndarray::Axis(0), &[self.matrix.view(), row.view()])
+                .map_err(|e| Error::Other(format!("ndarray concatenate: {e}")))?;
         self.matrix = new_matrix;
         self.binary_matrix.extend_from_slice(&packed);
         self.ids.push(id);

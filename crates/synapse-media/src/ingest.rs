@@ -69,13 +69,9 @@ pub fn add_video(db: &MediaDb, path: &str, sample_fps: f32) -> Result<Vec<DocId>
     let fps_str = format!("{sample_fps}");
     let status = Command::new("ffmpeg")
         .args([
-            "-y",
-            "-i",
-            path,
-            "-vf",
-            &format!("fps={fps_str}"),
-            "-q:v",
-            "5",
+            "-y", "-i", path,
+            "-vf", &format!("fps={fps_str}"),
+            "-q:v", "5",
             pattern.to_str().unwrap(),
         ])
         .output()
@@ -87,7 +83,9 @@ pub fn add_video(db: &MediaDb, path: &str, sample_fps: f32) -> Result<Vec<DocId>
     }
 
     let mut ids = vec![parent_id];
-    let mut entries: Vec<_> = std::fs::read_dir(&tmp)?.filter_map(|e| e.ok()).collect();
+    let mut entries: Vec<_> = std::fs::read_dir(&tmp)?
+        .filter_map(|e| e.ok())
+        .collect();
     entries.sort_by_key(|e| e.file_name());
 
     for (i, entry) in entries.iter().enumerate() {

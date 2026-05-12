@@ -11,9 +11,7 @@ pub struct Features {
 }
 
 pub fn ensure_schema(db: &Connection) -> Result<()> {
-    db.execute_batch(include_str!(
-        "../../../python/migrations/add_rerank_log.sql"
-    ))?;
+    db.execute_batch(include_str!("../../../python/migrations/add_rerank_log.sql"))?;
     Ok(())
 }
 

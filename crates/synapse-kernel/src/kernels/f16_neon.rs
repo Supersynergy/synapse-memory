@@ -17,9 +17,7 @@ pub fn dot_f16(a: &[u16], b: &[u16]) -> f32 {
 }
 
 #[cfg(not(target_arch = "aarch64"))]
-pub fn dot_f16(_a: &[u16], _b: &[u16]) -> f32 {
-    0.0
-}
+pub fn dot_f16(_a: &[u16], _b: &[u16]) -> f32 { 0.0 }
 
 #[inline]
 fn half_to_f32(h: u16) -> f32 {
@@ -27,15 +25,9 @@ fn half_to_f32(h: u16) -> f32 {
     let e = ((h >> 10) & 0x1f) as u32;
     let m = (h & 0x3ff) as u32;
     let bits = if e == 0 {
-        if m == 0 {
-            s << 31
-        } else {
-            let mut e2 = 1;
-            let mut m2 = m;
-            while (m2 & 0x400) == 0 {
-                m2 <<= 1;
-                e2 -= 1;
-            }
+        if m == 0 { s << 31 } else {
+            let mut e2 = 1; let mut m2 = m;
+            while (m2 & 0x400) == 0 { m2 <<= 1; e2 -= 1; }
             (s << 31) | (((127 - 15 + e2) as u32) << 23) | ((m2 & 0x3ff) << 13)
         }
     } else if e == 0x1f {

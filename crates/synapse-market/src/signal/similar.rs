@@ -39,7 +39,8 @@ impl RabitqSignalIndex {
 
     pub fn search(&self, query: &[f32], top_k: usize) -> Result<Vec<(SignalId, f32)>> {
         // nprobe = 20% of clusters gives good recall/speed trade-off for 768d vecs
-        let nprobe = ((self.inner.cluster_count() / 5).max(1)).min(self.inner.cluster_count());
+        let nprobe = ((self.inner.cluster_count() / 5).max(1))
+            .min(self.inner.cluster_count());
         let params = SearchParams::new(top_k, nprobe);
         let results = self
             .inner
@@ -57,14 +58,18 @@ impl RabitqSignalIndex {
             .map_err(|e| Error::Market(e.to_string()))?;
         // Save ids alongside: path + ".ids"
         let ids_path = path.with_extension("ids.bin");
-        let bytes: Vec<u8> = self.ids.iter().flat_map(|id| id.to_le_bytes()).collect();
+        let bytes: Vec<u8> = self
+            .ids
+            .iter()
+            .flat_map(|id| id.to_le_bytes())
+            .collect();
         std::fs::write(ids_path, bytes)?;
         Ok(())
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let inner =
-            IvfRabitqIndex::load_from_path(path).map_err(|e| Error::Market(e.to_string()))?;
+        let inner = IvfRabitqIndex::load_from_path(path)
+            .map_err(|e| Error::Market(e.to_string()))?;
         let ids_path = path.with_extension("ids.bin");
         let bytes = std::fs::read(ids_path)?;
         let ids: Vec<SignalId> = bytes

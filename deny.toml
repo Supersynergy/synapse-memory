@@ -20,6 +20,12 @@ ignore = [
     "RUSTSEC-2025-0141",
     # chrono-english 0.1.8 unmaintained — replacement (dateparser/parse_datetime) eval in progress.
     "RUSTSEC-2024-0395",
+    # instant 0.1.13 unmaintained — transitive via measure_time → tantivy → synapse-fts.
+    # No safe upgrade: tantivy 0.22 depends on measure_time which depends on instant. Track tantivy upgrade.
+    "RUSTSEC-2024-0384",
+    # lru 0.12.5 and 0.13.0 IterMut unsound — transitive. No fix released yet (RUSTSEC-2026-0002).
+    # Reach: internal LRU cache iteration. Not exposed in public API. Track: upgrade when lru fix lands.
+    "RUSTSEC-2026-0002",
 ]
 
 [licenses]

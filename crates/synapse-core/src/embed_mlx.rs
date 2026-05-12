@@ -50,9 +50,10 @@ struct Sidecar {
 
 impl Sidecar {
     fn spawn() -> Result<Self> {
-        let py = std::env::var("SYNAPSE_MLX_PYTHON").unwrap_or_else(|_| "python3".to_string());
-        let script =
-            std::env::var("SYNAPSE_MLX_SCRIPT").unwrap_or_else(|_| DEFAULT_SCRIPT.to_string());
+        let py = std::env::var("SYNAPSE_MLX_PYTHON")
+            .unwrap_or_else(|_| "python3".to_string());
+        let script = std::env::var("SYNAPSE_MLX_SCRIPT")
+            .unwrap_or_else(|_| DEFAULT_SCRIPT.to_string());
 
         let mut child = Command::new(&py)
             .arg(&script)
@@ -71,17 +72,13 @@ impl Sidecar {
             .take()
             .ok_or_else(|| Error::Other("mlx sidecar: no stdout".into()))?;
 
-        let mut s = Self {
-            child,
-            stdin,
-            stdout,
-        };
+        let mut s = Self { child, stdin, stdout };
 
         let ready = s.read_msg()?;
         let ready_ok = match &ready {
-            rmpv::Value::Map(m) => m
-                .iter()
-                .any(|(k, v)| k.as_str() == Some("ready") && v.as_bool() == Some(true)),
+            rmpv::Value::Map(m) => m.iter().any(|(k, v)| {
+                k.as_str() == Some("ready") && v.as_bool() == Some(true)
+            }),
             _ => false,
         };
         if !ready_ok {
@@ -234,9 +231,9 @@ impl TextEmbedder for MlxMetalEmbedder {
                             };
                             let mut v: Vec<f32> = Vec::with_capacity(row_arr.len());
                             for n in row_arr {
-                                let f = n
-                                    .as_f64()
-                                    .ok_or_else(|| Error::Other("mlx vec elem not float".into()))?;
+                                let f = n.as_f64().ok_or_else(|| {
+                                    Error::Other("mlx vec elem not float".into())
+                                })?;
                                 v.push(f as f32);
                             }
                             out.push(v);
@@ -471,8 +468,9 @@ mod tests {
     #[test]
     fn coalescer_flushes_lone_request_after_window() {
         use std::sync::Arc;
-        let fake: Arc<BatchFn> =
-            Arc::new(|texts: &[String]| Ok(texts.iter().map(|_| vec![0.0f32; 384]).collect()));
+        let fake: Arc<BatchFn> = Arc::new(|texts: &[String]| {
+            Ok(texts.iter().map(|_| vec![0.0f32; 384]).collect())
+        });
         let (tx, rx) = mpsc::channel::<CoalesceReq>();
         let _w = thread::spawn(move || coalesce_run(rx, fake));
 

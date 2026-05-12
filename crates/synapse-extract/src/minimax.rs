@@ -70,8 +70,8 @@ struct ChoiceMsg {
 
 impl MinimaxClient {
     pub fn from_env() -> Result<Self> {
-        let api_key =
-            std::env::var("MINIMAX_API_KEY").map_err(|_| anyhow!("MINIMAX_API_KEY not set"))?;
+        let api_key = std::env::var("MINIMAX_API_KEY")
+            .map_err(|_| anyhow!("MINIMAX_API_KEY not set"))?;
         let model = std::env::var("MINIMAX_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.into());
         let base = std::env::var("MINIMAX_API_BASE").unwrap_or_else(|_| DEFAULT_BASE.into());
         let timeout_ms: u64 = std::env::var("MINIMAX_TIMEOUT_MS")
@@ -81,45 +81,27 @@ impl MinimaxClient {
         let http = reqwest::blocking::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
             .build()?;
-        Ok(Self {
-            api_key,
-            model,
-            base,
-            http,
-        })
+        Ok(Self { api_key, model, base, http })
     }
 
     pub fn new(api_key: String, model: String, base: String, timeout_ms: u64) -> Result<Self> {
         let http = reqwest::blocking::Client::builder()
             .timeout(Duration::from_millis(timeout_ms))
             .build()?;
-        Ok(Self {
-            api_key,
-            model,
-            base,
-            http,
-        })
+        Ok(Self { api_key, model, base, http })
     }
 
     fn chat(&self, system: &str, user: &str, max_tokens: u32, json: bool) -> Result<String> {
         let req = ChatReq {
             model: &self.model,
             messages: vec![
-                Msg {
-                    role: "system",
-                    content: system,
-                },
-                Msg {
-                    role: "user",
-                    content: user,
-                },
+                Msg { role: "system", content: system },
+                Msg { role: "user", content: user },
             ],
             temperature: 0.0,
             max_tokens,
             response_format: if json {
-                Some(RespFmt {
-                    ty: "json_object".into(),
-                })
+                Some(RespFmt { ty: "json_object".into() })
             } else {
                 None
             },
@@ -172,9 +154,7 @@ impl MinimaxHooks {
         Self { client }
     }
     pub fn from_env() -> Result<Self> {
-        Ok(Self {
-            client: MinimaxClient::from_env()?,
-        })
+        Ok(Self { client: MinimaxClient::from_env()? })
     }
 }
 
@@ -186,9 +166,7 @@ impl PipelineHooks for MinimaxHooks {
             Err(_) => return Ok(vec![query.to_string()]),
         };
         #[derive(Deserialize)]
-        struct Out {
-            sub_queries: Vec<String>,
-        }
+        struct Out { sub_queries: Vec<String> }
         match serde_json::from_str::<Out>(&raw) {
             Ok(o) if !o.sub_queries.is_empty() => Ok(o.sub_queries),
             _ => Ok(vec![query.to_string()]),
@@ -197,19 +175,13 @@ impl PipelineHooks for MinimaxHooks {
 
     fn grade(&self, query: &str, doc: &str) -> CoreResult<f64> {
         let sys = "You are a Self-RAG relevance grader. Given a query and a document, output JSON {\"score\": <float 0..1>} where 1 = directly answers, 0 = irrelevant. No prose.";
-        let user = format!(
-            "Query: {}\n\nDocument:\n{}",
-            query,
-            &doc[..doc.len().min(2000)]
-        );
+        let user = format!("Query: {}\n\nDocument:\n{}", query, &doc[..doc.len().min(2000)]);
         let raw = match self.client.chat(sys, &user, 1024, true) {
             Ok(s) => s,
             Err(_) => return Ok(0.5),
         };
         #[derive(Deserialize)]
-        struct Out {
-            score: f64,
-        }
+        struct Out { score: f64 }
         match serde_json::from_str::<Out>(&raw) {
             Ok(o) => Ok(o.score.clamp(0.0, 1.0)),
             Err(_) => Ok(0.5),
@@ -220,10 +192,7 @@ impl PipelineHooks for MinimaxHooks {
         let sys = "Generate a single short hypothetical answer paragraph (<=80 words) that COULD plausibly answer the user's question. Output prose only, no preamble.";
         match self.client.chat(sys, query, 1024, false) {
             Ok(s) => Ok(s.trim().to_string()),
-            Err(_) => Ok(format!(
-                "{} relates to specific facts and recent context.",
-                query.trim()
-            )),
+            Err(_) => Ok(format!("{} relates to specific facts and recent context.", query.trim())),
         }
     }
 
@@ -244,9 +213,7 @@ impl PipelineHooks for MinimaxHooks {
                 // fallback identical to trait default
                 let mut out = String::new();
                 for s in items {
-                    if !out.is_empty() {
-                        out.push_str(" / ");
-                    }
+                    if !out.is_empty() { out.push_str(" / "); }
                     let head: String = s.chars().take(200).collect();
                     out.push_str(head.trim());
                 }
@@ -278,9 +245,7 @@ impl MinimaxExtractor {
         Self { client }
     }
     pub fn from_env() -> Result<Self> {
-        Ok(Self {
-            client: MinimaxClient::from_env()?,
-        })
+        Ok(Self { client: MinimaxClient::from_env()? })
     }
 }
 
@@ -299,9 +264,7 @@ pub struct ExtractItem {
     event_date: Option<String>,
 }
 
-fn default_conf() -> f64 {
-    0.8
-}
+fn default_conf() -> f64 { 0.8 }
 
 /// Mem0-v3 hierarchical-extract output: facts + summary + topics in ONE call.
 /// Shape mirrors mem0ai/mem0 v3 schema. Saves 2/3 of LLM round-trips vs v2.
@@ -352,16 +315,15 @@ impl MinimaxExtractor {
 }
 
 impl Extractor for MinimaxExtractor {
-    fn name(&self) -> &'static str {
-        "minimax-m2.7"
-    }
+    fn name(&self) -> &'static str { "minimax-m2.7" }
 
     fn extract(&self, text: &str) -> Result<Vec<ExtractedMemory>> {
         // Single-pass hierarchical (Mem0-v3): one LLM call → facts+summary+topics.
         // We discard summary/topics here; the worker daemon should call
         // `extract_hierarchical` directly to capture them for evolve/compact.
         let h = self.extract_hierarchical(text)?;
-        Ok(h.facts
+        Ok(h
+            .facts
             .into_iter()
             .map(|it| ExtractedMemory {
                 memory_type: MemoryType::parse(&it.ty),

@@ -21,8 +21,7 @@ mod explain_tests {
 
     #[test]
     fn explain_analyze_flag() {
-        let (inner, analyze) =
-            strip_explain("EXPLAIN ANALYZE SELECT id FROM docs LIMIT 5").unwrap();
+        let (inner, analyze) = strip_explain("EXPLAIN ANALYZE SELECT id FROM docs LIMIT 5").unwrap();
         assert!(analyze);
         assert_eq!(inner, "SELECT id FROM docs LIMIT 5");
     }
@@ -149,17 +148,9 @@ mod window_function_tests {
         let sql = "SELECT *, ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) AS rn FROM employees";
         let result = rewrite(sql);
         // No extensions detected
-        assert!(
-            result.extensions.is_empty(),
-            "unexpected extensions: {:?}",
-            result.extensions
-        );
+        assert!(result.extensions.is_empty(), "unexpected extensions: {:?}", result.extensions);
         // SQL unchanged (window function intact)
-        assert!(
-            result.sql.contains("ROW_NUMBER()"),
-            "sql modified: {}",
-            result.sql
-        );
+        assert!(result.sql.contains("ROW_NUMBER()"), "sql modified: {}", result.sql);
         assert!(result.sql.contains("OVER"), "sql modified: {}", result.sql);
     }
 

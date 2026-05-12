@@ -58,16 +58,11 @@ impl ColbertEmbedder {
     pub fn embed_doc(&self, text: &str) -> Result<Vec<Vec<f32>>> {
         #[cfg(feature = "colbert-jina")]
         {
-            return self
-                .inner
-                .embed(text, self.max_doc_tokens, jina::EmbedMode::Doc);
+            return self.inner.embed(text, self.max_doc_tokens, jina::EmbedMode::Doc);
         }
         #[cfg(not(feature = "colbert-jina"))]
         {
-            let n = text
-                .split_whitespace()
-                .count()
-                .clamp(1, self.max_doc_tokens);
+            let n = text.split_whitespace().count().clamp(1, self.max_doc_tokens);
             Ok(dummy_embed(text, n, 0x44_6F_63u64))
         }
     }
@@ -76,16 +71,11 @@ impl ColbertEmbedder {
     pub fn embed_query(&self, text: &str) -> Result<Vec<Vec<f32>>> {
         #[cfg(feature = "colbert-jina")]
         {
-            return self
-                .inner
-                .embed(text, self.max_query_tokens, jina::EmbedMode::Query);
+            return self.inner.embed(text, self.max_query_tokens, jina::EmbedMode::Query);
         }
         #[cfg(not(feature = "colbert-jina"))]
         {
-            let n = text
-                .split_whitespace()
-                .count()
-                .clamp(1, self.max_query_tokens);
+            let n = text.split_whitespace().count().clamp(1, self.max_query_tokens);
             Ok(dummy_embed(text, n, 0x51_72_79u64))
         }
     }
@@ -101,7 +91,8 @@ fn dummy_embed(seed_text: &str, n_tokens: usize, salt: u64) -> Vec<Vec<f32>> {
     });
     (0..n_tokens)
         .map(|t| {
-            let mut s = seed.wrapping_add((t as u64).wrapping_mul(0xDEAD_BEEF_CAFE_BABEu64));
+            let mut s =
+                seed.wrapping_add((t as u64).wrapping_mul(0xDEAD_BEEF_CAFE_BABEu64));
             let raw: Vec<f32> = (0..TOKEN_DIM)
                 .map(|_| {
                     s = s
@@ -170,8 +161,8 @@ mod jina {
             let cfg_path = dir.join("config.json");
             let cfg_str = std::fs::read_to_string(&cfg_path)
                 .with_context(|| format!("read config.json at {}", cfg_path.display()))?;
-            let bert_cfg: BertConfig =
-                serde_json::from_str(&cfg_str).context("parse config.json as BertConfig")?;
+            let bert_cfg: BertConfig = serde_json::from_str(&cfg_str)
+                .context("parse config.json as BertConfig")?;
 
             // Weights — try safetensors first, fallback pytorch_model.bin
             let weights_path = {
@@ -187,16 +178,21 @@ mod jina {
             }
 
             let vb = unsafe {
-                VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)?
+                VarBuilder::from_mmaped_safetensors(
+                    &[weights_path],
+                    DType::F32,
+                    &device,
+                )?
             };
 
-            let bert = BertModel::load(vb.pp("bert"), &bert_cfg).context("load BertModel")?;
+            let bert = BertModel::load(vb.pp("bert"), &bert_cfg)
+                .context("load BertModel")?;
 
             // Linear projection 768 → 128 (jina-colbert-v2 stores this as
             // `linear_projection.weight` / `.bias`)
             let proj_vb = vb.pp("linear_projection");
-            let proj =
-                linear(HIDDEN, TOKEN_DIM, proj_vb).context("load linear_projection (768→128)")?;
+            let proj = linear(HIDDEN, TOKEN_DIM, proj_vb)
+                .context("load linear_projection (768→128)")?;
 
             // Tokenizer
             let tok_path = dir.join("tokenizer.json");
@@ -209,39 +205,19 @@ mod jina {
                 "jina-colbert-v2 loaded"
             );
 
-            Ok(Self {
-                bert,
-                proj,
-                tokenizer,
-                device,
-            })
+            Ok(Self { bert, proj, tokenizer, device })
         }
 
         /// Tokenize + forward + project + L2-norm → Vec<Vec<f32>>
-        pub fn embed(
-            &self,
-            text: &str,
-            max_tokens: usize,
-            _mode: EmbedMode,
-        ) -> Result<Vec<Vec<f32>>> {
+        pub fn embed(&self, text: &str, max_tokens: usize, _mode: EmbedMode) -> Result<Vec<Vec<f32>>> {
             let enc = self
                 .tokenizer
                 .encode(text, true)
                 .map_err(|e| anyhow::anyhow!("tokenize: {e}"))?;
 
             let ids: Vec<u32> = enc.get_ids().iter().copied().take(max_tokens).collect();
-            let type_ids: Vec<u32> = enc
-                .get_type_ids()
-                .iter()
-                .copied()
-                .take(max_tokens)
-                .collect();
-            let mask: Vec<u32> = enc
-                .get_attention_mask()
-                .iter()
-                .copied()
-                .take(max_tokens)
-                .collect();
+            let type_ids: Vec<u32> = enc.get_type_ids().iter().copied().take(max_tokens).collect();
+            let mask: Vec<u32> = enc.get_attention_mask().iter().copied().take(max_tokens).collect();
             let seq_len = ids.len();
 
             let input_ids = Tensor::new(ids.as_slice(), &self.device)?.unsqueeze(0)?;
@@ -260,12 +236,7 @@ mod jina {
             let projected = self.proj.forward(&hidden)?;
 
             // To CPU f32 Vec
-            let data: Vec<f32> = projected
-                .to_dtype(DType::F32)?
-                .to_vec2::<f32>()?
-                .into_iter()
-                .flatten()
-                .collect();
+            let data: Vec<f32> = projected.to_dtype(DType::F32)?.to_vec2::<f32>()?.into_iter().flatten().collect();
 
             // Split into token vecs and L2-norm each
             let vecs: Vec<Vec<f32>> = data
@@ -283,11 +254,9 @@ mod jina {
         let api = Api::new()?;
         let repo = api.repo(Repo::new(HF_MODEL_ID.to_string(), RepoType::Model));
         // Pull the files we need
-        let config = repo.get("config.json")?;
-        let _tok = repo.get("tokenizer.json")?;
-        let _weights = repo
-            .get("model.safetensors")
-            .or_else(|_| repo.get("pytorch_model.bin"))?;
+        let config   = repo.get("config.json")?;
+        let _tok     = repo.get("tokenizer.json")?;
+        let _weights = repo.get("model.safetensors").or_else(|_| repo.get("pytorch_model.bin"))?;
         // All files land in the same cache dir — return parent of config
         Ok(config.parent().unwrap().to_path_buf())
     }
@@ -318,8 +287,8 @@ mod tests {
 
         let emb = ColbertEmbedder::from_hub().expect("model download/load");
         let text = "ColBERT late interaction";
-        let doc_vecs = emb.embed_doc(text).expect("embed_doc");
-        let qry_vecs = emb.embed_query(text).expect("embed_query");
+        let doc_vecs  = emb.embed_doc(text).expect("embed_doc");
+        let qry_vecs  = emb.embed_query(text).expect("embed_query");
 
         let n = doc_vecs.len();
         println!("doc tokens={n}  dim={}", doc_vecs[0].len());
@@ -334,11 +303,8 @@ mod tests {
 
         // Self-match: max_sim(doc, doc) ≈ n_tokens (each qi → exact same dj)
         let self_score = max_sim(&qry_vecs, &doc_vecs);
-        let threshold = 0.95 * (n as f32);
+        let threshold  = 0.95 * (n as f32);
         println!("max_sim self={self_score:.4}  threshold={threshold:.4}");
-        assert!(
-            self_score >= threshold,
-            "self max_sim {self_score} < {threshold}"
-        );
+        assert!(self_score >= threshold, "self max_sim {self_score} < {threshold}");
     }
 }

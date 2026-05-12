@@ -133,16 +133,11 @@ pub enum Response {
     Ids(Vec<i64>),
     Hits(Vec<Hit>),
     Docs(Vec<synapse_core::Doc>),
-    Stats {
-        docs: i64,
-        vecs: i64,
-    },
+    Stats { docs: i64, vecs: i64 },
     Ok,
     Err(String),
     /// Response to `Request::Embed`. Contains the raw embedding vector.
-    Embed {
-        vec: Vec<f32>,
-    },
+    Embed { vec: Vec<f32> },
     /// Response to `Request::BatchSearch`. One Hit-list per query, same order.
     BatchHits(Vec<Vec<Hit>>),
     /// Response to `Request::Sql`. Rows as msgpack arrays.

@@ -7,7 +7,7 @@
 //! TODO: register via synapse-mcp's tool registry instead of standalone.
 
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use synapse_core::types::PutRequest;
 extern crate blake3;
 
@@ -119,17 +119,17 @@ pub struct WingSearchInput {
 /// Dispatch a named MCP tool call. Returns JSON result or JSON error.
 pub fn dispatch(tool: &str, input: Value) -> Value {
     match tool {
-        "space_create" => space_create(input),
-        "wing_add" => wing_add(input),
-        "room_add" => room_add(input),
-        "drawer_put" => drawer_put(input),
-        "space_search" => space_search(input),
+        "space_create"  => space_create(input),
+        "wing_add"      => wing_add(input),
+        "room_add"      => room_add(input),
+        "drawer_put"    => drawer_put(input),
+        "space_search"  => space_search(input),
         "space_wake_up" => space_wake_up(input),
-        "drawer_list" => drawer_list(input),
-        "drawer_show" => drawer_show(input),
+        "drawer_list"   => drawer_list(input),
+        "drawer_show"   => drawer_show(input),
         "drawer_delete" => drawer_delete(input),
-        "space_sweep" => space_sweep(input),
-        "wing_search" => wing_search(input),
+        "space_sweep"   => space_sweep(input),
+        "wing_search"   => wing_search(input),
         other => json!({ "error": format!("unknown tool: {other}") }),
     }
 }
@@ -202,16 +202,11 @@ fn space_search(input: Value) -> Value {
             let emb_ref = inp.embedding.as_deref();
             match s.search(&inp.query, emb_ref, limit) {
                 Ok(hits) => {
-                    let results: Vec<Value> = hits
-                        .iter()
-                        .map(|h| {
-                            json!({
-                                "id": h.id,
-                                "text": h.text,
-                                "score": h.score,
-                            })
-                        })
-                        .collect();
+                    let results: Vec<Value> = hits.iter().map(|h| json!({
+                        "id": h.id,
+                        "text": h.text,
+                        "score": h.score,
+                    })).collect();
                     json!({ "ok": true, "results": results })
                 }
                 Err(e) => json!({ "error": e.to_string() }),
@@ -250,21 +245,19 @@ fn drawer_list(input: Value) -> Value {
                        WHERE uri LIKE ?1 AND (meta IS NULL OR meta NOT LIKE '%\"deleted\":true%') \
                        ORDER BY ts DESC LIMIT ?2 OFFSET ?3";
             let pattern = format!("{prefix}%");
-            let rows: Result<Vec<_>, _> = s.conn_ref().prepare(sql).and_then(|mut stmt| {
-                stmt.query_map(
-                    rusqlite::params![pattern, limit as i64, offset as i64],
-                    |row| {
-                        Ok(json!({
+            let rows: Result<Vec<_>, _> = s.conn_ref().prepare(sql)
+                .and_then(|mut stmt| {
+                    stmt.query_map(
+                        rusqlite::params![pattern, limit as i64, offset as i64],
+                        |row| Ok(json!({
                             "id":    row.get::<_, i64>(0)?,
                             "uri":   row.get::<_, String>(1)?,
                             "title": row.get::<_, Option<String>>(2)?,
                             "text":  row.get::<_, String>(3)?,
                             "ts":    row.get::<_, i64>(4)?,
-                        }))
-                    },
-                )
-                .and_then(|it| it.collect())
-            });
+                        })),
+                    ).and_then(|it| it.collect())
+                });
             match rows {
                 Ok(r) => json!({ "ok": true, "drawers": r }),
                 Err(e) => json!({ "error": e.to_string() }),
@@ -282,18 +275,16 @@ fn drawer_show(input: Value) -> Value {
     match crate::Space::open("show", &inp.space_path) {
         Ok(s) => {
             let sql = "SELECT id, uri, title, text, meta, ts FROM docs WHERE id = ?1";
-            let row = s
-                .conn_ref()
-                .query_row(sql, rusqlite::params![inp.id], |row| {
-                    Ok(json!({
-                        "id":    row.get::<_, i64>(0)?,
-                        "uri":   row.get::<_, Option<String>>(1)?,
-                        "title": row.get::<_, Option<String>>(2)?,
-                        "text":  row.get::<_, String>(3)?,
-                        "meta":  row.get::<_, Option<String>>(4)?,
-                        "ts":    row.get::<_, i64>(5)?,
-                    }))
-                });
+            let row = s.conn_ref().query_row(sql, rusqlite::params![inp.id], |row| {
+                Ok(json!({
+                    "id":    row.get::<_, i64>(0)?,
+                    "uri":   row.get::<_, Option<String>>(1)?,
+                    "title": row.get::<_, Option<String>>(2)?,
+                    "text":  row.get::<_, String>(3)?,
+                    "meta":  row.get::<_, Option<String>>(4)?,
+                    "ts":    row.get::<_, i64>(5)?,
+                }))
+            });
             match row {
                 Ok(r) => json!({ "ok": true, "drawer": r }),
                 Err(rusqlite::Error::QueryReturnedNoRows) => json!({ "error": "not found" }),
@@ -346,10 +337,9 @@ fn space_sweep(input: Value) -> Value {
     } else if let Some(ref msgs) = inp.messages {
         // Serialize messages to JSON array and route through chunk_session
         // so long messages get the same windowed splitting as session_text path.
-        let arr: Vec<serde_json::Value> = msgs
-            .iter()
-            .map(|m| serde_json::json!({"role": m.role, "content": m.content, "ts": m.ts}))
-            .collect();
+        let arr: Vec<serde_json::Value> = msgs.iter().map(|m| {
+            serde_json::json!({"role": m.role, "content": m.content, "ts": m.ts})
+        }).collect();
         if let Ok(raw) = serde_json::to_string(&arr) {
             chunk_session(&raw, source_id)
         } else {
@@ -366,19 +356,10 @@ fn space_sweep(input: Value) -> Value {
             for (idx, (chunk_text, meta)) in chunks.iter().enumerate() {
                 let canonical = format!("{}|{}|{}", inp.wing, inp.room, chunk_text);
                 let hash: [u8; 32] = *blake3::hash(canonical.as_bytes()).as_bytes();
-                let uri = format!(
-                    "spaces://{}/{}/sweep-{}",
-                    inp.wing,
-                    inp.room,
-                    &hex(&hash)[..16]
-                );
-                let exists: bool = s
-                    .conn_ref()
-                    .query_row(
-                        "SELECT 1 FROM docs WHERE uri = ?1",
-                        rusqlite::params![&uri],
-                        |_| Ok(true),
-                    )
+                let uri = format!("spaces://{}/{}/sweep-{}", inp.wing, inp.room, &hex(&hash)[..16]);
+                let exists: bool = s.conn_ref()
+                    .query_row("SELECT 1 FROM docs WHERE uri = ?1",
+                               rusqlite::params![&uri], |_| Ok(true))
                     .unwrap_or(false);
                 if exists {
                     skipped += 1;
@@ -412,20 +393,11 @@ fn chunk_session(raw: &str, source_id: &str) -> Vec<(String, serde_json::Value)>
     if let Ok(msgs) = serde_json::from_str::<Vec<serde_json::Value>>(raw) {
         let mut parsed: Vec<(String, serde_json::Value)> = Vec::new();
         for (msg_idx, m) in msgs.iter().enumerate() {
-            let Some(role) = m.get("role").and_then(|v| v.as_str()) else {
-                continue;
-            };
-            let Some(content) = m.get("content").and_then(|v| v.as_str()) else {
-                continue;
-            };
-            if content.trim().is_empty() {
-                continue;
-            }
-            let ts = m
-                .get("ts")
-                .or_else(|| m.get("timestamp"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let Some(role) = m.get("role").and_then(|v| v.as_str()) else { continue };
+            let Some(content) = m.get("content").and_then(|v| v.as_str()) else { continue };
+            if content.trim().is_empty() { continue; }
+            let ts = m.get("ts").or_else(|| m.get("timestamp"))
+                .and_then(|v| v.as_str()).unwrap_or("");
             let prefix = if ts.is_empty() {
                 format!("[{role}|msg{msg_idx}] ")
             } else {
@@ -442,31 +414,13 @@ fn chunk_session(raw: &str, source_id: &str) -> Vec<(String, serde_json::Value)>
     // Try line-by-line JSON messages (JSONL or embedded within a larger blob)
     let mut json_line_chunks: Vec<(String, serde_json::Value)> = Vec::new();
     for (msg_idx, line) in raw.lines().enumerate() {
-        if !line.trim_start().starts_with('{') {
-            continue;
-        }
-        let Ok(m) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
-        let Some(role) = m.get("role").and_then(|v| v.as_str()) else {
-            continue;
-        };
-        let Some(content) = m.get("content").and_then(|v| v.as_str()) else {
-            continue;
-        };
-        if content.trim().is_empty() {
-            continue;
-        }
+        if !line.trim_start().starts_with('{') { continue; }
+        let Ok(m) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+        let Some(role) = m.get("role").and_then(|v| v.as_str()) else { continue };
+        let Some(content) = m.get("content").and_then(|v| v.as_str()) else { continue };
+        if content.trim().is_empty() { continue; }
         let prefix = format!("[{role}|msg{msg_idx}] ");
-        split_message_content(
-            content,
-            &prefix,
-            role,
-            "",
-            msg_idx,
-            source_id,
-            &mut json_line_chunks,
-        );
+        split_message_content(content, &prefix, role, "", msg_idx, source_id, &mut json_line_chunks);
     }
     if !json_line_chunks.is_empty() {
         return json_line_chunks;
@@ -479,17 +433,13 @@ fn chunk_session(raw: &str, source_id: &str) -> Vec<(String, serde_json::Value)>
     let mut buf = String::new();
     for para in raw.split("\n\n") {
         let para = para.trim();
-        if para.is_empty() {
-            continue;
-        }
+        if para.is_empty() { continue; }
         if buf.len() + para.len() + 2 > MAX && !buf.is_empty() {
             let meta = serde_json::json!({"source": source_id, "chunk_type": "paragraph"});
             chunks.push((buf.trim().to_string(), meta));
             buf.clear();
         }
-        if !buf.is_empty() {
-            buf.push_str("\n\n");
-        }
+        if !buf.is_empty() { buf.push_str("\n\n"); }
         buf.push_str(para);
         if buf.len() >= TARGET {
             let meta = serde_json::json!({"source": source_id, "chunk_type": "paragraph"});
@@ -540,9 +490,7 @@ fn split_message_content(
         let meta = serde_json::json!({"role": role, "ts": ts, "msg_idx": msg_idx, "win": win_idx, "source": source_id});
         out.push((text, meta));
         win_idx += 1;
-        if end == total {
-            break;
-        }
+        if end == total { break; }
         start += step;
     }
 }
@@ -563,13 +511,11 @@ fn wing_search(input: Value) -> Value {
                         .into_iter()
                         .filter(|h| {
                             // Re-fetch uri for this id to apply wing filter
-                            s.conn_ref()
-                                .query_row(
-                                    "SELECT uri FROM docs WHERE id = ?1 AND uri LIKE ?2",
-                                    rusqlite::params![h.id, prefix],
-                                    |_| Ok(()),
-                                )
-                                .is_ok()
+                            s.conn_ref().query_row(
+                                "SELECT uri FROM docs WHERE id = ?1 AND uri LIKE ?2",
+                                rusqlite::params![h.id, prefix],
+                                |_| Ok(()),
+                            ).is_ok()
                         })
                         .take(k)
                         .map(|h| json!({ "id": h.id, "text": h.text, "score": h.score }))

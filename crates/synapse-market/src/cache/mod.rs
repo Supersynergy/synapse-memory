@@ -46,9 +46,6 @@ impl HotSet {
     }
 
     pub fn stats(&self) -> (u64, u64) {
-        (
-            self.hits.load(Ordering::Relaxed),
-            self.misses.load(Ordering::Relaxed),
-        )
+        (self.hits.load(Ordering::Relaxed), self.misses.load(Ordering::Relaxed))
     }
 }

@@ -6,4 +6,4 @@ pub mod backup;
 pub mod slowlog;
 
 pub use backup::{Backup, BackupTarget};
-pub use slowlog::{SlowEntry, SlowQueryLog};
+pub use slowlog::{SlowQueryLog, SlowEntry};

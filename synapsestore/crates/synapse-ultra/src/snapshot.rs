@@ -5,7 +5,7 @@ use std::{fs, mem};
 
 use memmap2::Mmap;
 use ndarray::Array2;
-use rusqlite::{Connection, OpenFlags, ffi::sqlite3_auto_extension};
+use rusqlite::{ffi::sqlite3_auto_extension, Connection, OpenFlags};
 
 use crate::error::{Result, UltraError};
 
@@ -84,7 +84,11 @@ pub struct Snapshot {
 pub fn brain_db_mtime(brain_path: &Path) -> u64 {
     fs::metadata(brain_path)
         .and_then(|m| m.modified())
-        .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs())
+        .map(|t| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        })
         .unwrap_or(0)
 }
 
@@ -97,7 +101,11 @@ pub fn load_mmap(snap_path: &Path, brain_mtime: u64) -> Option<Snapshot> {
         return None;
     }
     if header.version != SNAPSHOT_VERSION {
-        tracing::info!("snapshot version {} != {}, rebuilding", header.version, SNAPSHOT_VERSION);
+        tracing::info!(
+            "snapshot version {} != {}, rebuilding",
+            header.version,
+            SNAPSHOT_VERSION
+        );
         return None;
     }
     if header.mtime < brain_mtime {
@@ -111,23 +119,27 @@ pub fn load_mmap(snap_path: &Path, brain_mtime: u64) -> Option<Snapshot> {
     if mmap.len() < HEADER_BYTES + n * 8 + data_len {
         return None;
     }
-    let ids: Vec<i64> = (0..n).map(|i| {
-        let s = HEADER_BYTES + i * 8;
-        i64::from_le_bytes(mmap[s..s+8].try_into().unwrap())
-    }).collect();
+    let ids: Vec<i64> = (0..n)
+        .map(|i| {
+            let s = HEADER_BYTES + i * 8;
+            i64::from_le_bytes(mmap[s..s + 8].try_into().unwrap())
+        })
+        .collect();
     let data_start = HEADER_BYTES + n * 8;
     let data = &mmap[data_start..data_start + data_len];
 
     let (matrix_f32, matrix_f16) = if header.is_f16() {
         // decode f16 → f32, also keep f16 u16 array
-        let f16u: Vec<u16> = data.chunks_exact(2)
+        let f16u: Vec<u16> = data
+            .chunks_exact(2)
             .map(|c| u16::from_le_bytes(c.try_into().unwrap()))
             .collect();
         let f32v: Vec<f32> = f16u.iter().map(|&b| f16_bits_to_f32(b)).collect();
         let m = Array2::from_shape_vec((n, dim), f32v).ok()?;
         (m, f16u)
     } else {
-        let f32v: Vec<f32> = data.chunks_exact(4)
+        let f32v: Vec<f32> = data
+            .chunks_exact(4)
             .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
             .collect();
         let f16u: Vec<u16> = f32v.iter().map(|&x| f32_to_f16_bits(x)).collect();
@@ -135,7 +147,11 @@ pub fn load_mmap(snap_path: &Path, brain_mtime: u64) -> Option<Snapshot> {
         (m, f16u)
     };
 
-    Some(Snapshot { ids, matrix_f32, matrix_f16 })
+    Some(Snapshot {
+        ids,
+        matrix_f32,
+        matrix_f16,
+    })
 }
 
 pub fn rebuild(brain_path: &Path, snap_path: &Path) -> Result<Snapshot> {
@@ -169,7 +185,10 @@ pub fn rebuild(brain_path: &Path, snap_path: &Path) -> Result<Snapshot> {
             continue;
         }
         ids.push(id);
-        all_f32.extend(blob.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())));
+        all_f32.extend(
+            blob.chunks_exact(4)
+                .map(|c| f32::from_le_bytes(c.try_into().unwrap())),
+        );
     }
 
     let n = ids.len();
@@ -206,7 +225,11 @@ pub fn rebuild(brain_path: &Path, snap_path: &Path) -> Result<Snapshot> {
     f.flush()?;
 
     tracing::info!("snapshot written ({} rows, f16)", n);
-    Ok(Snapshot { ids, matrix_f32, matrix_f16 })
+    Ok(Snapshot {
+        ids,
+        matrix_f32,
+        matrix_f16,
+    })
 }
 
 pub fn normalize_rows(matrix: &mut Array2<f32>) {

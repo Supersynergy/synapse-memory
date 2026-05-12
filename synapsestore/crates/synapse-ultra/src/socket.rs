@@ -26,7 +26,12 @@ pub enum SocketMode {
 #[serde(tag = "op", content = "args")]
 pub enum UltraRequest {
     Ping,
-    Search { q: String, limit: usize, #[serde(default)] mode: SocketMode },
+    Search {
+        q: String,
+        limit: usize,
+        #[serde(default)]
+        mode: SocketMode,
+    },
     Stats,
 }
 
@@ -89,13 +94,18 @@ async fn handle_conn(
             Err(e) => return Err(e.into()),
         }
         let len = u32::from_le_bytes(len_buf) as usize;
-        if len == 0 || len > 1_048_576 { break; }
+        if len == 0 || len > 1_048_576 {
+            break;
+        }
         let mut body = vec![0u8; len];
         stream.read_exact(&mut body).await?;
 
         let req: UltraRequest = match rmp_serde::from_slice(&body) {
             Ok(r) => r,
-            Err(e) => { send_resp(&mut stream, &UltraResponse::Err(e.to_string())).await?; continue; }
+            Err(e) => {
+                send_resp(&mut stream, &UltraResponse::Err(e.to_string())).await?;
+                continue;
+            }
         };
 
         let resp = dispatch(req, &index, &cache, &embedder).await;
@@ -104,12 +114,20 @@ async fn handle_conn(
     Ok(())
 }
 
-async fn dispatch(req: UltraRequest, index: &SharedIndex, cache: &Arc<T0Cache>, embedder: &Arc<Embedder>) -> UltraResponse {
+async fn dispatch(
+    req: UltraRequest,
+    index: &SharedIndex,
+    cache: &Arc<T0Cache>,
+    embedder: &Arc<Embedder>,
+) -> UltraResponse {
     match req {
         UltraRequest::Ping => UltraResponse::Pong,
         UltraRequest::Stats => {
             let g = index.load();
-            UltraResponse::Stats { rows: g.n_rows(), cache_size: cache.len() }
+            UltraResponse::Stats {
+                rows: g.n_rows(),
+                cache_size: cache.len(),
+            }
         }
         UltraRequest::Search { q, limit, mode } => {
             let mode_byte: u8 = match mode {
@@ -121,7 +139,14 @@ async fn dispatch(req: UltraRequest, index: &SharedIndex, cache: &Arc<T0Cache>, 
             };
             let key = CacheKey::new(&q, mode_byte, limit as u16);
             if let Some(hits) = cache.get(&key) {
-                return UltraResponse::Hits(hits.iter().map(|h| HitMsg { id: h.id, score: h.score }).collect());
+                return UltraResponse::Hits(
+                    hits.iter()
+                        .map(|h| HitMsg {
+                            id: h.id,
+                            score: h.score,
+                        })
+                        .collect(),
+                );
             }
             match embedder.embed(&q) {
                 Err(e) => UltraResponse::Err(e.to_string()),
@@ -135,7 +160,14 @@ async fn dispatch(req: UltraRequest, index: &SharedIndex, cache: &Arc<T0Cache>, 
                         SocketMode::Hnsw => g.search_hnsw(&emb, limit),
                     };
                     cache.put(key, hits.clone());
-                    UltraResponse::Hits(hits.iter().map(|h| HitMsg { id: h.id, score: h.score }).collect())
+                    UltraResponse::Hits(
+                        hits.iter()
+                            .map(|h| HitMsg {
+                                id: h.id,
+                                score: h.score,
+                            })
+                            .collect(),
+                    )
                 }
             }
         }
@@ -143,8 +175,11 @@ async fn dispatch(req: UltraRequest, index: &SharedIndex, cache: &Arc<T0Cache>, 
 }
 
 async fn send_resp(stream: &mut UnixStream, resp: &UltraResponse) -> crate::error::Result<()> {
-    let bytes = rmp_serde::to_vec_named(resp).map_err(|e| crate::error::UltraError::Anyhow(anyhow::anyhow!(e)))?;
-    stream.write_all(&(bytes.len() as u32).to_le_bytes()).await?;
+    let bytes = rmp_serde::to_vec_named(resp)
+        .map_err(|e| crate::error::UltraError::Anyhow(anyhow::anyhow!(e)))?;
+    stream
+        .write_all(&(bytes.len() as u32).to_le_bytes())
+        .await?;
     stream.write_all(&bytes).await?;
     Ok(())
 }

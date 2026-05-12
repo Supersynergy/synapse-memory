@@ -3,9 +3,9 @@
 //! Thin wrapper — keeps synapse-multimodal independent from synapse-core at
 //! crate level (no circular dep). Callers link both and call `add_image_to_db`.
 
+use std::path::Path;
 use crate::embedder::MultimodalEmbedder;
 use crate::mime::MimeKind;
-use std::path::Path;
 
 /// Metadata stored alongside the image doc.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]

@@ -1,8 +1,8 @@
 //! In-memory cross-modal index for smoke tests and small collections.
 //! For production: wire into `synapse-core` `Db::add_with_embed`.
 
-use crate::embedder::{cosine_sim, MultimodalEmbedder};
 use std::path::Path;
+use crate::embedder::{cosine_sim, MultimodalEmbedder};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
@@ -33,10 +33,7 @@ pub struct CrossModalIndex {
 
 impl CrossModalIndex {
     pub fn new(dim: usize) -> Self {
-        Self {
-            dim,
-            docs: Vec::new(),
-        }
+        Self { dim, docs: Vec::new() }
     }
 
     pub fn add_text(&mut self, id: &str, text: &str, emb: &dyn MultimodalEmbedder) {
@@ -70,53 +67,32 @@ impl CrossModalIndex {
     }
 
     /// Text query → ranked hits across both text and image docs.
-    pub fn query_text(
-        &self,
-        query: &str,
-        emb: &dyn MultimodalEmbedder,
-        top_k: usize,
-    ) -> Vec<ModalHit> {
+    pub fn query_text(&self, query: &str, emb: &dyn MultimodalEmbedder, top_k: usize) -> Vec<ModalHit> {
         let q_embed = emb.embed_text(query);
         self.rank(&q_embed, top_k)
     }
 
     /// Image query → ranked hits across both text and image docs.
-    pub fn query_image(
-        &self,
-        path: &Path,
-        emb: &dyn MultimodalEmbedder,
-        top_k: usize,
-    ) -> anyhow::Result<Vec<ModalHit>> {
+    pub fn query_image(&self, path: &Path, emb: &dyn MultimodalEmbedder, top_k: usize) -> anyhow::Result<Vec<ModalHit>> {
         let q_embed = emb.embed_image(path)?;
         Ok(self.rank(&q_embed, top_k))
     }
 
     fn rank(&self, q: &[f32], top_k: usize) -> Vec<ModalHit> {
-        let mut scored: Vec<(f32, &ModalDoc)> = self
-            .docs
-            .iter()
+        let mut scored: Vec<(f32, &ModalDoc)> = self.docs.iter()
             .map(|d| (cosine_sim(q, &d.embed), d))
             .collect();
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
         scored.truncate(top_k);
-        scored
-            .into_iter()
-            .map(|(score, d)| ModalHit {
-                id: d.id.clone(),
-                content: d.content.clone(),
-                kind: d.kind,
-                score,
-            })
-            .collect()
+        scored.into_iter().map(|(score, d)| ModalHit {
+            id: d.id.clone(),
+            content: d.content.clone(),
+            kind: d.kind,
+            score,
+        }).collect()
     }
 
-    pub fn len(&self) -> usize {
-        self.docs.len()
-    }
-    pub fn is_empty(&self) -> bool {
-        self.docs.is_empty()
-    }
-    pub fn dim(&self) -> usize {
-        self.dim
-    }
+    pub fn len(&self) -> usize { self.docs.len() }
+    pub fn is_empty(&self) -> bool { self.docs.is_empty() }
+    pub fn dim(&self) -> usize { self.dim }
 }

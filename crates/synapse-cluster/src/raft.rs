@@ -80,9 +80,7 @@ impl SnapshotData {
 
     /// Find the latest snapshot index on disk (0 = none).
     pub async fn latest_index(dir: &Path) -> LogIndex {
-        let Ok(mut rd) = tokio::fs::read_dir(dir).await else {
-            return 0;
-        };
+        let Ok(mut rd) = tokio::fs::read_dir(dir).await else { return 0 };
         let mut best: LogIndex = 0;
         while let Ok(Some(entry)) = rd.next_entry().await {
             let name = entry.file_name();
@@ -205,11 +203,7 @@ impl WalLog {
         // Write to tmp then rename (atomic on POSIX)
         let tmp = self.path.with_extension("tmp");
         {
-            let mut f = OpenOptions::new()
-                .create(true)
-                .write(true)
-                .truncate(true)
-                .open(&tmp)?;
+            let mut f = OpenOptions::new().create(true).write(true).truncate(true).open(&tmp)?;
             for e in &entries {
                 let op_blob = serde_json::to_vec(&e.op)?;
                 let op_len = op_blob.len() as u32;
@@ -278,13 +272,9 @@ pub enum RaftMsg {
         follower_id: NodeId,
     },
     /// Client command: propose an Op.
-    Propose {
-        op: Op,
-    },
+    Propose { op: Op },
     /// Reply to Propose: Ok(committed_index) or Err.
-    ProposeReply {
-        index: Result<LogIndex, String>,
-    },
+    ProposeReply { index: Result<LogIndex, String> },
     /// Leader → follower: install a full snapshot (follower too far behind).
     InstallSnapshot {
         term: Term,
@@ -351,14 +341,7 @@ impl RaftState {
         Self {
             current_term: 0,
             voted_for: None,
-            log: vec![LogEntry {
-                term: 0,
-                index: 0,
-                op: Op::Delete {
-                    doc_id: "__sentinel__".into(),
-                    ts: 0,
-                },
-            }],
+            log: vec![LogEntry { term: 0, index: 0, op: Op::Delete { doc_id: "__sentinel__".into(), ts: 0 } }],
             commit_index: 0,
             last_applied: 0,
             role: Role::Follower,
@@ -420,10 +403,7 @@ impl RaftState {
         let sentinel = LogEntry {
             term: snap.last_included_term,
             index: snap.last_included_index,
-            op: Op::Delete {
-                doc_id: "__snap__".into(),
-                ts: 0,
-            },
+            op: Op::Delete { doc_id: "__snap__".into(), ts: 0 },
         };
         self.log.insert(0, sentinel);
         self.last_snapshot_index = snap.last_included_index;
@@ -433,11 +413,7 @@ impl RaftState {
     /// Returns true if compaction should run now.
     pub fn needs_compaction(&self) -> bool {
         // Count log entries above snapshot boundary
-        let live = self
-            .log
-            .iter()
-            .filter(|e| e.index > self.last_snapshot_index)
-            .count();
+        let live = self.log.iter().filter(|e| e.index > self.last_snapshot_index).count();
         live >= self.compaction_threshold
     }
 }
@@ -455,9 +431,7 @@ fn rand_u64() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos() as u64;
-    nanos
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407)
+    nanos.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407)
 }
 
 // ─── RaftNode ────────────────────────────────────────────────────────────────
@@ -532,11 +506,7 @@ impl RaftNode {
         for e in wal_entries {
             // Append to in-memory log (skip if already covered)
             if e.index > st.last_log_index() {
-                st.log.push(LogEntry {
-                    term: e.term,
-                    index: e.index,
-                    op: e.op,
-                });
+                st.log.push(LogEntry { term: e.term, index: e.index, op: e.op });
             }
         }
         if replayed > 0 {
@@ -634,11 +604,7 @@ impl RaftNode {
     pub async fn snapshot(&self) -> Result<SnapshotData> {
         let snap = self.state.read().await.snapshot();
         snap.save(snap.last_included_index).await?;
-        info!(
-            id = self.id,
-            index = snap.last_included_index,
-            "snapshot saved"
-        );
+        info!(id = self.id, index = snap.last_included_index, "snapshot saved");
         Ok(snap)
     }
 
@@ -668,10 +634,7 @@ impl RaftNode {
             let sentinel = LogEntry {
                 term: snap.last_included_term,
                 index,
-                op: Op::Delete {
-                    doc_id: "__snap__".into(),
-                    ts: 0,
-                },
+                op: Op::Delete { doc_id: "__snap__".into(), ts: 0 },
             };
             st.log.insert(0, sentinel);
             st.last_snapshot_index = index;
@@ -719,12 +682,7 @@ impl RaftNode {
                 };
                 drop(st);
                 let reply = send_raft_msg(peer.addr, msg).await?;
-                if let RaftMsg::InstallSnapshotReply {
-                    term,
-                    last_included_index,
-                    ..
-                } = reply
-                {
+                if let RaftMsg::InstallSnapshotReply { term, last_included_index, .. } = reply {
                     let mut st = self.state.write().await;
                     if term > st.current_term {
                         st.current_term = term;
@@ -743,14 +701,8 @@ impl RaftNode {
             let st = self.state.read().await;
             let next = st.next_index.get(&peer.id).copied().unwrap_or(1);
             let prev_index = next.saturating_sub(1);
-            let prev_term = st
-                .log
-                .iter()
-                .find(|e| e.index == prev_index)
-                .map(|e| e.term)
-                .unwrap_or(0);
-            let entries: Vec<LogEntry> =
-                st.log.iter().filter(|e| e.index >= next).cloned().collect();
+            let prev_term = st.log.iter().find(|e| e.index == prev_index).map(|e| e.term).unwrap_or(0);
+            let entries: Vec<LogEntry> = st.log.iter().filter(|e| e.index >= next).cloned().collect();
             RaftMsg::AppendEntries {
                 term: st.current_term,
                 leader_id: self.id,
@@ -761,13 +713,7 @@ impl RaftNode {
             }
         };
         let reply: RaftMsg = send_raft_msg(peer.addr, msg).await?;
-        if let RaftMsg::AppendEntriesReply {
-            term,
-            success,
-            match_index,
-            ..
-        } = reply
-        {
+        if let RaftMsg::AppendEntriesReply { term, success, match_index, .. } = reply {
             let mut st = self.state.write().await;
             if term > st.current_term {
                 st.current_term = term;
@@ -876,11 +822,7 @@ impl RaftNode {
                             }
                             st.role = Role::Leader;
                             st.current_leader = Some(node.id);
-                            info!(
-                                id = node.id,
-                                term = st.current_term,
-                                "became leader (single-node)"
-                            );
+                            info!(id = node.id, term = st.current_term, "became leader (single-node)");
                         }
                     }
                     let peers = node.peers.clone();
@@ -890,9 +832,7 @@ impl RaftNode {
                             match n.send_request_vote(&peer).await {
                                 Ok(true) => {
                                     let mut st = n.state.write().await;
-                                    if st.role != Role::Candidate {
-                                        return;
-                                    }
+                                    if st.role != Role::Candidate { return; }
                                     st.votes_received += 1;
                                     let quorum = (n.peers.len() + 1) / 2 + 1;
                                     if st.votes_received >= quorum {
@@ -952,12 +892,7 @@ async fn handle_raft_connection(mut stream: TcpStream, node: Arc<RaftNode>) -> R
 
 async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
     match msg {
-        RaftMsg::RequestVote {
-            term,
-            candidate_id,
-            last_log_index,
-            last_log_term,
-        } => {
+        RaftMsg::RequestVote { term, candidate_id, last_log_index, last_log_term } => {
             let mut st = node.state.write().await;
             if term > st.current_term {
                 st.current_term = term;
@@ -973,18 +908,10 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
                 st.voted_for = Some(candidate_id);
                 st.election_deadline = new_election_deadline();
             }
-            RaftMsg::RequestVoteReply {
-                term: st.current_term,
-                vote_granted,
-            }
+            RaftMsg::RequestVoteReply { term: st.current_term, vote_granted }
         }
         RaftMsg::AppendEntries {
-            term,
-            leader_id,
-            prev_log_index,
-            prev_log_term,
-            entries,
-            leader_commit,
+            term, leader_id, prev_log_index, prev_log_term, entries, leader_commit,
         } => {
             let mut st = node.state.write().await;
             if term < st.current_term {
@@ -1003,10 +930,7 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
 
             // Check prev_log consistency
             let prev_ok = prev_log_index == 0
-                || st
-                    .log
-                    .iter()
-                    .any(|e| e.index == prev_log_index && e.term == prev_log_term);
+                || st.log.iter().any(|e| e.index == prev_log_index && e.term == prev_log_term);
             if !prev_ok {
                 return RaftMsg::AppendEntriesReply {
                     term: st.current_term,
@@ -1033,11 +957,7 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
             if leader_commit > st.commit_index {
                 st.commit_index = leader_commit.min(st.last_log_index());
                 st.apply_committed();
-                debug!(
-                    id = node.id,
-                    commit = st.commit_index,
-                    "applied committed entries"
-                );
+                debug!(id = node.id, commit = st.commit_index, "applied committed entries");
             }
             let match_index = st.last_log_index();
             drop(st);
@@ -1054,17 +974,13 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
                 follower_id: node.id,
             }
         }
-        RaftMsg::Propose { op } => match node.propose(op).await {
-            Ok(idx) => RaftMsg::ProposeReply { index: Ok(idx) },
-            Err(e) => RaftMsg::ProposeReply {
-                index: Err(e.to_string()),
-            },
-        },
-        RaftMsg::InstallSnapshot {
-            term,
-            leader_id,
-            snapshot,
-        } => {
+        RaftMsg::Propose { op } => {
+            match node.propose(op).await {
+                Ok(idx) => RaftMsg::ProposeReply { index: Ok(idx) },
+                Err(e) => RaftMsg::ProposeReply { index: Err(e.to_string()) },
+            }
+        }
+        RaftMsg::InstallSnapshot { term, leader_id, snapshot } => {
             let last_index = snapshot.last_included_index;
             let mut st = node.state.write().await;
             if term >= st.current_term {
@@ -1073,11 +989,7 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
                 st.current_leader = Some(leader_id);
                 st.election_deadline = new_election_deadline();
                 st.apply_snapshot(snapshot);
-                info!(
-                    id = node.id,
-                    index = last_index,
-                    "installed snapshot from leader"
-                );
+                info!(id = node.id, index = last_index, "installed snapshot from leader");
             }
             RaftMsg::InstallSnapshotReply {
                 term: st.current_term,
@@ -1085,9 +997,7 @@ async fn process_msg(msg: RaftMsg, node: &Arc<RaftNode>) -> RaftMsg {
                 last_included_index: last_index,
             }
         }
-        _ => RaftMsg::ProposeReply {
-            index: Err("unexpected msg".into()),
-        },
+        _ => RaftMsg::ProposeReply { index: Err("unexpected msg".into()) },
     }
 }
 
@@ -1098,9 +1008,7 @@ const MAX_FRAME: u32 = 16 * 1024 * 1024;
 async fn send_raft_msg_to_stream(stream: &mut TcpStream, msg: &RaftMsg) -> Result<()> {
     let bytes = serde_json::to_vec(msg)?;
     let len = bytes.len() as u32;
-    if len > MAX_FRAME {
-        bail!("raft frame too large");
-    }
+    if len > MAX_FRAME { bail!("raft frame too large"); }
     stream.write_all(&len.to_le_bytes()).await?;
     stream.write_all(&bytes).await?;
     Ok(())
@@ -1110,9 +1018,7 @@ async fn recv_raft_msg(stream: &mut TcpStream) -> Result<RaftMsg> {
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf).await?;
     let len = u32::from_le_bytes(len_buf);
-    if len > MAX_FRAME {
-        bail!("raft frame too large");
-    }
+    if len > MAX_FRAME { bail!("raft frame too large"); }
     let mut buf = vec![0u8; len as usize];
     stream.read_exact(&mut buf).await?;
     Ok(serde_json::from_slice(&buf)?)

@@ -78,7 +78,7 @@ impl ClapEmbedder {
         anyhow::ensure!(!samples.is_empty(), "no audio samples from {path}");
         let mel = mel_spectrogram(&samples);
         anyhow::ensure!(!mel.is_empty(), "no mel frames from {path}");
-        let pooled = mean_pool_mel(&mel); // N_MELS-dim
+        let pooled = mean_pool_mel(&mel);          // N_MELS-dim
         let padded = tile_to_dim(pooled, EMBED_DIM); // 512-dim
         Ok(l2_normalise(padded))
     }
@@ -93,9 +93,7 @@ impl ClapEmbedder {
 }
 
 impl Default for ClapEmbedder {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 // ── Audio decode ──────────────────────────────────────────────────────────────
@@ -104,17 +102,11 @@ fn decode_audio_mono_f32(path: &str) -> Result<Vec<f32>> {
     // ffmpeg: decode → mono → 48kHz → f32 little-endian PCM on stdout
     let out = Command::new("ffmpeg")
         .args([
-            "-y",
-            "-i",
-            path,
-            "-ac",
-            "1",
-            "-ar",
-            &SAMPLE_RATE.to_string(),
-            "-f",
-            "f32le",
-            "-acodec",
-            "pcm_f32le",
+            "-y", "-i", path,
+            "-ac", "1",
+            "-ar", &SAMPLE_RATE.to_string(),
+            "-f", "f32le",
+            "-acodec", "pcm_f32le",
             "pipe:1",
         ])
         .output()
@@ -123,17 +115,14 @@ fn decode_audio_mono_f32(path: &str) -> Result<Vec<f32>> {
     anyhow::ensure!(
         out.status.success() || !out.stdout.is_empty(),
         "ffmpeg decode failed for {path}: {}",
-        String::from_utf8_lossy(&out.stderr)
-            .lines()
-            .last()
-            .unwrap_or("")
+        String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or("")
     );
 
     let bytes = out.stdout;
     let n = bytes.len() / 4;
     let mut samples = vec![0.0f32; n];
     for (i, s) in samples.iter_mut().enumerate() {
-        *s = f32::from_le_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap());
+        *s = f32::from_le_bytes(bytes[i*4..i*4+4].try_into().unwrap());
     }
     Ok(samples)
 }
@@ -355,7 +344,7 @@ mod tests {
         let siren_text = emb.embed_text("siren alarm emergency two-tone");
         let music_text = emb.embed_text("music chord melody harmony guitar");
 
-        let sim = |a: &[f32], b: &[f32]| -> f32 { a.iter().zip(b).map(|(x, y)| x * y).sum() };
+        let sim = |a: &[f32], b: &[f32]| -> f32 { a.iter().zip(b).map(|(x,y)| x*y).sum() };
 
         // audio-to-audio: siren vs music must differ
         let aa_sim = sim(&siren_audio, &music_audio);

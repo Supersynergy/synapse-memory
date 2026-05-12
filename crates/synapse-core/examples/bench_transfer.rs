@@ -71,5 +71,7 @@ fn main() {
     eprintln!("batch latency p50  : {} ms", p50 / 1000);
     eprintln!("batch latency p99  : {} ms", p99 / 1000);
     eprintln!("batch latency p100 : {} ms", p100 / 1000);
-    eprintln!("(batch={BATCH} transfers/tx, synchronous=OFF, WAL, no-embed, FTS5 dedup hash)");
+    eprintln!(
+        "(batch={BATCH} transfers/tx, synchronous=OFF, WAL, no-embed, FTS5 dedup hash)"
+    );
 }

@@ -77,7 +77,9 @@ pub struct T0Cache {
 impl T0Cache {
     pub fn new(total_cap: usize) -> Self {
         let per_shard = (total_cap / SHARDS).max(64);
-        let shards = (0..SHARDS).map(|_| Mutex::new(Shard::new(per_shard))).collect();
+        let shards = (0..SHARDS)
+            .map(|_| Mutex::new(Shard::new(per_shard)))
+            .collect();
         T0Cache { shards }
     }
 
@@ -105,7 +107,10 @@ impl T0Cache {
     }
 
     pub fn len(&self) -> usize {
-        self.shards.iter().map(|s| s.lock().unwrap().map.len()).sum()
+        self.shards
+            .iter()
+            .map(|s| s.lock().unwrap().map.len())
+            .sum()
     }
 }
 

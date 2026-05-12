@@ -17,9 +17,7 @@ fn make_rng_vec(seed: u64, len: usize) -> Vec<f32> {
     let mut x = seed.wrapping_add(1);
     let mut v = Vec::with_capacity(len);
     for _ in 0..len {
-        x = x
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         v.push(((x >> 33) as f32) / (u32::MAX as f32) * 2.0 - 1.0);
     }
     // normalise

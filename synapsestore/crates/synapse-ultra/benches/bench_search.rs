@@ -9,7 +9,10 @@ fn make_matrix(n: usize, dim: usize) -> (Array2<f32>, Vec<u16>) {
     let data: Vec<f32> = (0..n * dim).map(|i| (i as f32).sin()).collect();
     let mut m = Array2::from_shape_vec((n, dim), data).unwrap();
     synapse_ultra::snapshot::normalize_rows(&mut m);
-    let f16: Vec<u16> = m.iter().map(|&x| half::f16::from_f32(x).to_bits()).collect();
+    let f16: Vec<u16> = m
+        .iter()
+        .map(|&x| half::f16::from_f32(x).to_bits())
+        .collect();
     (m, f16)
 }
 

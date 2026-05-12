@@ -11,11 +11,11 @@
 //!   Each slot holds a PreparedStatementCache (max 1000 entries, LRU).
 //!   The backing Store is Arc-shared (read path: zero-copy, write path: serialized).
 
-use lru::LruCache;
-use parking_lot::Mutex;
-use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use parking_lot::Mutex;
+use lru::LruCache;
+use std::num::NonZeroUsize;
 
 use synapse_libsql::Store;
 
@@ -70,9 +70,7 @@ impl StmtCache {
         self.inner.lock().pop(&id);
     }
 
-    pub fn len(&self) -> usize {
-        self.inner.lock().len()
-    }
+    pub fn len(&self) -> usize { self.inner.lock().len() }
 }
 
 /// A logical connection slot.
@@ -84,11 +82,7 @@ pub struct Conn {
 
 impl Conn {
     pub fn new(id: u64, store: Arc<dyn Store>, stmt_cap: usize) -> Self {
-        Self {
-            id,
-            store,
-            stmts: StmtCache::new(stmt_cap),
-        }
+        Self { id, store, stmts: StmtCache::new(stmt_cap) }
     }
 }
 
@@ -133,17 +127,13 @@ impl ConnPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use synapse_libsql::{LibsqlError, QueryResult, Store};
+    use synapse_libsql::{Store, QueryResult, LibsqlError};
 
     struct DummyStore;
     #[async_trait::async_trait]
     impl Store for DummyStore {
-        async fn query(&self, _: &str) -> Result<QueryResult, LibsqlError> {
-            Ok(QueryResult::default())
-        }
-        async fn exec(&self, _: &str) -> Result<u64, LibsqlError> {
-            Ok(0)
-        }
+        async fn query(&self, _: &str) -> Result<QueryResult, LibsqlError> { Ok(QueryResult::default()) }
+        async fn exec(&self, _: &str) -> Result<u64, LibsqlError> { Ok(0) }
     }
 
     #[test]

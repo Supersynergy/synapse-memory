@@ -34,12 +34,7 @@ impl MrlEmbedder {
     #[must_use]
     pub fn new(inner: Box<dyn TextEmbedder>, k: usize) -> Self {
         assert!(k > 0, "MRL k must be > 0");
-        assert!(
-            k <= inner.dim(),
-            "MRL k {} exceeds inner dim {}",
-            k,
-            inner.dim()
-        );
+        assert!(k <= inner.dim(), "MRL k {} exceeds inner dim {}", k, inner.dim());
         let name = format!("{}@mrl{k}", inner.name());
         Self { inner, k, name }
     }
@@ -72,12 +67,8 @@ mod tests {
         dim: usize,
     }
     impl TextEmbedder for MockEmbedder {
-        fn name(&self) -> &str {
-            "mock"
-        }
-        fn dim(&self) -> usize {
-            self.dim
-        }
+        fn name(&self) -> &str { "mock" }
+        fn dim(&self) -> usize { self.dim }
         fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
             // deterministic: each output is [1, 2, 3, ..., dim]
             Ok(texts

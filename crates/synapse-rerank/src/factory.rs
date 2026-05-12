@@ -25,9 +25,7 @@ pub fn build_reranker_from_env() -> Box<dyn Reranker> {
                 return Box::new(r);
             }
             Err(e) => {
-                tracing::warn!(
-                    "LightGbmReranker load failed ({e}) — falling back to IdentityReranker"
-                );
+                tracing::warn!("LightGbmReranker load failed ({e}) — falling back to IdentityReranker");
                 return Box::new(IdentityReranker);
             }
         }
@@ -41,9 +39,7 @@ pub fn build_reranker_from_env() -> Box<dyn Reranker> {
                 return Box::new(r);
             }
             Err(e) => {
-                tracing::warn!(
-                    "OnnxCrossEncoder init failed ({e}) — falling back to IdentityReranker"
-                );
+                tracing::warn!("OnnxCrossEncoder init failed ({e}) — falling back to IdentityReranker");
                 return Box::new(IdentityReranker);
             }
         }

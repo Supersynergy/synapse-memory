@@ -15,4 +15,4 @@ pub mod index;
 pub mod posting;
 pub mod search;
 
-pub use index::{SpannConfig, SpannIndex};
+pub use index::{SpannIndex, SpannConfig};

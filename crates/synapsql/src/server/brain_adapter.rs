@@ -27,19 +27,15 @@
 //! Per-slot LRU cache (capacity 256) maps `blake3(sql)` → cached statement.
 //! DDL invalidates the cache. Cache-hit skips `prepare()` entirely.
 
-use crate::parser::rewriter::{rewrite, Extension};
-#[cfg(any(feature = "embed", test))]
-use crate::parser::rewriter::{PredicateOp as RewritePredicateOp, ScalarPredicate};
-use async_trait::async_trait;
-use lru::LruCache;
-use parking_lot::Mutex;
-use rusqlite::{Connection, OpenFlags};
-use std::num::NonZeroUsize;
 use std::sync::Arc;
+use async_trait::async_trait;
+use parking_lot::Mutex;
+use lru::LruCache;
+use std::num::NonZeroUsize;
+use rusqlite::{Connection, OpenFlags};
+use synapse_libsql::{QueryResult, Store as LibsqlStore, LibsqlError};
 use synapse_core::db::Store as CoreStore;
-#[cfg(any(feature = "embed", test))]
-use synapse_core::types::{MetadataPredicate, SearchOptions};
-use synapse_libsql::{LibsqlError, QueryResult, Store as LibsqlStore};
+use crate::parser::rewriter::{rewrite, Extension};
 
 // ── constants ──────────────────────────────────────────────────────────────────
 
@@ -64,10 +60,9 @@ impl Slot {
         let conn = Connection::open_with_flags(
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE
-                | OpenFlags::SQLITE_OPEN_CREATE
-                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|e| LibsqlError::Backend(e.to_string()))?;
+            | OpenFlags::SQLITE_OPEN_CREATE
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        ).map_err(|e| LibsqlError::Backend(e.to_string()))?;
 
         // Set busy_timeout first so subsequent pragmas wait on any transient lock.
         conn.pragma_update(None, "busy_timeout", 10000_i64)
@@ -79,7 +74,7 @@ impl Slot {
             .map_err(|e| LibsqlError::Backend(e.to_string()))?;
         conn.pragma_update(None, "mmap_size", 1_073_741_824_i64)
             .map_err(|e| LibsqlError::Backend(e.to_string()))?;
-        conn.pragma_update(None, "cache_size", -65_536_i64) // 64 MB per slot
+        conn.pragma_update(None, "cache_size", -65_536_i64)  // 64 MB per slot
             .map_err(|e| LibsqlError::Backend(e.to_string()))?;
 
         Ok(Slot {
@@ -152,7 +147,8 @@ pub struct BrainAdapter {
 impl BrainAdapter {
     pub fn open(path: &str) -> Result<Self, LibsqlError> {
         // 1. Register sqlite-vec extension and run migrations via CoreStore.
-        let store = CoreStore::open(path).map_err(|e| LibsqlError::Backend(e.to_string()))?;
+        let store = CoreStore::open(path)
+            .map_err(|e| LibsqlError::Backend(e.to_string()))?;
 
         // 2. Detect pool size from tokio worker count (fallback: 4).
         let pool_size = tokio::runtime::Handle::try_current()
@@ -161,7 +157,8 @@ impl BrainAdapter {
             .unwrap_or(4);
 
         // 3. Open pool — sqlite-vec auto_extension already registered globally.
-        let pool = Pool::new(path, pool_size).map_err(|e| LibsqlError::Backend(e.to_string()))?;
+        let pool = Pool::new(path, pool_size)
+            .map_err(|e| LibsqlError::Backend(e.to_string()))?;
 
         Ok(Self {
             inner: Arc::new(Mutex::new(store)),
@@ -220,7 +217,6 @@ impl LibsqlStore for BrainAdapter {
                         {
                             use synapse_core::embed::Embedder;
                             use synapse_core::types::SearchMode;
-                            let opts = search_options_from_extensions(&rw.extensions);
                             let embedder = Embedder::new()
                                 .map_err(|e| LibsqlError::Backend(e.to_string()))?;
                             let query_str = extract_vec_query_string(&sql_owned)
@@ -228,19 +224,12 @@ impl LibsqlStore for BrainAdapter {
                             let emb = embedder.embed_one(&query_str)
                                 .map_err(|e| LibsqlError::Backend(e.to_string()))?;
                             let store = inner.lock();
-                            let limit = _op.k;
-                            let hits = if opts.filter.is_some() {
-                                store.search_with_options(
-                                    &query_str,
-                                    SearchMode::Vec,
-                                    Some(&emb),
-                                    limit,
-                                    &opts,
-                                )
-                            } else {
-                                store.search(&query_str, SearchMode::Vec, Some(&emb), limit)
-                            }
-                            .map_err(|e| LibsqlError::Backend(e.to_string()))?;
+                            let hits = store.search(
+                                &query_str,
+                                SearchMode::Vec,
+                                Some(&emb),
+                                50,
+                            ).map_err(|e| LibsqlError::Backend(e.to_string()))?;
                             let rows: Vec<Vec<u8>> = hits.iter()
                                 .map(|h| format!("{}\t{:.6}", h.id, h.score).into_bytes())
                                 .collect();
@@ -259,24 +248,17 @@ impl LibsqlStore for BrainAdapter {
                         {
                             use synapse_core::embed::Embedder;
                             use synapse_core::types::SearchMode;
-                            let opts = search_options_from_extensions(&rw.extensions);
                             let embedder = Embedder::new()
                                 .map_err(|e| LibsqlError::Backend(e.to_string()))?;
                             let emb = embedder.embed_one(query_param)
                                 .map_err(|e| LibsqlError::Backend(e.to_string()))?;
                             let store = inner.lock();
-                            let hits = if opts.filter.is_some() {
-                                store.search_with_options(
-                                    query_param,
-                                    SearchMode::Hybrid,
-                                    Some(&emb),
-                                    50,
-                                    &opts,
-                                )
-                            } else {
-                                store.search(query_param, SearchMode::Hybrid, Some(&emb), 50)
-                            }
-                            .map_err(|e| LibsqlError::Backend(e.to_string()))?;
+                            let hits = store.search(
+                                query_param,
+                                SearchMode::Hybrid,
+                                Some(&emb),
+                                50,
+                            ).map_err(|e| LibsqlError::Backend(e.to_string()))?;
                             let rows: Vec<Vec<u8>> = hits.iter()
                                 .map(|h| format!("{}\t{:.6}", h.id, h.score).into_bytes())
                                 .collect();
@@ -316,9 +298,7 @@ impl LibsqlStore for BrainAdapter {
 
         tokio::task::spawn_blocking(move || {
             let mut slot = pool.acquire();
-            let n = slot
-                .conn
-                .execute(&sql_owned, [])
+            let n = slot.conn.execute(&sql_owned, [])
                 .map_err(|e| LibsqlError::Backend(e.to_string()))?;
             // Invalidate stmt cache on DDL
             if Slot::is_ddl(&sql_owned) {
@@ -334,113 +314,12 @@ impl LibsqlStore for BrainAdapter {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-/// Translate SQL-level scalar pushdowns into synapse-core metadata filters.
-///
-/// Inspired by DataFusion/SurrealDB/Qdrant-style filtered ANN execution:
-/// extract cheap scalar predicates before vector work, pass them as
-/// `SearchOptions`, then let core oversample and post-filter for recall.
-#[cfg(any(feature = "embed", test))]
-fn search_options_from_extensions(exts: &[Extension]) -> SearchOptions {
-    let mut predicates = Vec::new();
-
-    for ext in exts {
-        if let Extension::PredicatePushdown { predicates: pushed } = ext {
-            predicates.extend(pushed.iter().filter_map(metadata_predicate_from_scalar));
-        }
-    }
-
-    let filter = match predicates.len() {
-        0 => None,
-        1 => predicates.into_iter().next(),
-        _ => Some(MetadataPredicate::And(predicates)),
-    };
-
-    SearchOptions {
-        filter,
-        ..Default::default()
-    }
-}
-
-#[cfg(any(feature = "embed", test))]
-fn metadata_predicate_from_scalar(pred: &ScalarPredicate) -> Option<MetadataPredicate> {
-    let key = pred.column.rsplit('.').next()?.trim().to_owned();
-    if key.is_empty() {
-        return None;
-    }
-
-    match pred.op {
-        RewritePredicateOp::Eq => Some(MetadataPredicate::Eq {
-            key,
-            value: scalar_json_value(&pred.value),
-        }),
-        RewritePredicateOp::Ne => Some(MetadataPredicate::Ne {
-            key,
-            value: scalar_json_value(&pred.value),
-        }),
-        RewritePredicateOp::Lt => parse_numeric_predicate(&key, &pred.value, |key, value| {
-            MetadataPredicate::Lt { key, value }
-        }),
-        RewritePredicateOp::Le => parse_numeric_predicate(&key, &pred.value, |key, value| {
-            MetadataPredicate::Lte { key, value }
-        }),
-        RewritePredicateOp::Gt => parse_numeric_predicate(&key, &pred.value, |key, value| {
-            MetadataPredicate::Gt { key, value }
-        }),
-        RewritePredicateOp::Ge => parse_numeric_predicate(&key, &pred.value, |key, value| {
-            MetadataPredicate::Gte { key, value }
-        }),
-    }
-}
-
-#[cfg(any(feature = "embed", test))]
-fn parse_numeric_predicate(
-    key: &str,
-    raw: &str,
-    f: impl FnOnce(String, f64) -> MetadataPredicate,
-) -> Option<MetadataPredicate> {
-    let n = raw
-        .trim()
-        .trim_matches(|c| c == '\'' || c == '"')
-        .parse::<f64>()
-        .ok()?;
-    Some(f(key.to_owned(), n))
-}
-
-#[cfg(any(feature = "embed", test))]
-fn scalar_json_value(raw: &str) -> serde_json::Value {
-    let trimmed = raw.trim();
-    if let Some(param) = trimmed.strip_prefix(':') {
-        return serde_json::Value::String(param.to_owned());
-    }
-
-    let unquoted = trimmed.trim_matches(|c| c == '\'' || c == '"');
-    if let Ok(n) = unquoted.parse::<i64>() {
-        return serde_json::json!(n);
-    }
-    if let Ok(n) = unquoted.parse::<f64>() {
-        return serde_json::json!(n);
-    }
-    match unquoted.to_ascii_lowercase().as_str() {
-        "true" => serde_json::Value::Bool(true),
-        "false" => serde_json::Value::Bool(false),
-        "null" => serde_json::Value::Null,
-        _ => serde_json::Value::String(unquoted.to_owned()),
-    }
-}
-
 /// Execute `sql` on `slot`, using the stmt cache for SELECTs/reads.
 /// `bind_val`: optional single text bind parameter (for FTS5 MATCH queries).
-fn exec_with_cache(
-    slot: &mut Slot,
-    sql: &str,
-    bind_val: Option<&str>,
-) -> Result<QueryResult, LibsqlError> {
+fn exec_with_cache(slot: &mut Slot, sql: &str, bind_val: Option<&str>) -> Result<QueryResult, LibsqlError> {
     let trimmed = sql.trim_start();
     let upper6 = &trimmed[..trimmed.len().min(6)].to_ascii_uppercase();
-    let is_read = upper6 == "SELECT"
-        || upper6.starts_with("WITH")
-        || upper6.starts_with("PRAGMA")
-        || upper6.starts_with("EXPLAIN");
+    let is_read = upper6 == "SELECT" || upper6.starts_with("WITH") || upper6.starts_with("PRAGMA") || upper6.starts_with("EXPLAIN");
 
     if Slot::is_ddl(sql) {
         slot.stmt_cache.clear();
@@ -454,54 +333,38 @@ fn exec_with_cache(
         // and rely on rusqlite's internal statement cache via `prepare_cached`.
         let _ = slot.stmt_cache.get_or_insert(fp, || sql.to_owned());
 
-        let mut stmt = slot
-            .conn
-            .prepare_cached(sql)
+        let mut stmt = slot.conn.prepare_cached(sql)
             .map_err(|e| LibsqlError::Backend(e.to_string()))?;
         let col_count = stmt.column_count();
         let mut rows = Vec::new();
 
         let mut iter = if let Some(val) = bind_val {
-            stmt.query([val])
-                .map_err(|e| LibsqlError::Backend(e.to_string()))?
+            stmt.query([val]).map_err(|e| LibsqlError::Backend(e.to_string()))?
         } else {
-            stmt.query([])
-                .map_err(|e| LibsqlError::Backend(e.to_string()))?
+            stmt.query([]).map_err(|e| LibsqlError::Backend(e.to_string()))?
         };
 
-        while let Some(row) = iter
-            .next()
-            .map_err(|e| LibsqlError::Backend(e.to_string()))?
-        {
+        while let Some(row) = iter.next().map_err(|e| LibsqlError::Backend(e.to_string()))? {
             let mut parts = Vec::with_capacity(col_count);
             for i in 0..col_count {
-                let val: rusqlite::types::Value = row
-                    .get(i)
+                let val: rusqlite::types::Value = row.get(i)
                     .map_err(|e| LibsqlError::Backend(e.to_string()))?;
                 let s = match val {
-                    rusqlite::types::Value::Null => "NULL".to_owned(),
-                    rusqlite::types::Value::Integer(n) => n.to_string(),
-                    rusqlite::types::Value::Real(f) => f.to_string(),
-                    rusqlite::types::Value::Text(t) => t,
-                    rusqlite::types::Value::Blob(b) => format!("<blob {} bytes>", b.len()),
+                    rusqlite::types::Value::Null        => "NULL".to_owned(),
+                    rusqlite::types::Value::Integer(n)  => n.to_string(),
+                    rusqlite::types::Value::Real(f)     => f.to_string(),
+                    rusqlite::types::Value::Text(t)     => t,
+                    rusqlite::types::Value::Blob(b)     => format!("<blob {} bytes>", b.len()),
                 };
                 parts.push(s);
             }
             rows.push(parts.join("\t").into_bytes());
         }
-        Ok(QueryResult {
-            affected: rows.len() as u64,
-            rows,
-        })
+        Ok(QueryResult { affected: rows.len() as u64, rows })
     } else {
-        let n = slot
-            .conn
-            .execute(sql, [])
+        let n = slot.conn.execute(sql, [])
             .map_err(|e| LibsqlError::Backend(e.to_string()))?;
-        Ok(QueryResult {
-            affected: n as u64,
-            rows: vec![],
-        })
+        Ok(QueryResult { affected: n as u64, rows: vec![] })
     }
 }
 
@@ -511,15 +374,10 @@ fn extract_from_table(sql: &str) -> Option<String> {
     let from_pos = upper.find(" FROM ")? + 6;
     let rest = sql[from_pos..].trim_start();
     // Take until whitespace, comma, or JOIN
-    let end = rest
-        .find(|c: char| c.is_whitespace() || c == ',' || c == '(')
+    let end = rest.find(|c: char| c.is_whitespace() || c == ',' || c == '(')
         .unwrap_or(rest.len());
     let table = rest[..end].trim_matches(|c: char| c == '`' || c == '"' || c == '\'');
-    if table.is_empty() {
-        None
-    } else {
-        Some(table.to_owned())
-    }
+    if table.is_empty() { None } else { Some(table.to_owned()) }
 }
 
 /// Extract the literal query string from a `<=> 'text'` clause.
@@ -528,15 +386,13 @@ fn extract_vec_query_string(sql: &str) -> Option<String> {
     let pos = sql.find("<=>")?;
     let after = sql[pos + 3..].trim_start();
     if after.starts_with('\'') || after.starts_with('"') {
-        let q = after[1..]
-            .find(after.chars().next().unwrap())
+        let q = after[1..].find(after.chars().next().unwrap())
             .map(|end| after[1..end + 1].to_owned());
         return q;
     }
     // :param style — return the param name; caller substitutes
     if after.starts_with(':') {
-        let end = after[1..]
-            .find(|c: char| !c.is_alphanumeric() && c != '_')
+        let end = after[1..].find(|c: char| !c.is_alphanumeric() && c != '_')
             .map(|n| n + 1)
             .unwrap_or(after.len());
         return Some(after[1..end].to_owned());
@@ -546,21 +402,13 @@ fn extract_vec_query_string(sql: &str) -> Option<String> {
 
 /// Lazy-create `<table>_fts` FTS5 virtual table if it doesn't exist.
 /// Populates from `table` on creation.
-fn ensure_fts_index(
-    conn: &Connection,
-    table: &str,
-    fts_table: &str,
-    col: &str,
-) -> rusqlite::Result<()> {
+fn ensure_fts_index(conn: &Connection, table: &str, fts_table: &str, col: &str) -> rusqlite::Result<()> {
     // Check existence
-    let exists: bool = conn
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
-            [fts_table],
-            |r| r.get::<_, i64>(0),
-        )
-        .unwrap_or(0)
-        > 0;
+    let exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+        [fts_table],
+        |r| r.get::<_, i64>(0),
+    ).unwrap_or(0) > 0;
 
     if !exists {
         // Detect columns of source table to build content FTS
@@ -574,33 +422,4 @@ fn ensure_fts_index(
         ))?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn predicate_pushdown_becomes_core_search_options() {
-        let rw = rewrite(
-            "SELECT id FROM docs WHERE tenant_id = 'acme' AND score >= 0.7 AND embedding <=> :q LIMIT 10",
-        );
-
-        let opts = search_options_from_extensions(&rw.extensions);
-        let Some(MetadataPredicate::And(preds)) = opts.filter else {
-            panic!("expected compound metadata predicate");
-        };
-
-        assert_eq!(preds.len(), 2);
-        assert!(matches!(
-            &preds[0],
-            MetadataPredicate::Eq { key, value }
-                if key == "tenant_id" && value == &serde_json::json!("acme")
-        ));
-        assert!(matches!(
-            &preds[1],
-            MetadataPredicate::Gte { key, value }
-                if key == "score" && (*value - 0.7).abs() < f64::EPSILON
-        ));
-    }
 }

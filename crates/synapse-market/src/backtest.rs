@@ -3,9 +3,9 @@
 //! Usage:
 //!   let report = market.backtest("AAPL", start, end, &mut strategy)?;
 
+use rusqlite::Connection;
 use crate::error::Result;
 use crate::ohlcv::fetch_range;
-use rusqlite::Connection;
 
 /// A single OHLCV tick delivered to the strategy.
 #[derive(Debug, Clone)]
@@ -19,10 +19,7 @@ pub struct Tick {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum OrderSide {
-    Buy,
-    Sell,
-}
+pub enum OrderSide { Buy, Sell }
 
 #[derive(Debug, Clone)]
 pub struct Order {
@@ -66,14 +63,7 @@ pub fn run<S: Strategy>(
     let mut prev_equity = cash;
 
     for &(ts, o, h, l, c, v) in &rows {
-        let tick = Tick {
-            ts,
-            open: o,
-            high: h,
-            low: l,
-            close: c,
-            volume: v,
-        };
+        let tick = Tick { ts, open: o, high: h, low: l, close: c, volume: v };
         if let Some(ord) = strategy.on_tick(&tick) {
             let price = c; // fill at close (simplified)
             match ord.side {
@@ -98,11 +88,7 @@ pub fn run<S: Strategy>(
             }
         }
         let equity = cash + position * c;
-        let ret = if prev_equity > 0.0 {
-            equity / prev_equity - 1.0
-        } else {
-            0.0
-        };
+        let ret = if prev_equity > 0.0 { equity / prev_equity - 1.0 } else { 0.0 };
         daily_returns.push(ret);
         equity_curve.push(equity);
         prev_equity = equity;
@@ -114,29 +100,17 @@ pub fn run<S: Strategy>(
     let mut peak = f64::NEG_INFINITY;
     let mut max_drawdown = 0.0f64;
     for &e in &equity_curve {
-        if e > peak {
-            peak = e;
-        }
+        if e > peak { peak = e; }
         let dd = (peak - e) / peak.max(1.0);
-        if dd > max_drawdown {
-            max_drawdown = dd;
-        }
+        if dd > max_drawdown { max_drawdown = dd; }
     }
 
     // Sharpe (annualized, assume daily bars)
     let n = daily_returns.len() as f64;
     let mean = daily_returns.iter().sum::<f64>() / n.max(1.0);
-    let variance = daily_returns
-        .iter()
-        .map(|r| (r - mean).powi(2))
-        .sum::<f64>()
-        / n.max(1.0);
+    let variance = daily_returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / n.max(1.0);
     let std = variance.sqrt();
-    let sharpe = if std > 1e-10 {
-        mean / std * (252.0_f64).sqrt()
-    } else {
-        0.0
-    };
+    let sharpe = if std > 1e-10 { mean / std * (252.0_f64).sqrt() } else { 0.0 };
 
     Ok(BacktestReport {
         ticks: rows.len(),

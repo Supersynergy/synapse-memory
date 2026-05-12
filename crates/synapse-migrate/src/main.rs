@@ -5,11 +5,7 @@ use std::path::PathBuf;
 use synapse_core::{PutRequest, Store};
 
 #[derive(Parser)]
-#[command(
-    name = "synapse-migrate",
-    version,
-    about = "Import Qdrant/LanceDB/Chroma/Pinecone/Weaviate into .synx"
-)]
+#[command(name = "synapse-migrate", version, about = "Import Qdrant/LanceDB/Chroma/Pinecone/Weaviate into .synx")]
 struct Cli {
     /// Source URI: qdrant://host:port/collection | lancedb:///path/table | chroma:///path/collection
     #[arg(long)]
@@ -56,11 +52,7 @@ fn main() -> Result<()> {
         bail!("unknown source scheme — expected qdrant:// | lancedb:// | chroma:// | pinecone:// | weaviate://");
     };
 
-    println!(
-        "migrate done: {} docs inserted into {}",
-        total,
-        cli.to.display()
-    );
+    println!("migrate done: {} docs inserted into {}", total, cli.to.display());
     Ok(())
 }
 
@@ -134,39 +126,35 @@ fn migrate_chroma(src: &str, store: &mut Store, batch: usize, offset: u64) -> Re
         for (chroma_id, document, uri, emb_bytes) in rows {
             // Gather metadata for this id
             let mut meta_map = serde_json::Map::new();
-            meta_map.insert(
-                "chroma_id".into(),
-                serde_json::Value::String(chroma_id.clone()),
-            );
+            meta_map.insert("chroma_id".into(), serde_json::Value::String(chroma_id.clone()));
 
             let mut mstmt = conn.prepare(
                 "SELECT key, str_value, int_value, float_value FROM embedding_metadata WHERE id = ?1",
             )?;
-            let _ = mstmt
-                .query_map(rusqlite::params![chroma_id], |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, Option<String>>(1)?,
-                        r.get::<_, Option<i64>>(2)?,
-                        r.get::<_, Option<f64>>(3)?,
-                    ))
-                })
-                .and_then(|mapped| {
-                    for row in mapped {
-                        let (key, sv, iv, fv) = row?;
-                        let val = if let Some(s) = sv {
-                            serde_json::Value::String(s)
-                        } else if let Some(i) = iv {
-                            serde_json::Value::Number(i.into())
-                        } else if let Some(f) = fv {
-                            serde_json::json!(f)
-                        } else {
-                            serde_json::Value::Null
-                        };
-                        meta_map.insert(key, val);
-                    }
-                    Ok(())
-                });
+            let _ = mstmt.query_map(rusqlite::params![chroma_id], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<i64>>(2)?,
+                    r.get::<_, Option<f64>>(3)?,
+                ))
+            })
+            .and_then(|mapped| {
+                for row in mapped {
+                    let (key, sv, iv, fv) = row?;
+                    let val = if let Some(s) = sv {
+                        serde_json::Value::String(s)
+                    } else if let Some(i) = iv {
+                        serde_json::Value::Number(i.into())
+                    } else if let Some(f) = fv {
+                        serde_json::json!(f)
+                    } else {
+                        serde_json::Value::Null
+                    };
+                    meta_map.insert(key, val);
+                }
+                Ok(())
+            });
 
             let embedding = emb_bytes.and_then(|b| bytes_to_f32_vec(&b));
 
@@ -213,9 +201,7 @@ fn bytes_to_f32_vec(b: &[u8]) -> Option<Vec<f32>> {
 /// Scrolls all points with vectors and payload.
 fn migrate_qdrant(src: &str, store: &mut Store, batch: usize, offset: u64) -> Result<u64> {
     let stripped = src.strip_prefix("qdrant://").unwrap();
-    let slash = stripped
-        .find('/')
-        .context("missing collection name in qdrant:// URI")?;
+    let slash = stripped.find('/').context("missing collection name in qdrant:// URI")?;
     let host_port = &stripped[..slash];
     let collection = &stripped[slash + 1..];
 
@@ -223,8 +209,8 @@ fn migrate_qdrant(src: &str, store: &mut Store, batch: usize, offset: u64) -> Re
 
     // Probe — fail fast if unreachable
     let info_url = format!("{}/collections/{}", base_url, collection);
-    let info_body =
-        http_get_json(&info_url).with_context(|| format!("cannot reach Qdrant at {}", info_url))?;
+    let info_body = http_get_json(&info_url)
+        .with_context(|| format!("cannot reach Qdrant at {}", info_url))?;
     let count = info_body
         .pointer("/result/vectors_count")
         .or_else(|| info_body.pointer("/result/points_count"))
@@ -251,7 +237,8 @@ fn migrate_qdrant(src: &str, store: &mut Store, batch: usize, offset: u64) -> Re
         }
 
         let scroll_url = format!("{}/collections/{}/points/scroll", base_url, collection);
-        let resp = http_post_json(&scroll_url, &body).context("qdrant scroll request failed")?;
+        let resp = http_post_json(&scroll_url, &body)
+            .context("qdrant scroll request failed")?;
 
         let points = resp
             .pointer("/result/points")
@@ -281,16 +268,12 @@ fn migrate_qdrant(src: &str, store: &mut Store, batch: usize, offset: u64) -> Re
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
-            let embedding: Option<Vec<f32>> =
-                pt.get("vector").and_then(|v| v.as_array()).map(|arr| {
-                    arr.iter()
-                        .filter_map(|x| x.as_f64().map(|f| f as f32))
-                        .collect()
-                });
+            let embedding: Option<Vec<f32>> = pt
+                .get("vector")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect());
 
-            let mut meta = payload
-                .cloned()
-                .unwrap_or(serde_json::Value::Object(Default::default()));
+            let mut meta = payload.cloned().unwrap_or(serde_json::Value::Object(Default::default()));
             if let Some(id) = pt.get("id") {
                 if let Some(obj) = meta.as_object_mut() {
                     obj.insert("qdrant_id".into(), id.clone());
@@ -436,16 +419,13 @@ fn migrate_pinecone(src: &str, store: &mut Store, batch: usize, offset: u64) -> 
 
     // Collect all IDs first (list endpoint), then fetch in batches
     loop {
-        let mut list_url = format!(
-            "{}/vectors/list?namespace={}&limit=100",
-            base_url, namespace
-        );
+        let mut list_url = format!("{}/vectors/list?namespace={}&limit=100", base_url, namespace);
         if let Some(ref tok) = pagination_token {
             list_url.push_str(&format!("&paginationToken={}", tok));
         }
 
-        let resp =
-            http_get_json_with_key(&list_url, &api_key).context("pinecone list request failed")?;
+        let resp = http_get_json_with_key(&list_url, &api_key)
+            .context("pinecone list request failed")?;
 
         let ids = resp
             .pointer("/vectors")
@@ -486,10 +466,7 @@ fn migrate_pinecone(src: &str, store: &mut Store, batch: usize, offset: u64) -> 
             .map(|id| format!("ids={}", urlencod(id)))
             .collect::<Vec<_>>()
             .join("&");
-        let fetch_url = format!(
-            "{}/vectors/fetch?namespace={}&{}",
-            base_url, namespace, ids_qs
-        );
+        let fetch_url = format!("{}/vectors/fetch?namespace={}&{}", base_url, namespace, ids_qs);
 
         let resp = http_get_json_with_key(&fetch_url, &api_key)
             .context("pinecone fetch request failed")?;
@@ -517,34 +494,18 @@ fn migrate_pinecone(src: &str, store: &mut Store, batch: usize, offset: u64) -> 
                 .and_then(|m| m.get("title"))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
-            let embedding: Option<Vec<f32>> =
-                vec_val.get("values").and_then(|v| v.as_array()).map(|arr| {
-                    arr.iter()
-                        .filter_map(|x| x.as_f64().map(|f| f as f32))
-                        .collect()
-                });
+            let embedding: Option<Vec<f32>> = vec_val
+                .get("values")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect());
 
-            let mut meta = metadata
-                .cloned()
-                .unwrap_or(serde_json::Value::Object(Default::default()));
+            let mut meta = metadata.cloned().unwrap_or(serde_json::Value::Object(Default::default()));
             if let Some(obj) = meta.as_object_mut() {
-                obj.insert(
-                    "pinecone_id".into(),
-                    serde_json::Value::String(vec_id.clone()),
-                );
-                obj.insert(
-                    "pinecone_namespace".into(),
-                    serde_json::Value::String(namespace.to_string()),
-                );
+                obj.insert("pinecone_id".into(), serde_json::Value::String(vec_id.clone()));
+                obj.insert("pinecone_namespace".into(), serde_json::Value::String(namespace.to_string()));
             }
 
-            let req = PutRequest {
-                uri,
-                title,
-                text,
-                meta: Some(meta),
-                embedding,
-            };
+            let req = PutRequest { uri, title, text, meta: Some(meta), embedding };
             store.put(&req)?;
         }
 
@@ -660,11 +621,7 @@ fn migrate_weaviate(src: &str, store: &mut Store, batch: usize, offset: u64) -> 
             let embedding: Option<Vec<f32>> = additional
                 .and_then(|a| a.get("vector"))
                 .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|x| x.as_f64().map(|f| f as f32))
-                        .collect()
-                });
+                .map(|arr| arr.iter().filter_map(|x| x.as_f64().map(|f| f as f32)).collect());
 
             let text = obj
                 .get("text")
@@ -686,10 +643,7 @@ fn migrate_weaviate(src: &str, store: &mut Store, batch: usize, offset: u64) -> 
             // Build meta: all fields except _additional
             let mut meta_map = serde_json::Map::new();
             meta_map.insert("weaviate_id".into(), serde_json::Value::String(weaviate_id));
-            meta_map.insert(
-                "weaviate_class".into(),
-                serde_json::Value::String(class_name.to_string()),
-            );
+            meta_map.insert("weaviate_class".into(), serde_json::Value::String(class_name.to_string()));
             for (k, v) in obj.as_object().into_iter().flatten() {
                 if k != "_additional" {
                     meta_map.insert(k.clone(), v.clone());
@@ -727,14 +681,10 @@ fn http_get_json(url: &str) -> Result<serde_json::Value> {
         .output()
         .context("curl not found")?;
     if !output.status.success() {
-        bail!(
-            "curl GET {} failed: {}",
-            url,
-            String::from_utf8_lossy(&output.stderr)
-        );
+        bail!("curl GET {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
     }
-    let v: serde_json::Value =
-        serde_json::from_slice(&output.stdout).context("parse JSON response")?;
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .context("parse JSON response")?;
     Ok(v)
 }
 
@@ -756,35 +706,24 @@ fn http_post_json(url: &str, body: &serde_json::Value) -> Result<serde_json::Val
         .output()
         .context("curl not found")?;
     if !output.status.success() {
-        bail!(
-            "curl POST {} failed: {}",
-            url,
-            String::from_utf8_lossy(&output.stderr)
-        );
+        bail!("curl POST {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
     }
-    let v: serde_json::Value =
-        serde_json::from_slice(&output.stdout).context("parse JSON response")?;
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .context("parse JSON response")?;
     Ok(v)
 }
 
 fn http_get_json_with_key(url: &str, api_key: &str) -> Result<serde_json::Value> {
     let output = std::process::Command::new("curl")
         .args([
-            "-sf",
-            "--max-time",
-            "30",
-            "-H",
-            &format!("Api-Key: {}", api_key),
+            "-sf", "--max-time", "30",
+            "-H", &format!("Api-Key: {}", api_key),
             url,
         ])
         .output()
         .context("curl not found")?;
     if !output.status.success() {
-        bail!(
-            "curl GET {} failed: {}",
-            url,
-            String::from_utf8_lossy(&output.stderr)
-        );
+        bail!("curl GET {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
     }
     serde_json::from_slice(&output.stdout).context("parse JSON response")
 }
@@ -798,42 +737,22 @@ fn http_get_json_opt_key(url: &str, api_key: Option<&str>) -> Result<serde_json:
     cmd.arg(url);
     let output = cmd.output().context("curl not found")?;
     if !output.status.success() {
-        bail!(
-            "curl GET {} failed: {}",
-            url,
-            String::from_utf8_lossy(&output.stderr)
-        );
+        bail!("curl GET {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
     }
     serde_json::from_slice(&output.stdout).context("parse JSON response")
 }
 
-fn http_post_json_opt_key(
-    url: &str,
-    body: &serde_json::Value,
-    api_key: Option<&str>,
-) -> Result<serde_json::Value> {
+fn http_post_json_opt_key(url: &str, body: &serde_json::Value, api_key: Option<&str>) -> Result<serde_json::Value> {
     let body_str = body.to_string();
     let mut cmd = std::process::Command::new("curl");
-    cmd.args([
-        "-sf",
-        "--max-time",
-        "30",
-        "-X",
-        "POST",
-        "-H",
-        "Content-Type: application/json",
-    ]);
+    cmd.args(["-sf", "--max-time", "30", "-X", "POST", "-H", "Content-Type: application/json"]);
     if let Some(k) = api_key {
         cmd.args(["-H", &format!("Authorization: Bearer {}", k)]);
     }
     cmd.args(["-d", &body_str, url]);
     let output = cmd.output().context("curl not found")?;
     if !output.status.success() {
-        bail!(
-            "curl POST {} failed: {}",
-            url,
-            String::from_utf8_lossy(&output.stderr)
-        );
+        bail!("curl POST {} failed: {}", url, String::from_utf8_lossy(&output.stderr));
     }
     serde_json::from_slice(&output.stdout).context("parse JSON response")
 }
@@ -885,8 +804,11 @@ mod tests {
         )
         .unwrap();
 
-        conn.execute("INSERT INTO collections VALUES ('coll-1', 'test')", [])
-            .unwrap();
+        conn.execute(
+            "INSERT INTO collections VALUES ('coll-1', 'test')",
+            [],
+        )
+        .unwrap();
 
         for i in 0u32..100 {
             let fake_emb: Vec<u8> = (0u32..384).flat_map(|_| (i as f32).to_le_bytes()).collect();
@@ -913,14 +835,8 @@ mod tests {
         assert_eq!(count, 100, "expected 100 docs migrated");
 
         // Verify stored in synapse
-        let hits = store
-            .search("document", synapse_core::SearchMode::Lex, None, 200)
-            .unwrap();
-        assert!(
-            hits.len() >= 100,
-            "expected >= 100 hits, got {}",
-            hits.len()
-        );
+        let hits = store.search("document", synapse_core::SearchMode::Lex, None, 200).unwrap();
+        assert!(hits.len() >= 100, "expected >= 100 hits, got {}", hits.len());
     }
 
     /// Qdrant source: no live server — just verify URI parse error for bad scheme.
@@ -966,19 +882,10 @@ mod tests {
         let mut store = make_store(&tmp);
         // Unset key for this test
         std::env::remove_var("PINECONE_API_KEY");
-        let err = migrate_pinecone(
-            "pinecone://my-index-abc123.svc.us-east1-gcp.pinecone.io/default",
-            &mut store,
-            32,
-            0,
-        );
+        let err = migrate_pinecone("pinecone://my-index-abc123.svc.us-east1-gcp.pinecone.io/default", &mut store, 32, 0);
         assert!(err.is_err());
         let msg = format!("{}", err.unwrap_err());
-        assert!(
-            msg.contains("PINECONE_API_KEY"),
-            "expected key error, got: {}",
-            msg
-        );
+        assert!(msg.contains("PINECONE_API_KEY"), "expected key error, got: {}", msg);
     }
 
     /// Pinecone: verify URI without namespace errors cleanly (host-only).
@@ -1027,12 +934,7 @@ mod tests {
 
     #[test]
     fn test_bytes_to_f32_vec() {
-        let v: Vec<u8> = 1.0f32
-            .to_le_bytes()
-            .iter()
-            .chain(2.0f32.to_le_bytes().iter())
-            .copied()
-            .collect();
+        let v: Vec<u8> = 1.0f32.to_le_bytes().iter().chain(2.0f32.to_le_bytes().iter()).copied().collect();
         let result = bytes_to_f32_vec(&v).unwrap();
         assert_eq!(result, vec![1.0f32, 2.0f32]);
     }

@@ -32,14 +32,7 @@ pub trait PipelineHooks: Send + Sync {
     fn decompose(&self, query: &str) -> Result<Vec<String>> {
         // Mirror of synapse-extract default. Kept here so synapse-core
         // doesn't depend on synapse-extract.
-        let cues = [
-            " after ",
-            " before ",
-            " and then ",
-            " while ",
-            " vs ",
-            " versus ",
-        ];
+        let cues = [" after ", " before ", " and then ", " while ", " vs ", " versus "];
         let lower = query.to_lowercase();
         for cue in cues.iter() {
             if let Some(pos) = lower.find(cue) {
@@ -228,9 +221,7 @@ pub fn evolve_on_ingest<H: PipelineHooks>(
         // daemon where the Store handle is available. We still call hooks.merge
         // to validate the hook works (cheap, side-effect-free).
         let old_text: String = conn
-            .query_row("SELECT text FROM docs WHERE id=?1", [old_doc_id], |r| {
-                r.get(0)
-            })
+            .query_row("SELECT text FROM docs WHERE id=?1", [old_doc_id], |r| r.get(0))
             .unwrap_or_default();
         let _merged = hooks.merge(&old_text, new_text)?;
         if let Ok(old_mid) = conn.query_row::<i64, _, _>(
@@ -310,9 +301,7 @@ mod tests {
     #[test]
     fn rule_hooks_grade_overlap() {
         let h = RuleHooks;
-        let s = h
-            .grade("rust async runtime", "rust runtime crashed")
-            .unwrap();
+        let s = h.grade("rust async runtime", "rust runtime crashed").unwrap();
         assert!(s > 0.0 && s <= 1.0);
     }
 

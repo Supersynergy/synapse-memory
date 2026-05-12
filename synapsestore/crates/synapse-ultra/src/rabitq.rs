@@ -200,9 +200,8 @@ mod tests {
                         unsafe {
                             let mut s = 0u32;
                             for j in 0..6 {
-                                s += (pa.add(j).read_unaligned()
-                                    ^ pb.add(j).read_unaligned())
-                                .count_ones();
+                                s += (pa.add(j).read_unaligned() ^ pb.add(j).read_unaligned())
+                                    .count_ones();
                             }
                             s
                         }
@@ -230,9 +229,8 @@ mod tests {
                         unsafe {
                             let mut s = 0u32;
                             for j in 0..6 {
-                                s += (pa.add(j).read_unaligned()
-                                    ^ pb.add(j).read_unaligned())
-                                .count_ones();
+                                s += (pa.add(j).read_unaligned() ^ pb.add(j).read_unaligned())
+                                    .count_ones();
                             }
                             s
                         }
@@ -308,8 +306,14 @@ mod tests {
 
         let query_indices: Vec<usize> = (0..50).map(|i| i * 199 % n).collect();
 
-        let (plain_r, rot_r, rbq_r) =
-            recall_at_k(&vecs, &plain_packed, &rotated_packed, &rabitq_entries, k, &query_indices);
+        let (plain_r, rot_r, rbq_r) = recall_at_k(
+            &vecs,
+            &plain_packed,
+            &rotated_packed,
+            &rabitq_entries,
+            k,
+            &query_indices,
+        );
 
         println!(
             "recall@{k} (n={n}, q=50):  plain={plain_r:.3}  rotated={rot_r:.3}  rabitq={rbq_r:.3}"

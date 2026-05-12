@@ -67,11 +67,7 @@ impl ColdTier for MemoryTier {
     }
 }
 
-#[cfg(any(
-    feature = "s3-backend",
-    feature = "gcs-backend",
-    feature = "azure-backend"
-))]
+#[cfg(any(feature = "s3-backend", feature = "gcs-backend", feature = "azure-backend"))]
 pub mod object_store_tier {
     //! Real `object_store` crate adapter — S3/GCS/Azure cold-tier.
     use super::*;

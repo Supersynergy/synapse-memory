@@ -8,7 +8,7 @@
 //! Run:
 //!   ./target/release-bench/ann_bench_parallel_build [--dim 128] [--n 1000000]
 
-use synapse_ann::{usearch_backend::UsearchIndex, AnnIndex as _};
+use synapse_ann::{AnnIndex as _, usearch_backend::UsearchIndex};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -19,7 +19,7 @@ fn main() {
             .unwrap_or(default)
     };
     let dim = get("--dim", 128);
-    let n = get("--n", 1_000_000);
+    let n   = get("--n",   1_000_000);
 
     println!("ann_bench_parallel_build dim={dim} n={n}");
     println!("rayon threads: {}", rayon::current_num_threads());
@@ -34,20 +34,14 @@ fn main() {
         idx_serial.insert(i as u64, v).unwrap();
     }
     let serial_s = t0.elapsed().as_secs_f64();
-    println!(
-        "serial  build {n}: {serial_s:.2}s  ({:.0} vec/s)",
-        n as f64 / serial_s
-    );
+    println!("serial  build {n}: {serial_s:.2}s  ({:.0} vec/s)", n as f64 / serial_s);
 
     // --- parallel ---
     let mut idx_par = UsearchIndex::new(dim, n).unwrap();
     let t1 = std::time::Instant::now();
     let inserted = idx_par.add_batch_parallel(&ids, &vecs).unwrap();
     let par_s = t1.elapsed().as_secs_f64();
-    println!(
-        "parallel build {n}: {par_s:.2}s  ({:.0} vec/s)  inserted={inserted}",
-        n as f64 / par_s
-    );
+    println!("parallel build {n}: {par_s:.2}s  ({:.0} vec/s)  inserted={inserted}", n as f64 / par_s);
     println!("speedup: {:.2}×", serial_s / par_s);
 
     // run parallel twice for variance
@@ -55,14 +49,8 @@ fn main() {
     let t2 = std::time::Instant::now();
     idx_par2.add_batch_parallel(&ids, &vecs).unwrap();
     let par_s2 = t2.elapsed().as_secs_f64();
-    println!(
-        "parallel run-2: {par_s2:.2}s  speedup: {:.2}×",
-        serial_s / par_s2
-    );
-    println!(
-        "median speedup: {:.2}×",
-        serial_s / ((par_s + par_s2) / 2.0)
-    );
+    println!("parallel run-2: {par_s2:.2}s  speedup: {:.2}×", serial_s / par_s2);
+    println!("median speedup: {:.2}×", serial_s / ((par_s + par_s2) / 2.0));
 }
 
 fn synth(seed: u64, dim: usize) -> Vec<f32> {

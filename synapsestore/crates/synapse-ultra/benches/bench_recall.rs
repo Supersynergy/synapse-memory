@@ -4,13 +4,18 @@ use synapse_ultra::binary::{build_binary_matrix, pack_signs};
 use synapse_ultra::search::{top_k_binary_first, top_k_f32};
 
 fn make_random_matrix(n: usize, dim: usize) -> (Array2<f32>, Vec<u16>) {
-    let data: Vec<f32> = (0..n * dim).map(|i| {
-        let x = (i as f64 * 1.6180339887) % 1.0;
-        (x * 2.0 - 1.0) as f32
-    }).collect();
+    let data: Vec<f32> = (0..n * dim)
+        .map(|i| {
+            let x = (i as f64 * 1.6180339887) % 1.0;
+            (x * 2.0 - 1.0) as f32
+        })
+        .collect();
     let mut m = Array2::from_shape_vec((n, dim), data).unwrap();
     synapse_ultra::snapshot::normalize_rows(&mut m);
-    let f16: Vec<u16> = m.iter().map(|&x| half::f16::from_f32(x).to_bits()).collect();
+    let f16: Vec<u16> = m
+        .iter()
+        .map(|&x| half::f16::from_f32(x).to_bits())
+        .collect();
     (m, f16)
 }
 
@@ -40,12 +45,16 @@ fn bench_recall_levels(c: &mut Criterion) {
     let (matrix, matrix_f16) = make_random_matrix(n, dim);
     let bin = build_binary_matrix(&matrix);
 
-    let queries: Vec<Vec<f32>> = (0..20).map(|qi| {
-        let mut q: Vec<f32> = (0..dim).map(|i| (((qi * 384 + i) as f64 * 2.7182818) % 1.0 * 2.0 - 1.0) as f32).collect();
-        let norm = q.iter().map(|x| x * x).sum::<f32>().sqrt();
-        q.iter_mut().for_each(|x| *x /= norm);
-        q
-    }).collect();
+    let queries: Vec<Vec<f32>> = (0..20)
+        .map(|qi| {
+            let mut q: Vec<f32> = (0..dim)
+                .map(|i| (((qi * 384 + i) as f64 * 2.7182818) % 1.0 * 2.0 - 1.0) as f32)
+                .collect();
+            let norm = q.iter().map(|x| x * x).sum::<f32>().sqrt();
+            q.iter_mut().for_each(|x| *x /= norm);
+            q
+        })
+        .collect();
 
     // Print recall table
     println!("\nRecall@10 vs rerank_n (n=1k, 20 queries):");

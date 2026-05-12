@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Result};
 use lru::LruCache;
 use std::num::NonZeroUsize;
-use zstd::stream::{decode_all, encode_all};
+use zstd::stream::{encode_all, decode_all};
 
-use crate::store::page::{decode_page, Bar, HEADER_SIZE, PAGE_SIZE};
+use crate::store::page::{decode_page, Bar, PAGE_SIZE, HEADER_SIZE};
 
 const CSM_MAGIC: u64 = 0x534D_5843_4F4C_4400; // "SMXCOLD\0"
 const CSM_HEADER_SIZE: usize = 64;
@@ -44,11 +44,7 @@ impl CsmFileHeader {
             bail!("invalid csm magic");
         }
         let page_count = u32::from_le_bytes(b[8..12].try_into().unwrap());
-        Ok(Self {
-            magic,
-            page_count,
-            _pad: [0u8; 52],
-        })
+        Ok(Self { magic, page_count, _pad: [0u8; 52] })
     }
 }
 
@@ -75,12 +71,7 @@ impl CsmEntry {
         let zstd_len = u32::from_le_bytes(b[4..8].try_into().unwrap());
         let ts_min = i64::from_le_bytes(b[8..16].try_into().unwrap());
         let ts_max = i64::from_le_bytes(b[16..24].try_into().unwrap());
-        Self {
-            offset,
-            zstd_len,
-            ts_min,
-            ts_max,
-        }
+        Self { offset, zstd_len, ts_min, ts_max }
     }
 }
 
@@ -122,11 +113,7 @@ impl ColdTier {
             cur_offset += c.len() as u32;
         }
 
-        let hdr = CsmFileHeader {
-            magic: CSM_MAGIC,
-            page_count: n as u32,
-            _pad: [0u8; 52],
-        };
+        let hdr = CsmFileHeader { magic: CSM_MAGIC, page_count: n as u32, _pad: [0u8; 52] };
         let mut f = File::create(base_path)?;
         f.write_all(&hdr.to_bytes())?;
         for e in &entries {
@@ -164,9 +151,7 @@ impl ColdTier {
         if let Some(cached) = self.cache.get(&idx) {
             return Ok(cached.clone());
         }
-        let entry = self
-            .entries
-            .get(idx as usize)
+        let entry = self.entries.get(idx as usize)
             .ok_or_else(|| anyhow::anyhow!("cold page idx {} out of range", idx))?;
         let raw_page = self.decompress_entry(entry)?;
         let (_hdr, bars) = decode_page(&raw_page);
@@ -217,9 +202,7 @@ pub struct ColdStats {
 
 impl ColdStats {
     pub fn compression_ratio(&self) -> f64 {
-        if self.total_compressed_bytes == 0 {
-            return 0.0;
-        }
+        if self.total_compressed_bytes == 0 { return 0.0; }
         self.hot_bytes as f64 / self.total_compressed_bytes as f64
     }
 }

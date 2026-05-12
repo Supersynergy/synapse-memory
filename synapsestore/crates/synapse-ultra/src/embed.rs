@@ -30,8 +30,7 @@ pub struct Embedder {
 
 impl Embedder {
     pub fn new(emb_cache_path: Option<&Path>) -> Result<Self> {
-        let db = emb_cache_path
-            .and_then(|p| Connection::open(p).ok());
+        let db = emb_cache_path.and_then(|p| Connection::open(p).ok());
         if let Some(ref db) = db {
             db.execute_batch(
                 "CREATE TABLE IF NOT EXISTS emb_cache (
@@ -89,7 +88,12 @@ impl Embedder {
 
         // T2: MLX Metal (Apple Silicon, fast path)
         let v = if mlx_enabled() {
-            match self.mlx.as_ref().map(|m| m.embed_one(text)).unwrap_or_else(|| Err(UltraError::Embed("mlx unavailable".into()))) {
+            match self
+                .mlx
+                .as_ref()
+                .map(|m| m.embed_one(text))
+                .unwrap_or_else(|| Err(UltraError::Embed("mlx unavailable".into())))
+            {
                 Ok(vec) => vec,
                 Err(e) => {
                     tracing::debug!("mlx embed failed, falling back to fastembed: {e}");
@@ -127,8 +131,7 @@ impl Embedder {
         if guard.is_none() {
             tracing::info!("initializing fastembed BGE-small-en-v1.5 model");
             let m = TextEmbedding::try_new(
-                InitOptions::new(EmbeddingModel::BGESmallENV15)
-                    .with_show_download_progress(false),
+                InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(false),
             )
             .map_err(|e| UltraError::Embed(e.to_string()))?;
             *guard = Some(m);

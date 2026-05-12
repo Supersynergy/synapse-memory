@@ -27,10 +27,7 @@ impl TurboVecIndex {
             return Err(Error::Market(format!("dim {dim} not a multiple of 8")));
         }
         let mut inner = IdMapIndex::new(dim, bit_width);
-        let flat: Vec<f32> = entries
-            .iter()
-            .flat_map(|(_, v)| v.iter().copied())
-            .collect();
+        let flat: Vec<f32> = entries.iter().flat_map(|(_, v)| v.iter().copied()).collect();
         let ids: Vec<u64> = entries.iter().map(|(id, _)| *id).collect();
         inner.add_with_ids(&flat, &ids);
         inner.prepare();

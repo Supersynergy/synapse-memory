@@ -64,7 +64,8 @@ impl UltraIndex {
                     .map_err(|e| crate::error::UltraError::Anyhow(anyhow::anyhow!("{e}")))?;
                 for (i, row) in self.matrix_f32.rows().into_iter().enumerate() {
                     let slice: &[f32] = row.as_slice().expect("contiguous row");
-                    fresh.insert(i as u64, slice)
+                    fresh
+                        .insert(i as u64, slice)
                         .map_err(|e| crate::error::UltraError::Anyhow(anyhow::anyhow!("{e}")))?;
                 }
                 let _ = fresh.save(hnsw_path);
@@ -94,28 +95,47 @@ impl UltraIndex {
             k,
             rerank_n,
         );
-        raw.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect()
+        raw.into_iter()
+            .map(|(idx, score)| Hit {
+                id: self.ids[idx],
+                score,
+            })
+            .collect()
     }
 
     /// T1-strict: brute-force f32, recall ≥ 0.99.
     pub fn search_strict(&self, query_f32: &[f32], k: usize) -> Vec<Hit> {
         debug_assert_eq!(query_f32.len(), EMBED_DIM);
         let raw = search::top_k_f32(query_f32, self.matrix_f32.view(), k);
-        raw.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect()
+        raw.into_iter()
+            .map(|(idx, score)| Hit {
+                id: self.ids[idx],
+                score,
+            })
+            .collect()
     }
 
     /// Batch brute-force via GEMM (Accelerate on macOS, ndarray on Linux).
     /// Returns one Vec<Hit> per query, sorted best-first.
     /// Use when batch ≥ 8 and mode == Strict for maximum throughput.
     pub fn search_batch_blas(&self, queries: &[Vec<f32>], k: usize) -> Vec<Vec<Hit>> {
-        if queries.is_empty() { return vec![]; }
+        if queries.is_empty() {
+            return vec![];
+        }
         let matrix_flat = self.matrix_f32.as_slice().expect("row-major contiguous");
         let n = self.ids.len();
         let dim = EMBED_DIM;
         let q_refs: Vec<&[f32]> = queries.iter().map(|q| q.as_slice()).collect();
         let raw = search::top_k_batch_gemm(&q_refs, matrix_flat, n, dim, k);
         raw.into_iter()
-            .map(|row| row.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect())
+            .map(|row| {
+                row.into_iter()
+                    .map(|(idx, score)| Hit {
+                        id: self.ids[idx],
+                        score,
+                    })
+                    .collect()
+            })
             .collect()
     }
 
@@ -124,18 +144,22 @@ impl UltraIndex {
         debug_assert_eq!(query_f32.len(), EMBED_DIM);
         let query_sign = binary::pack_signs(query_f32);
         let n = self.ids.len();
-        let mut ham: Vec<(usize, u32)> = (0..n).map(|i| {
-            let row = &self.bin_matrix[i * 48..(i + 1) * 48];
-            (i, binary::hamming_distance(&query_sign, row))
-        }).collect();
+        let mut ham: Vec<(usize, u32)> = (0..n)
+            .map(|i| {
+                let row = &self.bin_matrix[i * 48..(i + 1) * 48];
+                (i, binary::hamming_distance(&query_sign, row))
+            })
+            .collect();
         let k2 = k.min(n);
         ham.select_nth_unstable_by_key(k2.saturating_sub(1), |x| x.1);
         ham.truncate(k2);
         ham.sort_unstable_by_key(|x| x.1);
-        ham.into_iter().map(|(idx, dist)| Hit {
-            id: self.ids[idx],
-            score: 1.0 - (dist as f32 / 384.0),
-        }).collect()
+        ham.into_iter()
+            .map(|(idx, dist)| Hit {
+                id: self.ids[idx],
+                score: 1.0 - (dist as f32 / 384.0),
+            })
+            .collect()
     }
 
     /// RaBitQ search: asymmetric IP estimate → top-rerank_n candidates → f16 cosine rerank → top-k.
@@ -183,8 +207,15 @@ impl UltraIndex {
             b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
         });
         reranked.truncate(k2);
-        reranked.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        reranked.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect()
+        reranked
+            .sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        reranked
+            .into_iter()
+            .map(|(idx, score)| Hit {
+                id: self.ids[idx],
+                score,
+            })
+            .collect()
     }
 
     /// HNSW approximate search. Candidates: 2*k from UsearchIndex → f32 cosine rerank → top-k.
@@ -213,10 +244,17 @@ impl UltraIndex {
             .map(|(key, dist)| (key as usize, 1.0 - dist))
             .collect();
 
-        candidates.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        candidates
+            .sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         candidates.truncate(k);
 
-        candidates.into_iter().map(|(idx, score)| Hit { id: self.ids[idx], score }).collect()
+        candidates
+            .into_iter()
+            .map(|(idx, score)| Hit {
+                id: self.ids[idx],
+                score,
+            })
+            .collect()
     }
 }
 
@@ -243,9 +281,9 @@ pub fn load_or_rebuild(brain_path: &Path, snap_path: &Path) -> Result<SharedInde
 
     #[cfg(feature = "hnsw")]
     let idx = {
-        let hnsw_path = std::path::PathBuf::from(
-            std::env::var("HOME").unwrap_or_else(|_| "/root".into())
-        ).join(".synapse/ultra_hnsw.usearch");
+        let hnsw_path =
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/root".into()))
+                .join(".synapse/ultra_hnsw.usearch");
         let base = UltraIndex::from_snapshot(snap);
         base.with_hnsw(&hnsw_path, brain_mtime)?
     };

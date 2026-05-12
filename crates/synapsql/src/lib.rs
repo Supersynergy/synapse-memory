@@ -11,9 +11,9 @@
 //! - Full introspection intercept (SELECT 1, VERSION(), SHOW VARIABLES)
 //! - Global QPS counter (target ≥10k single core)
 
-pub mod parser;
-pub mod pool;
 pub mod server;
 pub mod sql_ext;
+pub mod parser;
+pub mod pool;
 
 pub use server::Service;

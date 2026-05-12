@@ -19,7 +19,9 @@ fn bench_dist_score(c: &mut Criterion) {
 
     #[cfg(feature = "turbo")]
     c.bench_function("dist_score_simd 1k (turbo)", |b| {
-        b.iter(|| synapse_core::turbo::rrf_simd::distance_to_score(black_box(&dists)))
+        b.iter(|| {
+            synapse_core::turbo::rrf_simd::distance_to_score(black_box(&dists))
+        })
     });
 }
 

@@ -98,7 +98,10 @@ async fn vec_search(
 
     let emb = match state.embedder.embed(&params.q) {
         Ok(e) => e,
-        Err(e) => { tracing::error!("embed: {}", e); return Json(vec![]); }
+        Err(e) => {
+            tracing::error!("embed: {}", e);
+            return Json(vec![]);
+        }
     };
 
     let guard = state.index.load();
@@ -118,21 +121,25 @@ async fn vec_batch(
     State(state): State<Arc<AppState>>,
     Json(body): Json<BatchQuery>,
 ) -> impl IntoResponse {
-    let results: Vec<Vec<HitResp>> = body.queries.iter().map(|q| {
-        let key = CacheKey::new(q, 1, body.limit as u16);
-        if let Some(hits) = state.cache.get(&key) {
-            return hits_to_resp(&hits);
-        }
-        match state.embedder.embed(q) {
-            Err(_) => vec![],
-            Ok(emb) => {
-                let guard = state.index.load();
-                let hits = guard.search_binary_first(&emb, body.limit);
-                state.cache.put(key, hits.clone());
-                hits_to_resp(&hits)
+    let results: Vec<Vec<HitResp>> = body
+        .queries
+        .iter()
+        .map(|q| {
+            let key = CacheKey::new(q, 1, body.limit as u16);
+            if let Some(hits) = state.cache.get(&key) {
+                return hits_to_resp(&hits);
             }
-        }
-    }).collect();
+            match state.embedder.embed(q) {
+                Err(_) => vec![],
+                Ok(emb) => {
+                    let guard = state.index.load();
+                    let hits = guard.search_binary_first(&emb, body.limit);
+                    state.cache.put(key, hits.clone());
+                    hits_to_resp(&hits)
+                }
+            }
+        })
+        .collect();
     Json(results)
 }
 
@@ -170,9 +177,7 @@ async fn vec_raw(
     State(state): State<Arc<AppState>>,
     Json(body): Json<VecRawQuery>,
 ) -> impl IntoResponse {
-    let effective_mode = body.target_recall
-        .map(recall_to_mode)
-        .unwrap_or(body.mode);
+    let effective_mode = body.target_recall.map(recall_to_mode).unwrap_or(body.mode);
     let guard = state.index.load();
     let hits = match effective_mode {
         SearchMode::BinaryFirst => guard.search_binary_first(&body.vec, body.limit),
@@ -212,16 +217,20 @@ async fn vec_raw_batch(
         return Json(results);
     }
 
-    let results: Vec<Vec<HitResp>> = body.vecs.iter().map(|vec| {
-        let hits = match body.mode {
-            SearchMode::BinaryFirst => guard.search_binary_first(vec, body.limit),
-            SearchMode::Strict => guard.search_strict(vec, body.limit),
-            SearchMode::BinaryOnly => guard.search_binary_only(vec, body.limit),
-            #[cfg(feature = "hnsw")]
-            SearchMode::Hnsw => guard.search_hnsw(vec, body.limit),
-        };
-        hits_to_resp(&hits)
-    }).collect();
+    let results: Vec<Vec<HitResp>> = body
+        .vecs
+        .iter()
+        .map(|vec| {
+            let hits = match body.mode {
+                SearchMode::BinaryFirst => guard.search_binary_first(vec, body.limit),
+                SearchMode::Strict => guard.search_strict(vec, body.limit),
+                SearchMode::BinaryOnly => guard.search_binary_only(vec, body.limit),
+                #[cfg(feature = "hnsw")]
+                SearchMode::Hnsw => guard.search_hnsw(vec, body.limit),
+            };
+            hits_to_resp(&hits)
+        })
+        .collect();
     Json(results)
 }
 
@@ -235,7 +244,12 @@ async fn stats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
 }
 
 fn hits_to_resp(hits: &[Hit]) -> Vec<HitResp> {
-    hits.iter().map(|h| HitResp { id: h.id, score: h.score }).collect()
+    hits.iter()
+        .map(|h| HitResp {
+            id: h.id,
+            score: h.score,
+        })
+        .collect()
 }
 
 pub async fn serve(state: Arc<AppState>, bind: &str) -> crate::error::Result<()> {

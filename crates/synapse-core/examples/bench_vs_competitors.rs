@@ -30,21 +30,15 @@ fn corpus(n: usize, d: usize) -> Vec<f32> {
     for row in out.chunks_mut(d) {
         let n: f32 = row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-8);
         let inv = 1.0 / n;
-        for x in row {
-            *x *= inv;
-        }
+        for x in row { *x *= inv; }
     }
     out
 }
 
 fn bench<F: FnMut()>(mut f: F) -> f64 {
-    for _ in 0..3 {
-        f();
-    }
+    for _ in 0..3 { f(); }
     let t = Instant::now();
-    for _ in 0..ITERS {
-        f();
-    }
+    for _ in 0..ITERS { f(); }
     t.elapsed().as_secs_f64() * 1e6 / ITERS as f64
 }
 
@@ -68,23 +62,16 @@ fn main() {
         use ndarray::{Array1, Array2};
         let mat = Array2::from_shape_vec((N, DIM), db.clone()).unwrap();
         let qv = Array1::from_vec(q.clone());
-        bench(|| {
-            let _ = mat.dot(&qv);
-        })
+        bench(|| { let _ = mat.dot(&qv); })
     };
 
     #[cfg(feature = "simsimd")]
     let int8_us = {
         use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
-        let rows: Vec<(i64, Vec<f32>)> = db
-            .chunks(DIM)
-            .enumerate()
-            .map(|(i, r)| (i as i64, r.to_vec()))
-            .collect();
+        let rows: Vec<(i64, Vec<f32>)> =
+            db.chunks(DIM).enumerate().map(|(i, r)| (i as i64, r.to_vec())).collect();
         let idx = InMemoryI8Index::build(rows);
-        bench(|| {
-            let _ = idx.search(&q, 10);
-        })
+        bench(|| { let _ = idx.search(&q, 10); })
     };
     #[cfg(not(feature = "simsimd"))]
     let int8_us = f64::NAN;
@@ -93,11 +80,8 @@ fn main() {
     let pipeline_us = {
         use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
         use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
-        let rows: Vec<(i64, Vec<f32>)> = db
-            .chunks(DIM)
-            .enumerate()
-            .map(|(i, r)| (i as i64, r.to_vec()))
-            .collect();
+        let rows: Vec<(i64, Vec<f32>)> =
+            db.chunks(DIM).enumerate().map(|(i, r)| (i as i64, r.to_vec())).collect();
         let hidx = InMemoryHammingIndex::build(rows.clone());
         let iidx = InMemoryI8Index::build(rows);
         // Warm the id_to_row lookup cache before timing.

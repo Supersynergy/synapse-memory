@@ -8,10 +8,10 @@ repository.workspace = true
 description = "Python bindings for synapse-market via PyO3"
 
 [lib]
-name = "synapse_market"
+name = "synapse_market_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.24", features = ["extension-module"] }
+pyo3 = { version = "0.24", features = ["extension-module", "abi3-py39"] }
 synapse-market = { path = "../synapse-market" }
 anyhow.workspace = true

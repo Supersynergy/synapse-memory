@@ -6,8 +6,8 @@
 //! - Feature `multimodal-dummy`: deterministic placeholder (grayscale histogram + blake3 hash)
 //! - Neither: stub that panics
 
-use anyhow::Result;
 use std::path::Path;
+use anyhow::Result;
 
 /// Shared embed space for text and images.
 pub trait MultimodalEmbedder: Send + Sync {
@@ -21,9 +21,9 @@ pub trait MultimodalEmbedder: Send + Sync {
 #[cfg(feature = "clip-jina")]
 pub mod jina {
     use super::*;
-    use hf_hub::api::sync::Api;
-    use ort::{session::Session, value::Tensor};
     use std::sync::Mutex;
+    use ort::{session::Session, value::Tensor};
+    use hf_hub::api::sync::Api;
     use tokenizers::Tokenizer;
 
     const MODEL_REPO: &str = "jinaai/jina-clip-v2";
@@ -60,9 +60,7 @@ pub mod jina {
     }
 
     impl MultimodalEmbedder for JinaClipEmbedder {
-        fn dim(&self) -> usize {
-            DIM
-        }
+        fn dim(&self) -> usize { DIM }
 
         fn embed_text(&self, text: &str) -> Vec<f32> {
             match self.embed_text_inner(text) {
@@ -81,25 +79,18 @@ pub mod jina {
 
     impl JinaClipEmbedder {
         fn embed_text_inner(&self, text: &str) -> anyhow::Result<Vec<f32>> {
-            let encoding = self
-                .tokenizer
-                .encode(text, true)
+            let encoding = self.tokenizer.encode(text, true)
                 .map_err(|e| anyhow::anyhow!("tokenize: {e}"))?;
             let ids: Vec<i64> = encoding.get_ids().iter().map(|&x| x as i64).collect();
-            let mask: Vec<i64> = encoding
-                .get_attention_mask()
-                .iter()
-                .map(|&x| x as i64)
-                .collect();
+            let mask: Vec<i64> = encoding.get_attention_mask().iter().map(|&x| x as i64).collect();
             let len = ids.len();
             let input_ids = Tensor::<i64>::from_array(([1usize, len], ids))?;
             let attention_mask = Tensor::<i64>::from_array(([1usize, len], mask))?;
-            let mut guard = self
-                .text_session
-                .lock()
-                .map_err(|_| anyhow::anyhow!("text session mutex poisoned"))?;
-            let outputs = guard
-                .run(ort::inputs!["input_ids" => input_ids, "attention_mask" => attention_mask])?;
+            let mut guard = self.text_session
+                .lock().map_err(|_| anyhow::anyhow!("text session mutex poisoned"))?;
+            let outputs = guard.run(
+                ort::inputs!["input_ids" => input_ids, "attention_mask" => attention_mask]
+            )?;
             let (_, data) = outputs[0].try_extract_tensor::<f32>()?;
             Ok(super::l2_norm(data.to_vec()))
         }
@@ -120,10 +111,8 @@ pub mod jina {
                 [1usize, 3, IMG_SIZE as usize, IMG_SIZE as usize],
                 pixels,
             ))?;
-            let mut guard = self
-                .vision_session
-                .lock()
-                .map_err(|_| anyhow::anyhow!("vision session mutex poisoned"))?;
+            let mut guard = self.vision_session
+                .lock().map_err(|_| anyhow::anyhow!("vision session mutex poisoned"))?;
             let outputs = guard.run(ort::inputs!["pixel_values" => tensor])?;
             let (_, data) = outputs[0].try_extract_tensor::<f32>()?;
             Ok(super::l2_norm(data.to_vec()))
@@ -136,8 +125,8 @@ pub mod jina {
 #[cfg(all(feature = "multimodal", not(feature = "clip-jina")))]
 mod real {
     use super::*;
-    use hf_hub::api::sync::Api;
     use ort::{session::Session, value::Tensor};
+    use hf_hub::api::sync::Api;
 
     const MODEL_REPO: &str = "openai/clip-vit-base-patch32";
     const DIM: usize = 512;
@@ -166,9 +155,7 @@ mod real {
     }
 
     impl MultimodalEmbedder for ClipEmbedder {
-        fn dim(&self) -> usize {
-            DIM
-        }
+        fn dim(&self) -> usize { DIM }
 
         fn embed_text(&self, _text: &str) -> Vec<f32> {
             tracing::warn!("CLIP openai text stub — tokenizer not wired; use clip-jina feature");
@@ -191,10 +178,8 @@ mod real {
                 [1usize, 3, IMG_SIZE as usize, IMG_SIZE as usize],
                 pixels,
             ))?;
-            let mut guard = self
-                .vision_session
-                .lock()
-                .map_err(|_| anyhow::anyhow!("vision session mutex poisoned"))?;
+            let mut guard = self.vision_session
+                .lock().map_err(|_| anyhow::anyhow!("vision session mutex poisoned"))?;
             let outputs = guard.run(ort::inputs!["pixel_values" => tensor])?;
             let (_, data) = outputs[0].try_extract_tensor::<f32>()?;
             Ok(super::l2_norm(data.to_vec()))
@@ -220,9 +205,7 @@ mod dummy {
     }
 
     impl MultimodalEmbedder for ClipEmbedder {
-        fn dim(&self) -> usize {
-            self.dim
-        }
+        fn dim(&self) -> usize { self.dim }
 
         fn embed_text(&self, text: &str) -> Vec<f32> {
             text_hash_embed(text, self.dim)
@@ -269,25 +252,17 @@ mod dummy {
 
 // ─── Stub (no feature) ───────────────────────────────────────────────────────
 
-#[cfg(not(any(
-    feature = "multimodal",
-    feature = "multimodal-dummy",
-    feature = "clip-jina"
-)))]
+#[cfg(not(any(feature = "multimodal", feature = "multimodal-dummy", feature = "clip-jina")))]
 mod stub {
     use super::*;
     use crate::CLIP_DIM;
 
     pub struct ClipEmbedder;
     impl ClipEmbedder {
-        pub fn new() -> Self {
-            Self
-        }
+        pub fn new() -> Self { Self }
     }
     impl MultimodalEmbedder for ClipEmbedder {
-        fn dim(&self) -> usize {
-            CLIP_DIM
-        }
+        fn dim(&self) -> usize { CLIP_DIM }
         fn embed_text(&self, _: &str) -> Vec<f32> {
             panic!("synapse-multimodal: enable feature `clip-jina`, `multimodal`, or `multimodal-dummy`")
         }
@@ -306,18 +281,10 @@ pub use jina::JinaClipEmbedder as ClipEmbedder;
 #[cfg(all(feature = "multimodal", not(feature = "clip-jina")))]
 pub use real::ClipEmbedder;
 
-#[cfg(all(
-    feature = "multimodal-dummy",
-    not(feature = "multimodal"),
-    not(feature = "clip-jina")
-))]
+#[cfg(all(feature = "multimodal-dummy", not(feature = "multimodal"), not(feature = "clip-jina")))]
 pub use dummy::ClipEmbedder;
 
-#[cfg(not(any(
-    feature = "multimodal",
-    feature = "multimodal-dummy",
-    feature = "clip-jina"
-)))]
+#[cfg(not(any(feature = "multimodal", feature = "multimodal-dummy", feature = "clip-jina")))]
 pub use stub::ClipEmbedder;
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
@@ -325,9 +292,7 @@ pub use stub::ClipEmbedder;
 pub fn l2_norm(mut v: Vec<f32>) -> Vec<f32> {
     let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
     if norm > 1e-9 {
-        for x in &mut v {
-            *x /= norm;
-        }
+        for x in &mut v { *x /= norm; }
     }
     v
 }

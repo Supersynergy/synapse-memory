@@ -8,13 +8,13 @@
 //!
 //! Plan cache hit = skip parse+rewrite for hot queries (zero alloc hot path).
 
-use crate::parser::rewriter::RewriteResult;
-use bytes::Bytes;
-use lru::LruCache;
-use parking_lot::Mutex;
-use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use parking_lot::Mutex;
+use lru::LruCache;
+use std::num::NonZeroUsize;
+use bytes::Bytes;
+use crate::parser::rewriter::RewriteResult;
 
 /// Cached result entry.
 #[derive(Clone, Debug)]
@@ -61,14 +61,7 @@ impl QueryCache {
         let k = Self::key(fingerprint);
         let epoch = self.epoch.load(Ordering::Acquire);
         let mut inner = self.inner.lock();
-        inner.put(
-            k,
-            CachedResult {
-                payload,
-                epoch,
-                ncols,
-            },
-        );
+        inner.put(k, CachedResult { payload, epoch, ncols });
     }
 
     /// Bump write epoch — invalidates all cached reads.
@@ -98,9 +91,7 @@ pub struct PlanCache {
 impl PlanCache {
     pub fn new(capacity: usize) -> Self {
         let cap = NonZeroUsize::new(capacity.max(1)).unwrap();
-        Self {
-            inner: Mutex::new(LruCache::new(cap)),
-        }
+        Self { inner: Mutex::new(LruCache::new(cap)) }
     }
 
     pub fn key(fingerprint: &str) -> [u8; 32] {

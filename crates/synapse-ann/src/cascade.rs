@@ -26,10 +26,7 @@ pub struct CascadeConfig {
 
 impl Default for CascadeConfig {
     fn default() -> Self {
-        Self {
-            rough_mult: 100,
-            hnsw_ef: None,
-        }
+        Self { rough_mult: 100, hnsw_ef: None }
     }
 }
 
@@ -120,9 +117,7 @@ pub fn cascade_search<I: AnnIndex>(
         for item in full {
             if !hits.iter().any(|&(id, _)| id == item.0) {
                 hits.push(item);
-                if hits.len() >= k {
-                    break;
-                }
+                if hits.len() >= k { break; }
             }
         }
         hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -154,12 +149,10 @@ mod tests {
         let n = 200usize;
         let bpr = 8usize; // 64-bit signatures
         let ids: Vec<u64> = (0..n as u64).collect();
-        let bits: Vec<u8> = (0..n)
-            .flat_map(|i| {
-                let v = i as u64;
-                v.to_le_bytes().to_vec()
-            })
-            .collect();
+        let bits: Vec<u8> = (0..n).flat_map(|i| {
+            let v = i as u64;
+            v.to_le_bytes().to_vec()
+        }).collect();
         let query_bits = 42u64.to_le_bytes().to_vec();
         let top = hamming_topk(&query_bits, &ids, &bits, bpr, 10);
         assert_eq!(top.len(), 10);

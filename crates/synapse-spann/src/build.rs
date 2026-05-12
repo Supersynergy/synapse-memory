@@ -1,11 +1,11 @@
 //! SPANN build: k-means cluster assignment → write centroids + posting lists.
 
+use std::{fs, path::Path};
 use anyhow::Result;
 use linfa::traits::Fit;
 use linfa::DatasetBase;
 use linfa_clustering::KMeans;
 use ndarray::Array2;
-use std::{fs, path::Path};
 
 use crate::posting::write_posting;
 
@@ -48,7 +48,9 @@ pub fn build_index(
     let dataset = DatasetBase::from(arr);
 
     let k = n_clusters.min(n);
-    let model = KMeans::params(k).max_n_iterations(max_iter).fit(&dataset)?;
+    let model = KMeans::params(k)
+        .max_n_iterations(max_iter)
+        .fit(&dataset)?;
 
     // Centroids as f32
     let centroids_f32: Vec<Vec<f32>> = model

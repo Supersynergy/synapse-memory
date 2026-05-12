@@ -27,9 +27,9 @@ pub mod index;
 pub mod mime;
 pub mod storage;
 
+pub use embedder::{ClipEmbedder, MultimodalEmbedder};
 #[cfg(feature = "clip-jina")]
 pub use embedder::jina::JinaClipEmbedder;
-pub use embedder::{ClipEmbedder, MultimodalEmbedder};
 pub use index::{CrossModalIndex, ModalHit, ModalKind};
 pub use mime::MimeKind;
 

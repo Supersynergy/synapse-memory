@@ -50,12 +50,7 @@ struct SpannBuffer {
 #[cfg(feature = "spann-tier")]
 impl SpannBuffer {
     fn new(dim: usize, dir: PathBuf) -> Self {
-        Self {
-            docs: Vec::new(),
-            dim,
-            dir,
-            index: None,
-        }
+        Self { docs: Vec::new(), dim, dir, index: None }
     }
 
     fn add(&mut self, doc_id: u64, vec: Vec<f32>) -> Result<()> {
@@ -69,12 +64,7 @@ impl SpannBuffer {
         }
         let n = self.docs.len();
         let n_clusters = (n / 100).max(1).min(4096);
-        let cfg = SpannConfig {
-            n_clusters,
-            dim: self.dim,
-            n_docs: n,
-            max_iter: 50,
-        };
+        let cfg = SpannConfig { n_clusters, dim: self.dim, n_docs: n, max_iter: 50 };
         let spann_dir = self.dir.join("spann");
         let idx = SpannIndex::build(&spann_dir, &self.docs, cfg)?;
         self.index = Some(idx);
@@ -85,9 +75,7 @@ impl SpannBuffer {
     }
 
     fn search(&self, query: &[f32], k: usize) -> Vec<(i64, f32)> {
-        let Some(ref idx) = self.index else {
-            return vec![];
-        };
+        let Some(ref idx) = self.index else { return vec![] };
         let nprobe = 8;
         idx.search(query, k, nprobe)
             .into_iter()
@@ -195,10 +183,7 @@ impl TieredIndex {
         // Flush pending disk docs before searching.
         let _ = self.disk.flush();
 
-        let hints = SearchHints {
-            k,
-            ..Default::default()
-        };
+        let hints = SearchHints { k, ..Default::default() };
         let mut results: Vec<(i64, f32)> = self
             .mem
             .as_ref()
@@ -217,14 +202,8 @@ impl TieredIndex {
     #[cfg(not(feature = "spann-tier"))]
     pub fn search(&mut self, query: &[f32], k: usize) -> Vec<(i64, f32)> {
         self.ensure_mem_built();
-        let hints = SearchHints {
-            k,
-            ..Default::default()
-        };
-        self.mem
-            .as_ref()
-            .map(|m| m.search(query, hints))
-            .unwrap_or_default()
+        let hints = SearchHints { k, ..Default::default() };
+        self.mem.as_ref().map(|m| m.search(query, hints)).unwrap_or_default()
     }
 
     /// Total indexed docs across both tiers.

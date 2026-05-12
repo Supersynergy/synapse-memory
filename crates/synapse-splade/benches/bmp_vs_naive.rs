@@ -40,10 +40,7 @@ fn main() {
 
     // Build queries
     let queries: Vec<_> = (0..N_QUERIES)
-        .map(|i| {
-            enc.encode(&format!("{} query_{}", templates[i % templates.len()], i))
-                .unwrap()
-        })
+        .map(|i| enc.encode(&format!("{} query_{}", templates[i % templates.len()], i)).unwrap())
         .collect();
 
     // Warm up
@@ -78,20 +75,9 @@ fn main() {
     // Rank equivalence spot-check
     let mut rank_eq_ok = 0usize;
     for q in &queries {
-        let naive_ids: Vec<u64> = naive
-            .search(q, TOP_K)
-            .unwrap()
-            .into_iter()
-            .map(|(id, _)| id)
-            .collect();
-        let bmp_ids: Vec<u64> = bmp
-            .search_topk(q, TOP_K)
-            .into_iter()
-            .map(|(id, _)| id)
-            .collect();
-        if naive_ids == bmp_ids {
-            rank_eq_ok += 1;
-        }
+        let naive_ids: Vec<u64> = naive.search(q, TOP_K).unwrap().into_iter().map(|(id,_)| id).collect();
+        let bmp_ids: Vec<u64> = bmp.search_topk(q, TOP_K).into_iter().map(|(id,_)| id).collect();
+        if naive_ids == bmp_ids { rank_eq_ok += 1; }
     }
     println!("Rank-eq: {}/{} queries match", rank_eq_ok, N_QUERIES);
 

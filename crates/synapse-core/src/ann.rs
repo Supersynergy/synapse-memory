@@ -93,7 +93,7 @@ impl Ann {
             Err(e) => {
                 let msg = format!("{e:?}");
                 if msg.contains("Duplicate") || msg.contains("already exists") {
-                    Ok(()) // already present, safe to skip
+                    Ok(())  // already present, safe to skip
                 } else {
                     Err(Error::Other(format!("usearch insert_or_skip: {e}")))
                 }

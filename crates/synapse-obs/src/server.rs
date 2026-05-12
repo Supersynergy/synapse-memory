@@ -22,10 +22,7 @@ async fn metrics_handler() -> impl axum::response::IntoResponse {
     let mut buf = Vec::with_capacity(4096);
     encoder.encode(&families, &mut buf).unwrap_or_default();
     (
-        [(
-            axum::http::header::CONTENT_TYPE,
-            "text/plain; version=0.0.4",
-        )],
+        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
         buf,
     )
 }

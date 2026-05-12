@@ -39,8 +39,10 @@ pub struct EntityRecognizer {
 impl EntityRecognizer {
     /// Build from explicit gazetteer entries `(canonical, type)`.
     pub fn from_gazetteer(entries: &[(String, String)]) -> Result<Self> {
-        let (patterns, types): (Vec<&str>, Vec<String>) =
-            entries.iter().map(|(p, t)| (p.as_str(), t.clone())).unzip();
+        let (patterns, types): (Vec<&str>, Vec<String>) = entries
+            .iter()
+            .map(|(p, t)| (p.as_str(), t.clone()))
+            .unzip();
         let ac = if patterns.is_empty() {
             None
         } else {
@@ -66,8 +68,9 @@ impl EntityRecognizer {
 
     /// Pull canonical names directly from the running store's `entities` table.
     pub fn from_store(conn: &Connection) -> Result<Self> {
-        let mut stmt =
-            conn.prepare("SELECT canonical_name, COALESCE(entity_type, 'thing') FROM entities")?;
+        let mut stmt = conn.prepare(
+            "SELECT canonical_name, COALESCE(entity_type, 'thing') FROM entities",
+        )?;
         let entries: Vec<(String, String)> = stmt
             .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
             .collect::<std::result::Result<_, _>>()?;
@@ -120,10 +123,7 @@ impl EntityRecognizer {
         }
         for m in self.re_capitalised.find_iter(text) {
             // Drop matches already covered by a longer span (gazetteer wins).
-            if spans
-                .iter()
-                .any(|s| s.start <= m.start() && s.end >= m.end())
-            {
+            if spans.iter().any(|s| s.start <= m.start() && s.end >= m.end()) {
                 continue;
             }
             spans.push(EntitySpan {

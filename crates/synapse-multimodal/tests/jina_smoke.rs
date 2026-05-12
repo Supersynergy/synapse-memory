@@ -8,9 +8,9 @@
 
 #[cfg(feature = "clip-jina")]
 mod jina_smoke {
-    use image::{Rgb, RgbImage};
-    use synapse_multimodal::{embedder::cosine_sim, JinaClipEmbedder, MultimodalEmbedder};
+    use synapse_multimodal::{JinaClipEmbedder, MultimodalEmbedder, embedder::cosine_sim};
     use tempfile::TempDir;
+    use image::{RgbImage, Rgb};
 
     fn make_cat_image(dir: &std::path::Path) -> std::path::PathBuf {
         // Simple orange-ish image as "cat proxy"
@@ -30,10 +30,7 @@ mod jina_smoke {
         let v = emb.embed_text("cat");
         assert_eq!(v.len(), 1024);
         let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!(
-            (norm - 1.0).abs() < 1e-4,
-            "text embed not unit-norm: {norm}"
-        );
+        assert!((norm - 1.0).abs() < 1e-4, "text embed not unit-norm: {norm}");
     }
 
     #[test]
@@ -44,10 +41,7 @@ mod jina_smoke {
         let v = emb.embed_image(&cat).expect("embed_image");
         assert_eq!(v.len(), 1024);
         let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!(
-            (norm - 1.0).abs() < 1e-4,
-            "image embed not unit-norm: {norm}"
-        );
+        assert!((norm - 1.0).abs() < 1e-4, "image embed not unit-norm: {norm}");
     }
 
     #[test]
@@ -59,9 +53,6 @@ mod jina_smoke {
         let img_vec = emb.embed_image(&cat).expect("embed_image");
         let sim = cosine_sim(&text_vec, &img_vec);
         println!("cross-modal cosine(\"a cat\", cat.png) = {sim:.4}");
-        assert!(
-            sim >= 0.2,
-            "cross-modal cosine too low: {sim:.4} (expected ≥ 0.2)"
-        );
+        assert!(sim >= 0.2, "cross-modal cosine too low: {sim:.4} (expected ≥ 0.2)");
     }
 }

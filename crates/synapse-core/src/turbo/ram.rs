@@ -17,10 +17,7 @@ pub fn madvise_willneed(ptr: *mut u8, len: usize) {
     unsafe {
         let ret = libc::madvise(ptr as *mut libc::c_void, len, libc::MADV_WILLNEED);
         if ret != 0 {
-            tracing::debug!(
-                "madvise(WILLNEED, {len}) failed: {}",
-                std::io::Error::last_os_error()
-            );
+            tracing::debug!("madvise(WILLNEED, {len}) failed: {}", std::io::Error::last_os_error());
         }
     }
 }
@@ -116,10 +113,7 @@ pub fn mmap_huge(len: usize) -> Option<*mut u8> {
         tracing::warn!("mmap(MAP_HUGETLB, {aligned} bytes) failed — falling back to normal pages");
         None
     } else {
-        tracing::info!(
-            "huge-pages: allocated {} MiB via MAP_HUGETLB",
-            aligned / (1024 * 1024)
-        );
+        tracing::info!("huge-pages: allocated {} MiB via MAP_HUGETLB", aligned / (1024 * 1024));
         Some(ptr as *mut u8)
     }
 }

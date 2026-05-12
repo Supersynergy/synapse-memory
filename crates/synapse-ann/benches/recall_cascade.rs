@@ -47,9 +47,7 @@ fn measure_recall(c: &mut Criterion) {
     for (i, v) in vectors.iter().enumerate() {
         idx.insert(i as u64, v).unwrap();
     }
-    let queries: Vec<Vec<f32>> = (0..QUERIES as u64)
-        .map(|i| vector(0xdead + i, DIM))
-        .collect();
+    let queries: Vec<Vec<f32>> = (0..QUERIES as u64).map(|i| vector(0xdead + i, DIM)).collect();
 
     let truth: Vec<Vec<u64>> = queries
         .iter()
@@ -81,12 +79,7 @@ fn measure_recall(c: &mut Criterion) {
         b.iter(|| black_box(idx.search(black_box(&queries[0]), K).unwrap()));
     });
     g.bench_function("search_with_rerank_4x", |b| {
-        b.iter(|| {
-            black_box(
-                idx.search_with_rerank(black_box(&queries[0]), K, 4)
-                    .unwrap(),
-            )
-        });
+        b.iter(|| black_box(idx.search_with_rerank(black_box(&queries[0]), K, 4).unwrap()));
     });
     g.finish();
 }

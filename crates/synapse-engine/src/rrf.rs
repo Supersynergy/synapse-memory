@@ -17,9 +17,7 @@ pub fn rrf_fuse(ranks_a: &[f64], ranks_b: &[f64], k: f64) -> Vec<f64> {
 pub fn distance_to_score(distances: &[f32]) -> Vec<f32> {
     let mut out = Vec::with_capacity(distances.len());
     // SAFETY: out has capacity == distances.len(); we write all elements before set_len.
-    unsafe {
-        out.set_len(distances.len());
-    }
+    unsafe { out.set_len(distances.len()); }
     distance_to_score_inplace(distances, &mut out);
     out
 }

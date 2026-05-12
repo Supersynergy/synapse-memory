@@ -15,9 +15,7 @@ use std::collections::HashMap;
 
 /// Seeded pseudo-random float in [-1, 1] — lcg-based, no deps.
 fn lcg_rand(state: &mut u64) -> f32 {
-    *state = state
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
+    *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let bits = ((*state >> 33) as u32) | 0x3F800000;
     let f = f32::from_bits(bits) - 1.5;
     f * 2.0 // [-1, 1]
@@ -64,10 +62,8 @@ pub fn muvera_encode(token_vecs: &[Vec<f32>], fde_dim: usize, seed: u64) -> Vec<
         return vec![0.0f32; fde_dim];
     }
     let token_dim = token_vecs[0].len();
-    assert!(
-        token_dim > 0 && fde_dim >= token_dim && fde_dim % token_dim == 0,
-        "fde_dim must be a positive multiple of token_dim"
-    );
+    assert!(token_dim > 0 && fde_dim >= token_dim && fde_dim % token_dim == 0,
+        "fde_dim must be a positive multiple of token_dim");
 
     let n_buckets = fde_dim / token_dim;
     // n_planes = ceil(log2(n_buckets)), min 1
@@ -114,9 +110,7 @@ mod tests {
     fn make_token_vecs(n: usize, dim: usize, base: f32) -> Vec<Vec<f32>> {
         (0..n)
             .map(|i| {
-                let mut v: Vec<f32> = (0..dim)
-                    .map(|j| base + (i * dim + j) as f32 * 0.01)
-                    .collect();
+                let mut v: Vec<f32> = (0..dim).map(|j| base + (i * dim + j) as f32 * 0.01).collect();
                 let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
                 v.iter_mut().for_each(|x| *x /= norm);
                 v
@@ -140,10 +134,7 @@ mod tests {
         let fde_a = muvera_encode(&vecs_a, 64, 42);
         let fde_b = muvera_encode(&vecs_b, 64, 42);
         let sim = cosine_sim(&fde_a, &fde_b);
-        assert!(
-            sim > 0.5,
-            "similar docs should have cosine > 0.5, got {sim:.4}"
-        );
+        assert!(sim > 0.5, "similar docs should have cosine > 0.5, got {sim:.4}");
     }
 
     #[test]
@@ -151,9 +142,7 @@ mod tests {
         let dim = 16;
         let vecs_b: Vec<Vec<f32>> = (0..8)
             .map(|_| {
-                let v: Vec<f32> = (0..dim)
-                    .map(|j| if j % 2 == 0 { 1.0 } else { -1.0 })
-                    .collect();
+                let v: Vec<f32> = (0..dim).map(|j| if j % 2 == 0 { 1.0 } else { -1.0 }).collect();
                 let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
                 v.into_iter().map(|x| x / norm).collect()
             })
@@ -169,10 +158,7 @@ mod tests {
         let fde_a = muvera_encode(&va, 64, 42);
         let fde_b = muvera_encode(&vecs_b, 64, 42);
         let sim = cosine_sim(&fde_a, &fde_b);
-        assert!(
-            sim < 0.7,
-            "dissimilar docs should have lower cosine, got {sim:.4}"
-        );
+        assert!(sim < 0.7, "dissimilar docs should have lower cosine, got {sim:.4}");
     }
 
     #[test]
@@ -196,9 +182,6 @@ mod tests {
         let vecs = make_token_vecs(6, 16, 0.3);
         let fde = muvera_encode(&vecs, 64, 13);
         let norm: f32 = fde.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!(
-            (norm - 1.0).abs() < 1e-5,
-            "FDE should be L2-normalised, norm={norm}"
-        );
+        assert!((norm - 1.0).abs() < 1e-5, "FDE should be L2-normalised, norm={norm}");
     }
 }

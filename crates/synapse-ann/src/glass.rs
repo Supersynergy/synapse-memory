@@ -190,6 +190,7 @@ impl GlassIndex {
             entry: 0,
         })
     }
+
 }
 
 // ── internal beam-search ──────────────────────────────────────────────────────
@@ -303,14 +304,8 @@ fn beam_search_csr(
     let entry = entry as usize;
     let d0 = l2sq(query, &flat[entry * dim..(entry + 1) * dim]);
     visited[entry] = true;
-    candidates.push(HeapEntry {
-        neg_dist: -d0,
-        id: entry as u32,
-    });
-    results.push(HeapEntry {
-        neg_dist: -d0,
-        id: entry as u32,
-    });
+    candidates.push(HeapEntry { neg_dist: -d0, id: entry as u32 });
+    results.push(HeapEntry { neg_dist: -d0, id: entry as u32 });
 
     while let Some(cur) = candidates.pop() {
         let worst = results.peek().map(|e| -e.neg_dist).unwrap_or(f32::MAX);
@@ -319,11 +314,7 @@ fn beam_search_csr(
         }
 
         let nbrs = graph.neighbours(cur.id as usize);
-        let batch: Vec<u32> = nbrs
-            .iter()
-            .copied()
-            .filter(|&nb| !visited[nb as usize])
-            .collect();
+        let batch: Vec<u32> = nbrs.iter().copied().filter(|&nb| !visited[nb as usize]).collect();
         for &nb in &batch {
             visited[nb as usize] = true;
         }
@@ -331,14 +322,8 @@ fn beam_search_csr(
         let dists = dist_batch(query, flat, dim, &batch);
         for (&nb, d) in batch.iter().zip(dists) {
             if results.len() < ef || d < worst {
-                candidates.push(HeapEntry {
-                    neg_dist: -d,
-                    id: nb,
-                });
-                results.push(HeapEntry {
-                    neg_dist: -d,
-                    id: nb,
-                });
+                candidates.push(HeapEntry { neg_dist: -d, id: nb });
+                results.push(HeapEntry { neg_dist: -d, id: nb });
                 if results.len() > ef {
                     results.pop();
                 }
@@ -372,10 +357,7 @@ impl GlassIndex {
         }
         let ef = ef.max(k);
         let results = beam_search_csr(&self.vecs, self.dim, &self.graph, self.entry, query, k, ef);
-        Ok(results
-            .into_iter()
-            .map(|(i, d)| (self.ids[i as usize], d))
-            .collect())
+        Ok(results.into_iter().map(|(i, d)| (self.ids[i as usize], d)).collect())
     }
 }
 
@@ -384,9 +366,7 @@ impl GlassIndex {
 impl AnnIndex for GlassIndex {
     fn insert(&mut self, _id: u64, _vector: &[f32]) -> Result<(), AnnError> {
         // Dynamic insertion not yet implemented; rebuild via `build()`.
-        Err(AnnError::Other(
-            "GlassIndex: dynamic insert not supported — use build()".into(),
-        ))
+        Err(AnnError::Other("GlassIndex: dynamic insert not supported — use build()".into()))
     }
 
     fn remove(&mut self, _id: u64) -> Result<usize, AnnError> {
@@ -403,9 +383,7 @@ impl AnnIndex for GlassIndex {
 
     fn save(&self, _path: &Path) -> Result<(), AnnError> {
         // TODO: bincode / rkyv serialization of (vecs, ids, graph).
-        Err(AnnError::Other(
-            "GlassIndex: save not yet implemented".into(),
-        ))
+        Err(AnnError::Other("GlassIndex: save not yet implemented".into()))
     }
 }
 
@@ -432,17 +410,16 @@ mod tests {
 
         // Search with the first vector as query — expect id=0 as nearest.
         let query = &vecs[0];
-        let results = idx.search_beam_simd(query, 10, 40).expect("search failed");
+        let results = idx
+            .search_beam_simd(query, 10, 40)
+            .expect("search failed");
 
         assert!(!results.is_empty(), "search returned empty");
         assert!(results.len() <= 10);
         // Nearest neighbour of vec[0] must be itself (distance ≈ 0).
         let (top_id, top_dist) = results[0];
         assert_eq!(top_id, 0, "expected self as nearest, got {top_id}");
-        assert!(
-            top_dist < 1e-6,
-            "self-distance should be ~0, got {top_dist}"
-        );
+        assert!(top_dist < 1e-6, "self-distance should be ~0, got {top_dist}");
     }
 
     #[test]
@@ -458,9 +435,6 @@ mod tests {
         let vecs = make_vecs(10, 8);
         let idx = GlassIndex::build(&vecs, 4, 20).unwrap();
         let bad_query = vec![0.0f32; 16]; // wrong dim
-        assert!(matches!(
-            idx.search(&bad_query, 3),
-            Err(AnnError::DimMismatch { .. })
-        ));
+        assert!(matches!(idx.search(&bad_query, 3), Err(AnnError::DimMismatch { .. })));
     }
 }

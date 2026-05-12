@@ -54,9 +54,7 @@ impl Synapse {
             embedding: None,
         };
         let mut store = inner.lock().await;
-        store
-            .put(&req)
-            .map_err(|e| napi::Error::from_reason(e.to_string()))
+        store.put(&req).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
     /// Full-text (lexical) search. Returns top-k hits.

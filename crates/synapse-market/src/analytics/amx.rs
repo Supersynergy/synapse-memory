@@ -21,20 +21,13 @@ pub fn correlation_matrix_amx(mat: &[f32], rows: usize, cols: usize) -> Vec<f32>
 #[link(name = "Accelerate", kind = "framework")]
 extern "C" {
     fn cblas_sgemm(
-        order: u32,
-        transa: u32,
-        transb: u32,
-        m: i32,
-        n: i32,
-        k: i32,
+        order: u32, transa: u32, transb: u32,
+        m: i32, n: i32, k: i32,
         alpha: f32,
-        a: *const f32,
-        lda: i32,
-        b: *const f32,
-        ldb: i32,
+        a: *const f32, lda: i32,
+        b: *const f32, ldb: i32,
         beta: f32,
-        c: *mut f32,
-        ldc: i32,
+        c: *mut f32, ldc: i32,
     );
 }
 
@@ -54,14 +47,8 @@ fn amx_impl(mat: &[f32], rows: usize, cols: usize) -> Vec<f32> {
     let mut normed = mat.to_vec();
     for c in 0..p {
         let mean = (0..n).map(|r| normed[r * p + c]).sum::<f32>() / n as f32;
-        let var = (0..n)
-            .map(|r| {
-                let d = normed[r * p + c] - mean;
-                d * d
-            })
-            .sum::<f32>()
-            / n as f32;
-        let inv = if var < 1e-24 { 0.0 } else { 1.0 / var.sqrt() };
+        let var  = (0..n).map(|r| { let d = normed[r*p+c] - mean; d*d }).sum::<f32>() / n as f32;
+        let inv  = if var < 1e-24 { 0.0 } else { 1.0 / var.sqrt() };
         for r in 0..n {
             normed[r * p + c] = (normed[r * p + c] - mean) * inv;
         }
@@ -72,25 +59,23 @@ fn amx_impl(mat: &[f32], rows: usize, cols: usize) -> Vec<f32> {
     unsafe {
         cblas_sgemm(
             CBLAS_ROW_MAJOR,
-            CBLAS_TRANS, // A = Nᵀ
+            CBLAS_TRANS,   // A = Nᵀ
             CBLAS_NO_TRANS,
-            p as i32, // M
-            p as i32, // N
-            n as i32, // K
+            p as i32,      // M
+            p as i32,      // N
+            n as i32,      // K
             1.0 / n as f32,
             normed.as_ptr(),
-            p as i32, // lda
+            p as i32,      // lda
             normed.as_ptr(),
-            p as i32, // ldb
+            p as i32,      // ldb
             0.0,
             out.as_mut_ptr(),
-            p as i32, // ldc
+            p as i32,      // ldc
         );
     }
 
-    for i in 0..p {
-        out[i * p + i] = 1.0;
-    }
+    for i in 0..p { out[i * p + i] = 1.0; }
     out
 }
 

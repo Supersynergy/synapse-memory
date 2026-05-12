@@ -25,17 +25,17 @@ impl IsolationLevel {
     /// The SQLite BEGIN statement for this level.
     pub fn sqlite_begin(self) -> &'static str {
         match self {
-            IsolationLevel::ReadCommitted => "BEGIN DEFERRED",
+            IsolationLevel::ReadCommitted  => "BEGIN DEFERRED",
             IsolationLevel::RepeatableRead => "BEGIN",
-            IsolationLevel::Serializable => "BEGIN IMMEDIATE",
+            IsolationLevel::Serializable   => "BEGIN IMMEDIATE",
         }
     }
 
     fn from_upper(s: &str) -> Option<Self> {
         match s.trim() {
-            "READ COMMITTED" => Some(IsolationLevel::ReadCommitted),
+            "READ COMMITTED"  => Some(IsolationLevel::ReadCommitted),
             "REPEATABLE READ" => Some(IsolationLevel::RepeatableRead),
-            "SERIALIZABLE" => Some(IsolationLevel::Serializable),
+            "SERIALIZABLE"    => Some(IsolationLevel::Serializable),
             _ => None,
         }
     }
@@ -51,9 +51,7 @@ pub enum TxnStatement {
     /// `BEGIN READ WRITE` — explicit read/write (maps to BEGIN IMMEDIATE).
     BeginReadWrite,
     /// `BEGIN AS OF TIMESTAMP '<ts>'` — Synapse time-travel snapshot.
-    BeginAsOf {
-        timestamp: String,
-    },
+    BeginAsOf { timestamp: String },
     /// `SET TRANSACTION ISOLATION LEVEL <level>`.
     SetIsolationLevel(IsolationLevel),
     Commit,
@@ -67,17 +65,17 @@ impl TxnStatement {
     /// Map this statement to the SQLite SQL to execute.
     pub fn to_sqlite(&self) -> &'static str {
         match self {
-            TxnStatement::Begin => "BEGIN",
-            TxnStatement::BeginReadOnly => "BEGIN DEFERRED",
-            TxnStatement::BeginReadWrite => "BEGIN IMMEDIATE",
-            TxnStatement::BeginAsOf { .. } => "BEGIN DEFERRED",
-            TxnStatement::SetIsolationLevel(l) => l.sqlite_begin(),
-            TxnStatement::Commit => "COMMIT",
-            TxnStatement::Rollback => "ROLLBACK",
+            TxnStatement::Begin                        => "BEGIN",
+            TxnStatement::BeginReadOnly                => "BEGIN DEFERRED",
+            TxnStatement::BeginReadWrite               => "BEGIN IMMEDIATE",
+            TxnStatement::BeginAsOf { .. }             => "BEGIN DEFERRED",
+            TxnStatement::SetIsolationLevel(l)         => l.sqlite_begin(),
+            TxnStatement::Commit                       => "COMMIT",
+            TxnStatement::Rollback                     => "ROLLBACK",
             // Savepoints: callers must format manually
-            TxnStatement::Savepoint(_) => "SAVEPOINT",
-            TxnStatement::ReleaseSavepoint(_) => "RELEASE SAVEPOINT",
-            TxnStatement::RollbackToSavepoint(_) => "ROLLBACK TO SAVEPOINT",
+            TxnStatement::Savepoint(_)                 => "SAVEPOINT",
+            TxnStatement::ReleaseSavepoint(_)          => "RELEASE SAVEPOINT",
+            TxnStatement::RollbackToSavepoint(_)       => "ROLLBACK TO SAVEPOINT",
         }
     }
 }
@@ -90,10 +88,9 @@ pub fn classify_txn(sql: &str) -> Option<TxnStatement> {
 
     // SET TRANSACTION ISOLATION LEVEL ...
     if upper.starts_with("SET TRANSACTION ISOLATION LEVEL") {
-        let level_str = s["SET TRANSACTION ISOLATION LEVEL".len()..]
-            .trim()
-            .to_ascii_uppercase();
-        return IsolationLevel::from_upper(&level_str).map(TxnStatement::SetIsolationLevel);
+        let level_str = s["SET TRANSACTION ISOLATION LEVEL".len()..].trim().to_ascii_uppercase();
+        return IsolationLevel::from_upper(&level_str)
+            .map(TxnStatement::SetIsolationLevel);
     }
 
     match lead {
@@ -125,17 +122,14 @@ pub fn classify_txn(sql: &str) -> Option<TxnStatement> {
         "ROLLBACK" => {
             // ROLLBACK TO [SAVEPOINT] name
             if let Some(rest) = upper.strip_prefix("ROLLBACK TO") {
-                let name = rest
-                    .trim_start()
+                let name = rest.trim_start()
                     .strip_prefix("SAVEPOINT")
                     .unwrap_or(rest.trim_start())
                     .trim()
                     .to_owned();
                 if !name.is_empty() {
                     return Some(TxnStatement::RollbackToSavepoint(
-                        s[s.to_ascii_uppercase().len() - name.len()..]
-                            .trim()
-                            .to_owned(),
+                        s[s.to_ascii_uppercase().len() - name.len()..].trim().to_owned()
                     ));
                 }
             }
@@ -143,24 +137,12 @@ pub fn classify_txn(sql: &str) -> Option<TxnStatement> {
         }
         "SAVEPOINT" => {
             let name = s[9..].trim().to_owned();
-            if name.is_empty() {
-                None
-            } else {
-                Some(TxnStatement::Savepoint(name))
-            }
+            if name.is_empty() { None } else { Some(TxnStatement::Savepoint(name)) }
         }
         "RELEASE" => {
             let rest = s[7..].trim();
-            let name = rest
-                .strip_prefix("SAVEPOINT")
-                .unwrap_or(rest)
-                .trim()
-                .to_owned();
-            if name.is_empty() {
-                None
-            } else {
-                Some(TxnStatement::ReleaseSavepoint(name))
-            }
+            let name = rest.strip_prefix("SAVEPOINT").unwrap_or(rest).trim().to_owned();
+            if name.is_empty() { None } else { Some(TxnStatement::ReleaseSavepoint(name)) }
         }
         _ => None,
     }
@@ -212,22 +194,13 @@ mod tests {
 
     #[test]
     fn begin_read_only() {
-        assert_eq!(
-            classify_txn("BEGIN READ ONLY"),
-            Some(TxnStatement::BeginReadOnly)
-        );
-        assert_eq!(
-            classify_txn("begin read only;"),
-            Some(TxnStatement::BeginReadOnly)
-        );
+        assert_eq!(classify_txn("BEGIN READ ONLY"), Some(TxnStatement::BeginReadOnly));
+        assert_eq!(classify_txn("begin read only;"), Some(TxnStatement::BeginReadOnly));
     }
 
     #[test]
     fn begin_read_write() {
-        assert_eq!(
-            classify_txn("BEGIN READ WRITE"),
-            Some(TxnStatement::BeginReadWrite)
-        );
+        assert_eq!(classify_txn("BEGIN READ WRITE"), Some(TxnStatement::BeginReadWrite));
     }
 
     #[test]
@@ -243,23 +216,15 @@ mod tests {
     fn set_isolation_serializable() {
         assert_eq!(
             classify_txn("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"),
-            Some(TxnStatement::SetIsolationLevel(
-                IsolationLevel::Serializable
-            ))
+            Some(TxnStatement::SetIsolationLevel(IsolationLevel::Serializable))
         );
     }
 
     #[test]
     fn set_isolation_read_committed() {
         let d = classify_txn("SET TRANSACTION ISOLATION LEVEL READ COMMITTED").unwrap();
-        assert_eq!(
-            d,
-            TxnStatement::SetIsolationLevel(IsolationLevel::ReadCommitted)
-        );
-        assert_eq!(
-            IsolationLevel::ReadCommitted.sqlite_begin(),
-            "BEGIN DEFERRED"
-        );
+        assert_eq!(d, TxnStatement::SetIsolationLevel(IsolationLevel::ReadCommitted));
+        assert_eq!(IsolationLevel::ReadCommitted.sqlite_begin(), "BEGIN DEFERRED");
     }
 
     #[test]

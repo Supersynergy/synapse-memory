@@ -24,9 +24,7 @@ fn percentile(mut xs: Vec<f64>, p: f64) -> f64 {
 
 fn bench(label: &str, e: &dyn TextEmbedder, texts: &[String], iters: usize) {
     // Warmup
-    let _ = e
-        .embed_batch(&texts[..1.min(texts.len())].to_vec())
-        .unwrap();
+    let _ = e.embed_batch(&texts[..1.min(texts.len())].to_vec()).unwrap();
 
     // Single-doc latency
     let mut singles = Vec::with_capacity(iters);
@@ -56,15 +54,15 @@ fn bench(label: &str, e: &dyn TextEmbedder, texts: &[String], iters: usize) {
         }
         let p50 = percentile(totals.clone(), 0.50);
         let per = p50 / bs as f64;
-        println!("{label:24}  batch={bs:3}  p50={p50:7.2}ms  per-doc={per:6.3}ms",);
+        println!(
+            "{label:24}  batch={bs:3}  p50={p50:7.2}ms  per-doc={per:6.3}ms",
+        );
     }
 }
 
 fn main() {
     let texts: Vec<String> = (0..100)
-        .map(|i| {
-            format!("the quick brown fox number {i} jumps over the lazy dog and runs to the river")
-        })
+        .map(|i| format!("the quick brown fox number {i} jumps over the lazy dog and runs to the river"))
         .collect();
 
     println!("\n=== synapse embed bench (M4 Max, 100 docs) ===\n");

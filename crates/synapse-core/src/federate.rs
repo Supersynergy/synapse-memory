@@ -379,7 +379,7 @@ fn handle_stream(
 mod tests {
     use super::*;
     use crate::crdt;
-
+    
     use crate::sign::random_signing_key;
 
     fn make_fed() -> Federation {

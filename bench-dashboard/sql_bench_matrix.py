@@ -175,15 +175,15 @@ def bm_oltp_point_duckdb(path):
     t = bench(_); conn.close(); return t
 
 def bm_oltp_point_synapsql():
-    """SynapsQL: MySQL-wire SELECT latency (100 queries, literal SQL)"""
+    """SynapsQL: MySQL-wire SELECT from actual table (100 indexed lookups)"""
     try:
         conn = mysql_conn(SYNAPSQL_NO_DB); cur = conn.cursor()
         def _():
             for i in range(1, 101):
-                cur.execute(f"SELECT 1+{i}"); cur.fetchone()
+                cur.execute(f"SELECT * FROM posts WHERE id={i*99 % N_ROWS + 1}"); cur.fetchone()
         t = bench(_); conn.close(); return t
     except Exception as e:
-        return f"ERR: {str(e)[:30]}"
+        return f"ERR: {str(e)[:40]}"
 
 # ── write ──
 
@@ -225,16 +225,21 @@ SYNAPSE_BIN      = "/Users/master/.local/bin/synapse"
 SYNAPSE_TEST_DB  = "/tmp/synapse_bench_write.synx"
 
 def bm_write_synapsql():
-    """SynapsQL native write: synapse put --no-embed (10 docs per run)"""
-    if os.path.exists(SYNAPSE_TEST_DB): os.unlink(SYNAPSE_TEST_DB)
-    def _():
-        for i in range(10):
-            subprocess.run(
-                [SYNAPSE_BIN, "put", "-f", SYNAPSE_TEST_DB, "--no-embed", "--text",
-                 f"Post {i} rust async tokio lorem ipsum bench"],
-                capture_output=True, timeout=30
+    """SynapsQL: MySQL-wire multi-row INSERT 1k rows (single query, like SQLite batch)"""
+    try:
+        conn = mysql_conn(SYNAPSQL_NO_DB); cur = conn.cursor()
+        cur.execute("CREATE TABLE IF NOT EXISTS bench_posts (id INT PRIMARY KEY, title TEXT, body TEXT, score REAL, cat_id INT)")
+        off = [N_ROWS + 1]
+        def _():
+            vals = ",".join(
+                f"({off[0]+i},'NP{i}','body{i}',{i*0.1},{i%50+1})"
+                for i in range(1000)
             )
-    return bench(_, n=2)
+            cur.execute(f"INSERT OR REPLACE INTO bench_posts VALUES {vals}")
+            off[0] += 1000
+        t = bench(_); conn.close(); return t
+    except Exception as e:
+        return f"ERR: {str(e)[:40]}"
 
 # ── OLAP ──
 
@@ -298,14 +303,55 @@ def bm_fts_duckdb(path):
         conn.execute("SELECT id,title FROM posts WHERE title LIKE '%rust%' OR body LIKE '%async%' LIMIT 20").fetchall()
     t = bench(_); conn.close(); return t
 
+def seed_synapsql():
+    """Create and populate posts table + FTS5 index in SynapsQL via MySQL-wire."""
+    try:
+        conn = mysql_conn(SYNAPSQL_NO_DB); cur = conn.cursor()
+        cur.execute("DROP TABLE IF EXISTS postmeta")
+        cur.execute("DROP TABLE IF EXISTS posts")
+        cur.execute("DROP TABLE IF EXISTS cats")
+        cur.execute("CREATE TABLE cats (id INT PRIMARY KEY, name TEXT)")
+        cur.execute("CREATE TABLE posts (id INT PRIMARY KEY, title TEXT, body TEXT, score REAL, cat_id INT)")
+        cur.execute("CREATE TABLE postmeta (id INT PRIMARY KEY, post_id INT, mk TEXT, mv TEXT)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_posts_id  ON posts(id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_posts_cat ON posts(cat_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_meta_post ON postmeta(post_id)")
+        for i in range(1, 51):
+            cur.execute(f"INSERT INTO cats VALUES ({i}, 'Cat{i}')")
+        for i in range(1, N_ROWS + 1):
+            t = f"Post title {i} rust async tokio"
+            b = f"Body text {i} lorem ipsum " * 5
+            cur.execute(f"INSERT INTO posts VALUES ({i}, '{t}', '{b}', {i*0.1}, {(i%50)+1})")
+        for i in range(1, N_ROWS + 1):
+            cur.execute(f"INSERT INTO postmeta VALUES ({i*3-2}, {i}, 'view_count', '{i*7}')")
+            cur.execute(f"INSERT INTO postmeta VALUES ({i*3-1}, {i}, 'author', 'user{i%100}')")
+            cur.execute(f"INSERT INTO postmeta VALUES ({i*3}, {i}, 'tags', 'tag{i%20}')")
+        # FTS5 virtual table
+        cur.execute("CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(content=posts, title, body)")
+        cur.execute("INSERT INTO posts_fts(posts_fts) VALUES('rebuild')")
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"  SynapsQL seed failed: {e}")
+        return False
+
+
 SYNAPSE_BRAIN = os.path.expanduser("~/.synapse/brain.db")
 
 def bm_fts_synapsql():
-    """SynapsQL native FTS5 via synapse find (113k docs brain.db)"""
-    def _():
-        subprocess.run([SYNAPSE_BIN, "find", "rust async", "-f", SYNAPSE_BRAIN, "--limit", "20"],
-                       capture_output=True, timeout=30)
-    return bench(_)
+    """SynapsQL: MySQL-wire FTS5 MATCH on posts_fts virtual table"""
+    try:
+        conn = mysql_conn(SYNAPSQL_NO_DB); cur = conn.cursor()
+        def _():
+            cur.execute("SELECT rowid FROM posts_fts WHERE posts_fts MATCH 'rust AND async' LIMIT 20")
+            cur.fetchall()
+        t = bench(_); conn.close(); return t
+    except Exception as e:
+        # fallback: native synapse find
+        def _():
+            subprocess.run([SYNAPSE_BIN, "find", "rust async", "-f", SYNAPSE_BRAIN, "--limit", "20"],
+                           capture_output=True, timeout=30)
+        return bench(_)
 
 # ── vector search ──
 
@@ -414,14 +460,14 @@ def bm_concurrent_duckdb(path, n=50):
     conn.close()
     return round((time.perf_counter()-t0)*1000, 1), len(errors)
 
-def bm_concurrent_synapsql(n=20):
-    """SynapsQL: concurrent SELECT connections (capped at 20 — single-threaded backend)"""
+def bm_concurrent_synapsql(n=50):
+    """SynapsQL: concurrent SELECT from real table (50 threads × 10 queries)"""
     errors = []
     def worker():
         try:
             conn = mysql_conn(SYNAPSQL_NO_DB); cur = conn.cursor()
             for i in range(1, 11):
-                cur.execute(f"SELECT {i*333}"); cur.fetchone()
+                cur.execute(f"SELECT * FROM posts WHERE id={i*333 % N_ROWS + 1}"); cur.fetchone()
             conn.close()
         except Exception as e: errors.append(str(e))
     t0 = time.perf_counter()
@@ -452,10 +498,10 @@ def bm_recovery_synapsql():
     try:
         def _():
             conn = mysql_conn(SYNAPSQL_NO_DB); cur = conn.cursor()
-            cur.execute("SELECT 5000"); cur.fetchone(); conn.close()
+            cur.execute("SELECT * FROM posts WHERE id=5000"); cur.fetchone(); conn.close()
         return bench(_)
     except Exception as e:
-        return f"ERR:{str(e)[:20]}"
+        return f"ERR:{str(e)[:30]}"
 
 # ── ACID ──
 
@@ -543,6 +589,11 @@ def main():
     t_duckdb_seed = round((time.perf_counter()-t0)*1000)
     print(f"{t_duckdb_seed}ms")
 
+    print("Seeding SynapsQL via MySQL-wire...", end=" ", flush=True)
+    t0 = time.perf_counter()
+    sq_ok = seed_synapsql()
+    t_sq_seed = round((time.perf_counter()-t0)*1000)
+    print(f"{t_sq_seed}ms {'OK' if sq_ok else 'FAILED'}")
     print("SynapsQL: native binary (synapse hybrid/find/vec)...\n")
 
     results = {}

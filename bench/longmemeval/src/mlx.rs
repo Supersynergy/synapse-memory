@@ -145,11 +145,7 @@ impl PipelineHooks for MlxHooks {
         if let Some(out) = self.generate(&prompt, 80) {
             let parts: Vec<String> = out
                 .lines()
-                .map(|l| {
-                    l.trim_start_matches(|c: char| !c.is_alphabetic())
-                        .trim()
-                        .to_string()
-                })
+                .map(|l| l.trim_start_matches(|c: char| !c.is_alphabetic()).trim().to_string())
                 .filter(|l| l.len() > 4)
                 .take(3)
                 .collect();

@@ -7,17 +7,18 @@
 //!   4. Read/write classifier for future read-replica routing (MyDuck pattern)
 //!   5. QPS counter per connection
 
+use std::io;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use async_trait::async_trait;
 use opensrv_mysql::{
-    AsyncMysqlIntermediary, AsyncMysqlShim, Column, ColumnFlags, ColumnType, OkResponse,
-    ParamParser, QueryResultWriter, StatementMetaWriter,
+    AsyncMysqlIntermediary, AsyncMysqlShim, OkResponse, ParamParser,
+    QueryResultWriter, StatementMetaWriter,
+    Column, ColumnFlags, ColumnType,
 };
-use std::io;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::Arc;
-use synapse_libsql::Store;
 use tokio::io::AsyncWrite;
 use tokio::net::TcpListener;
+use synapse_libsql::Store;
 
 const SYNAPSQL_VERSION: &str = "8.0.32-SynapsQL-1.0";
 
@@ -25,19 +26,14 @@ const SYNAPSQL_VERSION: &str = "8.0.32-SynapsQL-1.0";
 fn is_txn_statement(sql: &str) -> bool {
     let s = sql.trim().trim_end_matches(';').to_ascii_uppercase();
     let lead = s.split_whitespace().next().unwrap_or("");
-    matches!(
-        lead,
-        "BEGIN" | "START" | "COMMIT" | "END" | "ROLLBACK" | "SAVEPOINT" | "RELEASE"
-    )
+    matches!(lead, "BEGIN" | "START" | "COMMIT" | "END" | "ROLLBACK" | "SAVEPOINT" | "RELEASE")
 }
 
 /// Detect `EXPLAIN [ANALYZE] <inner>` and return (inner_sql, analyze).
 fn strip_explain(sql: &str) -> Option<(String, bool)> {
     let trimmed = sql.trim().trim_end_matches(';');
     let upper = trimmed.to_ascii_uppercase();
-    if !upper.starts_with("EXPLAIN") {
-        return None;
-    }
+    if !upper.starts_with("EXPLAIN") { return None; }
     let rest = trimmed[7..].trim_start();
     let upper_rest = rest.to_ascii_uppercase();
     let (inner, analyze) = if upper_rest.starts_with("ANALYZE") {
@@ -47,9 +43,7 @@ fn strip_explain(sql: &str) -> Option<(String, bool)> {
     } else {
         (rest.to_owned(), false)
     };
-    if inner.is_empty() {
-        return None;
-    }
+    if inner.is_empty() { return None; }
     Some((inner, analyze))
 }
 
@@ -62,11 +56,7 @@ fn build_explain_plan(inner_sql: &str, analyze: bool) -> (Vec<String>, Vec<Vec<S
         "detail".to_owned(),
         "estimated_cost".to_owned(),
     ];
-    let label = if analyze {
-        "EXPLAIN ANALYZE"
-    } else {
-        "EXPLAIN"
-    };
+    let label = if analyze { "EXPLAIN ANALYZE" } else { "EXPLAIN" };
     let upper = inner_sql.to_ascii_uppercase();
 
     let has_vec = upper.contains("<=>");
@@ -75,82 +65,23 @@ fn build_explain_plan(inner_sql: &str, analyze: bool) -> (Vec<String>, Vec<Vec<S
 
     let mut rows: Vec<Vec<String>> = Vec::new();
     let push = |rows: &mut Vec<Vec<String>>, step: usize, op: &str, detail: &str, cost: &str| {
-        rows.push(vec![
-            step.to_string(),
-            op.to_owned(),
-            detail.to_owned(),
-            cost.to_owned(),
-        ]);
+        rows.push(vec![step.to_string(), op.to_owned(), detail.to_owned(), cost.to_owned()]);
     };
 
-    push(
-        &mut rows,
-        0,
-        label,
-        &format!("input: {}", inner_sql.trim()),
-        "0",
-    );
+    push(&mut rows, 0, label, &format!("input: {}", inner_sql.trim()), "0");
 
     if has_hybrid {
-        push(
-            &mut rows,
-            1,
-            "HybridRRFPlan",
-            "HYBRID_RANK fusion=RRF(k=60)",
-            "O(log N)",
-        );
-        push(
-            &mut rows,
-            2,
-            "HNSWIndexScan",
-            "vec arm: HNSW SimSIMD",
-            "~8ms/113k",
-        );
-        push(
-            &mut rows,
-            3,
-            "FTS5IndexScan",
-            "text arm: BM25 FTS5",
-            "~2ms/100k",
-        );
-        push(
-            &mut rows,
-            4,
-            "RRFFusion",
-            "Reciprocal Rank Fusion",
-            "O(n_results)",
-        );
+        push(&mut rows, 1, "HybridRRFPlan", "HYBRID_RANK fusion=RRF(k=60)", "O(log N)");
+        push(&mut rows, 2, "HNSWIndexScan", "vec arm: HNSW SimSIMD", "~8ms/113k");
+        push(&mut rows, 3, "FTS5IndexScan", "text arm: BM25 FTS5", "~2ms/100k");
+        push(&mut rows, 4, "RRFFusion", "Reciprocal Rank Fusion", "O(n_results)");
     } else if has_vec {
-        push(
-            &mut rows,
-            1,
-            "HNSWIndexScan",
-            "col:<=> ANN via HNSW SimSIMD kernels",
-            "O(log N) ~8ms/113k",
-        );
+        push(&mut rows, 1, "HNSWIndexScan", "col:<=> ANN via HNSW SimSIMD kernels", "O(log N) ~8ms/113k");
     } else if has_fts {
-        push(
-            &mut rows,
-            1,
-            "FTS5IndexScan",
-            "MATCH..AGAINST BM25 FTS5/Tantivy",
-            "O(log N) ~2ms/100k",
-        );
+        push(&mut rows, 1, "FTS5IndexScan", "MATCH..AGAINST BM25 FTS5/Tantivy", "O(log N) ~2ms/100k");
     } else {
-        push(
-            &mut rows,
-            1,
-            "SQLite",
-            "passthrough to SQLite query planner",
-            "~1",
-        );
-        push(
-            &mut rows,
-            2,
-            "IndexScan",
-            "cost-based optimizer chooses index",
-            "varies",
-        );
+        push(&mut rows, 1, "SQLite", "passthrough to SQLite query planner", "~1");
+        push(&mut rows, 2, "IndexScan", "cost-based optimizer chooses index", "varies");
     }
 
     (cols, rows)
@@ -159,9 +90,7 @@ fn build_explain_plan(inner_sql: &str, analyze: bool) -> (Vec<String>, Vec<Vec<S
 /// Classify a query for routing (read vs write).
 fn is_read_only(sql: &str) -> bool {
     let s = sql.trim_start().to_ascii_lowercase();
-    s.starts_with("select")
-        || s.starts_with("show")
-        || s.starts_with("explain")
+    s.starts_with("select") || s.starts_with("show") || s.starts_with("explain")
         || s.starts_with("describe")
 }
 
@@ -177,66 +106,39 @@ fn fingerprint(sql: &str) -> String {
     while i < len {
         let b = bytes[i];
         // line comment
-        if b == b'-' && i + 1 < len && bytes[i + 1] == b'-' {
-            while i < len && bytes[i] != b'\n' {
-                i += 1;
-            }
+        if b == b'-' && i + 1 < len && bytes[i+1] == b'-' {
+            while i < len && bytes[i] != b'\n' { i += 1; }
             continue;
         }
         // block comment
-        if b == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
+        if b == b'/' && i + 1 < len && bytes[i+1] == b'*' {
             i += 2;
-            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                i += 1;
-            }
-            i += 2;
-            continue;
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i+1] == b'/') { i += 1; }
+            i += 2; continue;
         }
         // string literal
         if b == b'\'' {
             i += 1;
             while i < len {
-                if bytes[i] == b'\'' {
-                    if i + 1 < len && bytes[i + 1] == b'\'' {
-                        i += 2;
-                        continue;
-                    }
-                    break;
-                }
-                if bytes[i] == b'\\' {
-                    i += 1;
-                }
+                if bytes[i] == b'\'' { if i+1<len && bytes[i+1]==b'\'' { i+=2; continue; } break; }
+                if bytes[i] == b'\\' { i += 1; }
                 i += 1;
             }
             i += 1;
-            out.push('?');
-            last_space = false;
-            continue;
+            out.push('?'); last_space = false; continue;
         }
         // numeric literal
         if b.is_ascii_digit() {
-            let prev_ok = out
-                .as_bytes()
-                .last()
-                .map(|&c| !c.is_ascii_alphanumeric() && c != b'_')
-                .unwrap_or(true);
+            let prev_ok = out.as_bytes().last().map(|&c| !c.is_ascii_alphanumeric() && c != b'_').unwrap_or(true);
             if prev_ok {
-                while i < len && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
-                    i += 1;
-                }
-                out.push('?');
-                last_space = false;
-                continue;
+                while i < len && (bytes[i].is_ascii_digit() || bytes[i] == b'.') { i += 1; }
+                out.push('?'); last_space = false; continue;
             }
         }
         // whitespace collapse
         if b.is_ascii_whitespace() {
-            if !last_space && !out.is_empty() {
-                out.push(' ');
-                last_space = true;
-            }
-            i += 1;
-            continue;
+            if !last_space && !out.is_empty() { out.push(' '); last_space = true; }
+            i += 1; continue;
         }
         out.push(b.to_ascii_lowercase() as char);
         last_space = false;
@@ -285,10 +187,7 @@ fn intercept_introspection(sql: &str) -> Option<(Vec<String>, Vec<Vec<String>>)>
     }
     // SELECT VERSION()
     if s.contains("version()") && s.starts_with("select") {
-        return Some((
-            vec!["VERSION()".into()],
-            vec![vec![SYNAPSQL_VERSION.into()]],
-        ));
+        return Some((vec!["VERSION()".into()], vec![vec![SYNAPSQL_VERSION.into()]]));
     }
     // SELECT DATABASE()
     if s.contains("database()") && s.starts_with("select") {
@@ -325,30 +224,15 @@ where
 {
     type Error = io::Error;
 
-    async fn on_prepare<'a>(
-        &'a mut self,
-        sql: &'a str,
-        info: StatementMetaWriter<'a, W>,
-    ) -> io::Result<()> {
+    async fn on_prepare<'a>(&'a mut self, sql: &'a str, info: StatementMetaWriter<'a, W>) -> io::Result<()> {
         let id = self.next_stmt_id.fetch_add(1, Ordering::Relaxed);
         let fp = fingerprint(sql);
-        self.stmts.put(
-            id,
-            PreparedEntry {
-                sql: sql.to_owned(),
-                fingerprint: fp,
-            },
-        );
+        self.stmts.put(id, PreparedEntry { sql: sql.to_owned(), fingerprint: fp });
         // Reply with stmt_id, no params/columns (simplified)
         info.reply(id, &[], &[]).await
     }
 
-    async fn on_execute<'a>(
-        &'a mut self,
-        id: u32,
-        _params: ParamParser<'a>,
-        results: QueryResultWriter<'a, W>,
-    ) -> io::Result<()> {
+    async fn on_execute<'a>(&'a mut self, id: u32, _params: ParamParser<'a>, results: QueryResultWriter<'a, W>) -> io::Result<()> {
         self.qps.fetch_add(1, Ordering::Relaxed);
         if let Some(entry) = self.stmts.get(&id) {
             let sql = entry.sql.clone();
@@ -356,10 +240,7 @@ where
             if let Some((cols, rows)) = intercept_introspection(&sql) {
                 return write_text_result(results, cols, rows).await;
             }
-            let _ = self
-                .store
-                .query(&sql)
-                .await
+            let _ = self.store.query(&sql).await
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         }
         results.completed(OkResponse::default()).await
@@ -369,11 +250,7 @@ where
         self.stmts.pop(&id);
     }
 
-    async fn on_query<'a>(
-        &'a mut self,
-        sql: &'a str,
-        results: QueryResultWriter<'a, W>,
-    ) -> io::Result<()> {
+    async fn on_query<'a>(&'a mut self, sql: &'a str, results: QueryResultWriter<'a, W>) -> io::Result<()> {
         self.qps.fetch_add(1, Ordering::Relaxed);
         tracing::debug!(sql, "on_query");
 
@@ -394,12 +271,30 @@ where
             return write_text_result(results, cols, rows).await;
         }
 
-        // 4. Route to backend store
+        // 4. SET statements — intercept before SQLite (SQLite doesn't understand MySQL SET syntax)
+        {
+            let upper = sql.trim().to_ascii_uppercase();
+            if upper.starts_with("SET ") || upper.starts_with("SET@") {
+                // FOREIGN_KEY_CHECKS → PRAGMA
+                let pragma = if upper.contains("FOREIGN_KEY_CHECKS") {
+                    if upper.contains("=0") || upper.contains("= 0") {
+                        Some("PRAGMA foreign_keys = OFF")
+                    } else {
+                        Some("PRAGMA foreign_keys = ON")
+                    }
+                } else {
+                    None
+                };
+                if let Some(p) = pragma {
+                    let _ = self.store.exec(p).await;
+                }
+                return results.completed(OkResponse::default()).await;
+            }
+        }
+
+        // 5. Route to backend store
         if is_read_only(sql) {
-            let qr = self
-                .store
-                .query(sql)
-                .await
+            let qr = self.store.query(sql).await
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
             if qr.rows.is_empty() {
                 results.start(&[]).await?.finish().await
@@ -420,17 +315,12 @@ where
                 rw.finish().await
             }
         } else {
-            let affected = self
-                .store
-                .exec(sql)
-                .await
+            let affected = self.store.exec(sql).await
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-            results
-                .completed(OkResponse {
-                    affected_rows: affected,
-                    ..Default::default()
-                })
-                .await
+            results.completed(OkResponse {
+                affected_rows: affected,
+                ..Default::default()
+            }).await
         }
     }
 }
@@ -444,16 +334,13 @@ async fn write_text_result<W>(
 where
     W: AsyncWrite + Send + Unpin,
 {
-    let cols: Vec<Column> = col_names
-        .iter()
-        .map(|name| Column {
-            table: String::new(),
-            column: name.clone(),
-            collen: 65535,
-            coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
-            colflags: ColumnFlags::empty(),
-        })
-        .collect();
+    let cols: Vec<Column> = col_names.iter().map(|name| Column {
+        table: String::new(),
+        column: name.clone(),
+        collen: 65535,
+        coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
+        colflags: ColumnFlags::empty(),
+    }).collect();
 
     let mut rw = results.start(&cols).await?;
     for row in rows {
@@ -469,9 +356,7 @@ where
 static GLOBAL_QPS: std::sync::OnceLock<Arc<AtomicU64>> = std::sync::OnceLock::new();
 
 fn global_qps() -> Arc<AtomicU64> {
-    GLOBAL_QPS
-        .get_or_init(|| Arc::new(AtomicU64::new(0)))
-        .clone()
+    GLOBAL_QPS.get_or_init(|| Arc::new(AtomicU64::new(0))).clone()
 }
 
 pub fn drain_qps() -> u64 {

@@ -26,9 +26,7 @@ fn make_corpus(n: usize, d: usize) -> Vec<f32> {
     for row in out.chunks_mut(d) {
         let n: f32 = row.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-8);
         let inv = 1.0 / n;
-        for x in row {
-            *x *= inv;
-        }
+        for x in row { *x *= inv; }
     }
     out
 }
@@ -54,9 +52,7 @@ fn binarize(buf: &[f32], d: usize) -> (Vec<u8>, usize) {
     let mut out = vec![0_u8; rows * bpr];
     for (i, row) in buf.chunks(d).enumerate() {
         for (j, &v) in row.iter().enumerate() {
-            if v > 0.0 {
-                out[i * bpr + j / 8] |= 1 << (j % 8);
-            }
+            if v > 0.0 { out[i * bpr + j / 8] |= 1 << (j % 8); }
         }
     }
     (out, bpr)
@@ -67,13 +63,9 @@ fn scalar_cos(q: &[f32], r: &[f32]) -> f32 {
 }
 
 fn time_fn<F: FnMut()>(mut f: F) -> f64 {
-    for _ in 0..3 {
-        f();
-    }
+    for _ in 0..3 { f(); }
     let t = Instant::now();
-    for _ in 0..ITERS {
-        f();
-    }
+    for _ in 0..ITERS { f(); }
     t.elapsed().as_secs_f64() * 1e6 / ITERS as f64
 }
 
@@ -88,70 +80,42 @@ fn main() {
 
     let mut rows: Vec<(&'static str, f64)> = Vec::new();
 
-    rows.push((
-        "S0 scalar cos f32",
-        time_fn(|| {
-            let _: Vec<f32> = db.chunks(DIM).map(|r| scalar_cos(&q, r)).collect();
-        }),
-    ));
+    rows.push(("S0 scalar cos f32", time_fn(|| {
+        let _: Vec<f32> = db.chunks(DIM).map(|r| scalar_cos(&q, r)).collect();
+    })));
 
-    rows.push((
-        "S1 rayon scalar cos f32",
-        time_fn(|| {
-            let _: Vec<f32> = db.par_chunks(DIM).map(|r| scalar_cos(&q, r)).collect();
-        }),
-    ));
+    rows.push(("S1 rayon scalar cos f32", time_fn(|| {
+        let _: Vec<f32> = db.par_chunks(DIM).map(|r| scalar_cos(&q, r)).collect();
+    })));
 
     #[cfg(feature = "simsimd")]
     {
         use synapse_core::matryoshka::truncate_row;
         use synapse_core::turbo::simsimd_kernels::{cos_f32, dot_i8, hamming_b8};
 
-        rows.push((
-            "S2 SimSIMD cos f32",
-            time_fn(|| {
-                let _: Vec<f32> = db
-                    .par_chunks(DIM)
-                    .map(|r| cos_f32(&q, r).unwrap_or(0.0))
-                    .collect();
-            }),
-        ));
+        rows.push(("S2 SimSIMD cos f32", time_fn(|| {
+            let _: Vec<f32> = db.par_chunks(DIM).map(|r| cos_f32(&q, r).unwrap_or(0.0)).collect();
+        })));
 
-        rows.push((
-            "S3 SimSIMD dot i8",
-            time_fn(|| {
-                let _: Vec<f32> = codes
-                    .par_chunks(DIM)
-                    .zip(scales.par_iter())
-                    .map(|(r, &s)| dot_i8(&q_codes, r).map(|v| v as f32 * s).unwrap_or(0.0))
-                    .collect();
-            }),
-        ));
+        rows.push(("S3 SimSIMD dot i8", time_fn(|| {
+            let _: Vec<f32> = codes.par_chunks(DIM).zip(scales.par_iter())
+                .map(|(r, &s)| dot_i8(&q_codes, r).map(|v| v as f32 * s).unwrap_or(0.0))
+                .collect();
+        })));
 
-        rows.push((
-            "S4 SimSIMD hamming b8",
-            time_fn(|| {
-                let _: Vec<f64> = bits
-                    .par_chunks(bpr)
-                    .map(|r| hamming_b8(&qbits[..bpr], r).unwrap_or(0.0))
-                    .collect();
-            }),
-        ));
+        rows.push(("S4 SimSIMD hamming b8", time_fn(|| {
+            let _: Vec<f64> = bits.par_chunks(bpr)
+                .map(|r| hamming_b8(&qbits[..bpr], r).unwrap_or(0.0))
+                .collect();
+        })));
 
-        let db_mrl: Vec<f32> = db
-            .chunks(DIM)
-            .flat_map(|r| truncate_row(r, MRL_K))
-            .collect();
+        let db_mrl: Vec<f32> = db.chunks(DIM).flat_map(|r| truncate_row(r, MRL_K)).collect();
         let q_mrl = truncate_row(&q, MRL_K);
-        rows.push((
-            "S5 MRL128 SimSIMD cos",
-            time_fn(|| {
-                let _: Vec<f32> = db_mrl
-                    .par_chunks(MRL_K)
-                    .map(|r| cos_f32(&q_mrl, r).unwrap_or(0.0))
-                    .collect();
-            }),
-        ));
+        rows.push(("S5 MRL128 SimSIMD cos", time_fn(|| {
+            let _: Vec<f32> = db_mrl.par_chunks(MRL_K)
+                .map(|r| cos_f32(&q_mrl, r).unwrap_or(0.0))
+                .collect();
+        })));
     }
 
     // S6 — ndarray gemv (what NdArraySearch.search uses internally)
@@ -159,30 +123,21 @@ fn main() {
         use ndarray::{Array1, Array2};
         let mat = Array2::from_shape_vec((N, DIM), db.clone()).expect("shape");
         let qv = Array1::from_vec(q.clone());
-        rows.push((
-            "S6 ndarray gemv cos",
-            time_fn(|| {
-                let _ = mat.dot(&qv);
-            }),
-        ));
+        rows.push(("S6 ndarray gemv cos", time_fn(|| {
+            let _ = mat.dot(&qv);
+        })));
     }
 
     // S8 — f16 storage brute-force (50% RAM)
     #[cfg(feature = "simsimd")]
     {
         use synapse_core::turbo::inmem_f16_index::InMemoryF16Index;
-        let rows_pairs: Vec<(i64, Vec<f32>)> = db
-            .chunks(DIM)
-            .enumerate()
-            .map(|(i, r)| (i as i64, r.to_vec()))
-            .collect();
+        let rows_pairs: Vec<(i64, Vec<f32>)> =
+            db.chunks(DIM).enumerate().map(|(i, r)| (i as i64, r.to_vec())).collect();
         let idx = InMemoryF16Index::build(rows_pairs);
-        rows.push((
-            "S8 f16 storage cos",
-            time_fn(|| {
-                let _ = idx.search(&q, 10);
-            }),
-        ));
+        rows.push(("S8 f16 storage cos", time_fn(|| {
+            let _ = idx.search(&q, 10);
+        })));
     }
 
     // S7 — Hamming candidate-gen → int8 rescore end-to-end pipeline
@@ -190,24 +145,18 @@ fn main() {
     {
         use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
         use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
-        let rows_pairs: Vec<(i64, Vec<f32>)> = db
-            .chunks(DIM)
-            .enumerate()
-            .map(|(i, r)| (i as i64, r.to_vec()))
-            .collect();
+        let rows_pairs: Vec<(i64, Vec<f32>)> =
+            db.chunks(DIM).enumerate().map(|(i, r)| (i as i64, r.to_vec())).collect();
         let hidx = InMemoryHammingIndex::build(rows_pairs.clone());
         let iidx = InMemoryI8Index::build(rows_pairs);
         let cands_n: usize = 80;
-        rows.push((
-            "S7 Hamming→i8 rescore k10",
-            time_fn(|| {
-                let cands = hidx.search(&q, cands_n);
-                let ids: Vec<i64> = cands.into_iter().map(|(id, _)| id).collect();
-                let mut rescored = iidx.rescore(&q, &ids);
-                rescored.truncate(10);
-                let _ = rescored;
-            }),
-        ));
+        rows.push(("S7 Hamming→i8 rescore k10", time_fn(|| {
+            let cands = hidx.search(&q, cands_n);
+            let ids: Vec<i64> = cands.into_iter().map(|(id, _)| id).collect();
+            let mut rescored = iidx.rescore(&q, &ids);
+            rescored.truncate(10);
+            let _ = rescored;
+        })));
     }
 
     let base = rows.first().map(|r| r.1).unwrap_or(1.0);
@@ -220,25 +169,19 @@ fn main() {
         let qps = 1e6 / us;
         let sx = base / us;
         let tag = &label[..2];
-        println!(
-            "| {tag:<4} | {name:<26} | {us:>8.0} | {qps:>7.0} | {sx:>7.2}× |",
-            name = &label[3..]
-        );
+        println!("| {tag:<4} | {name:<26} | {us:>8.0} | {qps:>7.0} | {sx:>7.2}× |",
+                 name = &label[3..]);
     }
 
     println!("\n```");
     for (label, us) in &rows {
         let len = (us / max * 55.0) as usize;
-        println!(
-            "{label:<28} {bar} {us:>6.0} us",
-            bar = "█".repeat(len.max(1))
-        );
+        println!("{label:<28} {bar} {us:>6.0} us",
+                 bar = "█".repeat(len.max(1)));
     }
     println!("```\n");
 
-    println!(
-        "baseline S0 = {base:.0} us · fastest = {:.0} us · total speed-up = {:.1}×",
-        rows.last().map(|r| r.1).unwrap_or(base),
-        base / rows.last().map(|r| r.1).unwrap_or(base)
-    );
+    println!("baseline S0 = {base:.0} us · fastest = {:.0} us · total speed-up = {:.1}×",
+             rows.last().map(|r| r.1).unwrap_or(base),
+             base / rows.last().map(|r| r.1).unwrap_or(base));
 }

@@ -12,14 +12,11 @@
 
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
-use synapsql::server::brain_adapter::BrainAdapter;
 use synapsql::Service;
+use synapsql::server::brain_adapter::BrainAdapter;
 
 #[derive(Parser)]
-#[command(
-    name = "synapsql",
-    about = "SynapsQL — MySQL/PG-wire + Vector + FTS. One binary. Zero config."
-)]
+#[command(name = "synapsql", about = "SynapsQL — MySQL/PG-wire + Vector + FTS. One binary. Zero config.")]
 struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
@@ -77,12 +74,7 @@ async fn main() -> std::io::Result<()> {
     // Spawn QPS reporter (logs every 5s)
     tokio::spawn(qps_reporter());
 
-    tracing::info!(
-        "SynapsQL starting — mysql={} pg={} http={}",
-        cli.mysql,
-        cli.pg,
-        cli.http
-    );
+    tracing::info!("SynapsQL starting — mysql={} pg={} http={}", cli.mysql, cli.pg, cli.http);
 
     Service::new(store)
         .with_mysql(&cli.mysql)
@@ -103,3 +95,4 @@ async fn qps_reporter() {
         }
     }
 }
+

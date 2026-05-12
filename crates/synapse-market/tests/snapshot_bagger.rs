@@ -11,9 +11,7 @@ use synapse_market::series::Series;
 use synapse_market::store::page::Bar;
 
 fn home() -> PathBuf {
-    std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp"))
+    std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("/tmp"))
 }
 
 fn load_bagger_data() -> HashMap<String, Vec<Bar>> {
@@ -22,13 +20,11 @@ fn load_bagger_data() -> HashMap<String, Vec<Bar>> {
         return HashMap::new();
     }
     let conn = SqliteConn::open(&db_path).unwrap();
-    let mut stmt = conn
-        .prepare(
-            "SELECT ticker, timestamp, open, high, low, close, volume
+    let mut stmt = conn.prepare(
+        "SELECT ticker, timestamp, open, high, low, close, volume
          FROM intraday_candles WHERE interval = '15m'
-         ORDER BY ticker, timestamp",
-        )
-        .unwrap();
+         ORDER BY ticker, timestamp"
+    ).unwrap();
     let mut map: HashMap<String, Vec<Bar>> = HashMap::new();
     let mut rows = stmt.query([]).unwrap();
     while let Some(r) = rows.next().unwrap() {
@@ -40,12 +36,8 @@ fn load_bagger_data() -> HashMap<String, Vec<Bar>> {
         let close: f64 = r.get::<_, f64>(5).unwrap_or(0.0);
         let volume: f64 = r.get::<_, f64>(6).unwrap_or(0.0);
         map.entry(ticker).or_default().push(Bar {
-            ts,
-            open: open as f32,
-            high: high as f32,
-            low: low as f32,
-            close: close as f32,
-            volume: volume as f32,
+            ts, open: open as f32, high: high as f32,
+            low: low as f32, close: close as f32, volume: volume as f32,
         });
     }
     map
@@ -57,20 +49,11 @@ fn sqlite_ingest_ticker(conn: &SqliteConn, ticker: &str, bars: &[Bar]) {
         "CREATE TABLE IF NOT EXISTS ohlcv_{safe} (
             ts INTEGER PRIMARY KEY, open REAL, high REAL, low REAL, close REAL, volume REAL
          );"
-    ))
-    .unwrap();
+    )).unwrap();
     let sql = format!("INSERT OR IGNORE INTO ohlcv_{safe} VALUES(?,?,?,?,?,?)");
     let mut stmt = conn.prepare_cached(&sql).unwrap();
     for b in bars {
-        stmt.execute(rusqlite::params![
-            b.ts,
-            b.open as f64,
-            b.high as f64,
-            b.low as f64,
-            b.close as f64,
-            b.volume as f64
-        ])
-        .unwrap();
+        stmt.execute(rusqlite::params![b.ts, b.open as f64, b.high as f64, b.low as f64, b.close as f64, b.volume as f64]).unwrap();
     }
 }
 
@@ -81,41 +64,20 @@ fn duckdb_ingest_ticker(conn: &DuckConn, ticker: &str, bars: &[Bar]) {
     )).unwrap();
     let mut app = conn.appender(&format!("ohlcv_{safe}")).unwrap();
     for b in bars {
-        app.append_row(duckdb::params![
-            b.ts,
-            b.open as f64,
-            b.high as f64,
-            b.low as f64,
-            b.close as f64,
-            b.volume as f64
-        ])
-        .unwrap();
+        app.append_row(duckdb::params![b.ts, b.open as f64, b.high as f64, b.low as f64, b.close as f64, b.volume as f64]).unwrap();
     }
     app.flush().unwrap();
 }
 
 struct Lcg(u64);
 impl Lcg {
-    fn new(seed: u64) -> Self {
-        Self(seed)
-    }
+    fn new(seed: u64) -> Self { Self(seed) }
     fn next_u64(&mut self) -> u64 {
-        self.0 = self
-            .0
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         self.0
     }
-    fn next_usize(&mut self, hi: usize) -> usize {
-        if hi == 0 {
-            0
-        } else {
-            (self.next_u64() % hi as u64) as usize
-        }
-    }
-    fn next_f64(&mut self) -> f64 {
-        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
-    }
+    fn next_usize(&mut self, hi: usize) -> usize { if hi == 0 { 0 } else { (self.next_u64() % hi as u64) as usize } }
+    fn next_f64(&mut self) -> f64 { (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64 }
 }
 
 fn init_bench_history(conn: &SqliteConn) {
@@ -125,9 +87,8 @@ fn init_bench_history(conn: &SqliteConn) {
             impl TEXT,
             p50_us INTEGER,
             n_queries INTEGER
-         );",
-    )
-    .unwrap();
+         );"
+    ).unwrap();
 }
 
 #[test]
@@ -170,9 +131,7 @@ fn snapshot_bagger_100_queries() {
     for _ in 0..100 {
         let ticker = &tickers[rng.next_usize(tickers.len())];
         let bars_all = &data[ticker];
-        if bars_all.len() < 10 {
-            continue;
-        }
+        if bars_all.len() < 10 { continue; }
 
         let ts_list: Vec<i64> = bars_all.iter().map(|b| b.ts).collect();
         let ts_min = *ts_list.iter().min().unwrap();
@@ -193,19 +152,11 @@ fn snapshot_bagger_100_queries() {
             let mut stmt = sq.prepare_cached(&format!(
                 "SELECT ts,open,high,low,close,volume FROM ohlcv_{safe} WHERE ts>=? AND ts<? ORDER BY ts"
             )).unwrap();
-            stmt.query_map(rusqlite::params![a, b], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, f64>(1)? as f32,
-                    r.get::<_, f64>(2)? as f32,
-                    r.get::<_, f64>(3)? as f32,
-                    r.get::<_, f64>(4)? as f32,
-                    r.get::<_, f64>(5)? as f32,
-                ))
-            })
-            .unwrap()
-            .map(|x| x.unwrap())
-            .collect()
+            stmt.query_map(rusqlite::params![a, b], |r| Ok((
+                r.get::<_,i64>(0)?, r.get::<_,f64>(1)? as f32,
+                r.get::<_,f64>(2)? as f32, r.get::<_,f64>(3)? as f32,
+                r.get::<_,f64>(4)? as f32, r.get::<_,f64>(5)? as f32,
+            ))).unwrap().map(|x| x.unwrap()).collect()
         };
         sq_times.push(t0.elapsed().as_micros());
 
@@ -215,56 +166,27 @@ fn snapshot_bagger_100_queries() {
             let mut stmt = dk.prepare(&format!(
                 "SELECT ts,open,high,low,close,volume FROM ohlcv_{safe} WHERE ts>=? AND ts<? ORDER BY ts"
             )).unwrap();
-            stmt.query_map(duckdb::params![a, b], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, f64>(1)? as f32,
-                    r.get::<_, f64>(2)? as f32,
-                    r.get::<_, f64>(3)? as f32,
-                    r.get::<_, f64>(4)? as f32,
-                    r.get::<_, f64>(5)? as f32,
-                ))
-            })
-            .unwrap()
-            .map(|x| x.unwrap())
-            .collect()
+            stmt.query_map(duckdb::params![a, b], |r| Ok((
+                r.get::<_,i64>(0)?, r.get::<_,f64>(1)? as f32,
+                r.get::<_,f64>(2)? as f32, r.get::<_,f64>(3)? as f32,
+                r.get::<_,f64>(4)? as f32, r.get::<_,f64>(5)? as f32,
+            ))).unwrap().map(|x| x.unwrap()).collect()
         };
         dk_times.push(t0.elapsed().as_micros());
 
         // Assert agreement
-        assert_eq!(
-            smx_bars.len(),
-            sq_rows.len(),
-            "DIFF ticker={ticker} ts={a}..{b}: smx={} sqlite={}",
-            smx_bars.len(),
-            sq_rows.len()
-        );
-        assert_eq!(
-            smx_bars.len(),
-            dk_rows.len(),
-            "DIFF ticker={ticker} ts={a}..{b}: smx={} duckdb={}",
-            smx_bars.len(),
-            dk_rows.len()
-        );
+        assert_eq!(smx_bars.len(), sq_rows.len(),
+            "DIFF ticker={ticker} ts={a}..{b}: smx={} sqlite={}", smx_bars.len(), sq_rows.len());
+        assert_eq!(smx_bars.len(), dk_rows.len(),
+            "DIFF ticker={ticker} ts={a}..{b}: smx={} duckdb={}", smx_bars.len(), dk_rows.len());
 
-        for (bar, (sq_ts, sq_o, sq_h, sq_l, sq_c, sq_v), (dk_ts, _, _, _, dk_c, _)) in smx_bars
-            .iter()
-            .zip(sq_rows.iter())
-            .zip(dk_rows.iter())
-            .map(|((a, b), c)| (a, b, c))
+        for (bar, (sq_ts, sq_o, sq_h, sq_l, sq_c, sq_v), (dk_ts, _, _, _, dk_c, _)) in
+            smx_bars.iter().zip(sq_rows.iter()).zip(dk_rows.iter()).map(|((a, b), c)| (a, b, c))
         {
             assert_eq!(bar.ts, *sq_ts);
             assert_eq!(bar.ts, *dk_ts);
-            assert!(
-                (bar.close - sq_c).abs() <= eps,
-                "close diff ticker={ticker} ts={}",
-                bar.ts
-            );
-            assert!(
-                (bar.close - dk_c).abs() <= eps,
-                "close diff ticker={ticker} ts={}",
-                bar.ts
-            );
+            assert!((bar.close - sq_c).abs() <= eps, "close diff ticker={ticker} ts={}", bar.ts);
+            assert!((bar.close - dk_c).abs() <= eps, "close diff ticker={ticker} ts={}", bar.ts);
             let _ = (sq_o, sq_h, sq_l, sq_v);
         }
     }
@@ -277,17 +199,12 @@ fn snapshot_bagger_100_queries() {
     if let Ok(hist) = SqliteConn::open(&bench_path) {
         init_bench_history(&hist);
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
 
-        let p50 = |mut v: Vec<u128>| {
-            v.sort_unstable();
-            v[v.len() / 2]
-        };
+        let p50 = |mut v: Vec<u128>| { v.sort_unstable(); v[v.len() / 2] };
         let smx_p50 = p50(smx_times) as i64;
-        let sq_p50 = p50(sq_times) as i64;
-        let dk_p50 = p50(dk_times) as i64;
+        let sq_p50  = p50(sq_times)  as i64;
+        let dk_p50  = p50(dk_times)  as i64;
 
         let _ = hist.execute(
             "INSERT INTO bench_history VALUES(?,?,?,?)",

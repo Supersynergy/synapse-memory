@@ -4,9 +4,9 @@
 //! Group-commit-100: 100 INSERTs in 1 tx = 1 fsync ≈ 500µs total = 5µs/row.
 //! → ~80-100× faster than naive single-row INSERT path.
 
-use crate::{Error, QueryResult, Store};
 use async_trait::async_trait;
 use libsql::{Builder, Connection};
+use crate::{Error, QueryResult, Store};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Mutex;
 
@@ -25,7 +25,9 @@ impl BatchedLibsqlStore {
             .build()
             .await
             .map_err(|e| Error::Backend(e.to_string()))?;
-        let conn = db.connect().map_err(|e| Error::Backend(e.to_string()))?;
+        let conn = db
+            .connect()
+            .map_err(|e| Error::Backend(e.to_string()))?;
         // PRAGMA tuning for WAL + relaxed durability
         conn.execute_batch(
             "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA wal_autocheckpoint=10000; PRAGMA cache_size=-64000;",
@@ -90,10 +92,7 @@ impl Store for BatchedLibsqlStore {
             .execute(sql, ())
             .await
             .map_err(|e| Error::Backend(e.to_string()))?;
-        Ok(QueryResult {
-            affected,
-            rows: vec![],
-        })
+        Ok(QueryResult { affected, rows: vec![] })
     }
     async fn exec(&self, sql: &str) -> Result<u64, Error> {
         self.buffered_exec(sql).await?;

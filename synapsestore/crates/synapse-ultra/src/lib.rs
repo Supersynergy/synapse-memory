@@ -1,11 +1,11 @@
 pub mod binary;
-pub mod rabitq;
 pub mod cache;
 pub mod embed;
 pub mod embed_mlx;
 pub mod error;
 pub mod http;
 pub mod index;
+pub mod rabitq;
 pub mod search;
 pub mod snapshot;
 pub mod socket;
@@ -16,8 +16,8 @@ pub use index::UltraIndex;
 
 // ── C-ABI FFI exports ────────────────────────────────────────────────────────
 
-use std::sync::Arc;
 use arc_swap::ArcSwap;
+use std::sync::Arc;
 
 /// Opaque handle returned by `synapse_open`.
 pub struct SynapseHandle {
@@ -29,7 +29,9 @@ pub struct SynapseHandle {
 #[no_mangle]
 pub extern "C" fn synapse_open(snap_path: *const std::os::raw::c_char) -> *mut SynapseHandle {
     let path_str = unsafe {
-        if snap_path.is_null() { return std::ptr::null_mut(); }
+        if snap_path.is_null() {
+            return std::ptr::null_mut();
+        }
         std::ffi::CStr::from_ptr(snap_path).to_str().unwrap_or("")
     };
     let snap_path = std::path::Path::new(path_str);
@@ -49,7 +51,9 @@ pub extern "C" fn synapse_open(snap_path: *const std::os::raw::c_char) -> *mut S
 #[no_mangle]
 pub extern "C" fn synapse_close(handle: *mut SynapseHandle) {
     if !handle.is_null() {
-        unsafe { drop(Box::from_raw(handle)); }
+        unsafe {
+            drop(Box::from_raw(handle));
+        }
     }
 }
 

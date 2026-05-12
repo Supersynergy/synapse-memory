@@ -81,11 +81,7 @@ impl Judge {
         };
         let stdin = child.stdin.take().expect("stdin");
         let stdout = BufReader::new(child.stdout.take().expect("stdout"));
-        let mut inner = Inner {
-            child,
-            stdin,
-            stdout,
-        };
+        let mut inner = Inner { child, stdin, stdout };
         // Wait for ready handshake (model load can take 5-15s cold).
         let mut line = String::new();
         let read_deadline = Instant::now() + Duration::from_secs(60);

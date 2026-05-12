@@ -77,7 +77,9 @@ async fn handle_conn(mut stream: UnixStream, index: SharedIndex) -> crate::error
             }
         };
 
-        stream.write_all(&(resp_bytes.len() as u32).to_le_bytes()).await?;
+        stream
+            .write_all(&(resp_bytes.len() as u32).to_le_bytes())
+            .await?;
         stream.write_all(&resp_bytes).await?;
     }
     Ok(())

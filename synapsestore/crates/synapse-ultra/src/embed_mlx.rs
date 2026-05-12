@@ -90,7 +90,11 @@ impl Sidecar {
             .take()
             .ok_or_else(|| UltraError::Embed("mlx: no stdout".into()))?;
 
-        let mut s = Self { child, stdin, stdout };
+        let mut s = Self {
+            child,
+            stdin,
+            stdout,
+        };
 
         // Wait for ready handshake
         let ready: EmbedResp = s.read_msg()?;
@@ -118,8 +122,8 @@ impl Sidecar {
     }
 
     fn write_msg<T: Serialize>(&mut self, val: &T) -> Result<()> {
-        let payload =
-            rmp_serde::to_vec_named(val).map_err(|e| UltraError::Embed(format!("mlx encode: {e}")))?;
+        let payload = rmp_serde::to_vec_named(val)
+            .map_err(|e| UltraError::Embed(format!("mlx encode: {e}")))?;
         let hdr = (payload.len() as u32).to_be_bytes();
         self.stdin
             .write_all(&hdr)
@@ -226,7 +230,10 @@ impl MlxEmbedder {
             .name("mlx-coalesce".into())
             .spawn(move || coalesce_run(rx, sidecar))
             .map_err(|e| UltraError::Embed(format!("coalesce worker spawn: {e}")))?;
-        Ok(Self { tx, _worker: worker })
+        Ok(Self {
+            tx,
+            _worker: worker,
+        })
     }
 
     /// Embed a batch. Requests are split into individual coalesce-queue items
@@ -240,7 +247,10 @@ impl MlxEmbedder {
         for text in texts {
             let (reply_tx, reply_rx) = mpsc::channel::<Result<Vec<f32>>>();
             self.tx
-                .send(CoalesceReq { text: text.clone(), reply: reply_tx })
+                .send(CoalesceReq {
+                    text: text.clone(),
+                    reply: reply_tx,
+                })
                 .map_err(|_| UltraError::Embed("mlx coalesce worker dead".into()))?;
             receivers.push(reply_rx);
         }
@@ -256,7 +266,10 @@ impl MlxEmbedder {
     pub fn embed_one(&self, text: &str) -> Result<Vec<f32>> {
         let (reply_tx, reply_rx) = mpsc::channel::<Result<Vec<f32>>>();
         self.tx
-            .send(CoalesceReq { text: text.to_string(), reply: reply_tx })
+            .send(CoalesceReq {
+                text: text.to_string(),
+                reply: reply_tx,
+            })
             .map_err(|_| UltraError::Embed("mlx coalesce worker dead".into()))?;
         reply_rx
             .recv()
@@ -280,27 +293,27 @@ mod tests {
 
         // Build a fake Sidecar-equivalent via the internal channel directly.
         let (tx, rx) = mpsc::sync_channel::<CoalesceReq>(64);
-        let _worker = thread::spawn(move || {
-            loop {
-                let first = match rx.recv() {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
-                let mut batch = vec![first];
-                let deadline = Instant::now() + COALESCE_WINDOW;
-                while batch.len() < COALESCE_MAX_BATCH {
-                    let now = Instant::now();
-                    if now >= deadline { break; }
-                    match rx.recv_timeout(deadline - now) {
-                        Ok(r) => batch.push(r),
-                        _ => break,
-                    }
+        let _worker = thread::spawn(move || loop {
+            let first = match rx.recv() {
+                Ok(r) => r,
+                Err(_) => return,
+            };
+            let mut batch = vec![first];
+            let deadline = Instant::now() + COALESCE_WINDOW;
+            while batch.len() < COALESCE_MAX_BATCH {
+                let now = Instant::now();
+                if now >= deadline {
+                    break;
                 }
-                cc.fetch_add(1, Ordering::SeqCst);
-                thread::sleep(Duration::from_millis(5));
-                for req in batch {
-                    let _ = req.reply.send(Ok(vec![0.1f32; 384]));
+                match rx.recv_timeout(deadline - now) {
+                    Ok(r) => batch.push(r),
+                    _ => break,
                 }
+            }
+            cc.fetch_add(1, Ordering::SeqCst);
+            thread::sleep(Duration::from_millis(5));
+            for req in batch {
+                let _ = req.reply.send(Ok(vec![0.1f32; 384]));
             }
         });
 
@@ -309,7 +322,11 @@ mod tests {
         let mut replies = Vec::with_capacity(n);
         for i in 0..n {
             let (rtx, rrx) = mpsc::channel();
-            tx.send(CoalesceReq { text: format!("doc-{i}"), reply: rtx }).unwrap();
+            tx.send(CoalesceReq {
+                text: format!("doc-{i}"),
+                reply: rtx,
+            })
+            .unwrap();
             replies.push(rrx);
         }
         for rrx in replies {

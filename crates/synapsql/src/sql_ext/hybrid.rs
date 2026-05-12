@@ -35,7 +35,7 @@ pub fn register_udf(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
             | rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
         |ctx| {
             let bm25: i64 = ctx.get(0)?;
-            let vec: i64 = ctx.get(1)?;
+            let vec:  i64 = ctx.get(1)?;
             Ok(hybrid_rank(bm25.unsigned_abs(), vec.unsigned_abs()))
         },
     )

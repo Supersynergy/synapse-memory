@@ -2,6 +2,7 @@
 /// 10 000 vectors × 384 dims, top-10 query.
 /// Reports p50 latency — run with:
 ///   cargo bench --bench f16_hnsw -p synapse-core -- --bench
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use synapse_core::turbo::inmem_f16_index::InMemoryF16Index;
 
@@ -10,8 +11,7 @@ fn build_index(n: usize, dim: usize) -> InMemoryF16Index {
         .map(|i| {
             let v: Vec<f32> = (0..dim)
                 .map(|d| {
-                    let x = ((i as u64).wrapping_mul(0x9e3779b97f4a7c15)
-                        ^ (d as u64 * 0xbf58476d1ce4e5b9)) as f32;
+                    let x = ((i as u64).wrapping_mul(0x9e3779b97f4a7c15) ^ (d as u64 * 0xbf58476d1ce4e5b9)) as f32;
                     x / u64::MAX as f32 - 0.5
                 })
                 .collect();
@@ -26,8 +26,7 @@ fn build_index(n: usize, dim: usize) -> InMemoryF16Index {
 fn query_vec(dim: usize) -> Vec<f32> {
     let v: Vec<f32> = (0..dim)
         .map(|d| {
-            let x = (0x1234_5678u64.wrapping_mul(0x9e3779b97f4a7c15)
-                ^ (d as u64 * 0xbf58476d1ce4e5b9)) as f32;
+            let x = (0x1234_5678u64.wrapping_mul(0x9e3779b97f4a7c15) ^ (d as u64 * 0xbf58476d1ce4e5b9)) as f32;
             x / u64::MAX as f32 - 0.5
         })
         .collect();
@@ -44,7 +43,9 @@ fn bench_f16_search(c: &mut Criterion) {
         let q = query_vec(dim);
 
         g.bench_with_input(BenchmarkId::new("search_top10", n), &n, |bench, _| {
-            bench.iter(|| std::hint::black_box(idx.search(std::hint::black_box(&q), 10)));
+            bench.iter(|| {
+                std::hint::black_box(idx.search(std::hint::black_box(&q), 10))
+            });
         });
     }
 

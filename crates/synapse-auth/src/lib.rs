@@ -56,17 +56,11 @@ pub struct AuthStore {
 
 impl AuthStore {
     pub fn new() -> Self {
-        Self {
-            keys: RwLock::new(HashMap::new()),
-        }
+        Self { keys: RwLock::new(HashMap::new()) }
     }
     pub fn add_key(&self, plain: &str, role: Role, label: impl Into<String>) {
         let h = hash_key(plain);
-        let k = ApiKey {
-            hash: h,
-            role,
-            label: label.into(),
-        };
+        let k = ApiKey { hash: h, role, label: label.into() };
         if let Ok(mut g) = self.keys.write() {
             g.insert(h, k);
         }

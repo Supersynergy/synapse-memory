@@ -1,5 +1,5 @@
-use std::time::Instant;
 use synapse_market::book::{BookEvent, BookStore, Op, Side};
+use std::time::Instant;
 use tempfile::NamedTempFile;
 
 #[test]
@@ -8,16 +8,14 @@ fn replay_p50_under_50us() {
     let mut store = BookStore::open(tmp.path()).unwrap();
 
     // 10k events (smaller than bench, but still covers multiple checkpoints)
-    let events: Vec<BookEvent> = (0..10_000usize)
-        .map(|i| BookEvent {
-            ts: 1_000_000_000 + i as i64 * 1_000,
-            level: (i % 50) as u8,
-            side: if i % 2 == 0 { Side::Bid } else { Side::Ask },
-            op: Op::Update,
-            px: 100.0 + (i % 20) as f32 * 0.05,
-            qty: 1.0,
-        })
-        .collect();
+    let events: Vec<BookEvent> = (0..10_000usize).map(|i| BookEvent {
+        ts: 1_000_000_000 + i as i64 * 1_000,
+        level: (i % 50) as u8,
+        side: if i % 2 == 0 { Side::Bid } else { Side::Ask },
+        op: Op::Update,
+        px: 100.0 + (i % 20) as f32 * 0.05,
+        qty: 1.0,
+    }).collect();
     store.append(&events).unwrap();
 
     // 1000 random-ish ts queries

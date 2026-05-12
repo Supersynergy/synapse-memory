@@ -1,11 +1,11 @@
 /// 64KB fixed page with Hilbert-zorder locality for (timestamp, price-zone).
-/// Layout: 64B header | 6 column buffers (ts_base i64, ts_deltas [i32], o/h/l/c/v [f32])
+/// Layout: 64B header | 6 column buffers (ts [i64], o/h/l/c/v [f32])
 use blake3;
 
 pub const PAGE_SIZE: usize = 65536;
 pub const HEADER_SIZE: usize = 64;
-/// Max rows per page: (64KB - 64B header) / (4B ts_delta + 4B×5 ohlcv) = 65472/24 = 2728
-pub const MAX_ROWS: usize = 2728;
+/// Max rows per page: (64KB - 64B header) / (8B ts + 4B×5 ohlcv) = 65472/28 = 2338
+pub const MAX_ROWS: usize = 2338;
 
 /// 64-byte page header (packed manually, no padding issues)
 #[derive(Debug, Clone, Copy)]
@@ -13,7 +13,7 @@ pub struct PageHeader {
     pub ts_min: i64,
     pub ts_max: i64,
     pub row_count: u32,
-    pub checksum: [u8; 8],    // first 8 bytes of blake3
+    pub checksum: [u8; 8], // first 8 bytes of blake3
     pub hilbert_curve_id: u8, // 0 = unsorted, 1 = sorted by hilbert_index
     _pad: [u8; 35],
 }
@@ -23,14 +23,7 @@ impl PageHeader {
         let hash = blake3::hash(body);
         let mut checksum = [0u8; 8];
         checksum.copy_from_slice(&hash.as_bytes()[..8]);
-        Self {
-            ts_min,
-            ts_max,
-            row_count,
-            checksum,
-            hilbert_curve_id: 0,
-            _pad: [0u8; 35],
-        }
+        Self { ts_min, ts_max, row_count, checksum, hilbert_curve_id: 0, _pad: [0u8; 35] }
     }
 
     pub fn to_bytes(&self) -> [u8; HEADER_SIZE] {
@@ -50,14 +43,7 @@ impl PageHeader {
         let mut checksum = [0u8; 8];
         checksum.copy_from_slice(&b[20..28]);
         let hilbert_curve_id = b[28];
-        Self {
-            ts_min,
-            ts_max,
-            row_count,
-            checksum,
-            hilbert_curve_id,
-            _pad: [0u8; 35],
-        }
+        Self { ts_min, ts_max, row_count, checksum, hilbert_curve_id, _pad: [0u8; 35] }
     }
 }
 
@@ -82,8 +68,7 @@ pub fn hilbert_index(
     price_scale: f64,
 ) -> u64 {
     let t = ((ts - ts_origin) as f64 / ts_scale).clamp(0.0, u32::MAX as f64) as u32;
-    let p_log =
-        ((price / price_origin).ln() as f64 / price_scale).clamp(0.0, u32::MAX as f64) as u32;
+    let p_log = ((price / price_origin).ln() as f64 / price_scale).clamp(0.0, u32::MAX as f64) as u32;
     fast_hilbert::xy2h::<u32>(t, p_log, 32)
 }
 
@@ -118,44 +103,31 @@ pub fn encode_page(bars: &[Bar]) -> Vec<u8> {
     let ts_origin = sorted.iter().map(|b| b.ts).min().unwrap();
     let price_origin = sorted.iter().map(|b| b.close).fold(f32::INFINITY, f32::min);
     let ts_range = (sorted.iter().map(|b| b.ts).max().unwrap() - ts_origin).max(1);
-    let price_max = sorted
-        .iter()
-        .map(|b| b.close)
-        .fold(f32::NEG_INFINITY, f32::max);
+    let price_max = sorted.iter().map(|b| b.close).fold(f32::NEG_INFINITY, f32::max);
     let price_log_max = (price_max / price_origin).ln().max(1e-9_f64 as f32) as f64;
     let ts_scale = ts_range as f64 / u32::MAX as f64;
     let price_scale = price_log_max / u32::MAX as f64;
     let ts_scale = if ts_scale == 0.0 { 1.0 } else { ts_scale };
     let price_scale = if price_scale == 0.0 { 1.0 } else { price_scale };
     sorted.sort_unstable_by_key(|b| {
-        hilbert_index(
-            b.ts,
-            b.close,
-            ts_origin,
-            price_origin,
-            ts_scale,
-            price_scale,
-        )
+        hilbert_index(b.ts, b.close, ts_origin, price_origin, ts_scale, price_scale)
     });
     let bars = sorted.as_slice();
 
     let n = bars.len();
-    let ts_base = bars[0].ts;
 
-    // body: ts_deltas (i32 × n) | open (f32 × n) | high | low | close | volume
-    let body_len = n * (4 + 4 + 4 + 4 + 4 + 4); // 24 bytes/row
+    // body: ts (i64 × n) | open (f32 × n) | high | low | close | volume
+    let body_len = n * (8 + 4 + 4 + 4 + 4 + 4); // 28 bytes/row
     let mut body = vec![0u8; body_len];
 
-    let ts_off = 0;
-    let o_off = n * 4;
-    let h_off = n * 8;
-    let l_off = n * 12;
-    let c_off = n * 16;
-    let v_off = n * 20;
+    let o_off = n * 8;
+    let h_off = n * 8 + n * 4;
+    let l_off = n * 8 + n * 8;
+    let c_off = n * 8 + n * 12;
+    let v_off = n * 8 + n * 16;
 
     for (i, bar) in bars.iter().enumerate() {
-        let delta = (bar.ts - ts_base) as i32;
-        body[ts_off + i * 4..ts_off + i * 4 + 4].copy_from_slice(&delta.to_le_bytes());
+        body[i * 8..i * 8 + 8].copy_from_slice(&bar.ts.to_le_bytes());
         body[o_off + i * 4..o_off + i * 4 + 4].copy_from_slice(&bar.open.to_le_bytes());
         body[h_off + i * 4..h_off + i * 4 + 4].copy_from_slice(&bar.high.to_le_bytes());
         body[l_off + i * 4..l_off + i * 4 + 4].copy_from_slice(&bar.low.to_le_bytes());
@@ -178,11 +150,11 @@ pub fn encode_page(bars: &[Bar]) -> Vec<u8> {
 /// SoA in-memory page — parallel column Vecs, no per-row structs.
 /// Build from a `&[Bar]` slice; public Bar struct unchanged.
 pub struct Page {
-    ts: Vec<i64>,
-    open: Vec<f32>,
-    high: Vec<f32>,
-    low: Vec<f32>,
-    close: Vec<f32>,
+    ts:     Vec<i64>,
+    open:   Vec<f32>,
+    high:   Vec<f32>,
+    low:    Vec<f32>,
+    close:  Vec<f32>,
     volume: Vec<f32>,
 }
 
@@ -192,36 +164,22 @@ impl Page {
         if !sorted.is_empty() {
             let ts_origin = sorted.iter().map(|b| b.ts).min().unwrap();
             let price_origin = sorted.iter().map(|b| b.close).fold(f32::INFINITY, f32::min);
-            let price_origin = if price_origin <= 0.0 {
-                1.0_f32
-            } else {
-                price_origin
-            };
+            let price_origin = if price_origin <= 0.0 { 1.0_f32 } else { price_origin };
             let ts_range = (sorted.iter().map(|b| b.ts).max().unwrap() - ts_origin).max(1);
-            let price_max = sorted
-                .iter()
-                .map(|b| b.close)
-                .fold(f32::NEG_INFINITY, f32::max);
+            let price_max = sorted.iter().map(|b| b.close).fold(f32::NEG_INFINITY, f32::max);
             let price_log_max = (price_max / price_origin).ln().max(1e-9) as f64;
             let ts_scale = (ts_range as f64 / u32::MAX as f64).max(1.0);
             let price_scale = price_log_max.max(1e-9) / u32::MAX as f64;
             sorted.sort_unstable_by_key(|b| {
-                hilbert_index(
-                    b.ts,
-                    b.close,
-                    ts_origin,
-                    price_origin,
-                    ts_scale,
-                    price_scale,
-                )
+                hilbert_index(b.ts, b.close, ts_origin, price_origin, ts_scale, price_scale)
             });
         }
         let n = sorted.len();
-        let mut ts = Vec::with_capacity(n);
-        let mut open = Vec::with_capacity(n);
-        let mut high = Vec::with_capacity(n);
-        let mut low = Vec::with_capacity(n);
-        let mut close = Vec::with_capacity(n);
+        let mut ts     = Vec::with_capacity(n);
+        let mut open   = Vec::with_capacity(n);
+        let mut high   = Vec::with_capacity(n);
+        let mut low    = Vec::with_capacity(n);
+        let mut close  = Vec::with_capacity(n);
         let mut volume = Vec::with_capacity(n);
         for b in &sorted {
             ts.push(b.ts);
@@ -231,68 +189,30 @@ impl Page {
             close.push(b.close);
             volume.push(b.volume);
         }
-        Self {
-            ts,
-            open,
-            high,
-            low,
-            close,
-            volume,
-        }
+        Self { ts, open, high, low, close, volume }
     }
 
-    #[inline]
-    pub fn closes(&self) -> &[f32] {
-        &self.close
-    }
-    #[inline]
-    pub fn opens(&self) -> &[f32] {
-        &self.open
-    }
-    #[inline]
-    pub fn highs(&self) -> &[f32] {
-        &self.high
-    }
-    #[inline]
-    pub fn lows(&self) -> &[f32] {
-        &self.low
-    }
-    #[inline]
-    pub fn volumes(&self) -> &[f32] {
-        &self.volume
-    }
-    #[inline]
-    pub fn timestamps(&self) -> &[i64] {
-        &self.ts
-    }
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.ts.len()
-    }
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.ts.is_empty()
-    }
+    #[inline] pub fn closes(&self)     -> &[f32] { &self.close }
+    #[inline] pub fn opens(&self)      -> &[f32] { &self.open }
+    #[inline] pub fn highs(&self)      -> &[f32] { &self.high }
+    #[inline] pub fn lows(&self)       -> &[f32] { &self.low }
+    #[inline] pub fn volumes(&self)    -> &[f32] { &self.volume }
+    #[inline] pub fn timestamps(&self) -> &[i64] { &self.ts }
+    #[inline] pub fn len(&self)        -> usize  { self.ts.len() }
+    #[inline] pub fn is_empty(&self)   -> bool   { self.ts.is_empty() }
 }
 
 /// Column selector for range_columns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Col {
-    Ts,
-    Open,
-    High,
-    Low,
-    Close,
-    Volume,
-}
+pub enum Col { Ts, Open, High, Low, Close, Volume }
 
 /// Returned by range_columns — parallel column vecs, same length.
 pub struct ColumnSlices {
-    pub ts: Vec<i64>,
-    pub open: Option<Vec<f32>>,
-    pub high: Option<Vec<f32>>,
-    pub low: Option<Vec<f32>>,
-    pub close: Option<Vec<f32>>,
+    pub ts:     Vec<i64>,
+    pub open:   Option<Vec<f32>>,
+    pub high:   Option<Vec<f32>>,
+    pub low:    Option<Vec<f32>>,
+    pub close:  Option<Vec<f32>>,
     pub volume: Option<Vec<f32>>,
 }
 
@@ -302,13 +222,12 @@ pub fn decode_page_soa_filtered(page: &[u8], ts_start: i64, ts_end: i64) -> Page
     let hdr_bytes: [u8; HEADER_SIZE] = page[..HEADER_SIZE].try_into().unwrap();
     let header = PageHeader::from_bytes(&hdr_bytes);
     let n = header.row_count as usize;
-    let ts_base = header.ts_min;
     let body = &page[HEADER_SIZE..];
-    let o_off = n * 4;
-    let h_off = n * 8;
-    let l_off = n * 12;
-    let c_off = n * 16;
-    let v_off = n * 20;
+    let o_off = n * 8;
+    let h_off = n * 8 + n * 4;
+    let l_off = n * 8 + n * 8;
+    let c_off = n * 8 + n * 12;
+    let v_off = n * 8 + n * 16;
 
     let mut ts_vec = Vec::with_capacity(n);
     let mut open_vec = Vec::with_capacity(n);
@@ -318,36 +237,16 @@ pub fn decode_page_soa_filtered(page: &[u8], ts_start: i64, ts_end: i64) -> Page
     let mut vol_vec = Vec::with_capacity(n);
 
     for i in 0..n {
-        let delta = i32::from_le_bytes(body[i * 4..i * 4 + 4].try_into().unwrap());
-        let ts = ts_base + delta as i64;
-        if ts < ts_start || ts >= ts_end {
-            continue;
-        }
+        let ts = i64::from_le_bytes(body[i * 8..i * 8 + 8].try_into().unwrap());
+        if ts < ts_start || ts >= ts_end { continue; }
         ts_vec.push(ts);
-        open_vec.push(f32::from_le_bytes(
-            body[o_off + i * 4..o_off + i * 4 + 4].try_into().unwrap(),
-        ));
-        high_vec.push(f32::from_le_bytes(
-            body[h_off + i * 4..h_off + i * 4 + 4].try_into().unwrap(),
-        ));
-        low_vec.push(f32::from_le_bytes(
-            body[l_off + i * 4..l_off + i * 4 + 4].try_into().unwrap(),
-        ));
-        close_vec.push(f32::from_le_bytes(
-            body[c_off + i * 4..c_off + i * 4 + 4].try_into().unwrap(),
-        ));
-        vol_vec.push(f32::from_le_bytes(
-            body[v_off + i * 4..v_off + i * 4 + 4].try_into().unwrap(),
-        ));
+        open_vec.push(f32::from_le_bytes(body[o_off + i * 4..o_off + i * 4 + 4].try_into().unwrap()));
+        high_vec.push(f32::from_le_bytes(body[h_off + i * 4..h_off + i * 4 + 4].try_into().unwrap()));
+        low_vec.push(f32::from_le_bytes(body[l_off + i * 4..l_off + i * 4 + 4].try_into().unwrap()));
+        close_vec.push(f32::from_le_bytes(body[c_off + i * 4..c_off + i * 4 + 4].try_into().unwrap()));
+        vol_vec.push(f32::from_le_bytes(body[v_off + i * 4..v_off + i * 4 + 4].try_into().unwrap()));
     }
-    Page {
-        ts: ts_vec,
-        open: open_vec,
-        high: high_vec,
-        low: low_vec,
-        close: close_vec,
-        volume: vol_vec,
-    }
+    Page { ts: ts_vec, open: open_vec, high: high_vec, low: low_vec, close: close_vec, volume: vol_vec }
 }
 
 /// Decode all bars from a page buffer.
@@ -357,36 +256,21 @@ pub fn decode_page(page: &[u8]) -> (PageHeader, Vec<Bar>) {
     let n = header.row_count as usize;
 
     let body = &page[HEADER_SIZE..];
-    let ts_off = 0;
-    let o_off = n * 4;
-    let h_off = n * 8;
-    let l_off = n * 12;
-    let c_off = n * 16;
-    let v_off = n * 20;
-
-    // We need ts_base: stored as the first delta decoded gives offset-0, but base is
-    // implicit — we store it as header.ts_min (first bar's ts when sorted).
-    // Actually ts_base = ts of bar[0] which we stored as delta=0 in encode.
-    // header.ts_min == ts_base for sorted pages.
-    let ts_base = header.ts_min;
+    let o_off = n * 8;
+    let h_off = n * 8 + n * 4;
+    let l_off = n * 8 + n * 8;
+    let c_off = n * 8 + n * 12;
+    let v_off = n * 8 + n * 16;
 
     let mut bars = Vec::with_capacity(n);
     for i in 0..n {
-        let delta =
-            i32::from_le_bytes(body[ts_off + i * 4..ts_off + i * 4 + 4].try_into().unwrap());
+        let ts = i64::from_le_bytes(body[i * 8..i * 8 + 8].try_into().unwrap());
         let open = f32::from_le_bytes(body[o_off + i * 4..o_off + i * 4 + 4].try_into().unwrap());
         let high = f32::from_le_bytes(body[h_off + i * 4..h_off + i * 4 + 4].try_into().unwrap());
         let low = f32::from_le_bytes(body[l_off + i * 4..l_off + i * 4 + 4].try_into().unwrap());
         let close = f32::from_le_bytes(body[c_off + i * 4..c_off + i * 4 + 4].try_into().unwrap());
         let volume = f32::from_le_bytes(body[v_off + i * 4..v_off + i * 4 + 4].try_into().unwrap());
-        bars.push(Bar {
-            ts: ts_base + delta as i64,
-            open,
-            high,
-            low,
-            close,
-            volume,
-        });
+        bars.push(Bar { ts, open, high, low, close, volume });
     }
     (header, bars)
 }
@@ -416,12 +300,12 @@ mod tests {
         let (hdr, decoded) = decode_page(&page);
         assert_eq!(hdr.row_count, 100);
         assert_eq!(decoded.len(), 100);
-        // Hilbert-sort may reorder rows; compare as sorted-by-ts sets.
-        let mut input_sorted = bars.clone();
-        let mut decoded_sorted = decoded.clone();
-        input_sorted.sort_by_key(|b| b.ts);
-        decoded_sorted.sort_by_key(|b| b.ts);
-        for (a, b) in input_sorted.iter().zip(decoded_sorted.iter()) {
+        // Hilbert-sort reorders rows; compare as ts-sorted sets
+        let mut inp = bars.clone();
+        let mut dec = decoded.clone();
+        inp.sort_by_key(|b| b.ts);
+        dec.sort_by_key(|b| b.ts);
+        for (a, b) in inp.iter().zip(dec.iter()) {
             assert_eq!(a.ts, b.ts);
             assert!((a.close - b.close).abs() < 1e-5);
         }

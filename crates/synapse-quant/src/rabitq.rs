@@ -11,9 +11,9 @@
 //! Applied as a series of rank-1 updates (O(k·D) time).
 
 #[cfg(feature = "rabitq")]
-use rand::rngs::StdRng;
-#[cfg(feature = "rabitq")]
 use rand::{RngExt, SeedableRng};
+#[cfg(feature = "rabitq")]
+use rand::rngs::StdRng;
 
 /// Box-Muller: two uniform [0,1] → one N(0,1).
 #[cfg(feature = "rabitq")]
@@ -61,19 +61,14 @@ impl RaBitQEncoder {
     #[cfg(not(feature = "rabitq"))]
     pub fn new_identity(dim: usize) -> Self {
         let mut rotation = vec![0.0_f32; dim * dim];
-        for i in 0..dim {
-            rotation[i * dim + i] = 1.0;
-        }
+        for i in 0..dim { rotation[i * dim + i] = 1.0; }
         Self { rotation, dim }
     }
 
     /// Encode vector `v` → `RaBitQVec` (1-bit signs of rotated dims + norm).
     pub fn encode(&self, v: &[f32]) -> Result<RaBitQVec, QuantError> {
         if v.len() != self.dim {
-            return Err(QuantError::DimMismatch {
-                expected: self.dim,
-                actual: v.len(),
-            });
+            return Err(QuantError::DimMismatch { expected: self.dim, actual: v.len() });
         }
         let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
         let rotated = matvec_mul(&self.rotation, v, self.dim);
@@ -84,11 +79,7 @@ impl RaBitQEncoder {
                 bits[i / 8] |= 1 << (i % 8);
             }
         }
-        Ok(RaBitQVec {
-            bits,
-            norm,
-            dim: self.dim,
-        })
+        Ok(RaBitQVec { bits, norm, dim: self.dim })
     }
 
     /// Estimate inner product ⟨q, x⟩ using paper §3.2 asymmetric formula.
@@ -116,12 +107,7 @@ impl RaBitQEncoder {
             let sign: f32 = if bit == 1 { 1.0 } else { -1.0 };
             acc += query_rotated[i] * sign;
         }
-        let qnorm: f32 = query_rotated
-            .iter()
-            .map(|x| x * x)
-            .sum::<f32>()
-            .sqrt()
-            .max(1e-9);
+        let qnorm: f32 = query_rotated.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
         acc * code.norm / qnorm
     }
 
@@ -144,10 +130,7 @@ pub fn symmetric_distance_estimate(a: &RaBitQVec, b: &RaBitQVec) -> f32 {
 /// Hamming distance: number of differing bits between two byte arrays.
 #[inline]
 pub fn hamming_u8(a: &[u8], b: &[u8]) -> u32 {
-    a.iter()
-        .zip(b.iter())
-        .map(|(x, y)| (x ^ y).count_ones())
-        .sum()
+    a.iter().zip(b.iter()).map(|(x, y)| (x ^ y).count_ones()).sum()
 }
 
 /// Matrix-vector multiply: R (dim×dim row-major) × v → out.
@@ -170,25 +153,17 @@ fn build_householder_rotation(dim: usize, seed: u64) -> Vec<f32> {
     let mut rng = StdRng::seed_from_u64(seed);
     // Start with identity.
     let mut r = vec![0.0_f32; dim * dim];
-    for i in 0..dim {
-        r[i * dim + i] = 1.0;
-    }
+    for i in 0..dim { r[i * dim + i] = 1.0; }
 
     let k = if dim <= 64 { dim } else { dim / 2 }.max(8);
     for _ in 0..k {
         // Random Gaussian vector.
         let mut v: Vec<f32> = Vec::with_capacity(dim);
-        for _ in 0..dim {
-            v.push(rand_gaussian(&mut rng));
-        }
+        for _ in 0..dim { v.push(rand_gaussian(&mut rng)); }
         // Normalize.
         let vn: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-        if vn < 1e-9 {
-            continue;
-        }
-        for x in v.iter_mut() {
-            *x /= vn;
-        }
+        if vn < 1e-9 { continue; }
+        for x in v.iter_mut() { *x /= vn; }
         // Householder H = I - 2 v vᵀ. Apply to R: R ← H·R.
         // Each row i: r[i] -= 2*(v·r[i])*v
         for row in 0..dim {
@@ -205,15 +180,13 @@ fn build_householder_rotation(dim: usize, seed: u64) -> Vec<f32> {
 mod tests {
     use super::*;
     #[cfg(feature = "rabitq")]
-    use rand::rngs::StdRng;
-    #[cfg(feature = "rabitq")]
     use rand::{Rng, RngExt, SeedableRng};
+    #[cfg(feature = "rabitq")]
+    use rand::rngs::StdRng;
 
     fn norm_vec(v: &mut [f32]) {
         let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
-        for x in v.iter_mut() {
-            *x /= n;
-        }
+        for x in v.iter_mut() { *x /= n; }
     }
 
     #[cfg(feature = "rabitq")]
@@ -269,10 +242,8 @@ mod tests {
         // Check R·Rᵀ ≈ I: col norms ≈ 1
         for i in 0..dim {
             let col_norm_sq: f32 = (0..dim).map(|j| r[j * dim + i].powi(2)).sum();
-            assert!(
-                (col_norm_sq - 1.0).abs() < 0.05,
-                "col {i} norm² = {col_norm_sq:.4}, expected ~1"
-            );
+            assert!((col_norm_sq - 1.0).abs() < 0.05,
+                "col {i} norm² = {col_norm_sq:.4}, expected ~1");
         }
     }
 
@@ -306,9 +277,7 @@ mod tests {
         let mut recall_hits = 0usize;
         for q in &queries {
             // Ground-truth top-k (exact cosine on normalized = dot)
-            let mut exact: Vec<(usize, f32)> = corpus
-                .iter()
-                .enumerate()
+            let mut exact: Vec<(usize, f32)> = corpus.iter().enumerate()
                 .map(|(i, v)| (i, v.iter().zip(q.iter()).map(|(a, b)| a * b).sum::<f32>()))
                 .collect();
             exact.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
@@ -316,9 +285,7 @@ mod tests {
 
             // RaBitQ asymmetric estimate top-k (query f32, DB binarized)
             let qr = enc.rotate(q);
-            let mut est: Vec<(usize, f32)> = codes
-                .iter()
-                .enumerate()
+            let mut est: Vec<(usize, f32)> = codes.iter().enumerate()
                 .map(|(i, c)| (i, enc.query_estimate(&qr, c)))
                 .collect();
             est.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
@@ -327,21 +294,14 @@ mod tests {
         }
         let elapsed = t0.elapsed();
         let recall = recall_hits as f32 / (n_q * k) as f32;
-        eprintln!(
-            "RaBitQ R@10={:.3} over {n_q} queries, {n} corpus, {dim}d — {}ms total, {:.1}µs/query",
-            recall,
-            elapsed.as_millis(),
-            elapsed.as_micros() as f32 / n_q as f32
-        );
+        eprintln!("RaBitQ R@10={:.3} over {n_q} queries, {n} corpus, {dim}d — {}ms total, {:.1}µs/query",
+            recall, elapsed.as_millis(), elapsed.as_micros() as f32 / n_q as f32);
         // Storage: 32× vs f32 (1 bit/dim vs 32 bit/dim)
         eprintln!("Storage: 32× vs f32 (1 bit/dim)");
         // NOTE: 0.95+ R@10 from the paper requires f32 rerank of top-M candidates
         // (see RaBitQIndex in synapse-core for the full cascade).
         // Raw 1-bit asymmetric estimate gives ~0.20-0.30 R@10 — expected baseline.
         // Minimum sanity: must beat random (1/1000 = 0.001).
-        assert!(
-            recall >= 0.10,
-            "R@10={recall:.3} too low — estimator broken"
-        );
+        assert!(recall >= 0.10, "R@10={recall:.3} too low — estimator broken");
     }
 }

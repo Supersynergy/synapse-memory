@@ -31,19 +31,13 @@ blake3         = { workspace = true }
 parking_lot    = { workspace = true }
 # Statement cache + result LRU (safe: no RUSTSEC issue in lru 0.13)
 lru            = "0.13"
-serde_json     = { workspace = true }
 # Zero-copy byte buffers for result streaming
 bytes          = "1"
 # Atomic counters for QPS metrics
 # (no extra dep — use std::sync::atomic)
 
 [features]
-default = []
 rusqlite-udf = []
-embed = ["synapse-core/embed"]
-embed-dynamic = ["synapse-core/embed-dynamic"]
-embed-mlx = ["synapse-core/embed-mlx"]
-ann-usearch = ["synapse-core/ann-usearch"]
 
 [dev-dependencies]
 tokio = { workspace = true }

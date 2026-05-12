@@ -61,23 +61,23 @@ impl Strategy {
     pub(crate) const fn prior_recall(self) -> f64 {
         match self {
             Self::ScalarF32 | Self::RayonF32 | Self::SimSimdF32 => 1.00,
-            Self::SimSimdI8 => 0.97,
-            Self::MrlSimSimd => 0.95,
-            Self::SimSimdHamming => 0.72, // w/o rerank
-            Self::RaBitQCascade => 0.95,  // Hamming + RaBitQ rerank
+            Self::SimSimdI8                                    => 0.97,
+            Self::MrlSimSimd                                   => 0.95,
+            Self::SimSimdHamming                               => 0.72, // w/o rerank
+            Self::RaBitQCascade                                => 0.95, // Hamming + RaBitQ rerank
         }
     }
 
     /// Expected-µs-per-100k-rows floor.
     pub(crate) const fn prior_us_per_100k(self) -> f64 {
         match self {
-            Self::ScalarF32 => 13_000.0,
-            Self::RayonF32 => 1_500.0,
-            Self::SimSimdF32 => 760.0,
-            Self::SimSimdI8 => 325.0,
+            Self::ScalarF32      => 13_000.0,
+            Self::RayonF32       => 1_500.0,
+            Self::SimSimdF32     => 760.0,
+            Self::SimSimdI8      => 325.0,
             Self::SimSimdHamming => 250.0,
-            Self::MrlSimSimd => 400.0,
-            Self::RaBitQCascade => 500.0, // Hamming + rerank N candidates
+            Self::MrlSimSimd     => 400.0,
+            Self::RaBitQCascade  => 500.0, // Hamming + rerank N candidates
         }
     }
 }
@@ -95,11 +95,7 @@ pub struct QueryHints {
 
 impl Default for QueryHints {
     fn default() -> Self {
-        Self {
-            corpus_size: 10_000,
-            latency_budget_us: 0,
-            min_recall: 0.0,
-        }
+        Self { corpus_size: 10_000, latency_budget_us: 0, min_recall: 0.0 }
     }
 }
 
@@ -112,38 +108,21 @@ struct Beta {
 }
 
 impl Beta {
-    const fn new() -> Self {
-        Self {
-            alpha: 1.0,
-            beta: 1.0,
-        }
-    }
+    const fn new() -> Self { Self { alpha: 1.0, beta: 1.0 } }
 
     /// Update with a Bernoulli outcome (`success = recall ≥ target`).
     fn update(&mut self, success: bool) {
-        if success {
-            self.alpha += 1.0;
-        } else {
-            self.beta += 1.0;
-        }
+        if success { self.alpha += 1.0; } else { self.beta += 1.0; }
         // Clamp — never let pseudo-counts explode past 10_000 each.
         let cap = 10_000.0_f64;
-        if self.alpha > cap {
-            self.alpha = cap;
-        }
-        if self.beta > cap {
-            self.beta = cap;
-        }
+        if self.alpha > cap { self.alpha = cap; }
+        if self.beta  > cap { self.beta  = cap; }
     }
 
     /// Mean of the Beta posterior — used instead of sampling for determinism.
     fn mean(self) -> f64 {
         let total = self.alpha + self.beta;
-        if total < f64::EPSILON {
-            0.5
-        } else {
-            self.alpha / total
-        }
+        if total < f64::EPSILON { 0.5 } else { self.alpha / total }
     }
 }
 
@@ -194,18 +173,10 @@ impl AdaptiveRouter {
         // Feasible set: (strat, recall, us)
         let mut feasible: Vec<(Strategy, f64, f64)> = Vec::with_capacity(6);
         for strat in Self::enumerated() {
-            if !passes_corpus_gate(strat, hints.corpus_size) {
-                continue;
-            }
-            let post = self
-                .posterior
-                .get(&strat)
-                .copied()
-                .unwrap_or_else(Beta::new);
+            if !passes_corpus_gate(strat, hints.corpus_size) { continue; }
+            let post = self.posterior.get(&strat).copied().unwrap_or_else(Beta::new);
             let recall = post.mean().max(strat.prior_recall());
-            if recall < hints.min_recall {
-                continue;
-            }
+            if recall < hints.min_recall { continue; }
             let us = self.ewma_us.get(&strat).copied().unwrap_or(f64::INFINITY) * scale;
             feasible.push((strat, recall, us));
         }
@@ -249,19 +220,14 @@ impl AdaptiveRouter {
     pub fn observe(&mut self, strat: Strategy, us: f64, recall: f64) {
         let post = self.posterior.entry(strat).or_insert_with(Beta::new);
         post.update(recall >= 0.9); // 0.9 as a generic "good" threshold
-        let ewma = self
-            .ewma_us
-            .entry(strat)
-            .or_insert_with(|| strat.prior_us_per_100k());
+        let ewma = self.ewma_us.entry(strat).or_insert_with(|| strat.prior_us_per_100k());
         *ewma = 0.7 * *ewma + 0.3 * us;
         self.n_decisions += 1;
     }
 
     /// Total observations so far.
     #[must_use]
-    pub const fn decisions(&self) -> u64 {
-        self.n_decisions
-    }
+    pub const fn decisions(&self) -> u64 { self.n_decisions }
 
     /// Current posterior mean recall per strategy — mostly for debugging + UI.
     #[must_use]
@@ -269,12 +235,7 @@ impl AdaptiveRouter {
         Self::enumerated()
             .into_iter()
             .map(|s| {
-                let r = self
-                    .posterior
-                    .get(&s)
-                    .copied()
-                    .unwrap_or_else(Beta::new)
-                    .mean();
+                let r = self.posterior.get(&s).copied().unwrap_or_else(Beta::new).mean();
                 let us = self.ewma_us.get(&s).copied().unwrap_or(0.0);
                 (s, r, us)
             })
@@ -285,13 +246,13 @@ impl AdaptiveRouter {
 /// Hard gates: some strategies are nonsensical at certain scales.
 fn passes_corpus_gate(strat: Strategy, n: usize) -> bool {
     match strat {
-        Strategy::ScalarF32 => n <= 10_000,
-        Strategy::RayonF32 => n <= 200_000,
-        Strategy::SimSimdF32 => n <= 5_000_000,
-        Strategy::SimSimdI8 => n <= 50_000_000,
-        Strategy::SimSimdHamming => n >= 10_000,
-        Strategy::MrlSimSimd => n >= 5_000,
-        Strategy::RaBitQCascade => n >= 5_000 && n <= 50_000_000,
+        Strategy::ScalarF32                  => n <= 10_000,
+        Strategy::RayonF32                   => n <= 200_000,
+        Strategy::SimSimdF32                 => n <= 5_000_000,
+        Strategy::SimSimdI8                  => n <= 50_000_000,
+        Strategy::SimSimdHamming             => n >= 10_000,
+        Strategy::MrlSimSimd                 => n >= 5_000,
+        Strategy::RaBitQCascade              => n >= 5_000 && n <= 50_000_000,
     }
 }
 
@@ -310,10 +271,7 @@ mod tests {
         // At 100k with no constraints, full-recall paths win by recall tie-break
         // toward the cheaper compute — expect ScalarF32 to be gated-out at this
         // scale but RayonF32 still eligible with recall 1.0.
-        assert!(matches!(
-            s,
-            Strategy::RayonF32 | Strategy::SimSimdF32 | Strategy::SimSimdI8
-        ));
+        assert!(matches!(s, Strategy::RayonF32 | Strategy::SimSimdF32 | Strategy::SimSimdI8));
     }
 
     #[test]
@@ -356,15 +314,8 @@ mod tests {
             r.observe(Strategy::SimSimdI8, 280.0, 0.98);
         }
         let means = r.posterior_means();
-        let int8 = means
-            .iter()
-            .find(|(s, _, _)| *s == Strategy::SimSimdI8)
-            .unwrap();
-        assert!(
-            int8.1 > 0.9,
-            "int8 posterior mean {} should be > 0.9",
-            int8.1
-        );
+        let int8 = means.iter().find(|(s, _, _)| *s == Strategy::SimSimdI8).unwrap();
+        assert!(int8.1 > 0.9, "int8 posterior mean {} should be > 0.9", int8.1);
     }
 
     #[test]
@@ -385,10 +336,7 @@ mod tests {
             r.observe(Strategy::SimSimdI8, 100.0, 1.0);
         }
         let means = r.posterior_means();
-        let int8 = means
-            .iter()
-            .find(|(s, _, _)| *s == Strategy::SimSimdI8)
-            .unwrap();
+        let int8 = means.iter().find(|(s, _, _)| *s == Strategy::SimSimdI8).unwrap();
         assert!((int8.2 - 100.0).abs() < 5.0, "ewma_us = {}", int8.2);
     }
 }

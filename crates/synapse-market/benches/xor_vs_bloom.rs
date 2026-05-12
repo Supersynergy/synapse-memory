@@ -106,8 +106,7 @@ fn bench_neg_lookup(c: &mut Criterion) {
     let db_path = dir.path().join("bench.db");
     {
         let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE ts (t INTEGER PRIMARY KEY);")
-            .unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE ts (t INTEGER PRIMARY KEY);").unwrap();
         let tx = conn.unchecked_transaction().unwrap();
         let mut stmt = conn.prepare("INSERT OR IGNORE INTO ts VALUES (?)").unwrap();
         for &k in &keys {

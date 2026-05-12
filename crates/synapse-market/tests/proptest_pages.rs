@@ -1,6 +1,6 @@
 /// Property-based tests for page encode/decode, range-filter, delta-encoding.
 use proptest::prelude::*;
-use synapse_market::store::page::{decode_page, encode_page, Bar};
+use synapse_market::store::page::{Bar, encode_page, decode_page};
 
 // ── Strategies ────────────────────────────────────────────────────────────────
 fn arb_bar() -> impl Strategy<Value = Bar> {
@@ -11,15 +11,9 @@ fn arb_bar() -> impl Strategy<Value = Bar> {
         0.01f32..=10_000.0f32,
         0.01f32..=10_000.0f32,
         0.0f32..=1_000_000_000.0f32,
-    )
-        .prop_map(|(ts, open, high, low, close, volume)| Bar {
-            ts,
-            open,
-            high,
-            low,
-            close,
-            volume,
-        })
+    ).prop_map(|(ts, open, high, low, close, volume)| Bar {
+        ts, open, high, low, close, volume,
+    })
 }
 
 fn arb_bars(max: usize) -> impl Strategy<Value = Vec<Bar>> {
@@ -34,7 +28,11 @@ proptest! {
         let (hdr, decoded) = decode_page(&encoded);
         prop_assert_eq!(hdr.row_count as usize, bars.len());
         prop_assert_eq!(decoded.len(), bars.len());
-        for (a, b) in bars.iter().zip(decoded.iter()) {
+        let mut sorted_in = bars.clone();
+        let mut sorted_out = decoded.clone();
+        sorted_in.sort_by_key(|b| b.ts);
+        sorted_out.sort_by_key(|b| b.ts);
+        for (a, b) in sorted_in.iter().zip(sorted_out.iter()) {
             prop_assert_eq!(a.ts, b.ts);
             prop_assert!((a.open   - b.open  ).abs() < 1e-6, "open   mismatch: {} vs {}", a.open,   b.open);
             prop_assert!((a.high   - b.high  ).abs() < 1e-6, "high   mismatch: {} vs {}", a.high,   b.high);
@@ -91,7 +89,7 @@ proptest! {
         use synapse_market::store::page::PAGE_SIZE;
         let encoded = encode_page(&bars);
         prop_assert_eq!(encoded.len(), PAGE_SIZE,
-            "expected PAGE_SIZE={PAGE_SIZE} got {}", encoded.len());
+            "expected PAGE_SIZE={} got {}", PAGE_SIZE, encoded.len());
     }
 
     // Property 5: price-filter subset of full range

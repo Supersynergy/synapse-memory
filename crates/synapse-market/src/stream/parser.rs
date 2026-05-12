@@ -1,5 +1,5 @@
-use super::LiveTick;
 use serde_json::Value;
+use super::LiveTick;
 
 /// Wire format selector for `WebSocketTickStream`.
 #[derive(Debug, Clone)]
@@ -73,8 +73,7 @@ fn parse_kraken_v2(raw: &str) -> Option<LiveTick> {
         ms / 1000
     } else {
         // fallback: use current epoch placeholder (real impl would parse ISO8601)
-        trade["timestamp"]
-            .as_str()
+        trade["timestamp"].as_str()
             .and_then(|s| s.parse::<f64>().ok())
             .map(|f| f as i64)
             .unwrap_or(0)

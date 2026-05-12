@@ -6,11 +6,14 @@ use tracing_subscriber::EnvFilter;
 
 use synapse_ultra::cache::T0Cache;
 use synapse_ultra::embed::Embedder;
-use synapse_ultra::http::{AppState, serve};
+use synapse_ultra::http::{serve, AppState};
 use synapse_ultra::index::load_or_rebuild;
 
 #[derive(Parser)]
-#[command(name = "synapse-ultra", about = "High-throughput Synapse vector search daemon")]
+#[command(
+    name = "synapse-ultra",
+    about = "High-throughput Synapse vector search daemon"
+)]
 struct Args {
     /// brain.db path
     #[arg(long, default_value = "~/.synapse/brain.db")]
@@ -88,7 +91,9 @@ async fn main() -> anyhow::Result<()> {
     let sock_emb = Arc::clone(&embedder);
 
     tokio::spawn(async move {
-        if let Err(e) = synapse_ultra::socket::serve(&sock_path, sock_index, sock_cache, sock_emb).await {
+        if let Err(e) =
+            synapse_ultra::socket::serve(&sock_path, sock_index, sock_cache, sock_emb).await
+        {
             tracing::error!("socket server error: {}", e);
         }
     });
