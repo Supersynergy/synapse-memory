@@ -564,6 +564,35 @@ impl Series {
         }
         Ok(())
     }
+
+    /// Tag a catalyst at timestamp `ts`. Stored in `<base>.cat` sidecar.
+    pub fn tag_catalyst(&self, ts: i64, catalyst_id: u64) -> std::io::Result<()> {
+        use std::io::Write;
+        let cat_path = PathBuf::from(format!("{}.cat", self.idx_path.with_extension("").display()));
+        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(cat_path)?;
+        writeln!(f, "{ts} {catalyst_id}")?;
+        Ok(())
+    }
+
+    /// Return all (ts, catalyst_id) pairs in the given ts range.
+    pub fn catalysts_in(&self, ts_range: std::ops::Range<i64>) -> Vec<(i64, u64)> {
+        let cat_path = PathBuf::from(format!("{}.cat", self.idx_path.with_extension("").display()));
+        let Ok(f) = std::fs::File::open(&cat_path) else { return vec![] };
+        let reader = std::io::BufReader::new(f);
+        let mut out = Vec::new();
+        for line in reader.lines() {
+            let Ok(line) = line else { continue };
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() == 2 {
+                let ts: i64 = parts[0].parse().unwrap_or(0);
+                let cid: u64 = parts[1].parse().unwrap_or(0);
+                if ts_range.contains(&ts) {
+                    out.push((ts, cid));
+                }
+            }
+        }
+        out
+    }
 }
 
 #[cfg(test)]

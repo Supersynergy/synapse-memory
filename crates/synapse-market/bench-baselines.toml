@@ -1,19 +1,61 @@
 # Bench regression baselines for synapse-market CI.
 # Values = acceptable ceiling (p50 µs or speedup floor).
 # CI fails if a bench regresses >10% beyond these.
+# Platform: M4 Max, sccache disabled, 2026-05-12
 
 [w1_candle_range]
 # W1 bench: cold candle-range scan, re-open per iter.
 # Measured: 50µs p50 (w1_results.md). Ceiling = 50 * 1.10 = 55µs.
 # Note: held-open path not yet benched separately.
 held_handle_p50_us = 55
+# Held-handle path (no re-open overhead). Measured: 26.25µs. Ceiling = 26.25 * 1.3 = 35µs.
+held_handle_p50_us_max = 35
 
 [w3_a1_mean]
 # W3 A1: SIMD mean(close) speedup vs naive.
 # Gate in bench: ≥4.0×. Floor = 4.0× (source: w3_simd_agg.rs gate).
 simd_speedup_min = 4.0
 
+[w3_a1_mean_simd]
+# Measured: 4.3×. Floor = 4.0× with 10% regression allowance.
+speedup_min = 4.0
+
 [amx_corr]
 # AMX Pearson 220×220 cblas_sgemm p50.
 # Measured: 25µs p50 (M4MAX-AMX-CORR-2026.md). Ceiling = 25 * 2.0 = 50µs (CI scheduling jitter).
 amx_p50_us = 50
+
+[amx_corr_220]
+# AMX 220×220 correlation p50. Measured: 25µs. Ceiling = 25 * 2.4 = 60µs (CI jitter).
+p50_us_max = 60
+
+[hilbert_locality]
+# Hilbert-zorder page-skip ratios. Measured: middle7d=0.98, priceband=0.99.
+# Floor: 0.95 (tolerate 3pp variance).
+middle7d_skip_ratio_min = 0.95
+priceband_skip_ratio_min = 0.95
+
+[jit_filter]
+# JIT filter naive path ceiling. Measured: 449µs. Ceiling = 600µs.
+naive_us_max = 600
+# SQLite WAL must be ≥5ms (5000µs) slower than JIT to justify the layer.
+sqlite_us_min = 5000
+
+[pattern_fsm]
+# FSM throughput floors. Measured: VolumeSpike=20M/s, InsiderCluster=124M/s.
+volumespike_events_per_sec_min = 10_000_000
+insidercluster_events_per_sec_min = 50_000_000
+
+[walk_forward]
+# Walk-forward DSR/PBO sanity checks.
+dsr_robust_threshold = 0.95
+pbo_robust_max = 0.50
+
+[conformal]
+# Conformal prediction coverage. Nominal: 0.80. Tolerance: ±0.05.
+coverage_min = 0.75
+coverage_max = 0.85
+
+[hotset_warm]
+# HotSet warm p50 ceiling. Measured: sub-µs (0µs reported). Ceiling = 5µs.
+p50_us_max = 5

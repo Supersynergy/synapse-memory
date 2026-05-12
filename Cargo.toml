@@ -80,6 +80,12 @@ members = [
     # Distribution bindings: Python (pyo3/maturin), TS/Bun (FFI cdylib)
     "crates/synapse-market-py",
     "crates/synapse-market-ts",
+    # DuckDB-embedded OLAP engine — feature-gated `olap` (duckdb bundled, heavy)
+    "crates/synapse-olap",
+    # CDC + continuous-query streaming layer
+    "crates/synapse-stream",
+    # GreptimeDB-pattern lite time-series columnar store (Arrow/Parquet, feature-gated)
+    "crates/synapse-tsdb",
 ]
 
 [workspace.metadata]

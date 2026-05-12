@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc c0ab1d2be1ffaf2491d27293e7da410c0662092a8610e310a13bbb624987144d # shrinks to bars = [Bar { ts: 1149425553, open: 0.01, high: 0.01, low: 0.01, close: 2399.724, volume: 0.0 }, Bar { ts: 1149425553, open: 0.01, high: 0.01, low: 0.01, close: 0.01, volume: 0.0 }]

@@ -1,0 +1,5 @@
+[tool.uv.workspace]
+members = ["synapse_vectorbt", "synapse_qlib", "synapse_nautilus"]
+
+[tool.pytest.ini_options]
+testpaths = ["synapse_vectorbt/tests", "synapse_qlib/tests", "synapse_nautilus/tests"]

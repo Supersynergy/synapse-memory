@@ -1,0 +1,33 @@
+[package]
+name = "synapse-tsdb"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Time-series columnar storage (GreptimeDB-pattern lite) — Arrow/Parquet shards"
+
+[features]
+default = []
+tsdb = ["dep:arrow", "dep:parquet", "dep:snap"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+zstd.workspace = true
+tracing.workspace = true
+parking_lot.workspace = true
+
+arrow    = { version = "53", features = ["ipc"], optional = true }
+parquet  = { version = "53", features = ["snap"], optional = true }
+snap     = { version = "1", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "tsdb_bench"
+harness = false

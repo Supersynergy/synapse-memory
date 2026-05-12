@@ -8,6 +8,7 @@ description = "Graph traversal layer for Synapse — RELATE/traverse/shortest_pa
 [features]
 default = []
 hippo = ["dep:regex"]
+graph-datalog = []
 
 [dependencies]
 rusqlite.workspace = true

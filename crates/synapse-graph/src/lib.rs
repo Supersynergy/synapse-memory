@@ -31,6 +31,8 @@ pub mod live;
 pub mod csr;
 #[cfg(feature = "hippo")]
 pub mod hippo;
+#[cfg(feature = "graph-datalog")]
+pub mod datalog;
 
 pub use algorithms::{pagerank, top_pagerank, label_propagation, communities, materialize_pagerank};
 pub use sql_funcs::helpers as graph_helpers;

@@ -36,12 +36,17 @@ cranelift-native = "0.131"
 xorf = "0.11"
 fast_hilbert = "2"
 tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
 tokio-tungstenite = { version = "0.27", features = ["native-tls"] }
 futures-util = "0.3"
 async-trait = "0.1"
+rumqttc = { version = "0.24", optional = true }
+opensrv-mysql = { git = "https://github.com/databendlabs/opensrv.git", tag = "v0.10.0", optional = true }
 
 [features]
 default = []
+mqtt = ["dep:rumqttc"]
+smx-mysql = ["dep:opensrv-mysql"]
 polars = ["dep:polars-core", "dep:polars-io"]
 
 [dependencies.polars-core]
@@ -89,6 +94,11 @@ path = "src/bin/gen_big_corpus.rs"
 [[bin]]
 name = "stream_smoke"
 path = "src/bin/stream_smoke.rs"
+
+[[bin]]
+name = "smx_mysql_shim"
+path = "src/bin/smx_mysql_shim.rs"
+required-features = ["smx-mysql"]
 
 [[bench]]
 name = "amx_minimal"
@@ -162,6 +172,11 @@ path = "examples/backtest_demo.rs"
 [[bench]]
 name = "online_learner"
 path = "benches/online_learner.rs"
+harness = false
+
+[[bench]]
+name = "pattern_throughput"
+path = "benches/pattern_throughput.rs"
 harness = false
 
 [lib]

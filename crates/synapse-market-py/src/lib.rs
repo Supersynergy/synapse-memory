@@ -84,8 +84,8 @@ impl PyMarket {
     }
 }
 
-#[pymodule]
-fn synapse_market_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pymodule(name = "synapse_market")]
+fn synapse_market_init(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyMarket>()?;
     m.add_class::<SeriesHandle>()?;
     Ok(())
