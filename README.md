@@ -63,7 +63,9 @@ Synapse hybrid latency includes BM25 + ANN + RRF + cross-encoder rerank in one c
 
 ---
 
-## Crate map (38 crates)
+## Crate map
+
+### Production (`crates/`)
 
 | Crate | Role |
 |-------|------|
@@ -77,8 +79,8 @@ Synapse hybrid latency includes BM25 + ANN + RRF + cross-encoder rerank in one c
 | `synapse-rerank` | Cross-encoder rerank (identity default; ONNX optional) |
 | `synapse-extract` | Text extraction + chunking |
 | `synapse-temporal` | NL date parser, bitemporal filter |
-| `synapse-metal` | Metal/ANE SimSIMD kernels (cos_f32, dot_i8, hamming_b8) |
-| `synapse-quant` | f32→i8/f16/binary, Matryoshka MRL (experimental) |
+| `synapse-kernel` | Core kernel abstractions |
+| `synapse-quant` | f32→i8/f16/binary, Matryoshka MRL |
 | `synapse-ann` | Scale-100M HNSW+PQ scaffold |
 | `synapse-fts` | Block-Max WAND tantivy posting lists (BMP) |
 | `synapse-fusion` | MUVERA RRF API |
@@ -88,23 +90,34 @@ Synapse hybrid latency includes BM25 + ANN + RRF + cross-encoder rerank in one c
 | `synapse-graph` | Knowledge-graph triples |
 | `synapse-media` | Video keyframe + audio + image embedding index |
 | `synapse-multimodal` | Multimodal asset pipeline |
-| `synapse-embed-gpu` | GPU embedding bridge |
 | `synapse-py` | PyO3 wheel (Brain, LangChain/LlamaIndex adapters) |
+| `synapse-js` | JS/TS SDK via napi-rs |
 | `synapse-auth` | Auth primitives |
 | `synapse-cms` | Content-management helpers |
-| `synapse-edge` | Edge-deploy optimizations |
-| `synapse-kernel` | Core kernel abstractions |
 | `synapse-libsql` | libSQL/Turso backend |
-| `synapse-mysql` | MySQL adapter |
-| `synapse-pg` | PostgreSQL adapter |
 | `synapse-obs` | Observability / metrics |
 | `synapse-ops` | Ops helpers |
 | `synapse-raft` | Multi-node Raft consensus (scaffold) |
-| `synapse-rank` | Ranking utilities |
 | `synapse-server` | HTTP server layer |
 | `synapse-tier` | Tier / pricing enforcement |
 | `synapse-tune` | Hyperparameter tuning |
 | `synapse-license` | License key validation |
+| `synapse-market` | HFT/backtest engine: OHLCV + regime-vec |
+| `synapse-migrate` | Import from Qdrant/LanceDB/Chroma |
+| `synapse-spann` | Disk-tier SPANN: mmap posting-lists |
+| `synapse-splade` | SPLADE-v3 neural-sparse |
+
+### Experimental (`experimental/`)
+
+Not included in default workspace build. Stubs — contributions welcome.
+
+| Crate | Status |
+|-------|--------|
+| `synapse-mysql` | MySQL wire-protocol proxy (0 tests) |
+| `synapse-pg` | Postgres wire-protocol proxy (0 tests) |
+| `synapse-edge` | Pingora HTTP frontend (RUSTSEC blocked, opt-in) |
+| `synapse-rank` | LambdaMART scaffold (6 LOC) |
+| `synapse-embed-gpu` | GPU embedding bridge (standalone workspace) |
 
 ---
 

@@ -7,10 +7,9 @@ members = [
     "crates/synapsed",
     "crates/synapse-mcp",
     "crates/synapse-learn",
-    # scale-100M scaffolding (PR-0, empty stubs, TODO markers)
+    # scale-100M scaffolding (PR-0, ann core)
     "crates/synapse-ann",
-    "crates/synapse-mysql",
-    "crates/synapse-pg",
+    # synapse-mysql / synapse-pg / synapse-edge → experimental/ (stubs, 0 tests)
     # synapse-embed-gpu = standalone workspace (fastembed feature conflict)
     "crates/synapse-libsql",
     "crates/synapse-raft",
@@ -49,8 +48,7 @@ members = [
     "bench/industry",
     # High-throughput 4-tier vector search daemon (HNSW via usearch)
     "synapsestore/crates/synapse-ultra", "crates/synapse-fts",
-    # LambdaMART learning-to-rank scaffold
-    "crates/synapse-rank",
+    # synapse-rank → experimental/ (6 LOC, 0 tests)
     # ColBERT-v2 multi-vector late-interaction scaffold
     "crates/synapse-colbert",
     # SPLADE-v3 neural-sparse inverted-index scaffold
@@ -74,6 +72,25 @@ members = [
     "crates/synapse-js",
     # Embedded HFT/backtest engine: OHLCV + regime-vec + news-FTS + graph-entity
     "crates/synapse-market",
+]
+
+[workspace.metadata]
+# Production crates — included in default workspace build
+production-members = [
+    "synapse-kernel", "synapse-core", "synapse-cli", "synapsed", "synapse-mcp",
+    "synapse-learn", "synapse-ann", "synapse-libsql", "synapse-raft", "synapse-tier",
+    "synapse-quant", "synapse-cms", "synapse-ops", "synapse-auth", "synapse-tune",
+    "synapse-server", "synapse-engine", "synapse-license", "synapse-rerank",
+    "synapse-extract", "synapse-temporal", "synapse-graph", "synapse-space",
+    "synapse-fts", "synapse-colbert", "synapse-splade", "synapse-multimodal",
+    "synapse-cluster", "synapse-obs", "synapse-media", "synapse-fusion",
+    "synapse-migrate", "synapse-spann", "synapse-js", "synapse-market",
+    "synapse-wal", "synapse-seg", "synapse-ultra",
+]
+# Experimental — moved to experimental/ (stubs, 0 tests, or standalone workspace)
+# Build opt-in: `cd experimental && cargo build -p <name>`
+experimental-members = [
+    "synapse-mysql", "synapse-pg", "synapse-edge", "synapse-rank", "synapse-embed-gpu",
 ]
 
 [workspace.package]
@@ -124,12 +141,21 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls", "j
 # Adds ~30s build time, gains 5-15% perf across all benches (Mac+Linux).
 # For dev iteration speed use `cargo build` (debug profile).
 # For max-perf single-binary use `--profile release-fast` (fat LTO, ~5min build).
+# For native-CPU max: `RUSTFLAGS="-C target-cpu=native" cargo build --profile release-native`
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 panic = "abort"
-debug = 1
+strip = "symbols"
+overflow-checks = false
+debug = false
+incremental = false
+
+# Native-CPU profile: inherit release + RUSTFLAGS="-C target-cpu=native" for AVX2/NEON tuning.
+# Usage: RUSTFLAGS="-C target-cpu=native" cargo build --profile release-native -p synapsed
+[profile.release-native]
+inherits = "release"
 
 [profile.release-hardened]
 inherits = "release"
