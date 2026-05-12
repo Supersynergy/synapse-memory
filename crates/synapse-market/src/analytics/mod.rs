@@ -1,11 +1,15 @@
 pub mod neon;
 pub mod agg;
+pub mod amx;
+
+pub use amx::{correlation_matrix_amx, CorrMatrix};
 
 pub use neon::{
     mean_f32, sum_f32, min_f32, max_f32, dot_f32, correlation_f32,
     ewma_f32, rolling_mean_f32, rolling_std_f32,
 };
 pub use agg::{
+    AggKind, AggResult, agg_pages,
     mean_close, mean_close_slice,
     vwap, vwap_slices,
     rolling_returns, rolling_returns_slice,

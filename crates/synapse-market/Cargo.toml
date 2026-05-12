@@ -24,8 +24,13 @@ lru = "0.12"
 bincode = "1"
 synapse-core = { path = "../synapse-core" }
 wide = "0.7"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
 rabitq-rs = "0.9"
 simsimd = "6"
+cranelift-codegen = { version = "0.131", default-features = false, features = ["x86", "arm64"] }
+cranelift-frontend = "0.131"
+cranelift-jit = "0.131"
+cranelift-module = "0.131"
 
 [features]
 default = []
@@ -42,6 +47,9 @@ optional = true
 default-features = false
 features = ["csv", "parquet"]
 
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+accelerate-src = "0.3"
+
 [dev-dependencies]
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -50,6 +58,11 @@ duckdb = { version = "1", features = ["bundled"] }
 accelerate-src = "0.3"
 cblas-sys = "0.3"
 proptest = "1"
+
+[[bench]]
+name = "bloom_neglookup"
+path = "benches/bloom_neglookup.rs"
+harness = false
 
 [[bench]]
 name = "amx_minimal"
@@ -89,6 +102,16 @@ harness = false
 [[bench]]
 name = "book_replay"
 path = "benches/book_replay.rs"
+harness = false
+
+[[bench]]
+name = "api_correlation"
+path = "benches/api_correlation.rs"
+harness = false
+
+[[bench]]
+name = "hotset_point"
+path = "benches/hotset_point.rs"
 harness = false
 
 [[example]]

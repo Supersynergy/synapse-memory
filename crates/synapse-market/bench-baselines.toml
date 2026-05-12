@@ -1,0 +1,19 @@
+# Bench regression baselines for synapse-market CI.
+# Values = acceptable ceiling (p50 µs or speedup floor).
+# CI fails if a bench regresses >10% beyond these.
+
+[w1_candle_range]
+# W1 bench: cold candle-range scan, re-open per iter.
+# Measured: 50µs p50 (w1_results.md). Ceiling = 50 * 1.10 = 55µs.
+# Note: held-open path not yet benched separately.
+held_handle_p50_us = 55
+
+[w3_a1_mean]
+# W3 A1: SIMD mean(close) speedup vs naive.
+# Gate in bench: ≥4.0×. Floor = 4.0× (source: w3_simd_agg.rs gate).
+simd_speedup_min = 4.0
+
+[amx_corr]
+# AMX Pearson 220×220 cblas_sgemm p50.
+# Measured: 25µs p50 (M4MAX-AMX-CORR-2026.md). Ceiling = 25 * 2.0 = 50µs (CI scheduling jitter).
+amx_p50_us = 50

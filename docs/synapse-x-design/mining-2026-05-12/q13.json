@@ -1,0 +1,233 @@
+{
+ "MVCC snapshot": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "Mithril-mine/libmdbx",
+    "branch": "master",
+    "path": "mdbx.h",
+    "line": 1219,
+    "snippet": "* does not lead to the release of MVCC snapshot locks until the transactions are explicitly completed, or until the\n* flush system buffers to disk when committing a transaction. But there is a\n* huge difference in how are recycled the MVCC snapshots corresponding to\n* previous \"steady\" transactions (see below).\n* recycling old MVCC snapshots. */\nMDBX_OUSTED = -30411,\n\n/** MVCC snapshot used by parked transaction was bygone. */",
+    "rerank_score": 30412,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/include/utils/snapshot.h",
+    "line": 34,
+    "snippet": "* A tuple is visible iff the tuple is valid for the given MVCC snapshot.\n* There are several different kinds of snapshots:\n* * Normal MVCC snapshots\n* * MVCC snapshots taken during recovery (in Hot-Standby mode)\n* * Historic MVCC snapshots used during logical decoding\n* * snapshots passed to HeapTupleSatisfiesDirty()\n* The remaining fields are used only for MVCC snapshots, and are normally\n* just zeroes in special snapshots.  (But xmin and xmax are used",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 9
+   },
+   {
+    "source": "grep",
+    "repo": "MariaDB/server",
+    "branch": "main",
+    "path": "storage/innobase/include/trx0sys.h",
+    "line": 1040,
+    "snippet": "number becoming visible through rw_trx_hash. While we're in this gap\nconcurrent thread may come and do MVCC snapshot without seeing allocated\nbut not yet assigned serialisation number. Then at some point purge thread\nmay clone this view. As a result it won't see newly allocated serialisation\nnumber and may remove \"unnecessary\" history data of this transaction from\nrollback segments.\n\nm_rw_trx_hash_version is intended to solve this problem. MVCC snapshot has\nto wait until m_max_trx_id == m_rw_trx_hash_version, which effectively",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/backend/access/heap/heapam_indexscan.c",
+    "line": 145,
+    "snippet": "* because the SSI checks and the *Satisfies routine for historical\n* MVCC snapshots need the correct tid to decide about the visibility.\n* Only in a non-MVCC snapshot can more than one member of the HOT\n* chain be visible.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/backend/access/heap/heapam_visibility.c",
+    "line": 13,
+    "snippet": "* NOTE: When using a non-MVCC snapshot, we must check\n* TransactionIdIsInProgress (which looks in the PGPROC array) before\n* When using an MVCC snapshot, we rely on XidInMVCCSnapshot rather than\n* TransactionIdIsInProgress, but the logic is otherwise the same: do not\n* HeapTupleSatisfiesMVCC\n*\t\tTrue iff heap tuple is valid for the given MVCC snapshot.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/backend/access/nbtree/nbtsort.c",
+    "line": 191,
+    "snippet": "* building unique indexes.  snapshot is the snapshot used by the scan iff\n* an MVCC snapshot is required.\n* qual checks (because we have to index RECENTLY_DEAD tuples).  In a\n* concurrent build, we take a regular MVCC snapshot and index whatever's\n* live according to that.\n/* Free last reference to MVCC snapshot, if one was used */\nif (IsMVCCSnapshot(btleader->snapshot))",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/backend/utils/adt/dbsize.c",
+    "line": 375,
+    "snippet": "* that makes queries like \"SELECT pg_relation_size(oid) FROM pg_class\"\n* less robust, because while we scan pg_class with an MVCC snapshot,\n* someone else might drop the table. It's better to return NULL for\n* fail if we can't find the relation --- some rows might be visible in\n* the query's MVCC snapshot even though the relations have been dropped.\n* (Note: we could avoid using the catcache, but there's little point",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/backend/access/index/indexam.c",
+    "line": 442,
+    "snippet": "* current user of mark/restore functionality is nodeMergejoin.c, this\n* effectively means that merge-join plans only work for MVCC snapshots.  This\n* could be fixed if necessary, but for now it seems unimportant.\n* exist.  (There can be more than one matching tuple because of HOT chains,\n* although when using an MVCC snapshot it should be impossible for more than\n* one such tuple to exist.)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/backend/executor/nodeIndexonlyscan.c",
+    "line": 178,
+    "snippet": "* Only MVCC snapshots are supported here, so there should be no\n* need to keep following the HOT chain once a visible entry has\n* been found.  If we did want to allow that, we'd need to keep\n* more state to remember not to call index_getnext_tid next time.\n*/\nif (scandesc->xs_heap_continue)\nelog(ERROR, \"non-MVCC snapshots are not supported in index-only scans\");",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 288,
+  "time": 570,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "src/",
+      "count": 115
+     },
+     {
+      "val": "docs/",
+      "count": 28
+     },
+     {
+      "val": "crates/",
+      "count": 15
+     },
+     {
+      "val": "lib/",
+      "count": 12
+     },
+     {
+      "val": "libmdbx-dist/",
+      "count": 8
+     },
+     {
+      "val": "third_party/",
+      "count": 7
+     },
+     {
+      "val": "pkg/",
+      "count": 5
+     },
+     {
+      "val": "helix-db/src/helix_engine/",
+      "count": 4
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "postgres/postgres",
+      "count": 35,
+      "owner_id": "177543"
+     },
+     {
+      "val": "yugabyte/yugabyte-db",
+      "count": 32,
+      "owner_id": "17074854"
+     },
+     {
+      "val": "apache/kudu",
+      "count": 13,
+      "owner_id": "47359"
+     },
+     {
+      "val": "paradigmxyz/reth",
+      "count": 12,
+      "owner_id": "97369466"
+     },
+     {
+      "val": "orneryd/NornicDB",
+      "count": 9,
+      "owner_id": "1736223"
+     },
+     {
+      "val": "postgres-cn/pgdoc-cn",
+      "count": 8,
+      "owner_id": "12530370"
+     },
+     {
+      "val": "ossc-db/pg_bulkload",
+      "count": 8,
+      "owner_id": "13130303"
+     },
+     {
+      "val": "snej/nimdbx",
+      "count": 8,
+      "owner_id": "43241"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "C",
+      "count": 126
+     },
+     {
+      "val": "Markdown",
+      "count": 33
+     },
+     {
+      "val": "C++",
+      "count": 31
+     },
+     {
+      "val": "Rust",
+      "count": 19
+     },
+     {
+      "val": "Go",
+      "count": 16
+     },
+     {
+      "val": "Python",
+      "count": 9
+     },
+     {
+      "val": "Java",
+      "count": 7
+     },
+     {
+      "val": "JSON",
+      "count": 6
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "gh": 0,
+   "sg": 0,
+   "grep": 80
+  },
+  "fanout_queries": null,
+  "summary": "TL;DR: The search results reveal that Multi-Version Concurrency Control (MVCC) snapshots are used to manage visibility and access to data in various databases, including PostgreSQL and MariaDB. These snapshots are used to track the state of transactions and determine which data is visible or hidden at a given point in time. The pattern shows that MVCC snapshots are used to optimize concurrency and reduce contention between concurrent transactions."
+ }
+}

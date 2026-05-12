@@ -1,0 +1,248 @@
+{
+ "tdigest": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "facebook/hhvm",
+    "branch": "main",
+    "path": "third-party/folly/src/folly/rust/tdigest/tdigest.rs",
+    "line": 177,
+    "snippet": "        assert_eq!(1000_f64, tdigest.count());",
+    "rerank_score": 1000,
+    "_quality": 0.0,
+    "cluster_size": 4
+   },
+   {
+    "source": "grep",
+    "repo": "elastic/elasticsearch",
+    "branch": "main",
+    "path": "x-pack/plugin/esql/compute/src/main/generated/org/elasticsearch/compute/aggregation/FirstTDigestByTimestampGroupingAggregatorFunction.java",
+    "line": 21,
+    "snippet": "import org.elasticsearch.compute.data.Page;\nimport org.elasticsearch.compute.data.TDigestBlock;\nimport org.elasticsearch.compute.data.TDigestHolder;\nimport org.elasticsearch.compute.operator.DriverContext;\n\n/**\n* {@link GroupingAggregatorFunction} implementation for {@link FirstTDigestByTimestampAggregator}.\n* This class is generated. Edit {@code GroupingAggregatorImplementer} instead.\n*/\npublic final class FirstTDigestByTimestampGroupingAggregatorFunction implements GroupingAggregatorFunction {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 7
+   },
+   {
+    "source": "grep",
+    "repo": "elastic/elasticsearch",
+    "branch": "main",
+    "path": "server/src/main/java/org/elasticsearch/search/aggregations/metrics/HistogramUnionState.java",
+    "line": 22,
+    "snippet": "import org.elasticsearch.exponentialhistogram.ReleasableExponentialHistogram;\nimport org.elasticsearch.exponentialhistogram.TDigestToExponentialHistogramConverter;\nimport org.elasticsearch.tdigest.Centroid;\n* If the data is not mixed, the querying methods will just delegate to\n* {@link ExponentialHistogramState} or {@link TDigestState} as appropriate.\n* Otherwise the T-Digest data will be converted to exponential histogram and will be merged\nnew NoopCircuitBreaker(\"empty-state-cb\"),\nnew EmptyTDigestState(),",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "godotengine/godot",
+    "branch": "master",
+    "path": "platform/android/java/editor/src/main/java/com/android/apksig/ApkVerifier.java",
+    "line": 41,
+    "snippet": "import com.android.apksig.internal.apk.ApkSigningBlockUtils;\nimport com.android.apksig.internal.apk.ApkSigningBlockUtils.Result.SignerInfo.ContentDigest;\nimport com.android.apksig.internal.apk.ContentDigestAlgorithm;\nimport com.android.apksig.internal.apk.SignatureAlgorithm;\nResult result = new Result();\nMap<Integer, Map<ContentDigestAlgorithm, byte[]>> signatureSchemeApkContentDigests =\nnew HashMap<>();\nsignatureSchemeApkContentDigests.put(",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "elastic/elasticsearch",
+    "branch": "main",
+    "path": "server/src/main/java/org/elasticsearch/search/aggregations/metrics/MemoryTrackingTDigestArrays.java",
+    "line": 17,
+    "snippet": "import org.elasticsearch.tdigest.arrays.TDigestArrays;\nimport org.elasticsearch.tdigest.arrays.TDigestByteArray;\nimport org.elasticsearch.tdigest.arrays.TDigestDoubleArray;\nimport org.elasticsearch.tdigest.arrays.TDigestIntArray;\nimport org.elasticsearch.tdigest.arrays.TDigestLongArray;\n\nimport java.util.Arrays;\n\n/**\n* TDigestArrays with raw arrays and circuit breaking.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "godotengine/godot",
+    "branch": "master",
+    "path": "platform/android/java/editor/src/main/java/com/android/apksig/internal/apk/v4/V4SchemeSigner.java",
+    "line": 28,
+    "snippet": "import com.android.apksig.internal.apk.ApkSigningBlockUtils;\nimport com.android.apksig.internal.apk.ContentDigestAlgorithm;\nimport com.android.apksig.internal.apk.SignatureAlgorithm;\nfinal SignatureAlgorithm algorithm = iter.next();\nif (!isSupported(algorithm.getContentDigestAlgorithm(), false)) {\niter.remove();\n// Obtaining the merkle tree and the root hash in verity format.\nApkSigningBlockUtils.VerityTreeAndDigest verityContentDigestInfo =",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "elastic/elasticsearch",
+    "branch": "main",
+    "path": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/analytics/mapper/TDigestFieldMapper.java",
+    "line": 53,
+    "snippet": "import org.elasticsearch.search.MultiValueMode;\nimport org.elasticsearch.search.aggregations.metrics.TDigestExecutionHint;\nimport org.elasticsearch.search.aggregations.support.ValuesSourceType;\npublic class TDigestFieldMapper extends FieldMapper {\n\npublic static final String CENTROIDS_NAME = \"centroids\";\npublic static final String COUNTS_NAME = \"counts\";\n\npublic static final String CONTENT_TYPE = \"tdigest\";",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "godotengine/godot",
+    "branch": "master",
+    "path": "platform/android/java/editor/src/main/java/com/android/apksig/SourceStampVerifier.java",
+    "line": 30,
+    "snippet": "import com.android.apksig.internal.apk.ApkSigningBlockUtilsLite;\nimport com.android.apksig.internal.apk.ContentDigestAlgorithm;\nimport com.android.apksig.internal.apk.SignatureAlgorithm;\n* Verifies the APK's source stamp signature, including verification that the SHA-256 digest of\n* the stamp signing certificate matches the {@code expectedCertDigest}, and returns the result\n* of the verification.\n*\n* <p>A value of {@code null} for the {@code expectedCertDigest} will verify the source stamp,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "elastic/elasticsearch",
+    "branch": "main",
+    "path": "x-pack/plugin/esql/src/main/generated-src/org/elasticsearch/xpack/esql/expression/function/scalar/nulls/CoalesceTDigestEvaluator.java",
+    "line": 12,
+    "snippet": "import org.elasticsearch.compute.data.Block;\nimport org.elasticsearch.compute.data.TDigestBlock;\nimport org.elasticsearch.compute.data.Page;\nabstract sealed class CoalesceTDigestEvaluator implements ExpressionEvaluator permits // checkstyle hack\nCoalesceTDigestEvaluator.CoalesceTDigestEagerEvaluator, // checkstyle hack\nCoalesceTDigestEvaluator.CoalesceTDigestLazyEvaluator {\n\nprivate static final long BASE_RAM_BYTES_USED = RamUsageEstimator.shallowSizeOfInstance(CoalesceTDigestEvaluator.class);",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "elastic/elasticsearch",
+    "branch": "main",
+    "path": "x-pack/plugin/downsample/src/main/java/org/elasticsearch/xpack/downsample/TDigestHistogramFieldDownsampler.java",
+    "line": 18,
+    "snippet": "import org.elasticsearch.index.mapper.MappedFieldType;\nimport org.elasticsearch.search.aggregations.metrics.TDigestExecutionHint;\nimport org.elasticsearch.search.aggregations.metrics.TDigestState;\nimport org.elasticsearch.tdigest.Centroid;\nimport org.elasticsearch.xcontent.XContentBuilder;\nimport org.elasticsearch.xpack.analytics.mapper.HistogramFieldMapper;\nimport org.elasticsearch.xpack.core.analytics.mapper.TDigestFieldMapper;\n* Class that collects all raw values for a (tdigest) histogram metric field and computes its aggregate (downsampled)\n* values.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 39238,
+  "time": 730,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "src/",
+      "count": 6471
+     },
+     {
+      "val": "vendor/",
+      "count": 1857
+     },
+     {
+      "val": "pkg/",
+      "count": 1123
+     },
+     {
+      "val": "test/",
+      "count": 872
+     },
+     {
+      "val": "lib/",
+      "count": 756
+     },
+     {
+      "val": "core/",
+      "count": 749
+     },
+     {
+      "val": "packages/",
+      "count": 720
+     },
+     {
+      "val": "tests/",
+      "count": 648
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "bcgit/bc-java",
+      "count": 568,
+      "owner_id": "4566970"
+     },
+     {
+      "val": "elastic/elasticsearch",
+      "count": 455,
+      "owner_id": "6764390"
+     },
+     {
+      "val": "gatsbyjs/gatsby",
+      "count": 303,
+      "owner_id": "12551863"
+     },
+     {
+      "val": "MystenLabs/sui",
+      "count": 203,
+      "owner_id": "88845815"
+     },
+     {
+      "val": "pnp/cli-microsoft365",
+      "count": 194,
+      "owner_id": "31443929"
+     },
+     {
+      "val": "bcgit/bc-csharp",
+      "count": 183,
+      "owner_id": "4566970"
+     },
+     {
+      "val": "bazelbuild/bazel",
+      "count": 168,
+      "owner_id": "11684617"
+     },
+     {
+      "val": "renovatebot/renovate",
+      "count": 167,
+      "owner_id": "38656520"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "Java",
+      "count": 7470
+     },
+     {
+      "val": "Go",
+      "count": 5934
+     },
+     {
+      "val": "JavaScript",
+      "count": 5074
+     },
+     {
+      "val": "C++",
+      "count": 2594
+     },
+     {
+      "val": "C",
+      "count": 1936
+     },
+     {
+      "val": "TypeScript",
+      "count": 1835
+     },
+     {
+      "val": "C#",
+      "count": 1785
+     },
+     {
+      "val": "Python",
+      "count": 1657
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "sg": 169,
+   "grep": 60
+  },
+  "fanout_queries": [
+   "tdigest",
+   "tdigest.py",
+   "TDigest class",
+   "TDigest library"
+  ],
+  "summary": "The top search results for \"tdigest\" appear to be related to a data structure used in various applications, including Elasticsearch and Godot Engine, for efficient estimation of statistical quantities such as mean and standard deviation. These implementations suggest that Tdigest is being used to improve performance and reduce memory usage in these systems. The use of Tdigest across different domains indicates its versatility and potential benefits in optimizing computational resources."
+ }
+}

@@ -1,0 +1,217 @@
+{
+ "BtrBlocks FastPFOR pcodec integer compress": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2256,
+    "snippet": "#[cfg(all(test, feature = \"fastpfor\"))]",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2257,
+    "snippet": "mod fastpfor_tests {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2259,
+    "snippet": "    use fastpfor::cpp::{Codec32 as _, FastPFor256Codec};",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 1206,
+    "snippet": "// --- FastPFOR encoding ---",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 1208,
+    "snippet": "/// Encode a u32 slice using FastPFOR256 composite codec.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 1211,
+    "snippet": "fn encode_fastpfor_u32(values: &[u32]) -> Option<Vec<u8>> {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2264,
+    "snippet": "    fn test_fastpfor_raw_roundtrip_256_values() {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2289,
+    "snippet": "        // 1024 values \u2014 exceeds single FastPFOR block (128 values)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2291,
+    "snippet": "        let encoded = encode_fastpfor_u32(&values).expect(\"encode should succeed\");",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2309,
+    "snippet": "    fn test_fastpfor_empty() {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2315,
+    "snippet": "    fn test_fastpfor_smaller_than_varint() {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2316,
+    "snippet": "        // For sufficiently large data, FastPFOR should beat varint",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2342,
+    "snippet": "    fn test_vertex_stream_uses_fastpfor_metadata() {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2428,
+    "snippet": "    fn test_mlt_core_decodes_fastpfor_vertex_tile() {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 2492,
+    "snippet": "    /// Phase 3: Full-tile conformance with many string properties triggering FastPFOR on index stream.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 948,
+    "snippet": "            // Note: mlt-core does not support FastPFOR for i64/u64 streams,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "walkerke/freestiler",
+    "branch": "main",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "line": 1201,
+    "snippet": "#[allow(dead_code)] // reserved for future use with i64 FastPFOR if mlt-core adds support",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 173,
+  "time": 132,
+  "facets": {
+   "lang": {
+    "buckets": []
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 0,
+   "sg": 182
+  },
+  "fanout_queries": [
+   "BtrBlocks FastPFOR pcodec integer compress",
+   "btrblocks::FastPFOR",
+   "BTRBLOCKS_FastPFOR",
+   "fastpfor",
+   "btrblocks FastPFOR",
+   "fast_pfor",
+   "FastPFOR pcodec",
+   "pcodec fastpfor",
+   "BTRBLOCKS_PCODEC"
+  ],
+  "summary": "TL;DR: The search results reveal that the pattern \"FastPFOR\" is associated with a specific encoding technique, likely used for compressing integers in video coding (pcodec). This technique involves using a composite codec, specifically FastPFor256Codec, which is part of the freestiler library."
+ }
+}

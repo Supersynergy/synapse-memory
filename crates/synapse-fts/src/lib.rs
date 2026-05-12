@@ -18,6 +18,7 @@ pub struct FtsIndex {
 }
 
 struct FtsSchema {
+    #[allow(dead_code)]
     schema: Schema,
     doc_id: tantivy::schema::Field,
     text: tantivy::schema::Field,

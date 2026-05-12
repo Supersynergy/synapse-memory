@@ -11,7 +11,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-uti
 async-trait = "0.1"
 thiserror = "2"
 futures = "0.3"
-synapse-libsql = { path = "../../crates/synapse-libsql" }
+synapse-libsql = { path = "../synapse-libsql" }
 
 [features]
 default = []

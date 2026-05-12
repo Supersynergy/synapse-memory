@@ -2,6 +2,59 @@
 use crate::store::page::{Bar, Page};
 use super::neon;
 
+/// Aggregate kind for routed SimdAgg path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AggKind { Mean, Vwap, Min, Max, Sum }
+
+/// Scalar aggregate result — no bar materialization.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AggResult {
+    pub kind: AggKind,
+    pub value: f32,
+    pub n_bars: usize,
+}
+
+/// Compute aggregate directly over page column slices — zero alloc, no Bar materialization.
+pub fn agg_pages(pages: &[Page], kind: AggKind) -> AggResult {
+    let n_bars: usize = pages.iter().map(|p| p.len()).sum();
+    if n_bars == 0 {
+        return AggResult { kind, value: 0.0, n_bars: 0 };
+    }
+    let value = match kind {
+        AggKind::Mean => {
+            let (mut sum, mut count) = (0.0f32, 0usize);
+            for p in pages {
+                sum += mean_close_slice(p.closes()) * p.len() as f32;
+                count += p.len();
+            }
+            if count == 0 { 0.0 } else { sum / count as f32 }
+        }
+        AggKind::Vwap => {
+            let (mut pv, mut vol) = (0.0f32, 0.0f32);
+            for p in pages {
+                // accumulate pv + vol across pages
+                let third = 1.0 / 3.0;
+                for i in 0..p.len() {
+                    let tp = (p.highs()[i] + p.lows()[i] + p.closes()[i]) * third;
+                    pv  += tp * p.volumes()[i];
+                    vol += p.volumes()[i];
+                }
+            }
+            if vol < 1e-12 { 0.0 } else { pv / vol }
+        }
+        AggKind::Min => pages.iter()
+            .flat_map(|p| p.closes().iter().copied())
+            .fold(f32::MAX, f32::min),
+        AggKind::Max => pages.iter()
+            .flat_map(|p| p.closes().iter().copied())
+            .fold(f32::MIN, f32::max),
+        AggKind::Sum => pages.iter()
+            .flat_map(|p| p.closes().iter().copied())
+            .sum(),
+    };
+    AggResult { kind, value, n_bars }
+}
+
 // Byte offset of `close` field inside Bar: i64(8) + open(4) + high(4) + low(4) = 20
 const CLOSE_OFFSET: usize = 20;
 

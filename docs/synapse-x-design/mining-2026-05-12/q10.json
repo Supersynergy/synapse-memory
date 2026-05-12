@@ -1,0 +1,194 @@
+{
+ "order book L2 delta": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "AveryClapp/Cache-Explorer",
+    "branch": "main",
+    "path": "frontend/src/components/MetricCards.tsx",
+    "line": 16,
+    "snippet": "const l2Baseline = baselineResult?.levels.l2?.hitRate\nconst l2Delta = diffMode && l2Baseline != null ? formatDelta(l2Rate, l2Baseline) : null\n<div className=\"metric-value\">{formatPercent(l2Rate)}</div>\n{l2Delta && !l2Delta.isNeutral && (\n<div className={`metric-delta ${l2Delta.isPositive ? 'positive' : 'negative'}`}>\n{l2Delta.text}\n</div>",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "YicunAI/Pnlclaw-community",
+    "branch": "main",
+    "path": "packages/exchange-sdk/pnlclaw_exchange/exchanges/binance/normalizer.py",
+    "line": 16,
+    "snippet": "KlineEvent,\nOrderBookL2Delta,\nPriceLevel,\n``u`` (last update ID) for gap detection, while the unified\n:class:`OrderBookL2Delta` has only a single ``sequence_id``.\ndelta: OrderBookL2Delta\nfirst_update_id: int  # Binance ``U`` field",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "Telecominfraproject/oopt-gnpy",
+    "branch": "master",
+    "path": "gnpy/core/utils.py",
+    "line": 255,
+    "snippet": "def deltawl2deltaf(delta_wl, wavelength):\n\"\"\"deltawl2deltaf(delta_wl, wavelength):\ndelta_wl is BW in wavelength units",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ozankenangungor/orderbook-replay-lab",
+    "branch": "main",
+    "path": "codec/src/lib.rs",
+    "line": 50,
+    "snippet": "enum JsonMarketEventOwned {\nL2Delta {\nts_ns: u64,\nenum JsonMarketEventRef<'a> {\nL2Delta {\nts_ns: u64,\nmatch self {\nJsonMarketEventOwned::L2Delta {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "YicunAI/Pnlclaw-community",
+    "branch": "main",
+    "path": "packages/shared-types/pnlclaw_types/__init__.py",
+    "line": 46,
+    "snippet": "MarketType,\nOrderBookL2Delta,\nOrderBookL2Snapshot,\n\"MarketType\",\n\"OrderBookL2Delta\",\n\"OrderBookL2Snapshot\",",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "YicunAI/Pnlclaw-community",
+    "branch": "main",
+    "path": "packages/shared-types/pnlclaw_types/market.py",
+    "line": 184,
+    "snippet": "# OrderBookL2Delta\n# ---------------------------------------------------------------------------\n\n\nclass OrderBookL2Delta(BaseModel):\n\"\"\"Incremental L2 order book update (delta).\"\"\"",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "YicunAI/Pnlclaw-community",
+    "branch": "main",
+    "path": "packages/shared-types/tests/test_market.py",
+    "line": 4,
+    "snippet": "KlineEvent,\nOrderBookL2Delta,\nOrderBookL2Snapshot,\nclass TestOrderBookL2Delta:\ndef test_roundtrip(self):\ndelta = OrderBookL2Delta(\nexchange=\"binance\",\nrestored = OrderBookL2Delta.model_validate_json(raw)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "digitallyinduced/ihp",
+    "branch": "master",
+    "path": "ihp/Test/RouterBench.hs",
+    "line": 41,
+    "snippet": "data BenchController2\n= Ctrl2AlphaAction | Ctrl2BravoAction | Ctrl2CharlieAction | Ctrl2DeltaAction | Ctrl2EchoAction\n| Ctrl2FoxtrotAction | Ctrl2GolfAction | Ctrl2HotelAction | Ctrl2IndiaAction | Ctrl2JulietAction\nctrl2Constructors =\n[ Ctrl2AlphaAction, Ctrl2BravoAction, Ctrl2CharlieAction, Ctrl2DeltaAction, Ctrl2EchoAction\n, Ctrl2FoxtrotAction, Ctrl2GolfAction, Ctrl2HotelAction, Ctrl2IndiaAction, Ctrl2JulietAction",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "PetHubLocal/pethublocal",
+    "branch": "main",
+    "path": "pethublocal/message.py",
+    "line": 446,
+    "snippet": "frame_response.Bowl2To = b2ih(value[31:35])\nframe_response.Bowl2Delta = str(round(float(frame_response.Bowl2To) - float(frame_response.Bowl2From), 2))\npethubrecord['Time_Open'] = frame_response.Time\npethubrecord['Bowl_Weight'].append(frame_response.Bowl2From)\ndelta.append(frame_response.Bowl2Delta)\npethubrecord['Bowl_Delta'] = delta",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ozankenangungor/orderbook-replay-lab",
+    "branch": "main",
+    "path": "orderbook/src/lib.rs",
+    "line": 69,
+    "snippet": "match event {\nMarketEvent::L2Delta {\nsymbol, updates, ..\nfn delta(symbol: SymbolId, updates: Vec<LevelUpdate>) -> MarketEvent {\nMarketEvent::L2Delta {\nts_ns: 1,\nlet applied = book.apply(&MarketEvent::L2Delta {\nts_ns: 1,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "YicunAI/Pnlclaw-community",
+    "branch": "main",
+    "path": "packages/exchange-sdk/tests/test_binance_l2_manager.py",
+    "line": 21,
+    "snippet": "from pnlclaw_exchange.exchanges.binance.normalizer import BinanceDepthDelta\nfrom pnlclaw_types.market import OrderBookL2Delta, OrderBookL2Snapshot, PriceLevel\nask_levels = [PriceLevel(price=p, quantity=q) for p, q in (asks or [])]\ndelta = OrderBookL2Delta(\nexchange=\"binance\",",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "f0cii/bybit-api",
+    "branch": "master",
+    "path": "ws/process.go",
+    "line": 17,
+    "snippet": "func (b *ByBitWS) processOrderBookDelta(symbol string, delta *OrderBookL2Delta) {\nvalue, ok := b.orderBookLocals[symbol]",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "bennyaustin/fabric-accelerator",
+    "branch": "main",
+    "path": "workspace/elt-framework/controlDB.SQLDatabase/ELT/StoredProcedures/GetTransformDefinition_L2.sql",
+    "line": 9,
+    "snippet": "--Should be using L2DeltaTransformDate, if null then LocalDate\nSELECT",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "ozankenangungor/orderbook-replay-lab",
+    "branch": "main",
+    "path": "cli/tests/replay.rs",
+    "line": 9,
+    "snippet": "fn event(symbol: SymbolId, ts_ns: u64, updates: Vec<LevelUpdate>) -> MarketEvent {\nMarketEvent::L2Delta {\nts_ns,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "youerning/blog",
+    "branch": "master",
+    "path": "video_site/video_site/static/js/chunk-vendors.7b2b4d3a.js",
+    "line": 1,
+    "snippet": "\u2026es.SILENT);break;case\"setContents\":var L=c.delta,R=c.html;\"object\"===s(L)?l.setContents(L,f.sources.SILENT):\"string\"===typeof R?l.setContents(this.html2delta(R),f.sources.SILENT):r=\"contents is missing\";break;case\"getContents\":n=this.getContents();break;case\"clear\":l.setContents([]);break;case\"removeFormat\u2026",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 4
+   }
+  ],
+  "total": 142,
+  "time": 532,
+  "facets": {
+   "lang": {
+    "buckets": []
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 153,
+   "sg": 111
+  },
+  "fanout_queries": [
+   "order book L2 delta",
+   "orderbookL2delta",
+   "l2Delta",
+   "delta_l2",
+   "l2_delta",
+   "delta_l2_order_book",
+   "orderbook l2 delta",
+   "l2_delta_order_book"
+  ],
+  "summary": "TL;DR: The search results reveal a pattern where \"L2 delta\" is used as a term in various codebases, particularly in finance and trading applications. This term appears to be related to order book data, specifically referencing changes or differences in levels (e.g., prices) within an order book. The results suggest that L2 delta is a concept used to describe the variation or movement of price levels in an order book."
+ }
+}

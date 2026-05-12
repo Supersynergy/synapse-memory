@@ -1,0 +1,352 @@
+{
+ "product quantization": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "hicder/muopdb",
+    "branch": "main",
+    "path": "rs/config/src/collection.rs",
+    "line": 190,
+    "snippet": "            product_quantization_num_training_rows: 10000,",
+    "rerank_score": 10000,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "hicder/muopdb",
+    "branch": "main",
+    "path": "rs/config/src/collection.rs",
+    "line": 186,
+    "snippet": "            product_quantization_max_iteration: 1000,",
+    "rerank_score": 1000,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "hicder/muopdb",
+    "branch": "main",
+    "path": "rs/config/src/collection.rs",
+    "line": 187,
+    "snippet": "            product_quantization_batch_size: 1000,",
+    "rerank_score": 1000,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/ruflo",
+    "branch": "main",
+    "path": "v3/@claude-flow/plugins/src/integrations/ruvector/quantization.ts",
+    "line": 6,
+    "snippet": "* - Binary Quantization: 32x memory reduction\n* - Product Quantization (PQ): High compression with codebooks\n* - Optimized Product Quantization (OPQ): PQ with learned rotation\n* Options for product quantization.\n* Options for optimized product quantization.\n* Codebook for product quantization.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/agentic-flow",
+    "branch": "main",
+    "path": "packages/agentdb/src/optimizations/Quantization.ts",
+    "line": 5,
+    "snippet": "* - Scalar Quantization (4-bit and 8-bit)\n* - Product Quantization with trainable codebooks\n* - Quantized Vector Store with asymmetric distance computation\ntype: QuantizationType;\n/** Number of subvectors for product quantization (default: 8) */\nnumSubvectors?: number;\n/** Number of centroids per subvector for product quantization (default: 256) */\nnumCentroids?: number;\n/** Number of training iterations for product quantization (default: 25) */",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "rapidsai/cuvs",
+    "branch": "main",
+    "path": "c/include/cuvs/preprocessing/quantize/pq.h",
+    "line": 42,
+    "snippet": "* Whether to use subspaces for product quantization (PQ).\n* When true, one PQ codebook is used for each subspace. Otherwise, a single\n* PQ codebook is used.\n*/\nbool use_subspaces;\n/**\n* Whether to use Vector Quantization (KMeans) before product quantization (PQ).\n* When true, VQ is used before PQ. When false, only product quantization is used.\n* When one, only product quantization is used.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "weaviate/weaviate",
+    "branch": "main",
+    "path": "entities/vectorindex/compression/pq_data.go",
+    "line": 22,
+    "snippet": "// Encoder represents the type of encoder used for product quantization.\ntype Encoder byte\n// PQSegmentEncoder is the interface for product quantization segment encoders.\n// Implementations include TileEncoder and KMeansEncoder.\n// PQData holds the serialization data for Product Quantization compression.\ntype PQData struct {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "StarRocks/starrocks",
+    "branch": "main",
+    "path": "fe/fe-core/src/main/java/com/starrocks/common/VectorIndexParams.java",
+    "line": 90,
+    "snippet": "// Inverted File with Product Quantization\nIVFPQ\n// NBITS is a key parameter that refers to the number of bits used to quantize each sub-vector. Within the context of Product Quantization (PQ),\n// The RANGE_SEARCH_CONFIDENCE parameter determines the confidence level of the range search in IVFPQ (Inverted File with Product Quantization).",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "apache/pinot",
+    "branch": "master",
+    "path": "pinot-segment-spi/src/main/java/org/apache/pinot/segment/spi/index/creator/VectorQuantizerType.java",
+    "line": 31,
+    "snippet": "*   <li>{@link #SQ4} - Scalar quantization to 4-bit unsigned integers per dimension.</li>\n*   <li>{@link #PQ} - Product quantization, splitting vectors into sub-vectors and encoding\n*       each with a codebook index.</li>\n/** Product quantization. Vectors are split into sub-vectors and each is encoded via a trained codebook. */\nPQ(\"Product quantization (existing, migrated)\");",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ArcadeData/arcadedb",
+    "branch": "main",
+    "path": "engine/src/main/java/com/arcadedb/index/vector/LSMVectorIndex.java",
+    "line": 170,
+    "snippet": "// Product Quantization (PQ) for zero-disk-I/O approximate search\n// PQ file stores codebooks and encoded vectors; pqVectors is cached in memory\n// Create PQ file handler for Product Quantization (zero-disk-I/O search)\n// Note: PQ file uses direct I/O (not ArcadeDB pages) since it's loaded entirely into memory\n// Load PQ data if PRODUCT quantization is enabled\nif (metadata.quantizationType == VectorQuantizationType.PRODUCT && pqFile != null) {\n// IMPORTANT: If PRODUCT quantization is enabled but PQ file doesn't exist, we need to rebuild",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/ruflo",
+    "branch": "main",
+    "path": "v3/@claude-flow/plugins/examples/ruvector/quantization.ts",
+    "line": 78,
+    "snippet": "method: 'pq',\nname: 'Product Quantization (PQ)',\nbitsPerComponent: 8, // per subvector\n* Product Quantization (simplified).\nconsole.log('\\n   High-Dimensional Data:');\nconsole.log('     - Method: Product Quantization (PQ)');\nconsole.log('     - Compression: Variable (8-64x typical)');",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/RuVector",
+    "branch": "main",
+    "path": "npm/packages/ruvector/src/core/tensor-compress.js",
+    "line": 87,
+    "snippet": "case 'pq8':\n// Product quantization to 8-bit\nreturn { data: this.toPQ8(data), level };\ncase 'pq4':\n// Product quantization to 4-bit (packed into Uint8)\nreturn { data: this.toPQ4(data), level };\n* Product Quantization 8-bit\n* Product Quantization 4-bit (packed)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/RuVector",
+    "branch": "main",
+    "path": "crates/ruvector-core/src/advanced_features/product_quantization.rs",
+    "line": 1,
+    "snippet": "//! Enhanced Product Quantization with Precomputed Lookup Tables\n/// Configuration for Enhanced Product Quantization\n#[derive(Debug, Clone, Serialize, Deserialize)]\n/// Enhanced Product Quantization with lookup tables\n#[derive(Debug, Clone, Serialize, Deserialize)]",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/ruflo",
+    "branch": "main",
+    "path": "v3/@claude-flow/memory/src/types.ts",
+    "line": 276,
+    "snippet": "/** Number of subquantizers for product quantization */\nsubquantizers?: number;\n\n/** Codebook size for product quantization */\ncodebookSize?: number;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/ruflo",
+    "branch": "main",
+    "path": "v3/@claude-flow/plugins/__tests__/ruvector-quantization.test.ts",
+    "line": 6,
+    "snippet": "* - Binary quantization\n* - Product quantization (PQ)\n* - Recall accuracy with quantization\n* Product quantization - split vector into subvectors and quantize each\n* Encode vector using product quantization\n* Decode product quantization codes back to approximate vector",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "huawei-noah/noah-research",
+    "branch": "master",
+    "path": "noahnmt/dual-transfer/xlm/model/memory/memory.py",
+    "line": 274,
+    "snippet": "parser.add_argument(\"--mem_use_different_keys\", type=bool_flag, default=True,\nhelp=\"Use different keys for each head / product quantization\")\n# even number of key dimensions for product quantization\nassert params.mem_k_dim >= 2\n# split query for product quantization\n# split query for product quantization",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "milvus-io/milvus-sdk-csharp",
+    "branch": "main",
+    "path": "Milvus.Client/IndexType.cs",
+    "line": 67,
+    "snippet": "/// <para>\n/// <see cref=\"IvfPq\" /> (Product Quantization) uniformly decomposes the original high-dimensional vector space into\n/// vector clustering and product quantization. SCANN demonstrates a 20% performance improvement compared to HNSW\n/// and a 7-fold increase compared to IVF-FLAT in multiple benchmark tests.\n/// product quantization. What makes them different lies in the implementation details of product quantization and\n/// the use of SIMD (Single-Instruction / Multi-data) for efficient calculation.\n/// This quantization-based index organizes vector data into clusters and employs product quantization for efficient",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "qdrant/qdrant",
+    "branch": "master",
+    "path": "lib/quantization/src/encoded_vectors_pq.rs",
+    "line": 57,
+    "snippet": "/// Encode vector data using product quantization.\nlet centroid_data = &centroid[range.clone()];\n// by product quantization algorithm use euclid metric for any similarity function\nlet distance = subvector_data",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/RuVector",
+    "branch": "main",
+    "path": "crates/ruvector-core/src/advanced_features.rs",
+    "line": 3,
+    "snippet": "//! This module provides advanced vector database capabilities:\n//! - Enhanced Product Quantization with precomputed lookup tables\n//! - Filtered Search with automatic strategy selection\n//! - Matryoshka Representation Learning (adaptive-dimension search)\n//! - Optimized Product Quantization (OPQ) with learned rotation matrix",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 41343,
+  "time": 1640,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "docs/",
+      "count": 155
+     },
+     {
+      "val": "src/",
+      "count": 86
+     },
+     {
+      "val": "crates/",
+      "count": 67
+     },
+     {
+      "val": "examples/",
+      "count": 62
+     },
+     {
+      "val": "fairseq/",
+      "count": 54
+     },
+     {
+      "val": "packages/",
+      "count": 29
+     },
+     {
+      "val": ".claude/",
+      "count": 20
+     },
+     {
+      "val": "experiments/",
+      "count": 17
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "ruvnet/RuVector",
+      "count": 133,
+      "owner_id": "2934394"
+     },
+     {
+      "val": "ruvnet/agentic-flow",
+      "count": 45,
+      "owner_id": "2934394"
+     },
+     {
+      "val": "rapidsai/cuvs",
+      "count": 21,
+      "owner_id": "43887749"
+     },
+     {
+      "val": "microsoft/unilm",
+      "count": 19,
+      "owner_id": "6154722"
+     },
+     {
+      "val": "ruvnet/ruflo",
+      "count": 18,
+      "owner_id": "2934394"
+     },
+     {
+      "val": "TusKANNy/kannolo",
+      "count": 16,
+      "owner_id": "165914280"
+     },
+     {
+      "val": "lance-format/lance",
+      "count": 12,
+      "owner_id": "243204601"
+     },
+     {
+      "val": "ArcadeData/arcadedb",
+      "count": 12,
+      "owner_id": "32255470"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "Markdown",
+      "count": 479
+     },
+     {
+      "val": "Python",
+      "count": 334
+     },
+     {
+      "val": "Rust",
+      "count": 104
+     },
+     {
+      "val": "YAML",
+      "count": 52
+     },
+     {
+      "val": "Java",
+      "count": 33
+     },
+     {
+      "val": "Jupyter Notebook",
+      "count": 33
+     },
+     {
+      "val": "C++",
+      "count": 32
+     },
+     {
+      "val": "JSON",
+      "count": 32
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 239,
+   "sg": 898
+  },
+  "fanout_queries": [
+   "product quantization",
+   "product_quantization",
+   "productQuantization",
+   "pq",
+   "product_quantization_",
+   "productQuantization_",
+   "pq_func",
+   "pq_import",
+   "pq_"
+  ],
+  "summary": "TL;DR: The search results reveal that Product Quantization is a technique used in various machine learning and deep learning applications, including text analysis (as seen in ruvnet/agentic-flow) and molecular biology research (hicder/muopdb). It involves dividing data into smaller subvectors with centroids to achieve compression, and its variants include Optimized Product Quantization and Binary Quantization. The results highlight the versatility of Product Quantization across different domains and applications."
+ }
+}

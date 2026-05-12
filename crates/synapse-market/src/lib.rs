@@ -6,9 +6,12 @@
 //!  - News-FTS: FTS5 headline+body, graph edges to tickers
 //!  - Backtest: deterministic replay, Strategy trait, BacktestReport
 
+pub mod filter;
+// pub mod jit;  // blocked: cranelift 0.131 BlockArg API churn (see JIT_BLOCKERS.md)
 pub mod book;
 pub mod store;
 pub mod series;
+pub mod cache;
 pub mod analytics;
 pub mod signal;
 pub mod router;
@@ -28,8 +31,10 @@ pub use backtest::{Strategy, Tick, Order, OrderSide, BacktestReport};
 
 use rusqlite::Connection;
 use std::path::Path;
+use std::ops::Range;
 use signal::similar::RabitqSignalIndex;
 use signal::SignalId;
+use analytics::{correlation_matrix_amx, CorrMatrix};
 
 /// Main entry point — wraps a rusqlite Connection + Synapse Store.
 pub struct Market {
@@ -82,6 +87,32 @@ impl Market {
         n_clusters: usize,
     ) -> Result<RabitqSignalIndex> {
         RabitqSignalIndex::build(signals, n_clusters)
+    }
+
+    /// Compute the Pearson correlation matrix for `tickers` over `ts_range`.
+    ///
+    /// Each ticker's close prices in the range are fetched, aligned to the
+    /// shortest series length, assembled into a row-major f32 matrix, then
+    /// dispatched to the AMX/Accelerate kernel on macOS aarch64 (≥20× NEON).
+    /// Returns a [`CorrMatrix`] (n×n, row-major).
+    pub fn correlation_matrix(&self, tickers: &[&str], ts_range: Range<i64>) -> Result<CorrMatrix> {
+        let mut series: Vec<Vec<f32>> = Vec::with_capacity(tickers.len());
+        for t in tickers {
+            let rows = ohlcv::fetch_range(&self.conn, t, ts_range.start, ts_range.end)?;
+            let closes: Vec<f32> = rows.iter().map(|r| r.4 as f32).collect();
+            series.push(closes);
+        }
+        let cols = series.len();
+        let rows = series.iter().map(|s| s.len()).min().unwrap_or(0);
+        // Build row-major matrix: rows observations × cols variables
+        let mut mat = vec![0.0f32; rows * cols];
+        for (c, s) in series.iter().enumerate() {
+            for r in 0..rows {
+                mat[r * cols + c] = s[r];
+            }
+        }
+        let data = correlation_matrix_amx(&mat, rows, cols);
+        Ok(CorrMatrix { data, n: cols })
     }
 
     /// Run a full backtest over `symbol` in `[start_ts, end_ts)`.

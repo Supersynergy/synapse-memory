@@ -1,0 +1,40 @@
+[package]
+name = "synapsql"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "SynapsQL — MySQL/Postgres-wire + Vector + FTS + Graph + CRDT in one Rust binary"
+
+[[bin]]
+name = "synapsql"
+path = "src/bin/synapsql.rs"
+
+[[bin]]
+name = "synapsql-bench"
+path = "src/bin/synapsql_bench.rs"
+
+[dependencies]
+synapse-libsql = { path = "../synapse-libsql" }
+synapse-mysql  = { path = "../synapse-mysql" }
+synapse-pg     = { path = "../synapse-pg" }
+tokio          = { workspace = true }
+thiserror      = { workspace = true }
+tracing        = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap           = { workspace = true }
+async-trait    = "0.1"
+blake3         = { workspace = true }
+parking_lot    = { workspace = true }
+# Statement cache + result LRU (safe: no RUSTSEC issue in lru 0.13)
+lru            = "0.13"
+# Zero-copy byte buffers for result streaming
+bytes          = "1"
+# Atomic counters for QPS metrics
+# (no extra dep — use std::sync::atomic)
+
+[features]
+rusqlite-udf = []
+
+[dev-dependencies]
+tokio = { workspace = true }

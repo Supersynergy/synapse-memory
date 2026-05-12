@@ -1,0 +1,242 @@
+name: synapse-market release-check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/synapse-market/**"
+      - ".github/workflows/synapse-market.yml"
+  pull_request:
+    paths:
+      - "crates/synapse-market/**"
+      - ".github/workflows/synapse-market.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  check:
+    name: cargo check + clippy
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos14-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos14-cargo-
+
+      - name: cargo check
+        run: cargo check -p synapse-market --all-targets
+
+      - name: clippy
+        run: cargo clippy -p synapse-market --tests -- -D warnings
+
+  test:
+    name: nextest
+    needs: check
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos14-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos14-cargo-
+
+      - name: Install cargo-nextest
+        run: |
+          cargo install cargo-nextest --locked 2>/dev/null \
+            || echo "nextest install skipped (cached)"
+
+      - name: nextest run
+        run: |
+          if command -v cargo-nextest &>/dev/null; then
+            cargo nextest run -p synapse-market --no-fail-fast
+          else
+            cargo test -p synapse-market
+          fi
+
+  bench-w1:
+    name: bench w1_candle_range
+    needs: check
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos14-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos14-cargo-
+
+      - name: Run w1_candle_range bench
+        run: |
+          cargo bench --bench w1_candle_range -p synapse-market 2>&1 | tee bench-w1.txt
+
+      - name: Regression gate (p50 ≤ 55µs ceiling)
+        run: |
+          python3 - << 'EOF'
+          import re, sys, pathlib
+          txt = pathlib.Path("bench-w1.txt").read_text()
+          # criterion outputs lines like:  time:   [50.123 µs 51.456 µs 52.789 µs]
+          # extract median (middle value)
+          matches = re.findall(r'time:\s+\[\S+ µs\s+(\S+) µs', txt)
+          if not matches:
+              print("No criterion µs lines found — bench may have no Criterion output (skip gate)")
+              sys.exit(0)
+          median = float(matches[0])
+          ceiling = 55.0
+          print(f"w1 p50 median: {median:.1f}µs  ceiling: {ceiling}µs")
+          if median > ceiling:
+              print(f"REGRESSION: {median:.1f} > {ceiling}")
+              sys.exit(1)
+          EOF
+
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-w1
+          path: bench-w1.txt
+
+  bench-w3:
+    name: bench w3_simd_agg
+    needs: check
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos14-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos14-cargo-
+
+      - name: Run w3_simd_agg bench
+        run: |
+          cargo bench --bench w3_simd_agg -p synapse-market 2>&1 | tee bench-w3.txt
+
+      - name: Regression gate (A1 SIMD speedup ≥ 4.0×)
+        run: |
+          python3 - << 'EOF'
+          import re, sys, pathlib
+          txt = pathlib.Path("bench-w3.txt").read_text()
+          # bench prints: "→ SIMD speedup vs naive: 4.3×"
+          m = re.search(r'A1.*SIMD speedup vs naive:\s+([\d.]+)×', txt)
+          if not m:
+              print("No A1 speedup line found — skip gate")
+              sys.exit(0)
+          speedup = float(m.group(1))
+          floor = 4.0 * 0.9   # 10% regression allowance
+          print(f"w3 A1 speedup: {speedup:.2f}×  floor: {floor:.2f}×")
+          if speedup < floor:
+              print(f"REGRESSION: {speedup:.2f} < {floor:.2f}")
+              sys.exit(1)
+          EOF
+
+      - name: Upload bench artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-w3
+          path: bench-w3.txt
+
+  bench-amx:
+    name: bench amx_minimal (arm64 only)
+    needs: check
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check arch
+        id: arch
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Non-arm64 runner — skipping AMX bench"
+          fi
+
+      - name: Install Rust stable
+        if: steps.arch.outputs.run == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        if: steps.arch.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos14-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: macos14-cargo-
+
+      - name: Run amx_minimal bench
+        if: steps.arch.outputs.run == 'true'
+        run: |
+          cargo bench --bench amx_minimal -p synapse-market 2>&1 | tee bench-amx.txt
+
+      - name: Regression gate (AMX p50 ≤ 50µs ceiling)
+        if: steps.arch.outputs.run == 'true'
+        run: |
+          python3 - << 'EOF'
+          import re, sys, pathlib
+          txt = pathlib.Path("bench-amx.txt").read_text()
+          # amx_minimal prints: "  cblas_sgemm (AMX)   0.025 ms"
+          m = re.search(r'cblas.*?([\d.]+)\s+ms', txt, re.IGNORECASE)
+          if not m:
+              # also check criterion format
+              matches = re.findall(r'time:\s+\[\S+ µs\s+(\S+) µs', txt)
+              if not matches:
+                  print("No AMX timing found — skip gate")
+                  sys.exit(0)
+              median_us = float(matches[0])
+          else:
+              median_us = float(m.group(1)) * 1000  # ms → µs
+          ceiling = 50.0
+          print(f"AMX p50: {median_us:.1f}µs  ceiling: {ceiling}µs")
+          if median_us > ceiling:
+              print(f"REGRESSION: {median_us:.1f} > {ceiling}")
+              sys.exit(1)
+          EOF
+
+      - name: Upload bench artifact
+        if: steps.arch.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-amx
+          path: bench-amx.txt

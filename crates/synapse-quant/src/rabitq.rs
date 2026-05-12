@@ -11,7 +11,7 @@
 //! Applied as a series of rank-1 updates (O(k·D) time).
 
 #[cfg(feature = "rabitq")]
-use rand::{Rng, RngExt, SeedableRng};
+use rand::{RngExt, SeedableRng};
 #[cfg(feature = "rabitq")]
 use rand::rngs::StdRng;
 

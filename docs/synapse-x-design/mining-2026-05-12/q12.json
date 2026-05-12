@@ -1,0 +1,147 @@
+{
+ "MLX rust mmap": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "tools/testing/selftests/mm/mkdirty.c",
+    "line": 62,
+    "snippet": "static char *mmap_thp_range(int prot, char **_mmap_mem, size_t *_mmap_size)\n{\nconst size_t mmap_size = 2 * thpsize;\nchar *mem, *mmap_mem;\n\nmmap_mem = mmap(NULL, mmap_size, prot, MAP_PRIVATE|MAP_ANON,\n-1, 0);\nif (mmap_mem == MAP_FAILED) {\nksft_test_result_fail(\"mmap() failed\\n\");\nreturn MAP_FAILED;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "vercel/next.js",
+    "branch": "canary",
+    "path": "turbopack/crates/turbo-persistence/src/static_sorted_file.rs",
+    "line": 13,
+    "snippet": "use anyhow::{Context, Result, bail, ensure};\nuse memmap2::Mmap;\nuse quick_cache::{Lifecycle, sync::GuardResult};\nlookup_entry::{IterValue, LookupEntry, LookupValue},\nmmap_helper::advise_mmap_for_persistence,\nrc_bytes::RcBytes,\nif val.is_mmap_backed() {\n// Mmap-backed blocks bypass the cache (served directly from mmap),",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "mm/filemap.c",
+    "line": 9,
+    "snippet": "* This file handles the generic file mmap semantics used by\n* most \"normal\" filesystems (but you don't /have/ to use this:\n*  ->i_mmap_rwsem\t\t(truncate_pagecache)\n*    ->private_lock\t\t(__free_pte->block_dirty_folio)\n*      ->i_mmap_rwsem\t\t(truncate->unmap_mapping_range)\n*\n*  ->mmap_lock\n*    ->i_mmap_rwsem",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "arch/alpha/kernel/pci-sysfs.c",
+    "line": 9,
+    "snippet": "* Loosely based on generic HAVE_PCI_MMAP implementation in\n* drivers/pci/pci-sysfs.c\nstatic int hose_mmap_page_range(struct pci_controller *hose,\nstruct vm_area_struct *vma,\nenum pci_mmap_state mmap_type, int sparse)\n{\nunsigned long base;\n\nif (mmap_type == pci_mmap_mem)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "drivers/pci/pci-sysfs.c",
+    "line": 881,
+    "snippet": "* llseek operation for mmappable PCI resources.\n* May be left unused if the arch doesn't provide them.\n* pci_mmap_legacy_mem - map legacy PCI memory into user memory space\n* @filp: open sysfs file\n* @kobj: kobject corresponding to device to be mapped\n* @attr: struct bin_attribute for this file\n* @vma: struct vm_area_struct passed to mmap\n*\n* Uses an arch specific callback, pci_mmap_legacy_mem_page_range, to mmap",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "drivers/firmware/efi/memmap.c",
+    "line": 19,
+    "snippet": "* __efi_memmap_init - Common code for mapping the EFI memory map\n* @data: EFI memory map data\n*\n* This function takes care of figuring out which function to use to\n* map the EFI memory map in efi.memmap based on how far into the boot\n* we are.\n*\n* During bootup EFI_MEMMAP_LATE in data->flags should be clear since we\n* only have access to the early_memremap*() functions as the vmalloc",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "drivers/hsi/clients/cmt_speech.c",
+    "line": 29,
+    "snippet": "#define CS_MMAP_SIZE\tPAGE_SIZE\nint\t\t\tdataind_pending;\n/* mmap things */\nunsigned long\t\tmmap_base;\nunsigned long\t\tmmap_size;\nspinlock_t\t\tlock;\n/* state exposed to application */\nstruct cs_mmap_config_block\t*mmap_cfg;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "paritytech/polkavm",
+    "branch": "main",
+    "path": "crates/polkavm-linux-raw/src/mmap.rs",
+    "line": 4,
+    "snippet": "pub struct Mmap {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "paritytech/polkavm",
+    "branch": "main",
+    "path": "crates/polkavm-linux-raw/src/mmap.rs",
+    "line": 9,
+    "snippet": "unsafe impl Send for Mmap {}",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 7
+   },
+   {
+    "source": "sg",
+    "repo": "Grarak/DSVita",
+    "branch": "main",
+    "path": "src/mmap/vita.rs",
+    "line": 108,
+    "snippet": "impl AsRef<[u8]> for Mmap {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "Grarak/DSVita",
+    "branch": "main",
+    "path": "src/mmap/vita.rs",
+    "line": 1,
+    "snippet": "use crate::mmap::platform::kubridge::{",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   }
+  ],
+  "total": 454215,
+  "time": 313,
+  "facets": {},
+  "pages": 1,
+  "by_source": {
+   "sg": 186,
+   "grep": 10
+  },
+  "fanout_queries": [
+   "MLX rust mmap",
+   "mlx::mmap",
+   "MlxMmap",
+   "mmap",
+   "MlX MMAP",
+   "mmap.rs",
+   "mmap.rs:lib",
+   "rust mmap",
+   "rust-mlx-mmap"
+  ],
+  "summary": "These search results reveal a pattern where \"mmap\" is used in various contexts across different Linux repositories (e.g., kernel code, testing frameworks). The results highlight how \"mmap\" is utilized for memory mapping, file system operations, and caching mechanisms, showcasing its versatility and widespread use in the Linux ecosystem."
+ }
+}

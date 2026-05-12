@@ -1,0 +1,330 @@
+{
+ "hilbert curve": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "turi-code/SFrame",
+    "branch": "master",
+    "path": "oss_src/sgraph/sgraph_constants.cpp",
+    "line": 20,
+    "snippet": "EXPORT size_t SGRAPH_INGRESS_VID_BUFFER_SIZE = 1024 * 1024 * 1;\nEXPORT size_t SGRAPH_HILBERT_CURVE_PARALLEL_FOR_NUM_THREADS = thread::cpu_count();\nREGISTER_GLOBAL_WITH_CHECKS(int64_t,\nSGRAPH_HILBERT_CURVE_PARALLEL_FOR_NUM_THREADS,\ntrue,",
+    "rerank_score": 1024,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "rethinkdb/rethinkdb",
+    "branch": "main",
+    "path": "src/rdb_protocol/geo/s2/s2cellid.cc",
+    "line": 28,
+    "snippet": "// The following lookup tables are used to convert efficiently between an\n// (i,j) cell index and the corresponding position along the Hilbert curve.\n// \"lookup_pos\" maps 4 bits of \"i\", 4 bits of \"j\", and 2 bits representing the\n// orientation of the current cell into 8 bits representing the order in which\n// that subcell is visited by the Hilbert curve, plus 2 bits indicating the\n// new orientation of the Hilbert curve within that subcell.  (Cell\n// orientations are represented as combination of kSwapMask and kInvertMask.)\n// Alternating faces have opposite Hilbert curve orientations; this",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 3
+   },
+   {
+    "source": "grep",
+    "repo": "NetTopologySuite/NetTopologySuite",
+    "branch": "develop",
+    "path": "src/NetTopologySuite/Shape/Fractal/HilbertCode.cs",
+    "line": 6,
+    "snippet": "/// <summary>\n/// Encodes points as the index along finite planar Hilbert curves.\n/// <para>\n/// The planar Hilbert Curve is a continuous space-filling curve.\n/// In the limit the Hilbert curve has infinitely many vertices and fills\n/// the space of the unit square.\n/// A sequence of finite approximations to the infinite Hilbert curve\n/// is defined by the level number.\n/// The finite Hilbert curve at level n H\u2099 contains 2\u207f\u207a\u00b9 points.\n/// Each finite Hilbert curve defines an ordering of the",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "gonum/gonum",
+    "branch": "master",
+    "path": "spatial/curve/doc.go",
+    "line": 10,
+    "snippet": "// # Hilbert Curves\n//\n// The Hilbert curve is a continuous, space filling curve first described by\n// David Hilbert. The implementation of Hilbert2D is based on example code from\n// the [Hilbert curve (Wikipedia)]. The implementation of Hilbert3D and\n// Hilbert4D are extrapolated from Hilbert2D.\n//\n// Technically, a Hilbert curve is a continuous, fractal, space-filling curve of\n// infinite length, constructed as the limit of a series of piecewise linear",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "gonum/gonum",
+    "branch": "master",
+    "path": "spatial/curve/hilbert.go",
+    "line": 12,
+    "snippet": "// ErrUnderflow is returned by Hilbert curve constructors when the power is less\n// than 1.\nvar ErrUnderflow = errors.New(\"order is less than 1\")\n\n// ErrOverflow is returned (wrapped) by Hilbert curve constructors when the\n// power would cause Len and Pos to overflow.\n// Hilbert2D is a 2-dimensional Hilbert curve.\ntype Hilbert2D struct{ order int }",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "prestodb/presto",
+    "branch": "master",
+    "path": "presto-geospatial-toolkit/src/main/java/com/facebook/presto/geospatial/rtree/HilbertIndex.java",
+    "line": 22,
+    "snippet": "* <p>\n* A Hilbert index is the index on a Hilbert curve; a Hilbert curve is a\n* space-filling curve in a rectangle.  This class is instantiated with the\n* @param rectangle Rectangle defining bounds of Hilbert curve\n* @param y\n* @return Hilbert curve index, relative to rectangle\n* @return Hilbert curve index",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "databendlabs/databend",
+    "branch": "main",
+    "path": "src/query/expression/src/hilbert/index.rs",
+    "line": 17,
+    "snippet": "/// Computes the Hilbert curve index for a given set of points.\n///\n/// This function calculates the Hilbert curve index for a set of points in a multi-dimensional space.\n/// Each point is represented as a byte array, and the function maps these points to a Hilbert curve index\n/// using a precomputed state lookup table.\n/// A vector of bytes representing the Hilbert curve index for the given points.\n/// Decompresses a Hilbert curve index into its original points.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "rethinkdb/rethinkdb",
+    "branch": "main",
+    "path": "src/rdb_protocol/geo/s2/s2.h",
+    "line": 300,
+    "snippet": "//  (id)\n//    An S2CellId is a 64-bit encoding of a face and a Hilbert curve position\n//    on that face.  The Hilbert curve position implicitly encodes both the\n//    position of a cell and its subdivision level (see s2cellid.h).\n//    The (i, j) coordinate system is right-handed on each face, and the\n//    faces are oriented such that Hilbert curves connect continuously from\n//    one face to the next.\n// orientations of the Hilbert curve (axes swapped and/or directions",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "gaoxiang12/faster-lio",
+    "branch": "main",
+    "path": "include/ivox3d/hilbert.hpp",
+    "line": 36,
+    "snippet": "// N dimensional hilbert curve encoding & decoding based on the paper\n// \"Programming the Hilbert Curve\" by John Skilling.\n//\n// The interface assumes an std::array of some unsigned integer type.  This\n// contains an index in lexographic order, or a set of coordinates on the\n// hilbert curve.\n// Find the position of a point on an N dimensional Hilbert Curve.\n//\n// Based on the paper \"Programming the Hilbert Curve\" by John Skilling.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "ClickHouse/ClickHouse",
+    "branch": "master",
+    "path": "src/Common/HilbertUtils.h",
+    "line": 24,
+    "snippet": "Given the range of values of hilbert code - and this function will return segments of the Hilbert curve\nsuch that each of them lies in a whole domain (aka square)\nImagine a square, one side of which is a x-axis, other is a y-axis.\nFirst approximation of the Hilbert curve is on the picture - U curve.\nSo we divide Hilbert Code Interval on 4 parts each of which is represented by a square\n// Given 2 points representing ends of the range of Hilbert Curve that lies in a whole domain.\n/** Unpack an interval of Hilbert curve to hyperrectangles covered by it across N dimensions.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "geopandas/geopandas",
+    "branch": "main",
+    "path": "geopandas/tools/hilbert_curve.py",
+    "line": 6,
+    "snippet": "Calculate the distance along a Hilbert curve.\nnp.ndarray\nArray containing distances along the Hilbert curve\nx, y = _continuous_to_discrete_coords(bounds, level, total_bounds)\n# Compute distance along hilbert curve\ndistances = _encode(level, x, y)\np : The number of iterations used in constructing the Hilbert curve",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "openmm/openmm",
+    "branch": "master",
+    "path": "libraries/hilbert/src/hilbert.cpp",
+    "line": 127,
+    "snippet": "* Convert an index into a Hilbert curve to a set of coordinates.\n* Inputs:\n* Convert coordinates of a point on a Hilbert curve to its index.\n* Inputs:\n* Determine which of two points lies further along the Hilbert curve\n* Inputs:\n* Determine the first or last vertex of a box to lie on a Hilbert curve",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "golang/geo",
+    "branch": "master",
+    "path": "s2/s2intersect/s2intersect.go",
+    "line": 36,
+    "snippet": "// (spherical) concept in keeping with s2.CellUnionFromIntersection(). The 1D\n// (Hilbert curve) equivalent is referred to as an \"overlap\", simply to\n// differentiate between the two. An overlap interval is closed, and defined by\n// CellUnions, and a naive multi-way search is O(2^n), Find() is\n// O(max(i log i, c)) for c Cells constituting i intervals on the Hilbert curve\n// (contiguous Cells form a single interval).\n// Consider the following CellUnions, shown as their corresponding intervals on\n// the straightened Hilbert curve. Cells are denoted as = and grouped into 4 for",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "tengge1/ShadowEditor",
+    "branch": "master",
+    "path": "web/assets/js/utils/GeometryUtils.js",
+    "line": 11,
+    "snippet": "* @param center     Center of Hilbert curve.\n* @param size       Total width of Hilbert curve.\n* @param iterations Number of subdivisions.\n} // Return complete Hilbert Curve.\n* @param center     Center of Hilbert curve.\n* @param size       Total width of Hilbert curve.\n* @param iterations Number of subdivisions.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "delta-io/delta",
+    "branch": "master",
+    "path": "spark/src/main/scala/org/apache/spark/sql/delta/expressions/HilbertIndex.scala",
+    "line": 32,
+    "snippet": "* The columns are expected to all be Ints and to have at most numBits individually.\n* The points along the hilbert curve are represented by Longs.\n* The columns are expected to all be Ints and to have at most numBits.\n* The points along the hilbert curve are represented by Byte arrays.\n* Translate an n-dimensional point into it's corresponding position on the n-dimensional\n* hilbert curve.\n* @param point An n-dimensional point. (assumed to have n elements)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "neozhaoliang/pywonderland",
+    "branch": "master",
+    "path": "src/gifmaze/example_hilbert_curve.py",
+    "line": 3,
+    "snippet": "Hilbert curve animation based on Gray code\ndef encode(self, index):\n\"\"\"Convert index to coordinates of a point on the Hilbert curve.\ndef decode(self, coords):\n\"\"\"Convert coordinates to index of a point on the Hilbert curve.\ndef pixels_hilbert(size):\n\"\"\"Generate the pixels of a 2d Hilbert curve.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "3b1b/videos",
+    "branch": "master",
+    "path": "_2016/hilbert/section2.py",
+    "line": 200,
+    "snippet": "(1890, peano_curve, UP, \"Peano Curve\"),\n(1891, hilbert_curve, DOWN, \"Hilbert Curve\"),\nbubble.write(\n\"A Hilbert curve is the \\\\\\\\ limit of all these \\\\dots\"\nself.add(OldTexText(\"\"\"\nFinally define a Hilbert Curve\\\\dots\nexplanation = OldTexText(\"Actual Hilbert curve function\")",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 1196,
+  "time": 653,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "src/",
+      "count": 180
+     },
+     {
+      "val": "docs/",
+      "count": 53
+     },
+     {
+      "val": "examples/",
+      "count": 27
+     },
+     {
+      "val": "tests/",
+      "count": 25
+     },
+     {
+      "val": "doc/",
+      "count": 24
+     },
+     {
+      "val": "localization/i18n/",
+      "count": 21
+     },
+     {
+      "val": "resources/",
+      "count": 21
+     },
+     {
+      "val": "bbl/i18n/",
+      "count": 19
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "geoparquet/geoparquet-io",
+      "count": 26,
+      "owner_id": "118769518"
+     },
+     {
+      "val": "OrcaSlicer/OrcaSlicer",
+      "count": 22,
+      "owner_id": "134699248"
+     },
+     {
+      "val": "prusa3d/PrusaSlicer",
+      "count": 22,
+      "owner_id": "14859759"
+     },
+     {
+      "val": "bambulab/BambuStudio",
+      "count": 20,
+      "owner_id": "96461528"
+     },
+     {
+      "val": "trebeljahr/fractal-garden",
+      "count": 17,
+      "owner_id": "25333032"
+     },
+     {
+      "val": "felixpalmer/a5",
+      "count": 17,
+      "owner_id": "453755"
+     },
+     {
+      "val": "google/s2geometry",
+      "count": 16,
+      "owner_id": "1342004"
+     },
+     {
+      "val": "google/s2-geometry-library-java",
+      "count": 14,
+      "owner_id": "1342004"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "Markdown",
+      "count": 211
+     },
+     {
+      "val": "C++",
+      "count": 174
+     },
+     {
+      "val": "Python",
+      "count": 170
+     },
+     {
+      "val": "Gettext Catalog",
+      "count": 71
+     },
+     {
+      "val": "Java",
+      "count": 57
+     },
+     {
+      "val": "C",
+      "count": 53
+     },
+     {
+      "val": "JavaScript",
+      "count": 53
+     },
+     {
+      "val": "Rust",
+      "count": 43
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 180,
+   "sg": 225
+  },
+  "fanout_queries": [
+   "hilbert curve",
+   "hilbert curve algorithm",
+   "Hilbert Curve implementation",
+   "hilbert_curve",
+   "hilbert curve generator",
+   "HilbertCurve Java",
+   "hilbert curve data structure",
+   "hilbert curve visualization",
+   "hilbert curve fractal"
+  ],
+  "summary": "TL;DR: The search results reveal that the Hilbert curve is a continuous, space-filling curve with various implementations across different libraries and frameworks, including Gonum's Hilbert2D, Turi's SGraph, and RethinkDB's geo module. These implementations share common characteristics, such as using lookup tables to convert between cell indices and positions along the curve. The results suggest a consistent pattern in how the Hilbert curve is represented and utilized across different applications."
+ }
+}

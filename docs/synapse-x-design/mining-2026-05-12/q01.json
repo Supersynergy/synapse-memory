@@ -1,0 +1,39 @@
+{
+ "mmap columnar": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "NodeDB-Lab/nodedb",
+    "branch": "main",
+    "path": "nodedb/src/engine/timeseries/columnar_segment/mmap.rs",
+    "line": 119,
+    "snippet": "                \"posix_fadvise(DONTNEED) failed on columnar mmap drop\",",
+    "rerank_score": 100,
+    "_quality": 0.0
+   }
+  ],
+  "total": 1,
+  "time": 1478,
+  "facets": {
+   "lang": {
+    "buckets": []
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 0,
+   "sg": 1
+  },
+  "fanout_queries": [
+   "mmap columnar",
+   "mmap columnar database",
+   "mmap_columnar",
+   "mmap_columnar_db",
+   "columnar mmap",
+   "mmap columnar storage",
+   "mmap_columnar_storage",
+   "columnar mmap db"
+  ],
+  "summary": ""
+ }
+}

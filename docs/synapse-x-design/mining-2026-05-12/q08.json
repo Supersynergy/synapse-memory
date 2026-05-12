@@ -1,0 +1,70 @@
+{
+ "arrow ipc columnar": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "kubeflow/mcp-apache-spark-history-server",
+    "branch": "main",
+    "path": "skills/cli/examples/compare/report.md",
+    "line": 116,
+    "snippet": "- AQE created 23 coalesced partitions instead of 10; reshuffle stage took 462ms vs 94ms (+368ms)\n- **Root cause:** Arrow IPC columnar encoding has disproportionate per-partition overhead for small record counts (~269 records/partition), causing shuffle write amplification that cascades through AQE partition coalescing and Arrow decode overhead",
+    "rerank_score": 100,
+    "_quality": 0.0
+   },
+   {
+    "source": "grep",
+    "repo": "kubeflow/mcp-apache-spark-history-server",
+    "branch": "main",
+    "path": "skills/cli/examples/compare/findings/q20-v4.0.md",
+    "line": 78,
+    "snippet": "The regression is caused by CometColumnarExchange writing 2.3x more shuffle bytes than Spark's native Exchange for the post-aggregation reshuffle of 53,785 records. Default's Exchange (node 12) writes 10.2 MiB; Comet's CometColumnarExchange (node 13) writes 23.9 MiB for the same logical data (data size is identical at 10.0 MiB in both plans). This indicates the Arrow IPC columnar serialization format used by CometColumnarExchange has higher per-partition overhead when data is distributed across 200 shuffle partitions with small per-partition payloads (approximately 269 records per partition).",
+    "rerank_score": 100,
+    "_quality": 0.0
+   }
+  ],
+  "total": 3,
+  "time": 1555,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "skills/cli/examples/compare/",
+      "count": 3
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "kubeflow/mcp-apache-spark-history-server",
+      "count": 3,
+      "owner_id": "33164907"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "Markdown",
+      "count": 3
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 3,
+   "sg": 0
+  },
+  "fanout_queries": [
+   "arrow ipc columnar",
+   "arrow.IPC.Columnar",
+   "import arrow.ipc.columnar",
+   "ipc.arrow.Columnar",
+   "ipc.arrow.IPC",
+   "ipc.IPC.Columnar",
+   "ipc.IPC.arrow"
+  ],
+  "summary": ""
+ }
+}

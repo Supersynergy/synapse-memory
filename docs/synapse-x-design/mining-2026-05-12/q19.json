@@ -1,0 +1,136 @@
+{
+ "conformal prediction streaming": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "ovexro/trellis",
+    "branch": "main",
+    "path": "app/src-tauri/src/connection.rs",
+    "line": 404,
+    "snippet": "    fn as_tcp_stream(&self) -> Option<&std::net::TcpStream>;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 8
+   },
+   {
+    "source": "sg",
+    "repo": "ovexro/trellis",
+    "branch": "main",
+    "path": "app/src-tauri/src/connection.rs",
+    "line": 179,
+    "snippet": "                if let Some(stream) = socket.get_ref().as_tcp_stream() {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "stalwartlabs/mail-send",
+    "branch": "main",
+    "path": "src/smtp/builder.rs",
+    "line": 128,
+    "snippet": "                stream: self.tcp_stream().await?,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "stalwartlabs/mail-send",
+    "branch": "main",
+    "path": "src/smtp/builder.rs",
+    "line": 176,
+    "snippet": "            stream: tokio::time::timeout(self.timeout, async { self.tcp_stream().await })",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "alexcrichton/ssh2-rs",
+    "branch": "main",
+    "path": "src/session.rs",
+    "line": 312,
+    "snippet": "    pub fn set_tcp_stream<S: 'static + AsRawFd>(&mut self, stream: S) {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "alexcrichton/ssh2-rs",
+    "branch": "main",
+    "path": "src/session.rs",
+    "line": 114,
+    "snippet": "/// (via the `set_tcp_stream` method).",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 3
+   },
+   {
+    "source": "sg",
+    "repo": "alexcrichton/ssh2-rs",
+    "branch": "main",
+    "path": "src/session.rs",
+    "line": 296,
+    "snippet": "                    \"use set_tcp_stream() to associate with a TcpStream\",",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "alexcrichton/ssh2-rs",
+    "branch": "main",
+    "path": "src/session.rs",
+    "line": 318,
+    "snippet": "    /// You may use the tcp_stream() method to obtain the raw socket later.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "jerryshell/agarust",
+    "branch": "main",
+    "path": "server/src/lib.rs",
+    "line": 15,
+    "snippet": "pub async fn handle_tcp_stream(",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "jerryshell/agarust",
+    "branch": "main",
+    "path": "server/src/lib.rs",
+    "line": 21,
+    "snippet": "    let ws_stream = tokio_tungstenite::accept_async(tcp_stream).await?;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 200,
+  "time": 384,
+  "facets": {},
+  "pages": 1,
+  "by_source": {
+   "gh": 0,
+   "grep": 0,
+   "sg": 550
+  },
+  "fanout_queries": [
+   "conformal prediction streaming",
+   "conformal prediction streaming library",
+   "streaming_conformal_prediction",
+   "ConformalPredictionStream",
+   "cp_stream",
+   "CPS",
+   "CP Stream",
+   "conformal stream prediction"
+  ],
+  "summary": "TL;DR: The search results reveal a pattern where TCP streams are being handled and passed around in Rust code, with various functions (e.g., `as_tcp_stream`, `tcp_stream`) providing access to or manipulating these streams. This suggests that TCP streaming is a common functionality in Rust applications, potentially used for communication protocols like SSH or email. The results imply a need for efficient handling of TCP connections in Rust projects."
+ }
+}

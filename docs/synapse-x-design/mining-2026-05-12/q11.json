@@ -1,0 +1,88 @@
+{
+ "accelerate cblas_sgemm": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "garrytan/gstack",
+    "branch": "main",
+    "path": "browse/src/security-bunnative.ts",
+    "line": 24,
+    "snippet": "*     classifier head). Requires careful numerics \u2014 multi-week work.\n*   * Bun FFI + Apple Accelerate cblas_sgemm integration for macOS\n*     native matmul (~0.5ms per 768x768 matmul on M-series).",
+    "rerank_score": 100,
+    "_quality": 0.0
+   },
+   {
+    "source": "grep",
+    "repo": "miuda-ai/lele",
+    "branch": "main",
+    "path": "src/kernels/quantization.rs",
+    "line": 1248,
+    "snippet": ") -> TensorView<'a, f32> {\n// On macOS aarch64, use Apple Accelerate cblas_sgemm with dequantized fp32 weights\n// This leverages the AMX hardware which is much faster than NEON UDOT for these sizes",
+    "rerank_score": 100,
+    "_quality": 0.0
+   }
+  ],
+  "total": 4,
+  "time": 508,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "src/kernels/",
+      "count": 2
+     },
+     {
+      "val": "browse/src/",
+      "count": 1
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "garrytan/gstack",
+      "count": 2,
+      "owner_id": "19957"
+     },
+     {
+      "val": "miuda-ai/lele",
+      "count": 2,
+      "owner_id": "230281397"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "Rust",
+      "count": 2
+     },
+     {
+      "val": "Markdown",
+      "count": 1
+     },
+     {
+      "val": "TypeScript",
+      "count": 1
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 4,
+   "sg": 0
+  },
+  "fanout_queries": [
+   "accelerate cblas_sgemm",
+   "cblas_sgemm_acceleration",
+   "cblas_sgemm_accelerate",
+   "BLAS SGEMM Accelerate",
+   "CBLAS sgemm acceleration",
+   "cblas_sgemm_accelerate_c",
+   "cblas_sgemm_accelerated",
+   "cblas_sgemm_accelerator"
+  ],
+  "summary": "These search results indicate that Apple's Accelerate library, specifically the cblas_sgemm function, can be used to accelerate matrix multiplication operations, particularly on macOS devices with AMX hardware. The integration allows for faster performance, comparable to ~0.5ms per 768x768 matmul operation on M-series devices. This suggests a pattern of utilizing specialized libraries and hardware acceleration to improve computational efficiency in machine learning and deep learning applications."
+ }
+}

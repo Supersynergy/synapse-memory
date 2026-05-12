@@ -21,8 +21,8 @@ axum = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 synapse-libsql = { path = "../synapse-libsql", features = ["libsql-backend"] }
-synapse-mysql = { path = "../../experimental/synapse-mysql" }
-synapse-pg = { path = "../../experimental/synapse-pg" }
+synapse-mysql = { path = "../synapse-mysql" }
+synapse-pg = { path = "../synapse-pg" }
 synapse-ops = { path = "../synapse-ops" }
 synapse-auth = { path = "../synapse-auth" }
 synapse-tune = { path = "../synapse-tune" }

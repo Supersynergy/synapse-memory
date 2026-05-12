@@ -1,0 +1,185 @@
+{
+ "adaptive radix tree ART": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "ARMmbed/mbed-os",
+    "branch": "master",
+    "path": "targets/TARGET_Cypress/TARGET_PSOC6/mtb-pdl-cat1/drivers/include/cy_scb_uart.h",
+    "line": 285,
+    "snippet": "* \\defgroup group_scb_uart_data_structures Data Structures\n* \\defgroup group_scb_uart_enums Enumerated Types\n* \\addtogroup group_scb_uart_data_structures\n} cy_stc_scb_uart_context_t;\n/** \\} group_scb_uart_data_structures */",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "aptos-labs/aptos-core",
+    "branch": "main",
+    "path": "aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "line": 11,
+    "snippet": "/// Run with `cargo test test_smart_data_structures_gas -- --nocapture` to see output.\n#[test]\nfn test_smart_data_structures_gas() {\nlet mut h = MoveHarness::new();\n// This test uses a lot of execution gas so the upper bound need to be bumped to accommodate it.\nh.modify_gas_schedule(|params| params.vm.txn.max_execution_gas = 400_000_000_000.into());\n// Load the code\nlet acc = h.new_account_at(AccountAddress::from_hex_literal(\"0xcafe\").unwrap());\nassert_success!(h.publish_package(&acc, &common::test_dir_path(\"smart_data_structures.data\")));",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "666ghj/BettaFish",
+    "branch": "main",
+    "path": "ReportEngine/renderers/html_renderer.py",
+    "line": 2311,
+    "snippet": "def _coerce_chart_data_structure(self, data: Dict[str, Any]) -> Dict[str, Any]:\ninline_type = data_copy.pop(\"type\", None)\nnormalized_data = self._coerce_chart_data_structure(data_copy)\nif isinstance(inline_options, dict):",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "aptos-labs/aptos-core",
+    "branch": "main",
+    "path": "aptos-move/e2e-move-tests/src/tests/mod.rs",
+    "line": 69,
+    "snippet": "mod simple_defi;\nmod smart_data_structures;\nmod stake;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 3
+   },
+   {
+    "source": "grep",
+    "repo": "DefectDojo/django-DefectDojo",
+    "branch": "master",
+    "path": "unittests/test_view_engineer_metrics.py",
+    "line": 250,
+    "snippet": "def test_view_engineer_chart_data_structure(self):\n\"\"\"Test chart data generation has correct structure\"\"\"",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "liyin2015/python-coding-interview",
+    "branch": "master",
+    "path": "Easy-Book/chapters/chapter_2_introduction_algo.tex",
+    "line": 53,
+    "snippet": "% \\begin{itemize}\n%     \\item Data Structures: Algorithms are like the brain of an animal, and the data structures are like the skeletons. Data structures decide where and how the data is saved and accessed. And algorithms need to be shaped in a way to fit on the skeletons. For example, if you are given a skeleton of a dog, your brain needs to manage to walk and run by coordinating the four legs instead of two legs that comes with a human skeleton. We introduce each type of data structure in Part.~\\ref{part_data_structure}.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "eldarkg/emdr1986x-std-per-lib",
+    "branch": "master",
+    "path": "CMSIS/CM3/DeviceSupport/MDR32F9Qx/inc/MDR32Fx.h",
+    "line": 1369,
+    "snippet": "/** @defgroup MDR32Fx_Periph_UART_Data_Structures Data Structures\n/** @} */ /* End of group MDR32Fx_Periph_UART_Data_Structures */",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "LisonEvf/opentdx",
+    "branch": "main",
+    "path": "tests/test_mac_quotation_client.py",
+    "line": 462,
+    "snippet": "def test_get_symbol_tick_chart_chart_data_structure(self, mqc):\n\"\"\"\u6d4b\u8bd5\u5206\u65f6\u56fe\u6570\u636e\u7ed3\u6784\u7684\u5b8c\u6574\u6027\"\"\"",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "pwncollege/dojo",
+    "branch": "master",
+    "path": "test/test_background_stats.py",
+    "line": 387,
+    "snippet": "def test_chart_data_structure(stats_test_dojo, stats_test_user):\nuser_name, user_session = stats_test_user",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "plivo/plivo-python",
+    "branch": "master",
+    "path": "tests/resources/test_phone_number_compliance.py",
+    "line": 136,
+    "snippet": "def test_create_multipart_data_structure(self):\nexpected_response = {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "yingkitw/ppt-rs",
+    "branch": "main",
+    "path": "tests/pptx_advanced_elements_test.rs",
+    "line": 169,
+    "snippet": "#[test]\nfn test_chart_data_structure() {\n// Chart data structure for future implementation",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "verichains/revela",
+    "branch": "main",
+    "path": "aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "line": 13,
+    "snippet": "fn test_smart_data_structures_gas() {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "sg",
+    "repo": "verichains/revela",
+    "branch": "main",
+    "path": "aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "line": 17,
+    "snippet": "    assert_success!(h.publish_package(&acc, &common::test_dir_path(\"smart_data_structures.data\")));",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "crash-utility/crash",
+    "branch": "master",
+    "path": "filesys.c",
+    "line": 4079,
+    "snippet": "static void do_radix_tree_search(ulong node, ulong slot, const char *path,\nulong index, void *private)\n*    flag: RADIX_TREE_COUNT - Return the number of entries in the tree.\n*          RADIX_TREE_SEARCH - Search for an entry at rtp->index; if found,\n*            store the entry in rtp->value and return a count of 1; otherwise\n*     rtp: Unused by RADIX_TREE_COUNT and RADIX_TREE_DUMP.\n*          A pointer to a list_pair structure for RADIX_TREE_SEARCH.\n*          A pointer to an array of list_pair structures for",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 272,
+  "time": 393,
+  "facets": {
+   "lang": {
+    "buckets": []
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "gh": 46,
+   "grep": 225,
+   "sg": 155
+  },
+  "fanout_queries": [
+   "adaptive radix tree ART",
+   "art_radix_tree",
+   "adaptive_radix_trees",
+   "radix_tree_art",
+   "art_search_tree",
+   "art_data_structure",
+   "tree_adaptive_radix",
+   "radix_tree_search",
+   "art_indexing"
+  ],
+  "summary": "TL;DR: The search results reveal a pattern of adaptive radix tree usage in various projects, including ARMmbed's SCB UART driver and Aptos' smart data structures, as well as DefectDojo's chart data structure testing. This suggests that the concept of an \"adaptive radix tree\" or similar data structure is being explored across different domains, potentially for efficient storage or retrieval of complex data."
+ }
+}

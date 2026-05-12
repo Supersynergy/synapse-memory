@@ -171,6 +171,41 @@ pub struct ColumnSlices {
     pub volume: Option<Vec<f32>>,
 }
 
+/// Decode page directly into columnar Page — zero intermediate Vec<Bar>.
+/// Filters by ts range in one pass.
+pub fn decode_page_soa_filtered(page: &[u8], ts_start: i64, ts_end: i64) -> Page {
+    let hdr_bytes: [u8; HEADER_SIZE] = page[..HEADER_SIZE].try_into().unwrap();
+    let header = PageHeader::from_bytes(&hdr_bytes);
+    let n = header.row_count as usize;
+    let ts_base = header.ts_min;
+    let body = &page[HEADER_SIZE..];
+    let o_off = n * 4;
+    let h_off = n * 8;
+    let l_off = n * 12;
+    let c_off = n * 16;
+    let v_off = n * 20;
+
+    let mut ts_vec = Vec::with_capacity(n);
+    let mut open_vec = Vec::with_capacity(n);
+    let mut high_vec = Vec::with_capacity(n);
+    let mut low_vec = Vec::with_capacity(n);
+    let mut close_vec = Vec::with_capacity(n);
+    let mut vol_vec = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let delta = i32::from_le_bytes(body[i * 4..i * 4 + 4].try_into().unwrap());
+        let ts = ts_base + delta as i64;
+        if ts < ts_start || ts >= ts_end { continue; }
+        ts_vec.push(ts);
+        open_vec.push(f32::from_le_bytes(body[o_off + i * 4..o_off + i * 4 + 4].try_into().unwrap()));
+        high_vec.push(f32::from_le_bytes(body[h_off + i * 4..h_off + i * 4 + 4].try_into().unwrap()));
+        low_vec.push(f32::from_le_bytes(body[l_off + i * 4..l_off + i * 4 + 4].try_into().unwrap()));
+        close_vec.push(f32::from_le_bytes(body[c_off + i * 4..c_off + i * 4 + 4].try_into().unwrap()));
+        vol_vec.push(f32::from_le_bytes(body[v_off + i * 4..v_off + i * 4 + 4].try_into().unwrap()));
+    }
+    Page { ts: ts_vec, open: open_vec, high: high_vec, low: low_vec, close: close_vec, volume: vol_vec }
+}
+
 /// Decode all bars from a page buffer.
 pub fn decode_page(page: &[u8]) -> (PageHeader, Vec<Bar>) {
     let hdr_bytes: [u8; HEADER_SIZE] = page[..HEADER_SIZE].try_into().unwrap();

@@ -1,0 +1,38 @@
+{
+ "portable_simd f32x8": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxifft",
+    "branch": "main",
+    "path": "oxifft/src/simd/portable.rs",
+    "line": 384,
+    "snippet": "/// Portable SIMD f32x8 (8 lanes).",
+    "rerank_score": 0,
+    "_quality": 0.0
+   }
+  ],
+  "total": 2,
+  "time": 508,
+  "facets": {
+   "lang": {
+    "buckets": []
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 0,
+   "sg": 1
+  },
+  "fanout_queries": [
+   "portable_simd f32x8",
+   "portablesimd f32x8",
+   "Portable SIMD f32x8",
+   "portable_simd_f32x8",
+   "portable_simd_f32_8",
+   "portable_simd_f32x8_",
+   "portablesimd_f32x8"
+  ],
+  "summary": "TL;DR: The search results indicate that portable SIMD (Single Instruction, Multiple Data) operations for f32x8 (8 single-precision floating-point numbers) are available in various codebases, with a notable example found in the \"oxifft\" library's \"portable.rs\" file. This suggests that there is a growing interest and implementation of efficient SIMD operations across different projects."
+ }
+}

@@ -1,0 +1,106 @@
+{
+ "online prediction model": {
+  "hits": [],
+  "total": 13,
+  "time": 832,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "discovery/",
+      "count": 3
+     },
+     {
+      "val": "googleapiclient/discovery_cache/documents/",
+      "count": 3
+     },
+     {
+      "val": "src/apis/language/",
+      "count": 3
+     },
+     {
+      "val": "tests/store/model_registry/",
+      "count": 2
+     },
+     {
+      "val": "Sources/GeneratedServices/CloudNaturalLanguage/Public/GoogleAPIClientForREST/",
+      "count": 1
+     },
+     {
+      "val": "public/lib/google2-service/src/CloudNaturalLanguage/",
+      "count": 1
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "googleapis/google-api-nodejs-client",
+      "count": 6,
+      "owner_id": "16785467"
+     },
+     {
+      "val": "googleapis/google-api-python-client",
+      "count": 3,
+      "owner_id": "16785467"
+     },
+     {
+      "val": "mlflow/mlflow",
+      "count": 2,
+      "owner_id": "39938107"
+     },
+     {
+      "val": "google/google-api-objectivec-client-for-rest",
+      "count": 1,
+      "owner_id": "1342004"
+     },
+     {
+      "val": "moodle/moodle",
+      "count": 1,
+      "owner_id": "168672"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "JSON",
+      "count": 6
+     },
+     {
+      "val": "TypeScript",
+      "count": 3
+     },
+     {
+      "val": "Python",
+      "count": 2
+     },
+     {
+      "val": "Objective-C",
+      "count": 1
+     },
+     {
+      "val": "PHP",
+      "count": 1
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 0,
+   "sg": 0
+  },
+  "fanout_queries": [
+   "online prediction model",
+   "online prediction model python",
+   "online prediction model java",
+   "predictive modeling online",
+   "machine learning online predictor",
+   "online predictive model implementation",
+   "python online prediction algorithm",
+   "online classification model code",
+   "online regression prediction model"
+  ]
+ }
+}

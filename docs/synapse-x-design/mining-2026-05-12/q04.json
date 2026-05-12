@@ -1,0 +1,158 @@
+{
+ "cranelift JIT filter compile": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "bytecodealliance/cranelift-jit-demo",
+    "branch": "main",
+    "path": "src/bin/toy.rs",
+    "line": 37,
+    "snippet": "/// Executes the given code using the cranelift JIT compiler.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "sdiehl/compiler-crates",
+    "branch": "main",
+    "path": "cranelift/src/main.rs",
+    "line": 8,
+    "snippet": "fn main() {\nprintln!(\"Cranelift JIT Compiler Examples\");\nprintln!(\"================================\\n\");",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "VirusTotal/yara-x",
+    "branch": "main",
+    "path": "capi/Cargo.toml",
+    "line": 39,
+    "snippet": "# Enables the use of wasmtime's Pulley bytecode interpreter instead of the default\n# Cranelift JIT compiler. See the documentation in the `yara-x` core library for details.\npulley = [\"yara-x/pulley\"]",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "VirusTotal/yara-x",
+    "branch": "main",
+    "path": "lib/Cargo.toml",
+    "line": 104,
+    "snippet": "# Enables the use of wasmtime's Pulley bytecode interpreter instead of the\n# default Cranelift JIT compiler.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/RuVector",
+    "branch": "main",
+    "path": "docs/research/ruvm/sota-analysis.md",
+    "line": 231,
+    "snippet": "**Practical considerations:**\n- Wasmtime's cranelift JIT compiler works in no_std mode but requires virtual memory for code generation\n- The `signals-and-traps` feature can be disabled for platforms without virtual memory support",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "bytecodealliance/wasmtime-dotnet",
+    "branch": "main",
+    "path": "docs/index.md",
+    "line": 3,
+    "snippet": "[Wasmtime](https://github.com/bytecodealliance/wasmtime) is a standalone runtime for [WebAssembly](https://webassembly.org/), using the Cranelift JIT compiler.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "6over3/hako",
+    "branch": "main",
+    "path": "hosts/dotnet/Hako.Backend.Wasmtime/README.md",
+    "line": 3,
+    "snippet": "Wasmtime-based backend for Hako using the Cranelift JIT compiler for high performance.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "cool-japan/oxieml",
+    "branch": "master",
+    "path": "README.md",
+    "line": 391,
+    "snippet": "| `wasm`         | wasm-bindgen WASM bindings for browser/Node.js |\n| `jit`          | Cranelift JIT compiler for hot OxiOp sequences |",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "NLnetLabs/roto",
+    "branch": "main",
+    "path": "docs/source/overview/why_roto.md",
+    "line": 5,
+    "snippet": "Roto provides high performance through its use of the Cranelift JIT compiler, hot reloading (so you don't need to restart your application), and is easy to learn and debug.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "siravan/symjit",
+    "branch": "main",
+    "path": "rust/memory.rs",
+    "line": 8,
+    "snippet": "which is the jit memory manager of wasmtime cranelift jit compiler.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "paiml/ruchy",
+    "branch": "main",
+    "path": "src/jit/compiler.rs",
+    "line": 1,
+    "snippet": "//! Cranelift JIT Compiler Implementation",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "mimium-org/mimium-rs",
+    "branch": "main",
+    "path": "crates/lib/mimium-lang/src/runtime/wasm.rs",
+    "line": 154,
+    "snippet": "        // Enable Cranelift JIT compiler with optimization level Speed",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   }
+  ],
+  "total": 13,
+  "time": 220,
+  "facets": {},
+  "pages": 1,
+  "by_source": {
+   "gh": 0,
+   "grep": 13,
+   "sg": 5
+  },
+  "fanout_queries": [
+   "cranelift JIT filter compile",
+   "cranelift jit compiler filter",
+   "Cranelift JIT compile",
+   "jit filter compile cranelift",
+   "JIT compile cranelift",
+   "cranelift compile filter",
+   "compile cranelift jit",
+   "cranelift jit compile filter"
+  ],
+  "summary": "These search results highlight the use of Cranelift JIT compiler in various projects, showcasing its integration with different frameworks and libraries such as Wasmtime's Pulley bytecode interpreter and wasmtime itself. The results also touch upon practical considerations for using Cranelift JIT compiler, including its compatibility with no_std mode and virtual memory requirements."
+ }
+}

@@ -10,7 +10,9 @@ opensrv-mysql = { git = "https://github.com/databendlabs/opensrv.git", tag = "v0
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }
 async-trait = "0.1"
 thiserror = "2"
-synapse-libsql = { path = "../../crates/synapse-libsql" }
+lru = "0.13"
+tracing = "0.1"
+synapse-libsql = { path = "../synapse-libsql" }
 
 [features]
 default = []

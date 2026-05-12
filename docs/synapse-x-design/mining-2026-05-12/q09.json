@@ -1,0 +1,329 @@
+{
+ "io_uring": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/io_uring.c",
+    "line": 34,
+    "snippet": "* io_uring also uses READ/WRITE_ONCE() for _any_ store or load that happens\n* from data shared between the kernel and application. This is done both\n#include <linux/task_work.h>\n#include <linux/io_uring.h>\n#include <linux/io_uring/cmd.h>\n#include <linux/audit.h>\n#define CREATE_TRACE_POINTS\n#include <trace/events/io_uring.h>",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/uring_cmd.c",
+    "line": 4,
+    "snippet": "#include <linux/file.h>\n#include <linux/io_uring/cmd.h>\n#include <linux/security.h>\n#include <linux/nospec.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"io_uring.h\"\n#include \"alloc_cache.h\"",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "include/uapi/linux/io_uring.h",
+    "line": 3,
+    "snippet": "* Header file for the io_uring interface.\n*\n* Copyright (C) 2019 Jens Axboe\n* Copyright (C) 2019 Christoph Hellwig\n*/\n#ifndef LINUX_IO_URING_H\n#define LINUX_IO_URING_H\n#include <linux/types.h>\n#include <linux/io_uring/zcrx.h>",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "tools/include/io_uring/mini_liburing.h",
+    "line": 3,
+    "snippet": "#include <linux/io_uring.h>\n#include <sys/mman.h>\nunsigned int *ring_entries;\nstruct io_uring_cqe *cqes;\n};\n\nstruct io_uring_sq {\nunsigned int *khead;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/tctx.c",
+    "line": 7,
+    "snippet": "#include <linux/nospec.h>\n#include <linux/io_uring.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"io_uring.h\"\n#include \"tctx.h\"\nvoid __io_uring_free(struct task_struct *tsk)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "include/trace/events/io_uring.h",
+    "line": 2,
+    "snippet": "#undef TRACE_SYSTEM\n#define TRACE_SYSTEM io_uring\n\n#if !defined(_TRACE_IO_URING_H) || defined(TRACE_HEADER_MULTI_READ)\n#define _TRACE_IO_URING_H\n\n#include <linux/tracepoint.h>\n#include <uapi/linux/io_uring.h>\n#include <linux/io_uring_types.h>\n#include <linux/io_uring.h>",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "drivers/block/ublk_drv.c",
+    "line": 5,
+    "snippet": "* Take full use of io_uring passthrough command for communicating with\n* ublk userspace daemon(ublksrvd) for handling basic IO request.\n#include <linux/cdev.h>\n#include <linux/io_uring/cmd.h>\n#include <linux/blk-mq.h>\nstruct list_head node;\nstruct io_uring_cmd *cmd;\nunsigned short buf_group;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/cancel.c",
+    "line": 7,
+    "snippet": "#include <linux/nospec.h>\n#include <linux/io_uring.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"filetable.h\"\n#include \"io_uring.h\"\n#include \"tctx.h\"\nstatic int io_async_cancel_one(struct io_uring_task *tctx,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "tools/testing/selftests/drivers/net/hw/iou-zcrx.c",
+    "line": 43,
+    "snippet": "struct t_io_uring_zcrx_ifq_reg {\n__u32\tif_idx;\n__u32\tif_rxq;\n__u32\trq_entries;\n__u32\tflags;\n\n__u64\tarea_ptr; /* pointer to struct io_uring_zcrx_area_reg */\n__u64\tregion_ptr; /* struct io_uring_region_desc * */\n\nstruct io_uring_zcrx_offsets offsets;",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/register.c",
+    "line": 3,
+    "snippet": "* Code related to the io_uring_register() syscall\n#include <linux/compat.h>\n#include <linux/io_uring.h>\n#include <linux/io_uring_types.h>\n\n#include \"filetable.h\"\n#include \"io_uring.h\"\n#include \"opdef.h\"",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "fs/fuse/dev_uring.c",
+    "line": 12,
+    "snippet": "#include <linux/fs.h>\n#include <linux/io_uring/cmd.h>\nstatic const struct fuse_iqueue_ops fuse_io_uring_ops;\n\nstatic void uring_cmd_set_ring_ent(struct io_uring_cmd *cmd,\nstruct fuse_ring_ent *ring_ent)\n{\nstruct fuse_uring_pdu *pdu =\nio_uring_cmd_to_pdu(cmd, struct fuse_uring_pdu);",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "tools/include/uapi/linux/io_uring.h",
+    "line": 3,
+    "snippet": "* Header file for the io_uring interface.\n*\n* Copyright (C) 2019 Jens Axboe\n* Copyright (C) 2019 Christoph Hellwig\n*/\n#ifndef LINUX_IO_URING_H\n#define LINUX_IO_URING_H\n* if linux/time_types.h is available or not, it can\n* define UAPI_LINUX_IO_URING_H_SKIP_LINUX_TIME_TYPES_H",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/zcrx.c",
+    "line": 6,
+    "snippet": "#include <linux/nospec.h>\n#include <linux/io_uring.h>\n#include <linux/netdevice.h>\n#include <uapi/linux/io_uring.h>\n\n#include \"io_uring.h\"\n#include \"kbuf.h\"\nstruct io_uring_zcrx_area_reg *area_reg)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/cmd_net.c",
+    "line": 2,
+    "snippet": "#include <asm/ioctls.h>\n#include <linux/io_uring/net.h>\n#include <linux/errqueue.h>\n#include <net/sock.h>\n\n#include \"uring_cmd.h\"\n#include \"io_uring.h\"\n\nstatic int io_uring_cmd_get_sock_ioctl(struct socket *sock, int op)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "include/linux/io_uring_types.h",
+    "line": 1,
+    "snippet": "#ifndef IO_URING_TYPES_H\n#define IO_URING_TYPES_H\n#include <linux/llist.h>\n#include <uapi/linux/io_uring.h>\n\nstruct iou_loop_params;\nstruct io_uring_bpf_ops;\nenum io_uring_cmd_flags {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/net.c",
+    "line": 8,
+    "snippet": "#include <net/compat.h>\n#include <linux/io_uring.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"filetable.h\"\n#include \"io_uring.h\"\n#include \"kbuf.h\"\nint io_shutdown_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "torvalds/linux",
+    "branch": "master",
+    "path": "io_uring/mock_file.c",
+    "line": 12,
+    "snippet": "#include <linux/io_uring/cmd.h>\n#include <linux/io_uring_types.h>\n#include <uapi/linux/io_uring/mock_file.h>\nstatic int io_cmd_copy_regbuf(struct io_uring_cmd *cmd, unsigned int issue_flags)\n{\nconst struct io_uring_sqe *sqe = cmd->sqe;\nconst struct iovec __user *iovec;\nret = io_uring_cmd_import_fixed_vec(cmd, iovec, iovec_len, dir, &iter,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 21263,
+  "time": 1706,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "vendor/",
+      "count": 5635
+     },
+     {
+      "val": "src/",
+      "count": 2160
+     },
+     {
+      "val": "include/",
+      "count": 553
+     },
+     {
+      "val": "third_party/",
+      "count": 464
+     },
+     {
+      "val": "test/",
+      "count": 463
+     },
+     {
+      "val": "docs/",
+      "count": 392
+     },
+     {
+      "val": "linux/",
+      "count": 274
+     },
+     {
+      "val": "lib/",
+      "count": 265
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "axboe/liburing",
+      "count": 476,
+      "owner_id": "2619634"
+     },
+     {
+      "val": "thustorage/PipeANN",
+      "count": 392,
+      "owner_id": "8079339"
+     },
+     {
+      "val": "ocaml-multicore/ocaml-uring",
+      "count": 356,
+      "owner_id": "49026566"
+     },
+     {
+      "val": "jiayy/android_vuln_poc-exp",
+      "count": 255,
+      "owner_id": "5133865"
+     },
+     {
+      "val": "torvalds/linux",
+      "count": 239,
+      "owner_id": "1024025"
+     },
+     {
+      "val": "google/syzkaller",
+      "count": 150,
+      "owner_id": "1342004"
+     },
+     {
+      "val": "wheybags/wcp",
+      "count": 133,
+      "owner_id": "1093274"
+     },
+     {
+      "val": "Frogging-Family/linux-tkg",
+      "count": 117,
+      "owner_id": "62702152"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "Go",
+      "count": 6570
+     },
+     {
+      "val": "C",
+      "count": 2690
+     },
+     {
+      "val": "C++",
+      "count": 2470
+     },
+     {
+      "val": "Markdown",
+      "count": 1468
+     },
+     {
+      "val": "Rust",
+      "count": 1462
+     },
+     {
+      "val": "Roff Manpage",
+      "count": 528
+     },
+     {
+      "val": "Java",
+      "count": 318
+     },
+     {
+      "val": "Python",
+      "count": 317
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "grep": 229,
+   "sg": 332
+  },
+  "fanout_queries": [
+   "io_uring",
+   "io_uring_init",
+   "io_uring_submit",
+   "io_uring_complete",
+   "io_uring_queue",
+   "io_uring_queue_single",
+   "io_uring_queue_single_complete",
+   "linux_io_uring"
+  ],
+  "summary": "TL;DR: The search results reveal that the io_uring interface is designed to be highly efficient, using techniques such as READ/WRITE_ONCE() for store and load operations, and minimizing overhead through the use of a queue-based architecture. This pattern suggests that io_uring aims to optimize performance by reducing unnecessary memory accesses and improving concurrency."
+ }
+}

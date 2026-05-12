@@ -1,0 +1,52 @@
+services:
+  mariadb:
+    image: mariadb:11
+    environment:
+      MARIADB_ROOT_PASSWORD: synapse
+      MARIADB_DATABASE: wordpress
+    ports:
+      - "13307:3306"
+    volumes:
+      - mariadb-phase4-data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-psynapse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  wordpress-mariadb:
+    image: wordpress:6.7-php8.3-apache
+    ports:
+      - "8085:80"
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: synapse
+      WORDPRESS_DB_NAME: wordpress
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    volumes:
+      - wordpress-mariadb-phase4:/var/www/html
+    restart: unless-stopped
+
+  wordpress-synapse:
+    image: wordpress:6.7-php8.3-apache
+    ports:
+      - "8086:80"
+    environment:
+      WORDPRESS_DB_HOST: host.docker.internal:13306
+      WORDPRESS_DB_USER: root
+      WORDPRESS_DB_PASSWORD: synapse
+      WORDPRESS_DB_NAME: wordpress
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - wordpress-synapse-phase4:/var/www/html
+    restart: unless-stopped
+
+volumes:
+  mariadb-phase4-data:
+  wordpress-mariadb-phase4:
+  wordpress-synapse-phase4:

@@ -1,0 +1,331 @@
+{
+ "adaptive radix tree": {
+  "hits": [
+   {
+    "source": "grep",
+    "repo": "postgres/postgres",
+    "branch": "master",
+    "path": "src/include/lib/radixtree.h",
+    "line": 3,
+    "snippet": "* radixtree.h\n*\t\tTemplate for adaptive radix tree.\n*\n* A template to generate an \"adaptive radix tree\", specialized for value\n* types and for local/shared memory.\n*\n* The concept originates from the paper \"The Adaptive Radix Tree: ARTful\n* Indexing for Main-Memory Databases\" by Viktor Leis, Alfons Kemper,\n* The key idea of the adaptive radix tree is to choose different",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "plar/go-adaptive-radix-tree",
+    "branch": "master",
+    "path": "api.go",
+    "line": 43,
+    "snippet": "// Key represents the type used for keys in the Adaptive Radix Tree.\n// It can consist of any byte sequence, including Unicode characters and null bytes.\n// Node represents a node within the Adaptive Radix Tree.\ntype Node interface {\n// Tree is an Adaptive Radix Tree interface.\ntype Tree interface {\n// New creates a new adaptive radix tree.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/RuVector",
+    "branch": "main",
+    "path": "crates/ruvector-graph/src/optimization/adaptive_radix.rs",
+    "line": 1,
+    "snippet": "//! Adaptive Radix Tree (ART) for property indexes\n/// Adaptive Radix Tree for property indexing\npub struct AdaptiveRadixTree<V: Clone> {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ByteStorage/FlyDB",
+    "branch": "master",
+    "path": "db/index/art_with_bloom.go",
+    "line": 10,
+    "snippet": "// AdaptiveRadixTreeWithBloom Adaptive Radix Tree Index\n// The following link is the ART library written by go.\n// NewARTWithBloom Initializes the adaptive radix tree index\nfunc NewARTWithBloom() *AdaptiveRadixTreeWithBloom {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "lanpishu6300/crypto-exchange",
+    "branch": "main",
+    "path": "include/core/art_tree.h",
+    "line": 13,
+    "snippet": "// Adaptive Radix Tree (ART) for efficient price-based order book\n// Optimized for int64_t keys (Price)\n// Adaptive Radix Tree for Price keys\nclass ARTTree {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "ruvnet/RuVector",
+    "branch": "main",
+    "path": "crates/ruvector-graph/src/optimization/mod.rs",
+    "line": 10,
+    "snippet": "//! - Bloom filters for negative lookups\n//! - Adaptive radix trees for property indexes",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "RoaringBitmap/CRoaring",
+    "branch": "master",
+    "path": "include/roaring/art/art.h",
+    "line": 9,
+    "snippet": "* This file contains an implementation of an Adaptive Radix Tree as described\n* in https://db.in.tum.de/~leis/papers/ART.pdf.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "neondatabase/neon",
+    "branch": "main",
+    "path": "pageserver/src/tenant/disk_btree.rs",
+    "line": 13,
+    "snippet": "//! TODO:\n//! - maybe something like an Adaptive Radix Tree would be more efficient?\n//! - the values stored by image and delta layers are offsets into the file,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "exchange-core/collections",
+    "branch": "master",
+    "path": "src/main/java/exchange/core2/collections/art/LongAdaptiveRadixTreeMap.java",
+    "line": 27,
+    "snippet": "* Adaptive Radix Tree (ART) Java implementation\n* <p>\n* based on original paper:\n* <p>\n* The Adaptive Radix Tree:\n* ARTful Indexing for Main-Memory Databases",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "get-convex/convex-backend",
+    "branch": "main",
+    "path": "crates/search/src/memory_index/art.rs",
+    "line": 541,
+    "snippet": "/// Copy-on-write Adaptive Radix Tree implementation: https://db.in.tum.de/~leis/papers/ART.pdf\n#[derive(Debug, Clone)]",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "pgagroal/pgagroal",
+    "branch": "master",
+    "path": "src/include/art.h",
+    "line": 69,
+    "snippet": "* Initializes an adaptive radix tree\n* @param tree [out] The tree",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "cmu-db/noisepage",
+    "branch": "master",
+    "path": "src/include/storage/index/compact_ints_key.h",
+    "line": 31,
+    "snippet": "* For details of how and why integers must be stored in a big-endian and\n* sign-magnitude format, please refer to adaptive radix tree's key format",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "cmu-db/peloton",
+    "branch": "master",
+    "path": "src/include/index/art_index.h",
+    "line": 23,
+    "snippet": "// An Adaptive Radix Tree (ART) based index.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "plar/go-adaptive-radix-tree",
+    "branch": "master",
+    "path": "doc.go",
+    "line": 4,
+    "snippet": "// The design of ART is based on \"The Adaptive Radix Tree: ARTful Indexing for Main-Memory Databases\" [1].",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 2
+   },
+   {
+    "source": "grep",
+    "repo": "plar/go-adaptive-radix-tree",
+    "branch": "master",
+    "path": "examples/gtree/gtree.go",
+    "line": 15,
+    "snippet": "// NewGTree creates a new generic adaptive radix tree.\nfunc NewGTree[K comparable, V any]() *GTree[K, V] {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "DavidLiedle/DriftDB",
+    "branch": "main",
+    "path": "crates/driftdb-core/src/index_strategies.rs",
+    "line": 8,
+    "snippet": "//! - Bloom filters for membership testing\n//! - Adaptive Radix Trees for string keys\nBloom,\n/// Adaptive Radix Tree for strings\nART,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "grep",
+    "repo": "tikv/client-go",
+    "branch": "master",
+    "path": "internal/unionstore/art/art.go",
+    "line": 31,
+    "snippet": "// ART is rollbackable Adaptive Radix Tree optimized for TiDB's transaction states buffer use scenario.",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 45920,
+  "time": 1103,
+  "facets": {
+   "path": {
+    "buckets": [
+     {
+      "val": "src/",
+      "count": 28
+     },
+     {
+      "val": "rockspec/",
+      "count": 19
+     },
+     {
+      "val": "doc/manual/",
+      "count": 8
+     },
+     {
+      "val": "include/",
+      "count": 7
+     },
+     {
+      "val": "crates/",
+      "count": 6
+     },
+     {
+      "val": "docs/",
+      "count": 6
+     },
+     {
+      "val": "internal/",
+      "count": 5
+     },
+     {
+      "val": "third_party/",
+      "count": 5
+     }
+    ]
+   },
+   "repo": {
+    "buckets": [
+     {
+      "val": "api7/lua-resty-radixtree",
+      "count": 19,
+      "owner_id": "61078451"
+     },
+     {
+      "val": "lanpishu6300/crypto-exchange",
+      "count": 11,
+      "owner_id": "13306065"
+     },
+     {
+      "val": "pgmoneta/pgmoneta",
+      "count": 6,
+      "owner_id": "84387550"
+     },
+     {
+      "val": "rafaelkallis/adaptive-radix-tree",
+      "count": 6,
+      "owner_id": "9661903"
+     },
+     {
+      "val": "UncP/aili",
+      "count": 5,
+      "owner_id": "16263931"
+     },
+     {
+      "val": "ruvnet/RuVector",
+      "count": 5,
+      "owner_id": "2934394"
+     },
+     {
+      "val": "plar/go-adaptive-radix-tree",
+      "count": 5,
+      "owner_id": "72739"
+     },
+     {
+      "val": "cilium/cilium",
+      "count": 4,
+      "owner_id": "21054566"
+     }
+    ]
+   },
+   "lang": {
+    "buckets": [
+     {
+      "val": "Markdown",
+      "count": 103
+     },
+     {
+      "val": "C++",
+      "count": 21
+     },
+     {
+      "val": "Go",
+      "count": 20
+     },
+     {
+      "val": "C",
+      "count": 16
+     },
+     {
+      "val": "Rust",
+      "count": 14
+     },
+     {
+      "val": "Java",
+      "count": 3
+     },
+     {
+      "val": "TOML",
+      "count": 3
+     },
+     {
+      "val": "JSON",
+      "count": 2
+     }
+    ]
+   }
+  },
+  "pages": 1,
+  "by_source": {
+   "gh": 180,
+   "grep": 107,
+   "sg": 78
+  },
+  "fanout_queries": [
+   "adaptive radix tree",
+   "radix tree implementation",
+   "adaptive radix tree algorithm",
+   "prefix tree implementation",
+   "trie data structure",
+   "radix trie search",
+   "auto adaptive prefix tree",
+   "dynamic radix tree",
+   "fast radix tree search"
+  ],
+  "summary": "TL;DR: The search results reveal that an \"adaptive radix tree\" is a data structure used in various databases and indexing systems, characterized by its ability to adaptively choose different branching factors for efficient storage and retrieval of data. This pattern is observed across multiple programming languages, including PostgreSQL, Go, Rust, and C++."
+ }
+}

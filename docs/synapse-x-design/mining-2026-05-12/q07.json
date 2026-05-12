@@ -1,0 +1,243 @@
+{
+ "online learning streaming": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/visual_designer.rs",
+    "line": 120,
+    "snippet": "    OnlineLearning,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "line": 212,
+    "snippet": "pub struct OnlineLearningModel {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "line": 229,
+    "snippet": "impl OnlineLearningModel {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "line": 658,
+    "snippet": "    models: Arc<DashMap<String, OnlineLearningModel>>,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "line": 676,
+    "snippet": "    pub fn register_model(&self, name: String, model: OnlineLearningModel) {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "line": 697,
+    "snippet": "    ) -> Option<dashmap::mapref::one::Ref<'_, String, OnlineLearningModel>> {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "line": 746,
+    "snippet": "        let model = OnlineLearningModel::new(config, 3);",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 27,
+    "snippet": "pub struct OnlineLearningConfig {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 48,
+    "snippet": "impl Default for OnlineLearningConfig {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 227,
+    "snippet": "pub struct OnlineLearningStats {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 247,
+    "snippet": "pub struct OnlineLearningModel {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 249,
+    "snippet": "    config: OnlineLearningConfig,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 269,
+    "snippet": "    stats: Arc<RwLock<OnlineLearningStats>>,",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 284,
+    "snippet": "impl OnlineLearningModel {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 286,
+    "snippet": "    pub fn new(model_type: ModelType, feature_dim: usize, config: OnlineLearningConfig) -> Self {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 298,
+    "snippet": "            stats: Arc::new(RwLock::new(OnlineLearningStats::default())),",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 633,
+    "snippet": "    pub async fn get_stats(&self) -> OnlineLearningStats {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 981,
+    "snippet": "        let config = OnlineLearningConfig {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 987,
+    "snippet": "        let model = OnlineLearningModel::new(ModelType::LinearRegression, 2, config);",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   },
+   {
+    "source": "sg",
+    "repo": "cool-japan/oxirs",
+    "branch": "main",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "line": 1008,
+    "snippet": "        let config = OnlineLearningConfig {",
+    "rerank_score": 100,
+    "_quality": 0.0,
+    "cluster_size": 1
+   }
+  ],
+  "total": 123,
+  "time": 0,
+  "facets": {},
+  "pages": 1,
+  "by_source": {
+   "grep": 0,
+   "sg": 123
+  },
+  "fanout_queries": [
+   "online learning streaming",
+   "online+learning+streaming",
+   "onlineLearningStreaming",
+   "online-learning-streaming",
+   "onlineschooling",
+   "onlinelearning"
+  ],
+  "summary": "TL;DR: These search results reveal a pattern of online learning models being integrated into a streaming platform, with a focus on machine learning and data storage using Rust programming language. The code snippets suggest that online learning models are registered and managed within a centralized system, likely for real-time processing and prediction."
+ }
+}

@@ -9,7 +9,12 @@ members = [
     "crates/synapse-learn",
     # scale-100M scaffolding (PR-0, ann core)
     "crates/synapse-ann",
-    # synapse-mysql / synapse-pg / synapse-edge → experimental/ (stubs, 0 tests)
+    # SynapsQL — unified MySQL/PG-wire + Vector + FTS umbrella crate
+    "crates/synapsql",
+    # MySQL wire-protocol proxy → Synapse Store
+    "crates/synapse-mysql",
+    # Postgres wire-protocol proxy → Synapse Store
+    "crates/synapse-pg",
     # synapse-embed-gpu = standalone workspace (fastembed feature conflict)
     "crates/synapse-libsql",
     "crates/synapse-raft",
@@ -89,11 +94,12 @@ production-members = [
     "synapse-cluster", "synapse-obs", "synapse-media", "synapse-fusion",
     "synapse-migrate", "synapse-spann", "synapse-js", "synapse-market",
     "synapse-wal", "synapse-seg", "synapse-ultra",
+    "synapse-mysql", "synapse-pg", "synapsql",
 ]
 # Experimental — moved to experimental/ (stubs, 0 tests, or standalone workspace)
 # Build opt-in: `cd experimental && cargo build -p <name>`
 experimental-members = [
-    "synapse-mysql", "synapse-pg", "synapse-edge", "synapse-rank", "synapse-embed-gpu",
+    "synapse-edge", "synapse-rank", "synapse-embed-gpu",
 ]
 
 [workspace.package]

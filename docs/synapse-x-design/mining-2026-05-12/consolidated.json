@@ -1,0 +1,2946 @@
+{
+ "per_query": {
+  "q01": [
+   {
+    "repo": "NodeDB-Lab/nodedb",
+    "path": "nodedb/src/engine/timeseries/columnar_segment/mmap.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "                \"posix_fadvise(DONTNEED) failed on columnar mmap drop\",",
+    "lang": ""
+   }
+  ],
+  "q02": [
+   {
+    "repo": "ARMmbed/mbed-os",
+    "path": "targets/TARGET_Cypress/TARGET_PSOC6/mtb-pdl-cat1/drivers/include/cy_scb_uart.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* \\defgroup group_scb_uart_data_structures Data Structures\n* \\defgroup group_scb_uart_enums Enumerated Types\n* \\addtogroup group_scb_uart_data_structures\n} cy_stc_scb_uart_context_t;\n/** \\} group_scb_",
+    "lang": ""
+   },
+   {
+    "repo": "aptos-labs/aptos-core",
+    "path": "aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// Run with `cargo test test_smart_data_structures_gas -- --nocapture` to see output.\n#[test]\nfn test_smart_data_structures_gas() {\nlet mut h = MoveHarness::new();\n// This test uses a lot of executio",
+    "lang": ""
+   },
+   {
+    "repo": "666ghj/BettaFish",
+    "path": "ReportEngine/renderers/html_renderer.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "def _coerce_chart_data_structure(self, data: Dict[str, Any]) -> Dict[str, Any]:\ninline_type = data_copy.pop(\"type\", None)\nnormalized_data = self._coerce_chart_data_structure(data_copy)\nif isinstance(i",
+    "lang": ""
+   },
+   {
+    "repo": "aptos-labs/aptos-core",
+    "path": "aptos-move/e2e-move-tests/src/tests/mod.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "mod simple_defi;\nmod smart_data_structures;\nmod stake;",
+    "lang": ""
+   },
+   {
+    "repo": "DefectDojo/django-DefectDojo",
+    "path": "unittests/test_view_engineer_metrics.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "def test_view_engineer_chart_data_structure(self):\n\"\"\"Test chart data generation has correct structure\"\"\"",
+    "lang": ""
+   },
+   {
+    "repo": "liyin2015/python-coding-interview",
+    "path": "Easy-Book/chapters/chapter_2_introduction_algo.tex",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "% \\begin{itemize}\n%     \\item Data Structures: Algorithms are like the brain of an animal, and the data structures are like the skeletons. Data structures decide where and how the data is saved and ac",
+    "lang": ""
+   },
+   {
+    "repo": "eldarkg/emdr1986x-std-per-lib",
+    "path": "CMSIS/CM3/DeviceSupport/MDR32F9Qx/inc/MDR32Fx.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/** @defgroup MDR32Fx_Periph_UART_Data_Structures Data Structures\n/** @} */ /* End of group MDR32Fx_Periph_UART_Data_Structures */",
+    "lang": ""
+   },
+   {
+    "repo": "LisonEvf/opentdx",
+    "path": "tests/test_mac_quotation_client.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "def test_get_symbol_tick_chart_chart_data_structure(self, mqc):\n\"\"\"\u6d4b\u8bd5\u5206\u65f6\u56fe\u6570\u636e\u7ed3\u6784\u7684\u5b8c\u6574\u6027\"\"\"",
+    "lang": ""
+   },
+   {
+    "repo": "pwncollege/dojo",
+    "path": "test/test_background_stats.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "def test_chart_data_structure(stats_test_dojo, stats_test_user):\nuser_name, user_session = stats_test_user",
+    "lang": ""
+   },
+   {
+    "repo": "plivo/plivo-python",
+    "path": "tests/resources/test_phone_number_compliance.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "def test_create_multipart_data_structure(self):\nexpected_response = {",
+    "lang": ""
+   },
+   {
+    "repo": "yingkitw/ppt-rs",
+    "path": "tests/pptx_advanced_elements_test.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#[test]\nfn test_chart_data_structure() {\n// Chart data structure for future implementation",
+    "lang": ""
+   },
+   {
+    "repo": "verichains/revela",
+    "path": "aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "fn test_smart_data_structures_gas() {",
+    "lang": ""
+   },
+   {
+    "repo": "verichains/revela",
+    "path": "aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    assert_success!(h.publish_package(&acc, &common::test_dir_path(\"smart_data_structures.data\")));",
+    "lang": ""
+   },
+   {
+    "repo": "crash-utility/crash",
+    "path": "filesys.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "static void do_radix_tree_search(ulong node, ulong slot, const char *path,\nulong index, void *private)\n*    flag: RADIX_TREE_COUNT - Return the number of entries in the tree.\n*          RADIX_TREE_SEA",
+    "lang": ""
+   }
+  ],
+  "q03": [
+   {
+    "repo": "sophed/systems",
+    "path": "src/pages/index.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "\nuse crate::PostData;\n\npub fn index(latest_post: Option<&PostData>) -> Markup {\n    let post_info = match latest_post {\n        None => html!(\n            p { \"No posts available :(\" }",
+    "lang": null
+   },
+   {
+    "repo": "Skeletonxf/easy-ml",
+    "path": "src/differentiation.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/**\n * WengertLists are indexed with [`usize`].\n */\npub type Index = usize;\n\n/**\n * A list of operations performed in a forward pass of a dynamic computational graph,",
+    "lang": null
+   },
+   {
+    "repo": "maciejkula/wyrm",
+    "path": "src/lib.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "\n    /// Row-wise indexing of this parameter node. Primiarily used\n    /// to implement embedding layers.\n    pub fn index(&self, index: &Variable<IndexInputNode>) -> Variable<IndexNode<ParameterNode>",
+    "lang": null
+   },
+   {
+    "repo": "hsfzxjy/rten",
+    "path": "src/ops/mod.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "}\n\nimpl<'a> Layout for Input<'a> {\n    type Index<'b> = <DynLayout as Layout>::Index<'b>;\n    type Indices = <DynLayout as Layout>::Indices;\n\n    fn ndim(&self) -> usize {",
+    "lang": null
+   },
+   {
+    "repo": "sirius-cc-wu/rtforth",
+    "path": "src/core.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "impl Index<u8> for Stack<isize> {\n    type Output = isize;\n    #[inline(always)]\n    fn index(&self, index: u8) -> &isize {\n        &self.inner[index as usize]\n    }\n}",
+    "lang": null
+   },
+   {
+    "repo": "openkoi-ai/openkoi",
+    "path": "src/tui/app.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        }\n    }\n\n    fn index(&self) -> usize {\n        Tab::ALL.iter().position(|t| t == self).unwrap_or(0)\n    }\n",
+    "lang": null
+   },
+   {
+    "repo": "Dicklesworthstone/xf",
+    "path": "src/main.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    }\n\n    #[cfg(test)]\n    fn index(&self) -> Option<&VectorIndex> {\n        self.index.get()\n    }\n",
+    "lang": null
+   },
+   {
+    "repo": "teolex2020/AuraSDK",
+    "path": "src/memory.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        self.storage.clone()\n    }\n\n    pub fn index(&self) -> Arc<InvertedIndex> {\n        self.index.clone()\n    }\n",
+    "lang": null
+   },
+   {
+    "repo": "rust-control/qtable",
+    "path": "src/table.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "impl std::ops::Index<(State, Action)> for QTable {\n    type Output = QValue;\n\n    fn index(&self, (state, action): (State, Action)) -> &Self::Output {\n        &self.qvalues[*state][*action]\n    }\n}",
+    "lang": null
+   },
+   {
+    "repo": "Ai00-X/rwkv-agent-kit",
+    "path": "src/config.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    }\n\n    /// \u8bbe\u7f6e\u5b66\u4e60\u914d\u7f6e\n    pub fn learning(mut self, learning: LearningConfig) -> Self {\n        self.config.learning = learning;\n        self\n    }",
+    "lang": null
+   },
+   {
+    "repo": "playXE/rsgc",
+    "path": "src/heap/region.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        self.free_list.peek_free()\n    }\n\n    pub fn index(&self) -> usize {\n        self.index\n    }\n",
+    "lang": null
+   },
+   {
+    "repo": "pierridotite/NOMA",
+    "path": "src/graph.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        NodeId(id)\n    }\n\n    pub fn index(&self) -> usize {\n        self.0\n    }\n}",
+    "lang": null
+   },
+   {
+    "repo": "dasgefolge/quantum-werewolf",
+    "path": "src/game/types.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "}\n\nimpl NightActionResult<usize> {\n    pub(crate) fn index<P>(self, ids: &[P]) -> NightActionResult<&P> {\n        use NightActionResult::*;\n\n        match self {",
+    "lang": null
+   },
+   {
+    "repo": "proycon/vocajeux",
+    "path": "src/bin/vjc.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    names: Vec<String>\n}\n\nfn index(url: &str) -> Result<Index, reqwest::Error> {\n    let json: Index  = reqwest::get(url)?.json()?;\n    Ok(json)\n}",
+    "lang": null
+   },
+   {
+    "repo": "autumnai/leaf",
+    "path": "src/layer.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// The [implementation][1] of the Layer.\n    /// [1]: ../layers/index.html\n    ///",
+    "lang": null
+   },
+   {
+    "repo": "alvarogaiotti/Squeezer",
+    "path": "src/deal.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    type Output = Hand;\n\n    #[inline]\n    fn index(&self, index: Suit) -> &Self::Output {\n        &self.hands[index as usize]\n    }\n}",
+    "lang": null
+   },
+   {
+    "repo": "Cstannahill/docs-mcp-server",
+    "path": "src/learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        Ok(profile.preferred_difficulty.clone()) // Simplified implementation\n    }\n    \n    async fn determine_step_type(&self, page: &DocumentPage, index: usize) -> Result<TutorialStepType> {\n      ",
+    "lang": null
+   },
+   {
+    "repo": "0xsupremedev/auradb",
+    "path": "src/index.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "//! Learned index module for machine learning-based indexing\n//! \n//! This module will implement piecewise linear regression models,",
+    "lang": null
+   }
+  ],
+  "q04": [
+   {
+    "repo": "bytecodealliance/cranelift-jit-demo",
+    "path": "src/bin/toy.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// Executes the given code using the cranelift JIT compiler.",
+    "lang": ""
+   },
+   {
+    "repo": "sdiehl/compiler-crates",
+    "path": "cranelift/src/main.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "fn main() {\nprintln!(\"Cranelift JIT Compiler Examples\");\nprintln!(\"================================\\n\");",
+    "lang": ""
+   },
+   {
+    "repo": "VirusTotal/yara-x",
+    "path": "capi/Cargo.toml",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "# Enables the use of wasmtime's Pulley bytecode interpreter instead of the default\n# Cranelift JIT compiler. See the documentation in the `yara-x` core library for details.\npulley = [\"yara-x/pulley\"]",
+    "lang": ""
+   },
+   {
+    "repo": "VirusTotal/yara-x",
+    "path": "lib/Cargo.toml",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "# Enables the use of wasmtime's Pulley bytecode interpreter instead of the\n# default Cranelift JIT compiler.",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/RuVector",
+    "path": "docs/research/ruvm/sota-analysis.md",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "**Practical considerations:**\n- Wasmtime's cranelift JIT compiler works in no_std mode but requires virtual memory for code generation\n- The `signals-and-traps` feature can be disabled for platforms w",
+    "lang": ""
+   },
+   {
+    "repo": "bytecodealliance/wasmtime-dotnet",
+    "path": "docs/index.md",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "[Wasmtime](https://github.com/bytecodealliance/wasmtime) is a standalone runtime for [WebAssembly](https://webassembly.org/), using the Cranelift JIT compiler.",
+    "lang": ""
+   },
+   {
+    "repo": "6over3/hako",
+    "path": "hosts/dotnet/Hako.Backend.Wasmtime/README.md",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "Wasmtime-based backend for Hako using the Cranelift JIT compiler for high performance.",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxieml",
+    "path": "README.md",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "| `wasm`         | wasm-bindgen WASM bindings for browser/Node.js |\n| `jit`          | Cranelift JIT compiler for hot OxiOp sequences |",
+    "lang": ""
+   },
+   {
+    "repo": "NLnetLabs/roto",
+    "path": "docs/source/overview/why_roto.md",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "Roto provides high performance through its use of the Cranelift JIT compiler, hot reloading (so you don't need to restart your application), and is easy to learn and debug.",
+    "lang": ""
+   },
+   {
+    "repo": "siravan/symjit",
+    "path": "rust/memory.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "which is the jit memory manager of wasmtime cranelift jit compiler.",
+    "lang": ""
+   },
+   {
+    "repo": "paiml/ruchy",
+    "path": "src/jit/compiler.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "//! Cranelift JIT Compiler Implementation",
+    "lang": ""
+   },
+   {
+    "repo": "mimium-org/mimium-rs",
+    "path": "crates/lib/mimium-lang/src/runtime/wasm.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        // Enable Cranelift JIT compiler with optimization level Speed",
+    "lang": ""
+   }
+  ],
+  "q05": [
+   {
+    "repo": "dahomey-technologies/rustis",
+    "path": "src/commands/cuckoo_commands.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// [Cuckoo Filter Commands](https://redis.io/commands/?group=cf)",
+    "lang": ""
+   },
+   {
+    "repo": "dahomey-technologies/rustis",
+    "path": "src/commands/cuckoo_commands.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// Adds an item to the cuckoo filter, creating the filter if it does not exist.",
+    "lang": ""
+   },
+   {
+    "repo": "dahomey-technologies/rustis",
+    "path": "src/commands/cuckoo_commands.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// Cuckoo filters can contain the same item multiple times, and consider each insert as separate.",
+    "lang": ""
+   },
+   {
+    "repo": "dahomey-technologies/rustis",
+    "path": "src/commands/cuckoo_commands.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// Check if an `item` exists in a Cuckoo Filter `key`",
+    "lang": ""
+   },
+   {
+    "repo": "dahomey-technologies/rustis",
+    "path": "src/commands/cuckoo_commands.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// Create a Cuckoo Filter as `key` with a single sub-filter for the initial amount of `capacity` for items.",
+    "lang": ""
+   },
+   {
+    "repo": "dahomey-technologies/rustis",
+    "path": "src/commands/cuckoo_commands.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// See [`cf_reserve`](CuckooCommands::cf_reserve) for more information on cuckoo filter capacities.",
+    "lang": ""
+   },
+   {
+    "repo": "dahomey-technologies/rustis",
+    "path": "src/commands/cuckoo_commands.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// A group of Redis commands related to [`Cuckoo filters`](https://redis.io/docs/stack/bloom/)",
+    "lang": ""
+   },
+   {
+    "repo": "smallnest/concurrency-programming-via-rust",
+    "path": "collections/src/lib.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    // Create cuckoo filter with default max capacity of 1000000 items",
+    "lang": ""
+   },
+   {
+    "repo": "rpcpool/yellowstone-grpc",
+    "path": "yellowstone-grpc-proto/src/cuckoo/set.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// what the system can allocate, or if the underlying cuckoo filter cannot",
+    "lang": ""
+   }
+  ],
+  "q06": [
+   {
+    "repo": "hicder/muopdb",
+    "path": "rs/config/src/collection.rs",
+    "stars": 0,
+    "rerank": 10000,
+    "snippet": "            product_quantization_num_training_rows: 10000,",
+    "lang": ""
+   },
+   {
+    "repo": "hicder/muopdb",
+    "path": "rs/config/src/collection.rs",
+    "stars": 0,
+    "rerank": 1000,
+    "snippet": "            product_quantization_max_iteration: 1000,",
+    "lang": ""
+   },
+   {
+    "repo": "hicder/muopdb",
+    "path": "rs/config/src/collection.rs",
+    "stars": 0,
+    "rerank": 1000,
+    "snippet": "            product_quantization_batch_size: 1000,",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/ruflo",
+    "path": "v3/@claude-flow/plugins/src/integrations/ruvector/quantization.ts",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* - Binary Quantization: 32x memory reduction\n* - Product Quantization (PQ): High compression with codebooks\n* - Optimized Product Quantization (OPQ): PQ with learned rotation\n* Options for product qu",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/agentic-flow",
+    "path": "packages/agentdb/src/optimizations/Quantization.ts",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* - Scalar Quantization (4-bit and 8-bit)\n* - Product Quantization with trainable codebooks\n* - Quantized Vector Store with asymmetric distance computation\ntype: QuantizationType;\n/** Number of subvec",
+    "lang": ""
+   },
+   {
+    "repo": "rapidsai/cuvs",
+    "path": "c/include/cuvs/preprocessing/quantize/pq.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Whether to use subspaces for product quantization (PQ).\n* When true, one PQ codebook is used for each subspace. Otherwise, a single\n* PQ codebook is used.\n*/\nbool use_subspaces;\n/**\n* Whether to use",
+    "lang": ""
+   },
+   {
+    "repo": "weaviate/weaviate",
+    "path": "entities/vectorindex/compression/pq_data.go",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// Encoder represents the type of encoder used for product quantization.\ntype Encoder byte\n// PQSegmentEncoder is the interface for product quantization segment encoders.\n// Implementations include Ti",
+    "lang": ""
+   },
+   {
+    "repo": "StarRocks/starrocks",
+    "path": "fe/fe-core/src/main/java/com/starrocks/common/VectorIndexParams.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// Inverted File with Product Quantization\nIVFPQ\n// NBITS is a key parameter that refers to the number of bits used to quantize each sub-vector. Within the context of Product Quantization (PQ),\n// The",
+    "lang": ""
+   },
+   {
+    "repo": "apache/pinot",
+    "path": "pinot-segment-spi/src/main/java/org/apache/pinot/segment/spi/index/creator/VectorQuantizerType.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "*   <li>{@link #SQ4} - Scalar quantization to 4-bit unsigned integers per dimension.</li>\n*   <li>{@link #PQ} - Product quantization, splitting vectors into sub-vectors and encoding\n*       each with ",
+    "lang": ""
+   },
+   {
+    "repo": "ArcadeData/arcadedb",
+    "path": "engine/src/main/java/com/arcadedb/index/vector/LSMVectorIndex.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// Product Quantization (PQ) for zero-disk-I/O approximate search\n// PQ file stores codebooks and encoded vectors; pqVectors is cached in memory\n// Create PQ file handler for Product Quantization (zer",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/ruflo",
+    "path": "v3/@claude-flow/plugins/examples/ruvector/quantization.ts",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "method: 'pq',\nname: 'Product Quantization (PQ)',\nbitsPerComponent: 8, // per subvector\n* Product Quantization (simplified).\nconsole.log('\\n   High-Dimensional Data:');\nconsole.log('     - Method: Prod",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/RuVector",
+    "path": "npm/packages/ruvector/src/core/tensor-compress.js",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "case 'pq8':\n// Product quantization to 8-bit\nreturn { data: this.toPQ8(data), level };\ncase 'pq4':\n// Product quantization to 4-bit (packed into Uint8)\nreturn { data: this.toPQ4(data), level };\n* Prod",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/RuVector",
+    "path": "crates/ruvector-core/src/advanced_features/product_quantization.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "//! Enhanced Product Quantization with Precomputed Lookup Tables\n/// Configuration for Enhanced Product Quantization\n#[derive(Debug, Clone, Serialize, Deserialize)]\n/// Enhanced Product Quantization w",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/ruflo",
+    "path": "v3/@claude-flow/memory/src/types.ts",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/** Number of subquantizers for product quantization */\nsubquantizers?: number;\n\n/** Codebook size for product quantization */\ncodebookSize?: number;",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/ruflo",
+    "path": "v3/@claude-flow/plugins/__tests__/ruvector-quantization.test.ts",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* - Binary quantization\n* - Product quantization (PQ)\n* - Recall accuracy with quantization\n* Product quantization - split vector into subvectors and quantize each\n* Encode vector using product quanti",
+    "lang": ""
+   },
+   {
+    "repo": "huawei-noah/noah-research",
+    "path": "noahnmt/dual-transfer/xlm/model/memory/memory.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "parser.add_argument(\"--mem_use_different_keys\", type=bool_flag, default=True,\nhelp=\"Use different keys for each head / product quantization\")\n# even number of key dimensions for product quantization\na",
+    "lang": ""
+   },
+   {
+    "repo": "milvus-io/milvus-sdk-csharp",
+    "path": "Milvus.Client/IndexType.cs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// <para>\n/// <see cref=\"IvfPq\" /> (Product Quantization) uniformly decomposes the original high-dimensional vector space into\n/// vector clustering and product quantization. SCANN demonstrates a 20%",
+    "lang": ""
+   },
+   {
+    "repo": "qdrant/qdrant",
+    "path": "lib/quantization/src/encoded_vectors_pq.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// Encode vector data using product quantization.\nlet centroid_data = &centroid[range.clone()];\n// by product quantization algorithm use euclid metric for any similarity function\nlet distance = subve",
+    "lang": ""
+   },
+   {
+    "repo": "ruvnet/RuVector",
+    "path": "crates/ruvector-core/src/advanced_features.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "//! This module provides advanced vector database capabilities:\n//! - Enhanced Product Quantization with precomputed lookup tables\n//! - Filtered Search with automatic strategy selection\n//! - Matryos",
+    "lang": ""
+   }
+  ],
+  "q07": [
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/visual_designer.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    OnlineLearning,",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "pub struct OnlineLearningModel {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "impl OnlineLearningModel {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    models: Arc<DashMap<String, OnlineLearningModel>>,",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    pub fn register_model(&self, name: String, model: OnlineLearningModel) {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    ) -> Option<dashmap::mapref::one::Ref<'_, String, OnlineLearningModel>> {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/ml_integration.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        let model = OnlineLearningModel::new(config, 3);",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "pub struct OnlineLearningConfig {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "impl Default for OnlineLearningConfig {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "pub struct OnlineLearningStats {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "pub struct OnlineLearningModel {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    config: OnlineLearningConfig,",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    stats: Arc<RwLock<OnlineLearningStats>>,",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "impl OnlineLearningModel {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    pub fn new(model_type: ModelType, feature_dim: usize, config: OnlineLearningConfig) -> Self {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "            stats: Arc::new(RwLock::new(OnlineLearningStats::default())),",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    pub async fn get_stats(&self) -> OnlineLearningStats {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        let config = OnlineLearningConfig {",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        let model = OnlineLearningModel::new(ModelType::LinearRegression, 2, config);",
+    "lang": ""
+   },
+   {
+    "repo": "cool-japan/oxirs",
+    "path": "stream/oxirs-stream/src/online_learning.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        let config = OnlineLearningConfig {",
+    "lang": ""
+   }
+  ],
+  "q08": [
+   {
+    "repo": "kubeflow/mcp-apache-spark-history-server",
+    "path": "skills/cli/examples/compare/report.md",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "- AQE created 23 coalesced partitions instead of 10; reshuffle stage took 462ms vs 94ms (+368ms)\n- **Root cause:** Arrow IPC columnar encoding has disproportionate per-partition overhead for small rec",
+    "lang": ""
+   },
+   {
+    "repo": "kubeflow/mcp-apache-spark-history-server",
+    "path": "skills/cli/examples/compare/findings/q20-v4.0.md",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "The regression is caused by CometColumnarExchange writing 2.3x more shuffle bytes than Spark's native Exchange for the post-aggregation reshuffle of 53,785 records. Default's Exchange (node 12) writes",
+    "lang": ""
+   }
+  ],
+  "q09": [
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/io_uring.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* io_uring also uses READ/WRITE_ONCE() for _any_ store or load that happens\n* from data shared between the kernel and application. This is done both\n#include <linux/task_work.h>\n#include <linux/io_uri",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/uring_cmd.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <linux/file.h>\n#include <linux/io_uring/cmd.h>\n#include <linux/security.h>\n#include <linux/nospec.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"io_uring.h\"\n#include \"alloc_cache.h\"",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "include/uapi/linux/io_uring.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Header file for the io_uring interface.\n*\n* Copyright (C) 2019 Jens Axboe\n* Copyright (C) 2019 Christoph Hellwig\n*/\n#ifndef LINUX_IO_URING_H\n#define LINUX_IO_URING_H\n#include <linux/types.h>\n#includ",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "tools/include/io_uring/mini_liburing.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <linux/io_uring.h>\n#include <sys/mman.h>\nunsigned int *ring_entries;\nstruct io_uring_cqe *cqes;\n};\n\nstruct io_uring_sq {\nunsigned int *khead;",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/tctx.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <linux/nospec.h>\n#include <linux/io_uring.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"io_uring.h\"\n#include \"tctx.h\"\nvoid __io_uring_free(struct task_struct *tsk)",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "include/trace/events/io_uring.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#undef TRACE_SYSTEM\n#define TRACE_SYSTEM io_uring\n\n#if !defined(_TRACE_IO_URING_H) || defined(TRACE_HEADER_MULTI_READ)\n#define _TRACE_IO_URING_H\n\n#include <linux/tracepoint.h>\n#include <uapi/linux/io_",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "drivers/block/ublk_drv.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Take full use of io_uring passthrough command for communicating with\n* ublk userspace daemon(ublksrvd) for handling basic IO request.\n#include <linux/cdev.h>\n#include <linux/io_uring/cmd.h>\n#include",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/cancel.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <linux/nospec.h>\n#include <linux/io_uring.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"filetable.h\"\n#include \"io_uring.h\"\n#include \"tctx.h\"\nstatic int io_async_cancel_one(struct io_uring_t",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "tools/testing/selftests/drivers/net/hw/iou-zcrx.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "struct t_io_uring_zcrx_ifq_reg {\n__u32\tif_idx;\n__u32\tif_rxq;\n__u32\trq_entries;\n__u32\tflags;\n\n__u64\tarea_ptr; /* pointer to struct io_uring_zcrx_area_reg */\n__u64\tregion_ptr; /* struct io_uring_region_",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/register.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Code related to the io_uring_register() syscall\n#include <linux/compat.h>\n#include <linux/io_uring.h>\n#include <linux/io_uring_types.h>\n\n#include \"filetable.h\"\n#include \"io_uring.h\"\n#include \"opdef.",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "fs/fuse/dev_uring.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <linux/fs.h>\n#include <linux/io_uring/cmd.h>\nstatic const struct fuse_iqueue_ops fuse_io_uring_ops;\n\nstatic void uring_cmd_set_ring_ent(struct io_uring_cmd *cmd,\nstruct fuse_ring_ent *ring_en",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "tools/include/uapi/linux/io_uring.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Header file for the io_uring interface.\n*\n* Copyright (C) 2019 Jens Axboe\n* Copyright (C) 2019 Christoph Hellwig\n*/\n#ifndef LINUX_IO_URING_H\n#define LINUX_IO_URING_H\n* if linux/time_types.h is avail",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/zcrx.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <linux/nospec.h>\n#include <linux/io_uring.h>\n#include <linux/netdevice.h>\n#include <uapi/linux/io_uring.h>\n\n#include \"io_uring.h\"\n#include \"kbuf.h\"\nstruct io_uring_zcrx_area_reg *area_reg)",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/cmd_net.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <asm/ioctls.h>\n#include <linux/io_uring/net.h>\n#include <linux/errqueue.h>\n#include <net/sock.h>\n\n#include \"uring_cmd.h\"\n#include \"io_uring.h\"\n\nstatic int io_uring_cmd_get_sock_ioctl(struct s",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "include/linux/io_uring_types.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#ifndef IO_URING_TYPES_H\n#define IO_URING_TYPES_H\n#include <linux/llist.h>\n#include <uapi/linux/io_uring.h>\n\nstruct iou_loop_params;\nstruct io_uring_bpf_ops;\nenum io_uring_cmd_flags {",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/net.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <net/compat.h>\n#include <linux/io_uring.h>\n\n#include <uapi/linux/io_uring.h>\n\n#include \"filetable.h\"\n#include \"io_uring.h\"\n#include \"kbuf.h\"\nint io_shutdown_prep(struct io_kiocb *req, const s",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "io_uring/mock_file.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#include <linux/io_uring/cmd.h>\n#include <linux/io_uring_types.h>\n#include <uapi/linux/io_uring/mock_file.h>\nstatic int io_cmd_copy_regbuf(struct io_uring_cmd *cmd, unsigned int issue_flags)\n{\nconst s",
+    "lang": ""
+   }
+  ],
+  "q10": [
+   {
+    "repo": "AveryClapp/Cache-Explorer",
+    "path": "frontend/src/components/MetricCards.tsx",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "const l2Baseline = baselineResult?.levels.l2?.hitRate\nconst l2Delta = diffMode && l2Baseline != null ? formatDelta(l2Rate, l2Baseline) : null\n<div className=\"metric-value\">{formatPercent(l2Rate)}</div",
+    "lang": ""
+   },
+   {
+    "repo": "YicunAI/Pnlclaw-community",
+    "path": "packages/exchange-sdk/pnlclaw_exchange/exchanges/binance/normalizer.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "KlineEvent,\nOrderBookL2Delta,\nPriceLevel,\n``u`` (last update ID) for gap detection, while the unified\n:class:`OrderBookL2Delta` has only a single ``sequence_id``.\ndelta: OrderBookL2Delta\nfirst_update_",
+    "lang": ""
+   },
+   {
+    "repo": "Telecominfraproject/oopt-gnpy",
+    "path": "gnpy/core/utils.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "def deltawl2deltaf(delta_wl, wavelength):\n\"\"\"deltawl2deltaf(delta_wl, wavelength):\ndelta_wl is BW in wavelength units",
+    "lang": ""
+   },
+   {
+    "repo": "ozankenangungor/orderbook-replay-lab",
+    "path": "codec/src/lib.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "enum JsonMarketEventOwned {\nL2Delta {\nts_ns: u64,\nenum JsonMarketEventRef<'a> {\nL2Delta {\nts_ns: u64,\nmatch self {\nJsonMarketEventOwned::L2Delta {",
+    "lang": ""
+   },
+   {
+    "repo": "YicunAI/Pnlclaw-community",
+    "path": "packages/shared-types/pnlclaw_types/__init__.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "MarketType,\nOrderBookL2Delta,\nOrderBookL2Snapshot,\n\"MarketType\",\n\"OrderBookL2Delta\",\n\"OrderBookL2Snapshot\",",
+    "lang": ""
+   },
+   {
+    "repo": "YicunAI/Pnlclaw-community",
+    "path": "packages/shared-types/pnlclaw_types/market.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "# OrderBookL2Delta\n# ---------------------------------------------------------------------------\n\n\nclass OrderBookL2Delta(BaseModel):\n\"\"\"Incremental L2 order book update (delta).\"\"\"",
+    "lang": ""
+   },
+   {
+    "repo": "YicunAI/Pnlclaw-community",
+    "path": "packages/shared-types/tests/test_market.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "KlineEvent,\nOrderBookL2Delta,\nOrderBookL2Snapshot,\nclass TestOrderBookL2Delta:\ndef test_roundtrip(self):\ndelta = OrderBookL2Delta(\nexchange=\"binance\",\nrestored = OrderBookL2Delta.model_validate_json(r",
+    "lang": ""
+   },
+   {
+    "repo": "digitallyinduced/ihp",
+    "path": "ihp/Test/RouterBench.hs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "data BenchController2\n= Ctrl2AlphaAction | Ctrl2BravoAction | Ctrl2CharlieAction | Ctrl2DeltaAction | Ctrl2EchoAction\n| Ctrl2FoxtrotAction | Ctrl2GolfAction | Ctrl2HotelAction | Ctrl2IndiaAction | Ctr",
+    "lang": ""
+   },
+   {
+    "repo": "PetHubLocal/pethublocal",
+    "path": "pethublocal/message.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "frame_response.Bowl2To = b2ih(value[31:35])\nframe_response.Bowl2Delta = str(round(float(frame_response.Bowl2To) - float(frame_response.Bowl2From), 2))\npethubrecord['Time_Open'] = frame_response.Time\np",
+    "lang": ""
+   },
+   {
+    "repo": "ozankenangungor/orderbook-replay-lab",
+    "path": "orderbook/src/lib.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "match event {\nMarketEvent::L2Delta {\nsymbol, updates, ..\nfn delta(symbol: SymbolId, updates: Vec<LevelUpdate>) -> MarketEvent {\nMarketEvent::L2Delta {\nts_ns: 1,\nlet applied = book.apply(&MarketEvent::",
+    "lang": ""
+   },
+   {
+    "repo": "YicunAI/Pnlclaw-community",
+    "path": "packages/exchange-sdk/tests/test_binance_l2_manager.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "from pnlclaw_exchange.exchanges.binance.normalizer import BinanceDepthDelta\nfrom pnlclaw_types.market import OrderBookL2Delta, OrderBookL2Snapshot, PriceLevel\nask_levels = [PriceLevel(price=p, quantit",
+    "lang": ""
+   },
+   {
+    "repo": "f0cii/bybit-api",
+    "path": "ws/process.go",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "func (b *ByBitWS) processOrderBookDelta(symbol string, delta *OrderBookL2Delta) {\nvalue, ok := b.orderBookLocals[symbol]",
+    "lang": ""
+   },
+   {
+    "repo": "bennyaustin/fabric-accelerator",
+    "path": "workspace/elt-framework/controlDB.SQLDatabase/ELT/StoredProcedures/GetTransformDefinition_L2.sql",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "--Should be using L2DeltaTransformDate, if null then LocalDate\nSELECT",
+    "lang": ""
+   },
+   {
+    "repo": "ozankenangungor/orderbook-replay-lab",
+    "path": "cli/tests/replay.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "fn event(symbol: SymbolId, ts_ns: u64, updates: Vec<LevelUpdate>) -> MarketEvent {\nMarketEvent::L2Delta {\nts_ns,",
+    "lang": ""
+   },
+   {
+    "repo": "youerning/blog",
+    "path": "video_site/video_site/static/js/chunk-vendors.7b2b4d3a.js",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "\u2026es.SILENT);break;case\"setContents\":var L=c.delta,R=c.html;\"object\"===s(L)?l.setContents(L,f.sources.SILENT):\"string\"===typeof R?l.setContents(this.html2delta(R),f.sources.SILENT):r=\"contents is missi",
+    "lang": ""
+   }
+  ],
+  "q11": [
+   {
+    "repo": "garrytan/gstack",
+    "path": "browse/src/security-bunnative.ts",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "*     classifier head). Requires careful numerics \u2014 multi-week work.\n*   * Bun FFI + Apple Accelerate cblas_sgemm integration for macOS\n*     native matmul (~0.5ms per 768x768 matmul on M-series).",
+    "lang": ""
+   },
+   {
+    "repo": "miuda-ai/lele",
+    "path": "src/kernels/quantization.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": ") -> TensorView<'a, f32> {\n// On macOS aarch64, use Apple Accelerate cblas_sgemm with dequantized fp32 weights\n// This leverages the AMX hardware which is much faster than NEON UDOT for these sizes",
+    "lang": ""
+   }
+  ],
+  "q12": [
+   {
+    "repo": "torvalds/linux",
+    "path": "tools/testing/selftests/mm/mkdirty.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "static char *mmap_thp_range(int prot, char **_mmap_mem, size_t *_mmap_size)\n{\nconst size_t mmap_size = 2 * thpsize;\nchar *mem, *mmap_mem;\n\nmmap_mem = mmap(NULL, mmap_size, prot, MAP_PRIVATE|MAP_ANON,\n",
+    "lang": ""
+   },
+   {
+    "repo": "vercel/next.js",
+    "path": "turbopack/crates/turbo-persistence/src/static_sorted_file.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "use anyhow::{Context, Result, bail, ensure};\nuse memmap2::Mmap;\nuse quick_cache::{Lifecycle, sync::GuardResult};\nlookup_entry::{IterValue, LookupEntry, LookupValue},\nmmap_helper::advise_mmap_for_persi",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "mm/filemap.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* This file handles the generic file mmap semantics used by\n* most \"normal\" filesystems (but you don't /have/ to use this:\n*  ->i_mmap_rwsem\t\t(truncate_pagecache)\n*    ->private_lock\t\t(__free_pte->blo",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "arch/alpha/kernel/pci-sysfs.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Loosely based on generic HAVE_PCI_MMAP implementation in\n* drivers/pci/pci-sysfs.c\nstatic int hose_mmap_page_range(struct pci_controller *hose,\nstruct vm_area_struct *vma,\nenum pci_mmap_state mmap_t",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "drivers/pci/pci-sysfs.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* llseek operation for mmappable PCI resources.\n* May be left unused if the arch doesn't provide them.\n* pci_mmap_legacy_mem - map legacy PCI memory into user memory space\n* @filp: open sysfs file\n* @",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "drivers/firmware/efi/memmap.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* __efi_memmap_init - Common code for mapping the EFI memory map\n* @data: EFI memory map data\n*\n* This function takes care of figuring out which function to use to\n* map the EFI memory map in efi.memm",
+    "lang": ""
+   },
+   {
+    "repo": "torvalds/linux",
+    "path": "drivers/hsi/clients/cmt_speech.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#define CS_MMAP_SIZE\tPAGE_SIZE\nint\t\t\tdataind_pending;\n/* mmap things */\nunsigned long\t\tmmap_base;\nunsigned long\t\tmmap_size;\nspinlock_t\t\tlock;\n/* state exposed to application */\nstruct cs_mmap_config_b",
+    "lang": ""
+   },
+   {
+    "repo": "paritytech/polkavm",
+    "path": "crates/polkavm-linux-raw/src/mmap.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "pub struct Mmap {",
+    "lang": ""
+   },
+   {
+    "repo": "paritytech/polkavm",
+    "path": "crates/polkavm-linux-raw/src/mmap.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "unsafe impl Send for Mmap {}",
+    "lang": ""
+   },
+   {
+    "repo": "Grarak/DSVita",
+    "path": "src/mmap/vita.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "impl AsRef<[u8]> for Mmap {",
+    "lang": ""
+   },
+   {
+    "repo": "Grarak/DSVita",
+    "path": "src/mmap/vita.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "use crate::mmap::platform::kubridge::{",
+    "lang": ""
+   }
+  ],
+  "q13": [
+   {
+    "repo": "Mithril-mine/libmdbx",
+    "path": "mdbx.h",
+    "stars": 0,
+    "rerank": 30412,
+    "snippet": "* does not lead to the release of MVCC snapshot locks until the transactions are explicitly completed, or until the\n* flush system buffers to disk when committing a transaction. But there is a\n* huge ",
+    "lang": ""
+   },
+   {
+    "repo": "postgres/postgres",
+    "path": "src/include/utils/snapshot.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* A tuple is visible iff the tuple is valid for the given MVCC snapshot.\n* There are several different kinds of snapshots:\n* * Normal MVCC snapshots\n* * MVCC snapshots taken during recovery (in Hot-St",
+    "lang": ""
+   },
+   {
+    "repo": "MariaDB/server",
+    "path": "storage/innobase/include/trx0sys.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "number becoming visible through rw_trx_hash. While we're in this gap\nconcurrent thread may come and do MVCC snapshot without seeing allocated\nbut not yet assigned serialisation number. Then at some po",
+    "lang": ""
+   },
+   {
+    "repo": "postgres/postgres",
+    "path": "src/backend/access/heap/heapam_indexscan.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* because the SSI checks and the *Satisfies routine for historical\n* MVCC snapshots need the correct tid to decide about the visibility.\n* Only in a non-MVCC snapshot can more than one member of the H",
+    "lang": ""
+   },
+   {
+    "repo": "postgres/postgres",
+    "path": "src/backend/access/heap/heapam_visibility.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* NOTE: When using a non-MVCC snapshot, we must check\n* TransactionIdIsInProgress (which looks in the PGPROC array) before\n* When using an MVCC snapshot, we rely on XidInMVCCSnapshot rather than\n* Tra",
+    "lang": ""
+   },
+   {
+    "repo": "postgres/postgres",
+    "path": "src/backend/access/nbtree/nbtsort.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* building unique indexes.  snapshot is the snapshot used by the scan iff\n* an MVCC snapshot is required.\n* qual checks (because we have to index RECENTLY_DEAD tuples).  In a\n* concurrent build, we ta",
+    "lang": ""
+   },
+   {
+    "repo": "postgres/postgres",
+    "path": "src/backend/utils/adt/dbsize.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* that makes queries like \"SELECT pg_relation_size(oid) FROM pg_class\"\n* less robust, because while we scan pg_class with an MVCC snapshot,\n* someone else might drop the table. It's better to return N",
+    "lang": ""
+   },
+   {
+    "repo": "postgres/postgres",
+    "path": "src/backend/access/index/indexam.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* current user of mark/restore functionality is nodeMergejoin.c, this\n* effectively means that merge-join plans only work for MVCC snapshots.  This\n* could be fixed if necessary, but for now it seems ",
+    "lang": ""
+   },
+   {
+    "repo": "postgres/postgres",
+    "path": "src/backend/executor/nodeIndexonlyscan.c",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Only MVCC snapshots are supported here, so there should be no\n* need to keep following the HOT chain once a visible entry has\n* been found.  If we did want to allow that, we'd need to keep\n* more st",
+    "lang": ""
+   }
+  ],
+  "q14": [
+   {
+    "repo": "cool-japan/oxifft",
+    "path": "oxifft/src/simd/portable.rs",
+    "stars": 0,
+    "rerank": 0,
+    "snippet": "/// Portable SIMD f32x8 (8 lanes).",
+    "lang": ""
+   }
+  ],
+  "q15": [],
+  "q16": [
+   {
+    "repo": "facebook/hhvm",
+    "path": "third-party/folly/src/folly/rust/tdigest/tdigest.rs",
+    "stars": 0,
+    "rerank": 1000,
+    "snippet": "        assert_eq!(1000_f64, tdigest.count());",
+    "lang": ""
+   },
+   {
+    "repo": "elastic/elasticsearch",
+    "path": "x-pack/plugin/esql/compute/src/main/generated/org/elasticsearch/compute/aggregation/FirstTDigestByTimestampGroupingAggregatorFunction.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import org.elasticsearch.compute.data.Page;\nimport org.elasticsearch.compute.data.TDigestBlock;\nimport org.elasticsearch.compute.data.TDigestHolder;\nimport org.elasticsearch.compute.operator.DriverCon",
+    "lang": ""
+   },
+   {
+    "repo": "elastic/elasticsearch",
+    "path": "server/src/main/java/org/elasticsearch/search/aggregations/metrics/HistogramUnionState.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import org.elasticsearch.exponentialhistogram.ReleasableExponentialHistogram;\nimport org.elasticsearch.exponentialhistogram.TDigestToExponentialHistogramConverter;\nimport org.elasticsearch.tdigest.Cen",
+    "lang": ""
+   },
+   {
+    "repo": "godotengine/godot",
+    "path": "platform/android/java/editor/src/main/java/com/android/apksig/ApkVerifier.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import com.android.apksig.internal.apk.ApkSigningBlockUtils;\nimport com.android.apksig.internal.apk.ApkSigningBlockUtils.Result.SignerInfo.ContentDigest;\nimport com.android.apksig.internal.apk.Content",
+    "lang": ""
+   },
+   {
+    "repo": "elastic/elasticsearch",
+    "path": "server/src/main/java/org/elasticsearch/search/aggregations/metrics/MemoryTrackingTDigestArrays.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import org.elasticsearch.tdigest.arrays.TDigestArrays;\nimport org.elasticsearch.tdigest.arrays.TDigestByteArray;\nimport org.elasticsearch.tdigest.arrays.TDigestDoubleArray;\nimport org.elasticsearch.td",
+    "lang": ""
+   },
+   {
+    "repo": "godotengine/godot",
+    "path": "platform/android/java/editor/src/main/java/com/android/apksig/internal/apk/v4/V4SchemeSigner.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import com.android.apksig.internal.apk.ApkSigningBlockUtils;\nimport com.android.apksig.internal.apk.ContentDigestAlgorithm;\nimport com.android.apksig.internal.apk.SignatureAlgorithm;\nfinal SignatureAl",
+    "lang": ""
+   },
+   {
+    "repo": "elastic/elasticsearch",
+    "path": "x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/analytics/mapper/TDigestFieldMapper.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import org.elasticsearch.search.MultiValueMode;\nimport org.elasticsearch.search.aggregations.metrics.TDigestExecutionHint;\nimport org.elasticsearch.search.aggregations.support.ValuesSourceType;\npublic",
+    "lang": ""
+   },
+   {
+    "repo": "godotengine/godot",
+    "path": "platform/android/java/editor/src/main/java/com/android/apksig/SourceStampVerifier.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import com.android.apksig.internal.apk.ApkSigningBlockUtilsLite;\nimport com.android.apksig.internal.apk.ContentDigestAlgorithm;\nimport com.android.apksig.internal.apk.SignatureAlgorithm;\n* Verifies th",
+    "lang": ""
+   },
+   {
+    "repo": "elastic/elasticsearch",
+    "path": "x-pack/plugin/esql/src/main/generated-src/org/elasticsearch/xpack/esql/expression/function/scalar/nulls/CoalesceTDigestEvaluator.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import org.elasticsearch.compute.data.Block;\nimport org.elasticsearch.compute.data.TDigestBlock;\nimport org.elasticsearch.compute.data.Page;\nabstract sealed class CoalesceTDigestEvaluator implements E",
+    "lang": ""
+   },
+   {
+    "repo": "elastic/elasticsearch",
+    "path": "x-pack/plugin/downsample/src/main/java/org/elasticsearch/xpack/downsample/TDigestHistogramFieldDownsampler.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "import org.elasticsearch.index.mapper.MappedFieldType;\nimport org.elasticsearch.search.aggregations.metrics.TDigestExecutionHint;\nimport org.elasticsearch.search.aggregations.metrics.TDigestState;\nimp",
+    "lang": ""
+   }
+  ],
+  "q17": [
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#[cfg(all(test, feature = \"fastpfor\"))]",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "mod fastpfor_tests {",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    use fastpfor::cpp::{Codec32 as _, FastPFor256Codec};",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// --- FastPFOR encoding ---",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// Encode a u32 slice using FastPFOR256 composite codec.",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "fn encode_fastpfor_u32(values: &[u32]) -> Option<Vec<u8>> {",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    fn test_fastpfor_raw_roundtrip_256_values() {",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        // 1024 values \u2014 exceeds single FastPFOR block (128 values)",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        let encoded = encode_fastpfor_u32(&values).expect(\"encode should succeed\");",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    fn test_fastpfor_empty() {",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    fn test_fastpfor_smaller_than_varint() {",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        // For sufficiently large data, FastPFOR should beat varint",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    fn test_vertex_stream_uses_fastpfor_metadata() {",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    fn test_mlt_core_decodes_fastpfor_vertex_tile() {",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// Phase 3: Full-tile conformance with many string properties triggering FastPFOR on index stream.",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "            // Note: mlt-core does not support FastPFOR for i64/u64 streams,",
+    "lang": ""
+   },
+   {
+    "repo": "walkerke/freestiler",
+    "path": "src/rust/freestiler-core/src/mlt.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "#[allow(dead_code)] // reserved for future use with i64 FastPFOR if mlt-core adds support",
+    "lang": ""
+   }
+  ],
+  "q18": [
+   {
+    "repo": "turi-code/SFrame",
+    "path": "oss_src/sgraph/sgraph_constants.cpp",
+    "stars": 0,
+    "rerank": 1024,
+    "snippet": "EXPORT size_t SGRAPH_INGRESS_VID_BUFFER_SIZE = 1024 * 1024 * 1;\nEXPORT size_t SGRAPH_HILBERT_CURVE_PARALLEL_FOR_NUM_THREADS = thread::cpu_count();\nREGISTER_GLOBAL_WITH_CHECKS(int64_t,\nSGRAPH_HILBERT_C",
+    "lang": ""
+   },
+   {
+    "repo": "rethinkdb/rethinkdb",
+    "path": "src/rdb_protocol/geo/s2/s2cellid.cc",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// The following lookup tables are used to convert efficiently between an\n// (i,j) cell index and the corresponding position along the Hilbert curve.\n// \"lookup_pos\" maps 4 bits of \"i\", 4 bits of \"j\",",
+    "lang": ""
+   },
+   {
+    "repo": "NetTopologySuite/NetTopologySuite",
+    "path": "src/NetTopologySuite/Shape/Fractal/HilbertCode.cs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// <summary>\n/// Encodes points as the index along finite planar Hilbert curves.\n/// <para>\n/// The planar Hilbert Curve is a continuous space-filling curve.\n/// In the limit the Hilbert curve has in",
+    "lang": ""
+   },
+   {
+    "repo": "gonum/gonum",
+    "path": "spatial/curve/doc.go",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// # Hilbert Curves\n//\n// The Hilbert curve is a continuous, space filling curve first described by\n// David Hilbert. The implementation of Hilbert2D is based on example code from\n// the [Hilbert curv",
+    "lang": ""
+   },
+   {
+    "repo": "gonum/gonum",
+    "path": "spatial/curve/hilbert.go",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// ErrUnderflow is returned by Hilbert curve constructors when the power is less\n// than 1.\nvar ErrUnderflow = errors.New(\"order is less than 1\")\n\n// ErrOverflow is returned (wrapped) by Hilbert curve",
+    "lang": ""
+   },
+   {
+    "repo": "prestodb/presto",
+    "path": "presto-geospatial-toolkit/src/main/java/com/facebook/presto/geospatial/rtree/HilbertIndex.java",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* <p>\n* A Hilbert index is the index on a Hilbert curve; a Hilbert curve is a\n* space-filling curve in a rectangle.  This class is instantiated with the\n* @param rectangle Rectangle defining bounds of",
+    "lang": ""
+   },
+   {
+    "repo": "databendlabs/databend",
+    "path": "src/query/expression/src/hilbert/index.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// Computes the Hilbert curve index for a given set of points.\n///\n/// This function calculates the Hilbert curve index for a set of points in a multi-dimensional space.\n/// Each point is represented",
+    "lang": ""
+   },
+   {
+    "repo": "rethinkdb/rethinkdb",
+    "path": "src/rdb_protocol/geo/s2/s2.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "//  (id)\n//    An S2CellId is a 64-bit encoding of a face and a Hilbert curve position\n//    on that face.  The Hilbert curve position implicitly encodes both the\n//    position of a cell and its subd",
+    "lang": ""
+   },
+   {
+    "repo": "gaoxiang12/faster-lio",
+    "path": "include/ivox3d/hilbert.hpp",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// N dimensional hilbert curve encoding & decoding based on the paper\n// \"Programming the Hilbert Curve\" by John Skilling.\n//\n// The interface assumes an std::array of some unsigned integer type.  Thi",
+    "lang": ""
+   },
+   {
+    "repo": "ClickHouse/ClickHouse",
+    "path": "src/Common/HilbertUtils.h",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "Given the range of values of hilbert code - and this function will return segments of the Hilbert curve\nsuch that each of them lies in a whole domain (aka square)\nImagine a square, one side of which i",
+    "lang": ""
+   },
+   {
+    "repo": "geopandas/geopandas",
+    "path": "geopandas/tools/hilbert_curve.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "Calculate the distance along a Hilbert curve.\nnp.ndarray\nArray containing distances along the Hilbert curve\nx, y = _continuous_to_discrete_coords(bounds, level, total_bounds)\n# Compute distance along ",
+    "lang": ""
+   },
+   {
+    "repo": "openmm/openmm",
+    "path": "libraries/hilbert/src/hilbert.cpp",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* Convert an index into a Hilbert curve to a set of coordinates.\n* Inputs:\n* Convert coordinates of a point on a Hilbert curve to its index.\n* Inputs:\n* Determine which of two points lies further alon",
+    "lang": ""
+   },
+   {
+    "repo": "golang/geo",
+    "path": "s2/s2intersect/s2intersect.go",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "// (spherical) concept in keeping with s2.CellUnionFromIntersection(). The 1D\n// (Hilbert curve) equivalent is referred to as an \"overlap\", simply to\n// differentiate between the two. An overlap inter",
+    "lang": ""
+   },
+   {
+    "repo": "tengge1/ShadowEditor",
+    "path": "web/assets/js/utils/GeometryUtils.js",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* @param center     Center of Hilbert curve.\n* @param size       Total width of Hilbert curve.\n* @param iterations Number of subdivisions.\n} // Return complete Hilbert Curve.\n* @param center     Cente",
+    "lang": ""
+   },
+   {
+    "repo": "delta-io/delta",
+    "path": "spark/src/main/scala/org/apache/spark/sql/delta/expressions/HilbertIndex.scala",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "* The columns are expected to all be Ints and to have at most numBits individually.\n* The points along the hilbert curve are represented by Longs.\n* The columns are expected to all be Ints and to have",
+    "lang": ""
+   },
+   {
+    "repo": "neozhaoliang/pywonderland",
+    "path": "src/gifmaze/example_hilbert_curve.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "Hilbert curve animation based on Gray code\ndef encode(self, index):\n\"\"\"Convert index to coordinates of a point on the Hilbert curve.\ndef decode(self, coords):\n\"\"\"Convert coordinates to index of a poin",
+    "lang": ""
+   },
+   {
+    "repo": "3b1b/videos",
+    "path": "_2016/hilbert/section2.py",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "(1890, peano_curve, UP, \"Peano Curve\"),\n(1891, hilbert_curve, DOWN, \"Hilbert Curve\"),\nbubble.write(\n\"A Hilbert curve is the \\\\\\\\ limit of all these \\\\dots\"\nself.add(OldTexText(\"\"\"\nFinally define a Hil",
+    "lang": ""
+   }
+  ],
+  "q19": [
+   {
+    "repo": "ovexro/trellis",
+    "path": "app/src-tauri/src/connection.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    fn as_tcp_stream(&self) -> Option<&std::net::TcpStream>;",
+    "lang": ""
+   },
+   {
+    "repo": "ovexro/trellis",
+    "path": "app/src-tauri/src/connection.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "                if let Some(stream) = socket.get_ref().as_tcp_stream() {",
+    "lang": ""
+   },
+   {
+    "repo": "stalwartlabs/mail-send",
+    "path": "src/smtp/builder.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "                stream: self.tcp_stream().await?,",
+    "lang": ""
+   },
+   {
+    "repo": "stalwartlabs/mail-send",
+    "path": "src/smtp/builder.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "            stream: tokio::time::timeout(self.timeout, async { self.tcp_stream().await })",
+    "lang": ""
+   },
+   {
+    "repo": "alexcrichton/ssh2-rs",
+    "path": "src/session.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    pub fn set_tcp_stream<S: 'static + AsRawFd>(&mut self, stream: S) {",
+    "lang": ""
+   },
+   {
+    "repo": "alexcrichton/ssh2-rs",
+    "path": "src/session.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "/// (via the `set_tcp_stream` method).",
+    "lang": ""
+   },
+   {
+    "repo": "alexcrichton/ssh2-rs",
+    "path": "src/session.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "                    \"use set_tcp_stream() to associate with a TcpStream\",",
+    "lang": ""
+   },
+   {
+    "repo": "alexcrichton/ssh2-rs",
+    "path": "src/session.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    /// You may use the tcp_stream() method to obtain the raw socket later.",
+    "lang": ""
+   },
+   {
+    "repo": "jerryshell/agarust",
+    "path": "server/src/lib.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "pub async fn handle_tcp_stream(",
+    "lang": ""
+   },
+   {
+    "repo": "jerryshell/agarust",
+    "path": "server/src/lib.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "    let ws_stream = tokio_tungstenite::accept_async(tcp_stream).await?;",
+    "lang": ""
+   }
+  ],
+  "q20": [
+   {
+    "repo": "spiceai/spiceai",
+    "path": "crates/runtime/src/flight/flightsql/prepared_statement_query.rs",
+    "stars": 0,
+    "rerank": 100,
+    "snippet": "        // 2. Prepared statements will benefit from the shared DataFusion plan cache",
+    "lang": ""
+   }
+  ]
+ },
+ "repos": {
+  "NodeDB-Lab/nodedb": {
+   "stars": 0,
+   "queries": [
+    "q01"
+   ],
+   "paths": [
+    "q01:nodedb/src/engine/timeseries/columnar_segment/mmap.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "ARMmbed/mbed-os": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:targets/TARGET_Cypress/TARGET_PSOC6/mtb-pdl-cat1/drivers/include/cy_scb_uart.h"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "aptos-labs/aptos-core": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "q02:aptos-move/e2e-move-tests/src/tests/mod.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "666ghj/BettaFish": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:ReportEngine/renderers/html_renderer.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "DefectDojo/django-DefectDojo": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:unittests/test_view_engineer_metrics.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "liyin2015/python-coding-interview": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:Easy-Book/chapters/chapter_2_introduction_algo.tex"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "eldarkg/emdr1986x-std-per-lib": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:CMSIS/CM3/DeviceSupport/MDR32F9Qx/inc/MDR32Fx.h"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "LisonEvf/opentdx": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:tests/test_mac_quotation_client.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "pwncollege/dojo": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:test/test_background_stats.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "plivo/plivo-python": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:tests/resources/test_phone_number_compliance.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "yingkitw/ppt-rs": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:tests/pptx_advanced_elements_test.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "verichains/revela": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs",
+    "q02:aptos-move/e2e-move-tests/src/tests/smart_data_structures.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "crash-utility/crash": {
+   "stars": 0,
+   "queries": [
+    "q02"
+   ],
+   "paths": [
+    "q02:filesys.c"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "sophed/systems": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/pages/index.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "Skeletonxf/easy-ml": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/differentiation.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "maciejkula/wyrm": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/lib.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "hsfzxjy/rten": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/ops/mod.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "sirius-cc-wu/rtforth": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/core.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "openkoi-ai/openkoi": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/tui/app.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "Dicklesworthstone/xf": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/main.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "teolex2020/AuraSDK": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/memory.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "rust-control/qtable": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/table.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "Ai00-X/rwkv-agent-kit": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/config.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "playXE/rsgc": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/heap/region.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "pierridotite/NOMA": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/graph.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "dasgefolge/quantum-werewolf": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/game/types.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "proycon/vocajeux": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/bin/vjc.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "autumnai/leaf": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/layer.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "alvarogaiotti/Squeezer": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/deal.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "Cstannahill/docs-mcp-server": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/learning.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "0xsupremedev/auradb": {
+   "stars": 0,
+   "queries": [
+    "q03"
+   ],
+   "paths": [
+    "q03:src/index.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "bytecodealliance/cranelift-jit-demo": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:src/bin/toy.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "sdiehl/compiler-crates": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:cranelift/src/main.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "VirusTotal/yara-x": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:capi/Cargo.toml",
+    "q04:lib/Cargo.toml"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "ruvnet/RuVector": {
+   "stars": 0,
+   "queries": [
+    "q04",
+    "q06"
+   ],
+   "paths": [
+    "q04:docs/research/ruvm/sota-analysis.md",
+    "q06:npm/packages/ruvector/src/core/tensor-compress.js",
+    "q06:crates/ruvector-core/src/advanced_features/product_quantization.rs",
+    "q06:crates/ruvector-core/src/advanced_features.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "bytecodealliance/wasmtime-dotnet": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:docs/index.md"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "6over3/hako": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:hosts/dotnet/Hako.Backend.Wasmtime/README.md"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "cool-japan/oxieml": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:README.md"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "NLnetLabs/roto": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:docs/source/overview/why_roto.md"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "siravan/symjit": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:rust/memory.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "paiml/ruchy": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:src/jit/compiler.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "mimium-org/mimium-rs": {
+   "stars": 0,
+   "queries": [
+    "q04"
+   ],
+   "paths": [
+    "q04:crates/lib/mimium-lang/src/runtime/wasm.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "dahomey-technologies/rustis": {
+   "stars": 0,
+   "queries": [
+    "q05"
+   ],
+   "paths": [
+    "q05:src/commands/cuckoo_commands.rs",
+    "q05:src/commands/cuckoo_commands.rs",
+    "q05:src/commands/cuckoo_commands.rs",
+    "q05:src/commands/cuckoo_commands.rs",
+    "q05:src/commands/cuckoo_commands.rs",
+    "q05:src/commands/cuckoo_commands.rs",
+    "q05:src/commands/cuckoo_commands.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "smallnest/concurrency-programming-via-rust": {
+   "stars": 0,
+   "queries": [
+    "q05"
+   ],
+   "paths": [
+    "q05:collections/src/lib.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "rpcpool/yellowstone-grpc": {
+   "stars": 0,
+   "queries": [
+    "q05"
+   ],
+   "paths": [
+    "q05:yellowstone-grpc-proto/src/cuckoo/set.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "hicder/muopdb": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:rs/config/src/collection.rs",
+    "q06:rs/config/src/collection.rs",
+    "q06:rs/config/src/collection.rs"
+   ],
+   "lang": "",
+   "rerank": 10000
+  },
+  "ruvnet/ruflo": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:v3/@claude-flow/plugins/src/integrations/ruvector/quantization.ts",
+    "q06:v3/@claude-flow/plugins/examples/ruvector/quantization.ts",
+    "q06:v3/@claude-flow/memory/src/types.ts",
+    "q06:v3/@claude-flow/plugins/__tests__/ruvector-quantization.test.ts"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "ruvnet/agentic-flow": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:packages/agentdb/src/optimizations/Quantization.ts"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "rapidsai/cuvs": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:c/include/cuvs/preprocessing/quantize/pq.h"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "weaviate/weaviate": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:entities/vectorindex/compression/pq_data.go"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "StarRocks/starrocks": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:fe/fe-core/src/main/java/com/starrocks/common/VectorIndexParams.java"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "apache/pinot": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:pinot-segment-spi/src/main/java/org/apache/pinot/segment/spi/index/creator/VectorQuantizerType.java"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "ArcadeData/arcadedb": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:engine/src/main/java/com/arcadedb/index/vector/LSMVectorIndex.java"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "huawei-noah/noah-research": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:noahnmt/dual-transfer/xlm/model/memory/memory.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "milvus-io/milvus-sdk-csharp": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:Milvus.Client/IndexType.cs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "qdrant/qdrant": {
+   "stars": 0,
+   "queries": [
+    "q06"
+   ],
+   "paths": [
+    "q06:lib/quantization/src/encoded_vectors_pq.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "cool-japan/oxirs": {
+   "stars": 0,
+   "queries": [
+    "q07"
+   ],
+   "paths": [
+    "q07:stream/oxirs-stream/src/visual_designer.rs",
+    "q07:stream/oxirs-stream/src/ml_integration.rs",
+    "q07:stream/oxirs-stream/src/ml_integration.rs",
+    "q07:stream/oxirs-stream/src/ml_integration.rs",
+    "q07:stream/oxirs-stream/src/ml_integration.rs",
+    "q07:stream/oxirs-stream/src/ml_integration.rs",
+    "q07:stream/oxirs-stream/src/ml_integration.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs",
+    "q07:stream/oxirs-stream/src/online_learning.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "kubeflow/mcp-apache-spark-history-server": {
+   "stars": 0,
+   "queries": [
+    "q08"
+   ],
+   "paths": [
+    "q08:skills/cli/examples/compare/report.md",
+    "q08:skills/cli/examples/compare/findings/q20-v4.0.md"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "torvalds/linux": {
+   "stars": 0,
+   "queries": [
+    "q09",
+    "q12"
+   ],
+   "paths": [
+    "q09:io_uring/io_uring.c",
+    "q09:io_uring/uring_cmd.c",
+    "q09:include/uapi/linux/io_uring.h",
+    "q09:tools/include/io_uring/mini_liburing.h",
+    "q09:io_uring/tctx.c",
+    "q09:include/trace/events/io_uring.h",
+    "q09:drivers/block/ublk_drv.c",
+    "q09:io_uring/cancel.c",
+    "q09:tools/testing/selftests/drivers/net/hw/iou-zcrx.c",
+    "q09:io_uring/register.c",
+    "q09:fs/fuse/dev_uring.c",
+    "q09:tools/include/uapi/linux/io_uring.h",
+    "q09:io_uring/zcrx.c",
+    "q09:io_uring/cmd_net.c",
+    "q09:include/linux/io_uring_types.h",
+    "q09:io_uring/net.c",
+    "q09:io_uring/mock_file.c",
+    "q12:tools/testing/selftests/mm/mkdirty.c",
+    "q12:mm/filemap.c",
+    "q12:arch/alpha/kernel/pci-sysfs.c",
+    "q12:drivers/pci/pci-sysfs.c",
+    "q12:drivers/firmware/efi/memmap.c",
+    "q12:drivers/hsi/clients/cmt_speech.c"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "AveryClapp/Cache-Explorer": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:frontend/src/components/MetricCards.tsx"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "YicunAI/Pnlclaw-community": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:packages/exchange-sdk/pnlclaw_exchange/exchanges/binance/normalizer.py",
+    "q10:packages/shared-types/pnlclaw_types/__init__.py",
+    "q10:packages/shared-types/pnlclaw_types/market.py",
+    "q10:packages/shared-types/tests/test_market.py",
+    "q10:packages/exchange-sdk/tests/test_binance_l2_manager.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "Telecominfraproject/oopt-gnpy": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:gnpy/core/utils.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "ozankenangungor/orderbook-replay-lab": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:codec/src/lib.rs",
+    "q10:orderbook/src/lib.rs",
+    "q10:cli/tests/replay.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "digitallyinduced/ihp": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:ihp/Test/RouterBench.hs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "PetHubLocal/pethublocal": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:pethublocal/message.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "f0cii/bybit-api": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:ws/process.go"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "bennyaustin/fabric-accelerator": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:workspace/elt-framework/controlDB.SQLDatabase/ELT/StoredProcedures/GetTransformDefinition_L2.sql"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "youerning/blog": {
+   "stars": 0,
+   "queries": [
+    "q10"
+   ],
+   "paths": [
+    "q10:video_site/video_site/static/js/chunk-vendors.7b2b4d3a.js"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "garrytan/gstack": {
+   "stars": 0,
+   "queries": [
+    "q11"
+   ],
+   "paths": [
+    "q11:browse/src/security-bunnative.ts"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "miuda-ai/lele": {
+   "stars": 0,
+   "queries": [
+    "q11"
+   ],
+   "paths": [
+    "q11:src/kernels/quantization.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "vercel/next.js": {
+   "stars": 0,
+   "queries": [
+    "q12"
+   ],
+   "paths": [
+    "q12:turbopack/crates/turbo-persistence/src/static_sorted_file.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "paritytech/polkavm": {
+   "stars": 0,
+   "queries": [
+    "q12"
+   ],
+   "paths": [
+    "q12:crates/polkavm-linux-raw/src/mmap.rs",
+    "q12:crates/polkavm-linux-raw/src/mmap.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "Grarak/DSVita": {
+   "stars": 0,
+   "queries": [
+    "q12"
+   ],
+   "paths": [
+    "q12:src/mmap/vita.rs",
+    "q12:src/mmap/vita.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "Mithril-mine/libmdbx": {
+   "stars": 0,
+   "queries": [
+    "q13"
+   ],
+   "paths": [
+    "q13:mdbx.h"
+   ],
+   "lang": "",
+   "rerank": 30412
+  },
+  "postgres/postgres": {
+   "stars": 0,
+   "queries": [
+    "q13"
+   ],
+   "paths": [
+    "q13:src/include/utils/snapshot.h",
+    "q13:src/backend/access/heap/heapam_indexscan.c",
+    "q13:src/backend/access/heap/heapam_visibility.c",
+    "q13:src/backend/access/nbtree/nbtsort.c",
+    "q13:src/backend/utils/adt/dbsize.c",
+    "q13:src/backend/access/index/indexam.c",
+    "q13:src/backend/executor/nodeIndexonlyscan.c"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "MariaDB/server": {
+   "stars": 0,
+   "queries": [
+    "q13"
+   ],
+   "paths": [
+    "q13:storage/innobase/include/trx0sys.h"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "cool-japan/oxifft": {
+   "stars": 0,
+   "queries": [
+    "q14"
+   ],
+   "paths": [
+    "q14:oxifft/src/simd/portable.rs"
+   ],
+   "lang": "",
+   "rerank": 0.0
+  },
+  "facebook/hhvm": {
+   "stars": 0,
+   "queries": [
+    "q16"
+   ],
+   "paths": [
+    "q16:third-party/folly/src/folly/rust/tdigest/tdigest.rs"
+   ],
+   "lang": "",
+   "rerank": 1000
+  },
+  "elastic/elasticsearch": {
+   "stars": 0,
+   "queries": [
+    "q16"
+   ],
+   "paths": [
+    "q16:x-pack/plugin/esql/compute/src/main/generated/org/elasticsearch/compute/aggregation/FirstTDigestByTimestampGroupingAggregatorFunction.java",
+    "q16:server/src/main/java/org/elasticsearch/search/aggregations/metrics/HistogramUnionState.java",
+    "q16:server/src/main/java/org/elasticsearch/search/aggregations/metrics/MemoryTrackingTDigestArrays.java",
+    "q16:x-pack/plugin/core/src/main/java/org/elasticsearch/xpack/core/analytics/mapper/TDigestFieldMapper.java",
+    "q16:x-pack/plugin/esql/src/main/generated-src/org/elasticsearch/xpack/esql/expression/function/scalar/nulls/CoalesceTDigestEvaluator.java",
+    "q16:x-pack/plugin/downsample/src/main/java/org/elasticsearch/xpack/downsample/TDigestHistogramFieldDownsampler.java"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "godotengine/godot": {
+   "stars": 0,
+   "queries": [
+    "q16"
+   ],
+   "paths": [
+    "q16:platform/android/java/editor/src/main/java/com/android/apksig/ApkVerifier.java",
+    "q16:platform/android/java/editor/src/main/java/com/android/apksig/internal/apk/v4/V4SchemeSigner.java",
+    "q16:platform/android/java/editor/src/main/java/com/android/apksig/SourceStampVerifier.java"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "walkerke/freestiler": {
+   "stars": 0,
+   "queries": [
+    "q17"
+   ],
+   "paths": [
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs",
+    "q17:src/rust/freestiler-core/src/mlt.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "turi-code/SFrame": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:oss_src/sgraph/sgraph_constants.cpp"
+   ],
+   "lang": "",
+   "rerank": 1024
+  },
+  "rethinkdb/rethinkdb": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:src/rdb_protocol/geo/s2/s2cellid.cc",
+    "q18:src/rdb_protocol/geo/s2/s2.h"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "NetTopologySuite/NetTopologySuite": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:src/NetTopologySuite/Shape/Fractal/HilbertCode.cs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "gonum/gonum": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:spatial/curve/doc.go",
+    "q18:spatial/curve/hilbert.go"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "prestodb/presto": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:presto-geospatial-toolkit/src/main/java/com/facebook/presto/geospatial/rtree/HilbertIndex.java"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "databendlabs/databend": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:src/query/expression/src/hilbert/index.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "gaoxiang12/faster-lio": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:include/ivox3d/hilbert.hpp"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "ClickHouse/ClickHouse": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:src/Common/HilbertUtils.h"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "geopandas/geopandas": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:geopandas/tools/hilbert_curve.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "openmm/openmm": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:libraries/hilbert/src/hilbert.cpp"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "golang/geo": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:s2/s2intersect/s2intersect.go"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "tengge1/ShadowEditor": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:web/assets/js/utils/GeometryUtils.js"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "delta-io/delta": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:spark/src/main/scala/org/apache/spark/sql/delta/expressions/HilbertIndex.scala"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "neozhaoliang/pywonderland": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:src/gifmaze/example_hilbert_curve.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "3b1b/videos": {
+   "stars": 0,
+   "queries": [
+    "q18"
+   ],
+   "paths": [
+    "q18:_2016/hilbert/section2.py"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "ovexro/trellis": {
+   "stars": 0,
+   "queries": [
+    "q19"
+   ],
+   "paths": [
+    "q19:app/src-tauri/src/connection.rs",
+    "q19:app/src-tauri/src/connection.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "stalwartlabs/mail-send": {
+   "stars": 0,
+   "queries": [
+    "q19"
+   ],
+   "paths": [
+    "q19:src/smtp/builder.rs",
+    "q19:src/smtp/builder.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "alexcrichton/ssh2-rs": {
+   "stars": 0,
+   "queries": [
+    "q19"
+   ],
+   "paths": [
+    "q19:src/session.rs",
+    "q19:src/session.rs",
+    "q19:src/session.rs",
+    "q19:src/session.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "jerryshell/agarust": {
+   "stars": 0,
+   "queries": [
+    "q19"
+   ],
+   "paths": [
+    "q19:server/src/lib.rs",
+    "q19:server/src/lib.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  },
+  "spiceai/spiceai": {
+   "stars": 0,
+   "queries": [
+    "q20"
+   ],
+   "paths": [
+    "q20:crates/runtime/src/flight/flightsql/prepared_statement_query.rs"
+   ],
+   "lang": "",
+   "rerank": 100
+  }
+ },
+ "query_names": {
+  "q01": "columnar mmap embedded DB",
+  "q02": "adaptive radix tree (ART)",
+  "q03": "learned index (RMI/FITing)",
+  "q04": "cranelift JIT filter",
+  "q05": "bloom/cuckoo/quotient SIMD",
+  "q06": "vector quantization (RaBitQ/PQ)",
+  "q07": "online learner / FTRL",
+  "q08": "Lance/Arrow columnar",
+  "q09": "io_uring fixed file",
+  "q10": "tick DB / order book",
+  "q11": "Apple AMX accelerate cblas",
+  "q12": "MLX zero copy mmap rust",
+  "q13": "MVCC append snapshot",
+  "q14": "portable_simd f32x8/NEON",
+  "q15": "online prediction model",
+  "q16": "Welford/tdigest online stats",
+  "q17": "BtrBlocks/FastPFOR/pcodec compress",
+  "q18": "Hilbert/zorder space-filling curve",
+  "q19": "conformal prediction streaming",
+  "q20": "DataFusion plan cache adaptive"
+ },
+ "relevance": {
+  "q01": "Storage: mmap+columnar foundation for X-Store",
+  "q02": "Index: ART for KV/segment ID dispatch",
+  "q03": "Index: learned index = sub-\u00b5s point lookups",
+  "q04": "Compute: JIT compiled filter predicates",
+  "q05": "Filter: pre-vector candidate culling",
+  "q06": "ANN: 1-bit/quant codec (RaBitQ 71\u00d7 already in)",
+  "q07": "ML: streaming feature update for X-Learn",
+  "q08": "IO: Arrow/Lance file format compat",
+  "q09": "IO: zero-syscall batch reads for hot path",
+  "q10": "Domain: tick/L2 for X-Quant module",
+  "q11": "Compute: AMX/Accelerate path for M-series",
+  "q12": "ML: MLX zero-copy \u2192 unified GPU buffer",
+  "q13": "Storage: snapshot isolation for queries",
+  "q14": "SIMD: portable kernels Apple+x86",
+  "q15": "ML: online inference loop",
+  "q16": "Stats: streaming quantile/variance",
+  "q17": "Compress: integer/codec for cold columns",
+  "q18": "Index: spatial locality for multi-col",
+  "q19": "ML: uncertainty quantile streaming",
+  "q20": "Query: plan cache for hot SQL"
+ }
+}

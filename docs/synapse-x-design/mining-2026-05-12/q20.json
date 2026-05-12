@@ -1,0 +1,37 @@
+{
+ "DataFusion plan cache adaptive": {
+  "hits": [
+   {
+    "source": "sg",
+    "repo": "spiceai/spiceai",
+    "branch": "main",
+    "path": "crates/runtime/src/flight/flightsql/prepared_statement_query.rs",
+    "line": 959,
+    "snippet": "        // 2. Prepared statements will benefit from the shared DataFusion plan cache",
+    "rerank_score": 100,
+    "_quality": 0.0
+   }
+  ],
+  "total": 17,
+  "time": 167,
+  "facets": {},
+  "pages": 1,
+  "by_source": {
+   "gh": 0,
+   "grep": 0,
+   "sg": 1
+  },
+  "fanout_queries": [
+   "DataFusion plan cache adaptive",
+   "DataFusion plan cache",
+   "DataFusionPlanCache",
+   "DFPCache",
+   "DataFusion adaptive plan cache",
+   "DataFusionAdaptivePlanCache",
+   "DFAPC",
+   "DataFusion plan caching",
+   "DataFusionPlanCaching"
+  ],
+  "summary": "TL;DR: The search results indicate that prepared statements in DataFusion can benefit from sharing a cached plan, which suggests a pattern where caching is used to improve performance by reusing existing query plans. This implies that DataFusion's caching mechanism is designed to optimize the reuse of query plans across multiple executions."
+ }
+}
