@@ -10,11 +10,25 @@ use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use fastembed_dynamic::{EmbeddingModel, InitOptions, TextEmbedding};
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
+use rayon::prelude::*;
 use redb::{Database, ReadableTableMetadata, TableDefinition};
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const EMB_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("emb_cache_v1");
+
+/// PR-D1 scale-100M: process-wide observability counters for the embed cache.
+static CACHE_HITS: AtomicU64 = AtomicU64::new(0);
+static CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
+
+/// Returns (hits, misses) since process start.
+pub fn cache_counters() -> (u64, u64) {
+    (
+        CACHE_HITS.load(Ordering::Relaxed),
+        CACHE_MISSES.load(Ordering::Relaxed),
+    )
+}
 
 /// Returns number of ONNX sessions: half of logical cores, min 2.
 /// On M4 Max (12 cores) → 6 sessions. Replaces old `POOL_SIZE = 2`.
@@ -43,19 +57,15 @@ static SESSION_POOL: OnceCell<Mutex<Vec<TextEmbedding>>> = OnceCell::new();
 ///   `mxbai-large` → MxbaiEmbedLargeV1        (1024-dim, MTEB 64.7)
 ///   `nomic-1.5`   → NomicEmbedTextV15        (768-dim, MTEB 62.4)
 fn select_model() -> EmbeddingModel {
-    match std::env::var("SYNAPSE_EMBED_MODEL")
-        .unwrap_or_default()
-        .to_lowercase()
-        .as_str()
-    {
-        "bge-small-q" => EmbeddingModel::BGESmallENV15Q,
-        "arctic-xs" => EmbeddingModel::SnowflakeArcticEmbedXS,
-        "arctic-s" => EmbeddingModel::SnowflakeArcticEmbedS,
-        "arctic-m" => EmbeddingModel::SnowflakeArcticEmbedM,
-        "arctic-l" => EmbeddingModel::SnowflakeArcticEmbedL,
-        "mxbai-large" => EmbeddingModel::MxbaiEmbedLargeV1,
-        "nomic-1.5" => EmbeddingModel::NomicEmbedTextV15,
-        _ => EmbeddingModel::BGESmallENV15,
+    match std::env::var("SYNAPSE_EMBED_MODEL").unwrap_or_default().to_lowercase().as_str() {
+        "bge-small-q"          => EmbeddingModel::BGESmallENV15Q,
+        "arctic-xs"            => EmbeddingModel::SnowflakeArcticEmbedXS,
+        "arctic-s"             => EmbeddingModel::SnowflakeArcticEmbedS,
+        "arctic-m"             => EmbeddingModel::SnowflakeArcticEmbedM,
+        "arctic-l"             => EmbeddingModel::SnowflakeArcticEmbedL,
+        "mxbai-large"          => EmbeddingModel::MxbaiEmbedLargeV1,
+        "nomic-1.5"            => EmbeddingModel::NomicEmbedTextV15,
+        _                      => EmbeddingModel::BGESmallENV15,
     }
 }
 
@@ -142,10 +152,22 @@ impl Embedder {
     }
 
     fn embed_batch_cached(&self, cache: &Database, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        let hashes: Vec<[u8; 32]> = texts
-            .iter()
-            .map(|t| *blake3::hash(t.as_bytes()).as_bytes())
-            .collect();
+        // PR-D1 scale-100M: parallelize BLAKE3 hashing via rayon — but ONLY when
+        // the batch is large enough for parallelism to pay for itself.
+        // Measured on M4 Max: N=1000 rayon 1.9× SLOWER, N=10000 rayon 1.94× FASTER.
+        // Empirical break-even ≈ 5000. Stay serial below that.
+        const RAYON_HASH_THRESHOLD: usize = 5_000;
+        let hashes: Vec<[u8; 32]> = if texts.len() >= RAYON_HASH_THRESHOLD {
+            texts
+                .par_iter()
+                .map(|t| *blake3::hash(t.as_bytes()).as_bytes())
+                .collect()
+        } else {
+            texts
+                .iter()
+                .map(|t| *blake3::hash(t.as_bytes()).as_bytes())
+                .collect()
+        };
         let mut out: Vec<Option<Vec<f32>>> = vec![None; texts.len()];
         let mut miss_idx: Vec<usize> = Vec::new();
         {
@@ -171,9 +193,17 @@ impl Embedder {
                 }
             }
         }
+        CACHE_HITS.fetch_add((texts.len() - miss_idx.len()) as u64, Ordering::Relaxed);
+        CACHE_MISSES.fetch_add(miss_idx.len() as u64, Ordering::Relaxed);
         if !miss_idx.is_empty() {
             let miss_texts: Vec<String> = miss_idx.iter().map(|&i| texts[i].clone()).collect();
             let new_embs = self.embed_raw(miss_texts)?;
+            // PR-D1: f32→LE-bytes packing measured SLOWER with rayon at all sizes.
+            // Allocation dominates per-row. Keep serial.
+            let byte_rows: Vec<Vec<u8>> = new_embs
+                .iter()
+                .map(|emb| emb.iter().flat_map(|f| f.to_le_bytes()).collect())
+                .collect();
             let wtx = cache
                 .begin_write()
                 .map_err(|e| Error::Other(format!("redb wtx: {e}")))?;
@@ -181,8 +211,7 @@ impl Embedder {
                 let mut t = wtx
                     .open_table(EMB_TABLE)
                     .map_err(|e| Error::Other(format!("redb tbl: {e}")))?;
-                for (emb, &i) in new_embs.iter().zip(miss_idx.iter()) {
-                    let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
+                for ((emb, bytes), &i) in new_embs.iter().zip(byte_rows.iter()).zip(miss_idx.iter()) {
                     t.insert(hashes[i].as_slice(), bytes.as_slice())
                         .map_err(|e| Error::Other(format!("redb ins: {e}")))?;
                     out[i] = Some(emb.clone());
@@ -252,5 +281,7 @@ pub fn pick_embedder_with_cache<P: AsRef<std::path::Path>>(
         model = "bge-small-en-v1.5",
         "pick_embedder: fastembed ONNX CPU selected"
     );
-    Box::new(Embedder::new_with_cache(cache_path).expect("fastembed pool init failed"))
+    Box::new(
+        Embedder::new_with_cache(cache_path).expect("fastembed pool init failed"),
+    )
 }

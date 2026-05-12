@@ -213,3 +213,8 @@ harness = false
 name = "f16_hnsw"
 harness = false
 required-features = ["turbo"]
+
+[[bench]]
+name = "embed_cache"
+harness = false
+required-features = ["embed"]
