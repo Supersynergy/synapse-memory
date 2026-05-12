@@ -1,0 +1,23 @@
+{
+  "name": "@supersynergy/synx",
+  "version": "1.0.1-rc.1",
+  "description": "Synapse CLI — 8ms hybrid search, SimSIMD kernels, 113k docs",
+  "keywords": ["synapse", "vector-search", "hybrid-search", "embeddings", "cli"],
+  "homepage": "https://github.com/Supersynergy/synapse",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Supersynergy/synapse.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "synx": "./bin/synx.js"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": ["darwin", "linux"],
+  "cpu": ["arm64", "x64"]
+}

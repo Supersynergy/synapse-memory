@@ -1,0 +1,40 @@
+[qdrant] 1000 queries, corpus=168438, loading corpus...
+  Note: corpus capped at 20000 (qdrant local mode; full 168k=~150s build)
+  Recomputing GT for 20000-subset...
+  Starting qdrant in-process (local mode)...
+  Building qdrant M=16 ef=64...
+    build: 16.3s
+    p50=10.7ms p95=11.9ms QPS=93 R@10=1.0000
+  Building qdrant M=16 ef=128...
+    build: 9.6s
+    p50=11.5ms p95=13.5ms QPS=86 R@10=1.0000
+[
+  {
+    "engine": "qdrant M=16 ef=64",
+    "available": true,
+    "build_s": 16.34103066701209,
+    "n_queries": 1000,
+    "p50_ms": 10.73912502033636,
+    "p95_ms": 11.94437500089407,
+    "p99_ms": 14.109792013186961,
+    "mean_ms": 10.758143343729898,
+    "qps_1c": 92.95284214472042,
+    "recall_at_10": 1.0,
+    "recall_at_100": 0.99999,
+    "note": "corpus capped at 20000 (qdrant local mode; full 168k=~150s build)"
+  },
+  {
+    "engine": "qdrant M=16 ef=128",
+    "available": true,
+    "build_s": 9.56574270897545,
+    "n_queries": 1000,
+    "p50_ms": 11.510917043779045,
+    "p95_ms": 13.467957964166999,
+    "p99_ms": 15.7397500006482,
+    "mean_ms": 11.604981382610276,
+    "qps_1c": 86.16989265475864,
+    "recall_at_10": 1.0,
+    "recall_at_100": 0.99999,
+    "note": "corpus capped at 20000 (qdrant local mode; full 168k=~150s build)"
+  }
+]

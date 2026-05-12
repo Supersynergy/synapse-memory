@@ -1,0 +1,63 @@
+name: synapse-secure-release
+on:
+  workflow_dispatch:
+    inputs:
+      customers:
+        description: "JSON array of customer ids, e.g. [\"cust_a\",\"cust_b\"]"
+        required: true
+        default: '["cust_demo"]'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        customer_id: ${{ fromJson(github.event.inputs.customers) }}
+        target:
+          - { triple: x86_64-unknown-linux-gnu,   os: ubuntu-22.04 }
+          - { triple: aarch64-unknown-linux-gnu,  os: ubuntu-22.04 }
+          - { triple: x86_64-apple-darwin,        os: macos-14 }
+          - { triple: aarch64-apple-darwin,       os: macos-14 }
+    runs-on: ${{ matrix.target.os }}
+    env:
+      CUSTOMER_ID: ${{ matrix.customer_id }}
+      TARGETS: ${{ matrix.target.triple }}
+      SIGNING_KEY_PATH: ${{ github.workspace }}/.keys/ed25519.key
+      APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: ${{ matrix.target.triple }} }
+      - name: Restore signing key
+        run: |
+          mkdir -p .keys && chmod 700 .keys
+          printf '%s' "${{ secrets.ED25519_PRIVATE_KEY }}" > .keys/ed25519.key
+          chmod 600 .keys/ed25519.key
+      - name: Install minisign + objcopy
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            sudo apt-get update -y && sudo apt-get install -y minisign binutils
+          else
+            brew install minisign
+          fi
+      - name: Build hardened binary
+        run: bash release/build-secure.sh
+      - name: Compute signed S3 URL
+        id: s3
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION:    ${{ secrets.AWS_REGION }}
+          BUCKET:                ${{ secrets.RELEASE_BUCKET }}
+        run: |
+          KEY="synapse/${CUSTOMER_ID}/${{ matrix.target.triple }}/synapse"
+          aws s3 cp "release/dist/${CUSTOMER_ID}/${{ matrix.target.triple }}/" "s3://${BUCKET}/${KEY%/*}/" --recursive
+          URL=$(aws s3 presign "s3://${BUCKET}/${KEY}" --expires-in 86400)
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synapse-${{ matrix.customer_id }}-${{ matrix.target.triple }}
+          path: release/dist/${{ matrix.customer_id }}/${{ matrix.target.triple }}/
+          retention-days: 14
+      - name: Summary
+        run: echo "Signed URL (24h): ${{ steps.s3.outputs.url }}" >> $GITHUB_STEP_SUMMARY

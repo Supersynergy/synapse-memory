@@ -1,0 +1,62 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  cargo-doc:
+    name: Build & Deploy cargo-doc
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build docs
+        run: cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: "--cfg docsrs"
+
+      - name: Generate crate index
+        run: |
+          python3 - <<'PYEOF'
+          import os, pathlib
+          doc_dir = pathlib.Path("target/doc")
+          crates = sorted(p.name for p in doc_dir.iterdir() if p.is_dir() and not p.name.startswith(".") and (p / "index.html").exists())
+          lines = ["# Synapse Crate Index\n", f"Generated from {len(crates)} crates.\n\n"]
+          for c in crates:
+              lines.append(f"- [{c}]({c}/index.html)\n")
+          (doc_dir / "INDEX.md").write_text("".join(lines))
+          PYEOF
+
+      - name: Add index redirect
+        run: |
+          cat > target/doc/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=synapse_core/index.html">
+          </head>
+          <body>
+            <p>Redirecting to <a href="synapse_core/index.html">synapse_core</a>…</p>
+          </body>
+          </html>
+          EOF
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          destination_dir: .
+          force_orphan: true

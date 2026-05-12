@@ -1,0 +1,200 @@
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+Traceback (most recent call last):
+  File "/Users/master/projects/synapse/bench/4stack/aggregate.py", line 21, in <module>
+    def recall_at_k(base: dict, other: dict, k=10) -> float | None:
+TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'

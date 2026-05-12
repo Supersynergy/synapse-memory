@@ -1,6 +1,6 @@
 //! Near-dup nightly merge via LSH + cosine threshold.
 use anyhow::Result;
-use rand::Rng;
+use rand::RngExt;
 
 pub const COSINE_THRESHOLD: f64 = 0.95;
 pub const N_PLANES: usize = 8;
@@ -12,9 +12,9 @@ pub struct LshIndex {
 
 impl LshIndex {
     pub fn new(dim: usize) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let planes = (0..N_PLANES)
-            .map(|_| (0..dim).map(|_| rng.gen_range(-1.0f32..1.0)).collect())
+            .map(|_| (0..dim).map(|_| rng.random_range(-1.0f32..1.0)).collect())
             .collect();
         Self { planes, dim }
     }

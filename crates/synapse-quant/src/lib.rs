@@ -26,5 +26,14 @@ pub trait Quantizer {
     fn distance(&self, a: &Self::Encoded, b: &Self::Encoded) -> f32;
 }
 
-// TODO(PR-C1): pub mod int8;
+pub mod int8;
+pub use int8::{Int8, Int8Vec};
+
+pub mod ivf;
+pub use ivf::Ivf;
+
+#[cfg(feature = "rabitq")]
+pub mod rabitq;
+#[cfg(feature = "rabitq")]
+pub use rabitq::{RaBitQEncoder, RaBitQVec};
 // TODO(PR-C2): pub mod matryoshka;

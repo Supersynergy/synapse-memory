@@ -1,0 +1,39 @@
+[package]
+name = "synapse-space"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Space concept layer on top of Synapse: Space → Wing → Room → Drawer hierarchy."
+
+[lib]
+name = "synapse_space"
+
+[dependencies]
+synapse-core = { path = "../synapse-core" }
+synapse-rerank = { path = "../synapse-rerank", optional = true }
+synapse-engine = { path = "../synapse-engine" }
+synapse-ann = { path = "../synapse-ann" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+rusqlite.workspace = true
+# daemon-embed feature deps (always present, gated by cfg at use-site)
+rmp-serde.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+# Gate MLX/Metal embed path; off by default (no Apple GPU dep in default build)
+mlx = []
+# Wire unix-socket embed bridge to synapsed daemon at /tmp/synapse.sock
+daemon-embed = []
+# Cross-encoder rerank via synapse-rerank (IdentityReranker by default; add onnx for OnnxCrossEncoder)
+rerank = ["dep:synapse-rerank"]
+# Enable real ONNX cross-encoder in search_reranked (downloads model on first use)
+onnx = ["rerank", "synapse-rerank/onnx"]

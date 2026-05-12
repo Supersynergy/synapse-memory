@@ -1,0 +1,16 @@
+[package]
+name = "synapse-mysql"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "MySQL wire-protocol proxy → Synapse Store (async, opensrv-mysql backend)"
+
+[dependencies]
+opensrv-mysql = { git = "https://github.com/databendlabs/opensrv.git", tag = "v0.10.0" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }
+async-trait = "0.1"
+thiserror = "2"
+synapse-libsql = { path = "../../crates/synapse-libsql" }
+
+[features]
+default = []

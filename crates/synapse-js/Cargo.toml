@@ -1,0 +1,24 @@
+[package]
+name = "synapse-js"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+name = "synapse_js"
+
+[features]
+default = []
+
+[dependencies]
+napi = { version = "2", default-features = false, features = ["napi6", "async"] }
+napi-derive = "2"
+synapse-core = { path = "../synapse-core" }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+[build-dependencies]
+napi-build = "2"

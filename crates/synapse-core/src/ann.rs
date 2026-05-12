@@ -83,12 +83,51 @@ impl Ann {
             .map_err(|e| Error::Other(format!("usearch insert: {e}")))
     }
 
+    /// Insert if not already present. Used during sidecar tail-rebuild after
+    /// load when concurrent puts may have added rows after last persist.
+    /// Errors with "duplicate" or "already exists" are swallowed silently.
+    pub fn insert_or_skip(&self, id: i64, vec: &[f32]) -> Result<()> {
+        let mut g = self.inner.write();
+        match g.insert(id as u64, vec) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let msg = format!("{e:?}");
+                if msg.contains("Duplicate") || msg.contains("already exists") {
+                    Ok(())  // already present, safe to skip
+                } else {
+                    Err(Error::Other(format!("usearch insert_or_skip: {e}")))
+                }
+            }
+        }
+    }
+
     /// Remove `id`. Idempotent.
     pub fn remove(&self, id: i64) -> Result<usize> {
         self.inner
             .write()
             .remove(id as u64)
             .map_err(|e| Error::Other(format!("usearch remove: {e}")))
+    }
+
+    /// Current runtime ef_search (expansion_search).
+    pub fn expansion_search(&self) -> usize {
+        self.inner.read().expansion_search()
+    }
+
+    /// kNN search with a temporary ef boost (higher recall, higher latency).
+    /// ef is clamped to [k, 4096]. Returns `(id, distance)` pairs.
+    pub fn search_with_ef(&self, query: &[f32], k: usize, ef: usize) -> Result<Vec<(i64, f32)>> {
+        if query.len() != self.dim {
+            return Err(Error::DimMismatch {
+                expected: self.dim,
+                got: query.len(),
+            });
+        }
+        let g = self.inner.read();
+        let out = g
+            .search_with_ef(query, k, ef)
+            .map_err(|e| Error::Other(format!("usearch search_with_ef: {e}")))?;
+        Ok(out.into_iter().map(|(id, d)| (id as i64, d)).collect())
     }
 
     /// kNN search. Returns `(id, distance)` pairs. Callers join against

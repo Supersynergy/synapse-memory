@@ -1,0 +1,8 @@
+{
+  "customer_id": "test-001",
+  "built_at": "2026-04-25T17:45:29Z",
+  "git": "b9af09283d05f06b7fe59e98ff6148323a9ce4a4",
+  "targets": [
+    {"triple":"aarch64-apple-darwin","sha256":"79cb00416cbed317912d2ea44c180a4a0ca5da5644d93d017744ace07cb06dfa"}
+  ]
+}

@@ -11,9 +11,17 @@
 
 use rayon::prelude::*;
 
-/// Same tuning rationale as `inmem_i8_index::SEARCH_MIN_LEN` — min rows per
-/// rayon thread, picked against M4 Max bench progression.
 const HAMMING_MIN_LEN: usize = 512;
+const SINGLE_THREAD_THRESHOLD: usize = 500_000;
+
+static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> =
+    std::sync::LazyLock::new(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .thread_name(|i| format!("synapse-hamming-search-{i}"))
+            .build()
+            .expect("rayon hamming pool build")
+    });
 
 /// 1-bit Hamming-distance brute-force index.
 pub struct InMemoryHammingIndex {
@@ -61,9 +69,25 @@ impl InMemoryHammingIndex {
     #[must_use]
     pub const fn dim(&self) -> usize { self.dim }
 
+    /// Row IDs in insertion order. Exposed for cascade indexes that need to
+    /// map result IDs back to code-index positions (e.g. RaBitQIndex).
+    #[must_use]
+    pub fn ids(&self) -> &[i64] { &self.ids }
+
+    /// Position of `id` in the index, or None if absent.
+    #[must_use]
+    pub fn position_of(&self, id: i64) -> Option<usize> {
+        self.ids.iter().position(|&x| x == id)
+    }
+
     /// Top-k candidate ids by smallest Hamming distance.
+    ///
+    /// Bottleneck fix 2026-05-10: previously allocated `Vec<u32>` for ALL
+    /// N rows (40MB heap at 10M rows). Now uses bounded max-heap of size k —
+    /// O(k) memory, O(N log k) time. For typical k=10..100 this is 100k-1M×
+    /// smaller heap footprint at 10M-vec scale.
     pub fn search(&self, query: &[f32], k: usize) -> Vec<(i64, u32)> {
-        if self.is_empty() || query.len() != self.dim {
+        if self.is_empty() || query.len() != self.dim || k == 0 {
             return Vec::new();
         }
         let mut q_bits = vec![0_u8; self.bpr];
@@ -72,18 +96,51 @@ impl InMemoryHammingIndex {
                 q_bits[j / 8] |= 1 << (j % 8);
             }
         }
-        let dists: Vec<u32> = self
-            .bits
-            .par_chunks(self.bpr)
-            .with_min_len(HAMMING_MIN_LEN)
-            .map(|row| hamming_u32(&q_bits, row))
-            .collect();
-        let k = k.min(dists.len());
-        let mut idx: Vec<usize> = (0..dists.len()).collect();
-        idx.select_nth_unstable_by(k - 1, |a, b| dists[*a].cmp(&dists[*b]));
-        idx.truncate(k);
-        idx.sort_by(|a, b| dists[*a].cmp(&dists[*b]));
-        idx.into_iter().map(|i| (self.ids[i], dists[i])).collect()
+        let n = self.bits.len() / self.bpr;
+        let k = k.min(n);
+
+        // Bounded top-k via max-heap. Item = (dist, row_idx); BinaryHeap is max-heap
+        // by default, so we keep the k smallest distances by evicting the max.
+        use std::collections::BinaryHeap;
+
+        let topk: Vec<(u32, usize)> = if n >= SINGLE_THREAD_THRESHOLD {
+            SEARCH_POOL.install(|| {
+                self.bits
+                    .par_chunks(self.bpr)
+                    .with_min_len(HAMMING_MIN_LEN)
+                    .enumerate()
+                    .fold(
+                        || BinaryHeap::<(u32, usize)>::with_capacity(k + 1),
+                        |mut heap, (i, row)| {
+                            let d = hamming_u32(&q_bits, row);
+                            if heap.len() < k { heap.push((d, i)); }
+                            else if d < heap.peek().unwrap().0 { heap.pop(); heap.push((d, i)); }
+                            heap
+                        },
+                    )
+                    .reduce(
+                        || BinaryHeap::<(u32, usize)>::with_capacity(k + 1),
+                        |mut a, b| {
+                            for item in b.into_iter() {
+                                if a.len() < k { a.push(item); }
+                                else if item.0 < a.peek().unwrap().0 { a.pop(); a.push(item); }
+                            }
+                            a
+                        },
+                    )
+                    .into_sorted_vec()
+            })
+        } else {
+            let mut heap = BinaryHeap::<(u32, usize)>::with_capacity(k + 1);
+            for (i, row) in self.bits.chunks(self.bpr).enumerate() {
+                let d = hamming_u32(&q_bits, row);
+                if heap.len() < k { heap.push((d, i)); }
+                else if d < heap.peek().unwrap().0 { heap.pop(); heap.push((d, i)); }
+            }
+            heap.into_sorted_vec()
+        };
+
+        topk.into_iter().map(|(d, i)| (self.ids[i], d)).collect()
     }
 }
 

@@ -1,0 +1,37 @@
+[ultra] 1000 queries, corpus=168438
+  mode=strict...
+    p50=0.5ms p95=2.9ms QPS=1100 recall@10(self)=0.2439
+  mode=binary_first...
+    p50=0.5ms p95=5.1ms QPS=832 recall@10(self)=0.8827
+[
+  {
+    "engine": "ultra (strict)",
+    "available": true,
+    "mode": "strict",
+    "n_queries": 1000,
+    "p50_ms": 0.542583002243191,
+    "p95_ms": 2.92583298869431,
+    "p99_ms": 5.913375003729016,
+    "mean_ms": 0.9089112134533934,
+    "qps_1c": 1100.217474708576,
+    "recall_at_10_vs_gt": 0.24389999999999998,
+    "recall_at_100_vs_gt": 0.26759000000000005,
+    "note": "Recall vs brute-force GT may be low: ultra re-embeds text queries; stored embeddings may differ from re-embedded. self_recall (binary_first vs strict) is the meaningful ANN metric."
+  },
+  {
+    "engine": "ultra (binary_first)",
+    "available": true,
+    "mode": "binary_first",
+    "n_queries": 1000,
+    "p50_ms": 0.5030410247854888,
+    "p95_ms": 5.0978329963982105,
+    "p99_ms": 12.552957981824875,
+    "mean_ms": 1.2018888698657975,
+    "qps_1c": 832.0236796199466,
+    "recall_at_10_vs_gt": 0.2428,
+    "recall_at_100_vs_gt": 0.25914,
+    "note": "Recall vs brute-force GT may be low: ultra re-embeds text queries; stored embeddings may differ from re-embedded. self_recall (binary_first vs strict) is the meaningful ANN metric.",
+    "self_recall_at_10": 0.8827,
+    "self_recall_at_100": 0.82087
+  }
+]

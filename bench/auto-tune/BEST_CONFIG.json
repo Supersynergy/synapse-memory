@@ -1,0 +1,11 @@
+{
+  "cache_size_mb": 1024,
+  "mmap_size_mb": 1024,
+  "page_size": 8192,
+  "journal_mode": "WAL",
+  "synchronous": "OFF",
+  "batch_size": 10000,
+  "insert_ops_s": 255048.7,
+  "query_p50_ms": 0.005,
+  "db_size_kb": 8.0
+}

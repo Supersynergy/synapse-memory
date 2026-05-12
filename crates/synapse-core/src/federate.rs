@@ -106,7 +106,7 @@ struct DocStore {
 
 impl DocStore {
     fn get_or_create(&mut self, doc_id: &str) -> &Doc {
-        self.docs.entry(doc_id.to_string()).or_insert_with(Doc::new)
+        self.docs.entry(doc_id.to_string()).or_default()
     }
 
     fn state_vector(&mut self, doc_id: &str) -> Vec<u8> {
@@ -116,7 +116,7 @@ impl DocStore {
     }
 
     fn apply_update(&mut self, doc_id: &str, update: &[u8]) -> Result<Vec<u8>> {
-        let doc = self.docs.entry(doc_id.to_string()).or_insert_with(Doc::new);
+        let doc = self.docs.entry(doc_id.to_string()).or_default();
         let mut txn = doc.transact_mut();
         txn.apply_update(Update::decode_v1(update).map_err(|e| Error::Other(e.to_string()))?)
             .map_err(|e| Error::Other(e.to_string()))?;
@@ -339,7 +339,7 @@ impl ReadWrite for UnixStream {}
 fn handle_stream(
     stream: &mut (impl Read + Write),
     store: &Arc<Mutex<DocStore>>,
-    sk: &SigningKey,
+    _sk: &SigningKey,
 ) -> Result<()> {
     let buf = read_framed(stream)?;
     let msg = decode(&buf)?;
@@ -379,11 +379,11 @@ fn handle_stream(
 mod tests {
     use super::*;
     use crate::crdt;
-    use ed25519_dalek::SigningKey;
-    use rand::rngs::OsRng;
+    
+    use crate::sign::random_signing_key;
 
     fn make_fed() -> Federation {
-        let sk = SigningKey::generate(&mut OsRng);
+        let sk = random_signing_key();
         Federation::new(sk)
     }
 
@@ -414,7 +414,7 @@ mod tests {
     fn bad_signature_rejected() {
         let fed = make_fed();
         let update = crdt::new_meta(&[("tags", "test")]).unwrap();
-        let sk2 = SigningKey::generate(&mut OsRng);
+        let sk2 = random_signing_key();
         let bad_sig = sign::sign_bytes(&sk2, b"wrong data").to_vec();
         let vk = sk2.verifying_key().to_bytes().to_vec();
         let msg = Msg::Update {
@@ -428,8 +428,8 @@ mod tests {
 
     #[test]
     fn two_nodes_sync_via_tcp() {
-        let sk_a = SigningKey::generate(&mut OsRng);
-        let sk_b = SigningKey::generate(&mut OsRng);
+        let sk_a = random_signing_key();
+        let sk_b = random_signing_key();
         let fed_a = Federation::new(sk_a);
         let fed_b = Federation::new(sk_b.clone());
 

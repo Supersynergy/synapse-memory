@@ -3,7 +3,8 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "synapse"
+name = "synapse-rs"
+version = "1.0.1rc1"
 requires-python = ">=3.9"
 classifiers = [
     "License :: OSI Approved :: MIT License",
@@ -28,6 +29,6 @@ dev = ["pytest>=8", "numpy>=1.26"]
 
 [tool.maturin]
 # Use ABI3 wheel targeting Python 3.9+ so a single wheel covers modern pythons.
-features = ["pyo3/abi3-py39", "pyo3/extension-module"]
-module-name = "synapse"
+features = ["pyo3/extension-module"]
+module-name = "synapse_py"
 # Our Cargo.toml keeps crate-type = rlib — maturin adds cdylib automatically.

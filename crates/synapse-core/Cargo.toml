@@ -22,9 +22,14 @@ zstd.workspace = true
 blake3.workspace = true
 tracing.workspace = true
 fastembed = { workspace = true, optional = true }
+# embed-dynamic: ORT loaded via dlopen at runtime (no libstdc++ at link time).
+# Required when cross-compiling from mac to linux without a Linux sysroot.
+# Uses the same dep as `embed` but with ort-load-dynamic features layered on top.
+# When --all-features is used, both embed and embed-dynamic activate dep:fastembed — no alias conflict.
 redb = { workspace = true, optional = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
+getrandom = "0.2"
 age = { workspace = true }
 yrs = { workspace = true }
 rmp-serde = { workspace = true }
@@ -34,6 +39,7 @@ ndarray.workspace = true
 fastbloom.workspace = true
 toml.workspace = true
 base64.workspace = true
+bitflags = "2"
 rayon = "1"
 dashmap = "6"
 parking_lot = { workspace = true, optional = true }
@@ -44,23 +50,57 @@ reqwest = { workspace = true, optional = true }
 # M4 Max integration: NEON-native SIMD distances (f32/f16/i8/b8).
 simsimd = { version = "6.5", optional = true }
 # f16 storage/conversion helpers in turbo::f16_kernels (50% RAM savings).
-half = "2.4"
+half = "2.7"
 # Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
 tikv-jemallocator = { version = "0.6", optional = true }
+# mlock / madvise / madvise wrappers in turbo::ram (unix only).
+libc = "0.2"
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
 synapse-ann = { path = "../synapse-ann", optional = true }
+# NEON f16/i8 dot-product kernels (3.9× over scalar on M4 Max).
+synapse-kernel = { path = "../synapse-kernel" }
+synapse-engine = { path = "../synapse-engine" }
+# RaBitQ 1-bit cascade index — proper Householder rotation from synapse-quant.
+synapse-quant = { path = "../synapse-quant", features = ["rabitq"] }
 async-trait = "0.1"
 tokio = { workspace = true }
+# SOTA agent-memory layer: NER gazetteer + temporal/regex extraction.
+aho-corasick = "1"
+regex = "1"
+# embed-mlx feature: msgpack codec for the Python sidecar IPC.
+rmpv = { version = "1", optional = true }
+# tantivy-fts: route keyword search through synapse-fts (BM25 via tantivy).
+# Default OFF — FTS5 path unchanged when this feature is absent.
+synapse-fts = { path = "../synapse-fts", optional = true }
+# HippoRAG-2 / GraphRAG graph-retrieval (PPR over KG). Default OFF.
+synapse-graph = { path = "../synapse-graph", optional = true, features = ["hippo"] }
+# SPANN disk-tier: in-memory centroids + mmap posting lists. Default OFF.
+synapse-spann = { path = "../synapse-spann", optional = true }
+# Production observability (OTel + Prometheus). Default OFF.
+synapse-obs = { path = "../synapse-obs", optional = true }
+# embed-metal: Candle + Metal backend for BGE-small on Apple Silicon.
+# Feature-gated to avoid 200MB+ deps in default builds.
+candle-core = { version = "0.9", optional = true, features = ["metal"] }
+candle-nn = { version = "0.9", optional = true }
+candle-transformers = { version = "0.9", optional = true }
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["http", "progressbar", "fancy-regex"] }
+hf-hub = { version = "0.4", optional = true, features = ["tokio"] }
 
 [dependencies.libsql]
 version = "0.9"
 optional = true
 
 [features]
-default = ["backend-rusqlite"]
+# 2026-05-10: simsimd enabled by default — 1.5× NEON cosine on M4 Max,
+# AVX2 on x86_64. Apple Silicon + Linux aarch64 / x86_64 supported.
+# Pure-Rust default lost; build with --no-default-features --features backend-rusqlite for pure-Rust.
+default = ["backend-rusqlite", "turbo", "simsimd", "tantivy-fts"]
 backend-rusqlite = []
 backend-libsql = ["dep:libsql"]
 embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
+# embed-dynamic: ORT loaded via dlopen. Use for Linux cross-compile builds.
+# At runtime, libonnxruntime.so must be on LD_LIBRARY_PATH or next to the binary.
+embed-dynamic = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
 encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 turbo = []
 ollama = ["turbo", "dep:reqwest"]
@@ -70,19 +110,47 @@ simsimd = ["turbo", "dep:simsimd"]
 accelerate = []
 # Schritt 1 optim #2: opt-in jemalloc for the scale-bench example only.
 bench-jemalloc = ["dep:tikv-jemallocator"]
+# mlock: pin hot vector pages in RAM (needs RLIMIT_MEMLOCK or CAP_IPC_LOCK). Unix only.
+mlock = []
+# huge-pages: MAP_HUGETLB 2 MB pages for SPANN posting-lists. Linux only.
+huge-pages = []
 # PR-A1-wire: enable usearch-backed Store::search_vec fast-path with
 # sidecar persistence. Default OFF per SPEC §3 (pure-Rust default build).
 ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot"]
-# Phase 5 MLX Metal embedder scaffold (Apple Silicon only). Real mlx-rs dep added Day 57.
-embed-mlx = []
+# Phase 5 MLX Metal embedder (Apple Silicon only). IPC sidecar to mlx-embeddings.
+# Implies `turbo` (needed for embedder_trait module).
+embed-mlx = ["turbo", "dep:rmpv"]
+# Phase 5b Candle-Metal: native Rust BERT on Metal GPU, no Python sidecar.
+# Only builds on macOS aarch64. ~200MB deps (candle-transformers + tokenizers).
+embed-metal = ["turbo", "dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
+# Route keyword/hybrid BM25 leg through tantivy instead of SQLite FTS5.
+tantivy-fts = ["dep:synapse-fts", "dep:parking_lot"]
+# Split-conformal recall prediction — statistical recall guarantee, default OFF.
+conformal = []
+# Production observability: OTel traces + Prometheus metrics on :9478/metrics.
+observability = ["dep:synapse-obs", "synapse-obs/observability"]
+# HippoRAG-2 / GraphRAG: graph-PPR retrieval layer, +20-30% recall on entity queries.
+hippo = ["dep:synapse-graph"]
+# Auto disk-tier via SPANN when corpus > SYNAPSE_RAM_THRESHOLD_DOCS (default 100_000).
+spann-tier = ["dep:synapse-spann"]
+# Embedding dimension compile-time selection. Default = 384 (BGE-small / Arctic-XS/S).
+# embed-768:  Arctic-M / Nomic-1.5  (MTEB ≤62.5)
+# embed-1024: Mxbai-large / Arctic-L (MTEB ≤64.7)
+embed-768 = []
+embed-1024 = []
 
 [dev-dependencies]
 tempfile = "3"
 tokio = { workspace = true }
-criterion = { version = "0.5", default-features = false }
+criterion = { version = "0.8", default-features = false }
 # scale-bench example (PR-G2)
 clap = { version = "4", features = ["derive"] }
-sha2 = "0.10"
+sha2 = "0.11"
+
+[[example]]
+name = "libsql_fts5_abi_check"
+path = "examples/libsql_fts5_abi_check.rs"
+required-features = ["backend-libsql"]
 
 [[example]]
 name = "synapse_scale_bench"
@@ -92,6 +160,21 @@ path = "examples/synapse_scale_bench.rs"
 name = "bench_progression"
 path = "examples/bench_progression.rs"
 required-features = ["turbo", "simsimd"]
+
+[[example]]
+name = "bench_embed_mlx"
+path = "examples/bench_embed_mlx.rs"
+required-features = ["embed-mlx", "embed"]
+
+[[example]]
+name = "bench_embed_metal"
+path = "examples/bench_embed_metal.rs"
+required-features = ["embed-metal"]
+
+[[example]]
+name = "bench_tiered"
+path = "examples/bench_tiered.rs"
+required-features = ["spann-tier", "simsimd"]
 
 [lib]
 doctest = false
@@ -108,3 +191,25 @@ harness = false
 name = "kernels_progression"
 harness = false
 required-features = ["turbo", "simsimd"]
+
+[[bench]]
+name = "simsimd_vs_ndarray"
+harness = false
+required-features = ["turbo", "simsimd"]
+
+[[bench]]
+name = "rrf_simd"
+harness = false
+
+[[bench]]
+name = "dist_score"
+harness = false
+
+[[bench]]
+name = "rrf_neon"
+harness = false
+
+[[bench]]
+name = "f16_hnsw"
+harness = false
+required-features = ["turbo"]

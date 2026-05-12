@@ -1,0 +1,1 @@
+{"engine": "qdrant", "n_docs": 100000, "profile": "full", "error": "HTTPConnectionPool(host='localhost', port=6333): Max retries exceeded with url: /collections/bench_test (Caused by NewConnectionError(\"HTTPConnection(host='localhost', port=6333): Failed to establish a new connection: [Errno 61] Connection refused\"))", "status": "ERROR"}

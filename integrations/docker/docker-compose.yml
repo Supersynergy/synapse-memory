@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  synapse-server:
+    image: synapse/server:latest
+    build:
+      context: ../..
+      dockerfile: integrations/docker/Dockerfile
+    ports:
+      - "3306:3306"   # MySQL wire
+      - "5432:5432"   # PostgreSQL wire
+      - "9990:9990"   # Ops HTTP (health, slowlog, /metrics)
+    volumes:
+      - synapse-data:/data
+    environment:
+      RUST_LOG: info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9990/ops/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9091:9090"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on: [synapse-server]
+
+volumes:
+  synapse-data:

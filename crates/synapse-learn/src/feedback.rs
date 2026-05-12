@@ -34,7 +34,7 @@ pub fn sweep_unaccepted(
         .query_row(
             "SELECT COUNT(*) FROM feedback WHERE ts < ?1",
             rusqlite::params![cutoff],
-            |r| r.get::<_, usize>(0),
+            |r| r.get::<_, i64>(0).map(|v| v as usize),
         )
         .unwrap_or(0);
     if count > 0 {

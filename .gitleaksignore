@@ -1,0 +1,8 @@
+# Sample / placeholder secrets used in customer-facing docs and examples.
+# These are not real credentials.
+#
+# Format: <fingerprint> = <SHA1(file:rule:offset)> from `gitleaks detect`
+# Or: <file>:<rule>:<line>
+
+# Example license key shown in onboarding docs (Keygen.sh-compatible format demo).
+gtm/CUSTOMER-ONBOARDING.md:generic-api-key:10

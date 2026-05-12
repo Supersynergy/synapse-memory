@@ -8,7 +8,6 @@
 
 pub mod store;
 pub mod series;
-pub mod analytics;
 
 mod ohlcv;
 mod regime;

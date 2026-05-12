@@ -8,9 +8,22 @@
 
 use rayon::prelude::*;
 
+#[cfg(feature = "simsimd")]
+use crate::turbo::f16_kernels::{cos_f16_row_prepared, pack_f16_rows, prepare_query_f16};
+#[cfg(not(feature = "simsimd"))]
 use crate::turbo::f16_kernels::{cos_f16_row, pack_f16_rows};
 
 const SEARCH_MIN_LEN: usize = 256;
+const SINGLE_THREAD_THRESHOLD: usize = 500_000;
+
+static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> =
+    std::sync::LazyLock::new(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .thread_name(|i| format!("synapse-f16-search-{i}"))
+            .build()
+            .expect("rayon f16 pool build")
+    });
 
 /// Dense f16-stored brute-force cosine index.
 pub struct InMemoryF16Index {
@@ -54,12 +67,36 @@ impl InMemoryF16Index {
         if self.is_empty() || query.len() != self.dim {
             return Vec::new();
         }
-        let scores: Vec<f32> = self
-            .packed
-            .par_chunks(self.bpr)
-            .with_min_len(SEARCH_MIN_LEN)
-            .map(|row| cos_f16_row(query, row).unwrap_or(0.0))
-            .collect();
+        // Bottleneck fix 2026-05-10: hoist query f16 conversion out of par_chunks loop.
+        // Before: cos_f16_row allocated query Vec on every row → N allocs per search.
+        // After: prepare_query_f16 once, cos_f16_row_prepared per row → 1 alloc per search.
+        #[cfg(feature = "simsimd")]
+        let q_prepared = prepare_query_f16(query);
+
+        let scores: Vec<f32> = if self.packed.len() / self.bpr >= SINGLE_THREAD_THRESHOLD {
+            SEARCH_POOL.install(|| {
+                self.packed
+                    .par_chunks(self.bpr)
+                    .with_min_len(SEARCH_MIN_LEN)
+                    .map(|row| {
+                        #[cfg(feature = "simsimd")]
+                        { cos_f16_row_prepared(&q_prepared, row).unwrap_or(0.0) }
+                        #[cfg(not(feature = "simsimd"))]
+                        { cos_f16_row(query, row).unwrap_or(0.0) }
+                    })
+                    .collect()
+            })
+        } else {
+            self.packed
+                .chunks(self.bpr)
+                .map(|row| {
+                    #[cfg(feature = "simsimd")]
+                    { cos_f16_row_prepared(&q_prepared, row).unwrap_or(0.0) }
+                    #[cfg(not(feature = "simsimd"))]
+                    { cos_f16_row(query, row).unwrap_or(0.0) }
+                })
+                .collect()
+        };
         let k = k.min(scores.len());
         let mut idx: Vec<usize> = (0..scores.len()).collect();
         idx.select_nth_unstable_by(k - 1, |a, b| {

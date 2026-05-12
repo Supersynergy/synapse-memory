@@ -1,0 +1,56 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Synapse Bench — Embed (MLX)">
+  <header class="hero">
+    <h1>Embed <span>·</span> MLX vs fastembed</h1>
+    <p class="lead">
+      MLX Metal is now the default embedder. Numerical parity with fastembed is
+      1.0000 (bf16). The headline win is <strong>−48% on Vec p95 tail latency</strong>
+      — sub-100 ms p95 across the board, where fastembed CPU showed long-tail batching jitter.
+    </p>
+    <span class="badge">MLX bf16 · BGE-small-en-v1.5 · IPC sidecar</span>
+  </header>
+
+  <main>
+    <h2>Latency comparison</h2>
+    <table>
+      <thead><tr><th>Path</th><th>fastembed CPU (prev)</th><th>MLX Metal (now)</th><th>Δ p50/p95</th></tr></thead>
+      <tbody>
+        <tr><td>Lex p50</td>    <td>4.5 ms</td>   <td>5.9 ms</td>  <td class="delta-bad">+1.4 ms</td></tr>
+        <tr><td>Lex p95</td>    <td>16.6 ms</td>  <td>18.5 ms</td> <td class="delta-bad">+1.9 ms</td></tr>
+        <tr><td>Vec p50</td>    <td>81.9 ms</td>  <td>86.2 ms</td> <td class="delta-bad">+4.3 ms</td></tr>
+        <tr class="highlight"><td>Vec p95</td><td>174.3 ms</td><td><strong>90.8 ms</strong></td><td class="delta-good">−84 ms (−48%)</td></tr>
+        <tr><td>Hybrid p50</td> <td>56.4 ms</td>  <td>91.8 ms</td> <td class="delta-bad">+35 ms</td></tr>
+        <tr><td>Hybrid p95</td> <td>64.8 ms</td>  <td>96.3 ms</td> <td class="delta-bad">+32 ms</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Why p50 regresses, p95 wins</h2>
+    <p>The IPC sidecar to the MLX worker adds a fixed ~5 ms framing cost per call that
+       fastembed (in-process) does not pay on warm batches. So p50 looks worse on Lex/Vec
+       and on Hybrid (which embeds the query <em>and</em> reranks → two round-trips).</p>
+    <p>But p95 — the SLO-relevant tail — is dominated by fastembed's <em>batching jitter</em>,
+       which MLX Metal does not exhibit. Net: ship MLX as default for stable tail latency
+       under load.</p>
+
+    <h2>Parity</h2>
+    <p>MLX bf16 vs fastembed CPU: cosine similarity <strong>1.0000</strong> across the BGE-small
+       parity suite. No semantic regression.</p>
+
+    <h2>Security: CRIT-2 closed</h2>
+    <p>Oversized embed-frame DoS (the IPC reader trusted a 32-bit length and could allocate
+       up to 4 GiB on a crafted reply) is fixed:</p>
+    <ul>
+      <li><code>MAX_FRAME = 256 MiB</code> bound (BGE-small batch=1024 is ~1.5 MiB — wide margin)</li>
+      <li><code>n == 0</code> reject</li>
+      <li>File: <code>crates/synapse-core/src/embed_mlx.rs</code></li>
+    </ul>
+
+    <h2>Follow-ups</h2>
+    <ul>
+      <li>IPC batching: coalesce <code>embed_one</code> calls inside a 1 ms window so Hybrid pays one round-trip, not two. Should restore Hybrid p50 ≤ 60 ms.</li>
+      <li>Native <code>mlx-rs</code> BGE adapter (no IPC) — blocked on upstream BGE/BERT model loaders in mlx-rs.</li>
+    </ul>
+  </main>
+</Base>

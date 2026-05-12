@@ -1,0 +1,32 @@
+[package]
+name = "longmemeval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "LongMemEval-S benchmark runner for Synapse SOTA pipeline."
+
+[[bin]]
+name = "longmemeval"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+rusqlite.workspace = true
+tokio = { workspace = true }
+synapse-core = { path = "../../crates/synapse-core", features = ["embed"] }
+synapse-extract = { path = "../../crates/synapse-extract" }
+synapse-rerank = { path = "../../crates/synapse-rerank" }
+
+[features]
+default = ["minimax", "rerank"]
+mlx = ["synapse-extract/mlx"]
+minimax = ["synapse-extract/minimax"]
+rerank = ["synapse-rerank/onnx"]
+embed-768 = ["synapse-core/embed-768"]
+embed-1024 = ["synapse-core/embed-1024"]
+hyde = ["synapse-core/ollama"]

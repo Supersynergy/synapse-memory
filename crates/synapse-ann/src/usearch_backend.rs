@@ -52,15 +52,101 @@ impl UsearchIndex {
         // cosine. Measured via tests/ann_recall_parity.rs: expansion_search=64
         // gave 0.79 recall (fail), 256 gives ≥0.95. Build time rises ~1.5x
         // but still << 1s/100k at 10k vectors.
+        // F16 halves memory → better cache hit rate → faster search.
         IndexOptions {
             dimensions: dim,
             metric: MetricKind::Cos,
-            quantization: ScalarKind::F32,
+            quantization: ScalarKind::F16,
             connectivity: 16, // HNSW M; usearch default
             expansion_add: 256,
             expansion_search: 256,
             multi: false,
         }
+    }
+
+    /// Build a new empty HNSW index with explicit HNSW tuning params.
+    pub fn new_tuned(
+        dim: usize,
+        capacity: usize,
+        connectivity: usize,
+        expansion_add: usize,
+        expansion_search: usize,
+    ) -> Result<Self, AnnError> {
+        let opts = IndexOptions {
+            dimensions: dim,
+            metric: MetricKind::Cos,
+            quantization: ScalarKind::F16,
+            connectivity,
+            expansion_add,
+            expansion_search,
+            multi: false,
+        };
+        let idx =
+            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        idx.reserve(capacity.max(1024))
+            .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
+        Ok(Self { idx, dim, len: 0 })
+    }
+
+    /// Build a new empty HNSW index with F32 quantization (fallback).
+    pub fn new_f32(dim: usize, expected_capacity: usize) -> Result<Self, AnnError> {
+        let opts = IndexOptions {
+            dimensions: dim,
+            metric: MetricKind::Cos,
+            quantization: ScalarKind::F32,
+            connectivity: 16,
+            expansion_add: 256,
+            expansion_search: 256,
+            multi: false,
+        };
+        let idx =
+            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        idx.reserve(expected_capacity.max(1024))
+            .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
+        Ok(Self { idx, dim, len: 0 })
+    }
+
+    /// Build a new empty HNSW index with INT8 scalar quantization (4× memory vs F32, 2× vs F16).
+    /// Recall typically 0.95-0.99 vs F32 baseline. Use when memory-bound at 50M+ scale.
+    pub fn new_i8(dim: usize, expected_capacity: usize) -> Result<Self, AnnError> {
+        let opts = IndexOptions {
+            dimensions: dim,
+            metric: MetricKind::Cos,
+            quantization: ScalarKind::I8,
+            connectivity: 16,
+            expansion_add: 256,
+            expansion_search: 256,
+            multi: false,
+        };
+        let idx =
+            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        idx.reserve(expected_capacity.max(1024))
+            .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
+        Ok(Self { idx, dim, len: 0 })
+    }
+
+    /// Mutate the runtime `expansion_search` (HNSW ef-search). Higher = more
+    /// recall, more latency. Default 256. Call before `search` to tune the
+    /// next batch of queries. Not thread-safe — wrap in a lock for concurrent use.
+    pub fn set_expansion_search(&self, ef: usize) {
+        self.idx.change_expansion_search(ef);
+    }
+
+    /// Current runtime expansion_search.
+    pub fn expansion_search(&self) -> usize {
+        self.idx.expansion_search()
+    }
+
+    /// Search with a temporary `ef` boost: save current ef → set boosted →
+    /// search → restore. Trades latency for recall on the hot path while
+    /// leaving build-time ef untouched. Not thread-safe with concurrent calls
+    /// to `search` from other threads.
+    pub fn search_with_ef(&self, query: &[f32], k: usize, ef: usize) -> Result<Vec<(u64, f32)>, AnnError> {
+        let prev = self.expansion_search();
+        self.idx.change_expansion_search(ef.max(k));
+        let r = AnnIndex::search(self, query, k);
+        self.idx.change_expansion_search(prev);
+        r
     }
 
     /// Load a previously-saved sidecar from `path`. The caller supplies `dim`
@@ -144,6 +230,23 @@ impl AnnIndex for UsearchIndex {
             .collect())
     }
 
+    /// usearch override: use runtime `change_expansion_search` to actually
+    /// expand HNSW exploration, instead of pure oversample-and-truncate which
+    /// gives no recall lift once ef saturates at small k.
+    fn search_with_rerank(
+        &self,
+        query: &[f32],
+        k: usize,
+        mult: usize,
+    ) -> Result<Vec<(u64, f32)>, AnnError> {
+        let m = mult.clamp(2, 100);
+        let cur = self.expansion_search();
+        // Aggressive boost: multiply current ef by mult so rerank actually
+        // explores more of the graph. Capped at 16384 to avoid pathological cost.
+        let boosted_ef = cur.saturating_mul(m).min(16384).max(k * m);
+        UsearchIndex::search_with_ef(self, query, k, boosted_ef)
+    }
+
     fn len(&self) -> usize {
         self.len
     }
@@ -193,6 +296,23 @@ mod tests {
                 (raw as f32) / (u32::MAX as f32) - 0.5
             })
             .collect()
+    }
+
+    #[test]
+    fn search_with_rerank_returns_top_k_sorted() {
+        let mut idx = UsearchIndex::new(64, 256).unwrap();
+        for i in 0..200u64 {
+            idx.insert(i, &v(i, 64)).unwrap();
+        }
+        let q = v(42, 64);
+        let hits = idx.search_with_rerank(&q, 5, 4).unwrap();
+        assert_eq!(hits.len(), 5);
+        // ascending by distance
+        for w in hits.windows(2) {
+            assert!(w[0].1 <= w[1].1);
+        }
+        // top-1 is the inserted query vector
+        assert_eq!(hits[0].0, 42);
     }
 
     #[test]

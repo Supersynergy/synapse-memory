@@ -1,0 +1,10 @@
+{"id":"g1","query":"vector search hybrid retrieval","relevant_ids":[],"notes":"placeholder — populate after corpus indexed"}
+{"id":"g2","query":"graph traversal personalized pagerank","relevant_ids":[],"notes":"placeholder"}
+{"id":"g3","query":"entity extraction async pipeline","relevant_ids":[],"notes":"placeholder"}
+{"id":"g4","query":"recursive CTE bloom filter cycle detection","relevant_ids":[],"notes":"placeholder"}
+{"id":"g5","query":"HNSW ANN benchmark Sift-1M","relevant_ids":[],"notes":"placeholder"}
+{"id":"g6","query":"smollm2 fact extraction prompt","relevant_ids":[],"notes":"placeholder"}
+{"id":"g7","query":"community detection label propagation","relevant_ids":[],"notes":"placeholder"}
+{"id":"g8","query":"Cypher MATCH path between nodes","relevant_ids":[],"notes":"placeholder"}
+{"id":"g9","query":"ColBERT cascade rerank","relevant_ids":[],"notes":"placeholder"}
+{"id":"g10","query":"temporal decay edge weight","relevant_ids":[],"notes":"placeholder"}

@@ -1,0 +1,86 @@
+name: bench-regression
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  bench:
+    runs-on: macos-15-arm64
+    timeout-minutes: 180
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          path: pr
+          fetch-depth: 0
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: base
+          fetch-depth: 1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo (PR)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pr -> pr/target
+
+      - name: Cache cargo (base)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: base -> base/target
+          prefix-key: base
+
+      - name: Compile benches — PR
+        working-directory: pr
+        run: cargo bench --workspace --no-run 2>&1 | tail -5
+
+      - name: Compile benches — base
+        working-directory: base
+        run: cargo bench --workspace --no-run 2>&1 | tail -5
+
+      - name: Run benches — PR
+        working-directory: pr
+        run: |
+          cargo bench --bench rrf_neon              -p synapse-core   -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench i8_dot                -p synapse-kernel -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench f16_dot               -p synapse-kernel -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench i8_neon               -p synapse-colbert -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench bmp_vs_naive          -p synapse-splade  -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo run --example raw_ann_microbench    -p synapse-ann --release 2>&1 | tail -3 || true
+
+      - name: Run benches — base
+        working-directory: base
+        run: |
+          cargo bench --bench rrf_neon              -p synapse-core   -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench i8_dot                -p synapse-kernel -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench f16_dot               -p synapse-kernel -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench i8_neon               -p synapse-colbert -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo bench --bench bmp_vs_naive          -p synapse-splade  -- -- --output-format criterion 2>&1 | tail -3 || true
+          cargo run --example raw_ann_microbench    -p synapse-ann --release 2>&1 | tail -3 || true
+
+      - name: Compare + comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          REGRESSION_THRESHOLD: "0.10"
+          BASELINES_PATH: bench-dashboard/baselines.json
+        run: |
+          python3 pr/scripts/bench_compare.py \
+            --pr-dir   pr/target/criterion \
+            --base-dir base/target/criterion \
+            --baselines pr/$BASELINES_PATH \
+            --threshold $REGRESSION_THRESHOLD \
+            --pr        $PR_NUMBER \
+            --repo      $REPO \
+            --token     $GH_TOKEN

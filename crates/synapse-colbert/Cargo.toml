@@ -1,0 +1,44 @@
+[package]
+name = "synapse-colbert"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ColBERT-v2 multi-vector late-interaction scaffold for Synapse"
+
+[features]
+default = []
+# Enable when candle-core is wired; currently placeholder embedder used
+colbert = []
+# Real jina-colbert-v2 inference via candle (BertModel + linear projection 768→128)
+colbert-jina = ["dep:candle-core", "dep:candle-nn", "dep:candle-transformers", "dep:tokenizers", "dep:hf-hub"]
+# MUVERA: ColBERT→fixed-dim FDE encoding (Google 2024) — no extra deps
+muvera = []
+
+[dependencies]
+synapse-kernel = { path = "../synapse-kernel" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+tracing.workspace = true
+zstd.workspace = true
+
+# colbert-jina optional deps
+candle-core  = { version = "0.10", optional = true }
+candle-nn    = { version = "0.10", optional = true }
+candle-transformers = { version = "0.10", optional = true }
+tokenizers   = { version = "0.21", default-features = false, features = ["onig"], optional = true }
+hf-hub       = { version = "0.3", features = ["tokio"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "i8_neon"
+harness = false
+
+[lib]
+name = "synapse_colbert"
+path = "src/lib.rs"
+doctest = false

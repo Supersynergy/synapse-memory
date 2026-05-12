@@ -92,89 +92,20 @@ impl Series {
 
     /// Fetch all bars in timestamp range [start, end).
     pub fn range(&mut self, range: Range<i64>) -> std::io::Result<Vec<Bar>> {
-        self.range_filter(range, None)
-    }
-
-    /// Fetch bars in timestamp range AND optional price range (close ∈ price_range).
-    /// Returns (bars, pages_scanned, pages_skipped).
-    pub fn range_filter_stats(
-        &mut self,
-        ts_range: Range<i64>,
-        price_range: Option<Range<f32>>,
-    ) -> std::io::Result<(Vec<Bar>, usize, usize)> {
+        // Flush pending first so they're visible
         self.flush_pending()?;
 
         let mut result = Vec::new();
-        let mut scanned = 0usize;
-        let mut skipped = 0usize;
-
         for &(ts_min, ts_max, page_idx) in &self.index {
-            if ts_max < ts_range.start || ts_min >= ts_range.end {
-                skipped += 1;
+            // Skip pages entirely outside range
+            if ts_max < range.start || ts_min >= range.end {
                 continue;
             }
-            scanned += 1;
             let page = self.mmap.read_page(page_idx)?;
             let (_hdr, bars) = decode_page(&page);
             for bar in bars {
-                if bar.ts >= ts_range.start && bar.ts < ts_range.end {
-                    if let Some(ref pr) = price_range {
-                        if bar.close < pr.start || bar.close >= pr.end {
-                            continue;
-                        }
-                    }
+                if bar.ts >= range.start && bar.ts < range.end {
                     result.push(bar);
-                }
-            }
-        }
-        result.sort_unstable_by_key(|b| b.ts);
-        Ok((result, scanned, skipped))
-    }
-
-    /// Fetch bars in timestamp range AND optional price range.
-    pub fn range_filter(
-        &mut self,
-        ts_range: Range<i64>,
-        price_range: Option<Range<f32>>,
-    ) -> std::io::Result<Vec<Bar>> {
-        let (bars, _, _) = self.range_filter_stats(ts_range, price_range)?;
-        Ok(bars)
-    }
-
-    /// Fetch only requested columns from pages in ts_range.
-    /// Returns bars with only the requested columns populated (others = 0).
-    /// `cols`: subset of ["open","high","low","close","volume"] — ts always returned.
-    pub fn range_with_columns(
-        &mut self,
-        ts_range: Range<i64>,
-        cols: &[&str],
-    ) -> std::io::Result<Vec<Bar>> {
-        self.flush_pending()?;
-
-        let want_open   = cols.contains(&"open");
-        let want_high   = cols.contains(&"high");
-        let want_low    = cols.contains(&"low");
-        let want_close  = cols.contains(&"close");
-        let want_volume = cols.contains(&"volume");
-
-        let mut result = Vec::new();
-        for &(ts_min, ts_max, page_idx) in &self.index {
-            if ts_max < ts_range.start || ts_min >= ts_range.end {
-                continue;
-            }
-            let page = self.mmap.read_page(page_idx)?;
-            let (hdr, bars) = decode_page(&page);
-            let _ = hdr;
-            for bar in bars {
-                if bar.ts >= ts_range.start && bar.ts < ts_range.end {
-                    result.push(Bar {
-                        ts:     bar.ts,
-                        open:   if want_open   { bar.open   } else { 0.0 },
-                        high:   if want_high   { bar.high   } else { 0.0 },
-                        low:    if want_low    { bar.low    } else { 0.0 },
-                        close:  if want_close  { bar.close  } else { 0.0 },
-                        volume: if want_volume { bar.volume } else { 0.0 },
-                    });
                 }
             }
         }

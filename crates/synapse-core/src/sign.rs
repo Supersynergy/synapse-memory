@@ -2,12 +2,18 @@
 
 use crate::error::{Error, Result};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use rand::rngs::OsRng;
+// rand 0.10 hides OsRng behind feature gate; use a small inline helper that
+// generates a SigningKey from 32 random bytes via getrandom (already a transitive dep).
+pub fn random_signing_key() -> SigningKey {
+    let mut seed = [0u8; 32];
+    getrandom::getrandom(&mut seed).expect("getrandom seed");
+    SigningKey::from_bytes(&seed)
+}
 use std::path::Path;
 
 /// Generate a new keypair, writing secret key and public key to files.
 pub fn keygen(secret_path: impl AsRef<Path>, public_path: impl AsRef<Path>) -> Result<()> {
-    let sk = SigningKey::generate(&mut OsRng);
+    let sk = random_signing_key();
     std::fs::write(secret_path, sk.to_bytes())?;
     std::fs::write(public_path, sk.verifying_key().to_bytes())?;
     Ok(())
@@ -49,7 +55,7 @@ mod tests {
 
     #[test]
     fn roundtrip_sign_verify() {
-        let sk = SigningKey::generate(&mut OsRng);
+        let sk = random_signing_key();
         let vk = sk.verifying_key();
         let data = b"hello synapse";
         let sig = sign_bytes(&sk, data);
@@ -58,7 +64,7 @@ mod tests {
 
     #[test]
     fn tamper_detected() {
-        let sk = SigningKey::generate(&mut OsRng);
+        let sk = random_signing_key();
         let vk = sk.verifying_key();
         let sig = sign_bytes(&sk, b"original");
         assert!(verify_bytes(&vk, b"tampered", &sig).is_err());

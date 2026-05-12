@@ -1,0 +1,87 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Synapse Bench — Methodology">
+  <header class="hero">
+    <h1>Methodology <span>·</span> How we measure</h1>
+    <p class="lead">
+      Every number on this dashboard is reproducible from a pinned commit on a single
+      machine. No cherry-picks, no warmup-discard tricks beyond what's documented per suite.
+    </p>
+    <span class="badge">M4 Max · 128 GB · macOS 24.5.0</span>
+  </header>
+
+  <main>
+    <h2>Hardware</h2>
+    <ul>
+      <li>MacBook Pro · Apple M4 Max</li>
+      <li>128 GB unified memory</li>
+      <li>macOS 24.5.0 (Darwin)</li>
+      <li>Single-host benchmarks only (no network jitter)</li>
+    </ul>
+
+    <h2>Branch &amp; commits</h2>
+    <ul>
+      <li>Branch: <code>session-2026-04-25-ultrathink</code></li>
+      <li>WP install verified at HEAD <code>30c645a</code> ("fix(wp): final 3 scalar fns")</li>
+      <li>MLX promotion base: <code>d4aacd8</code> (parity 1.0000 vs fastembed)</li>
+      <li>All raw result Markdown lives under <code>bench/results/2026-04-25/</code></li>
+    </ul>
+
+    <h2>Per-suite procedure</h2>
+
+    <h3>WordPress plugin (Lex / Vec / Hybrid)</h3>
+    <ul>
+      <li>Daemon: <code>synapsed</code> on <code>/tmp/synapse.sock</code> via <code>launchctl kickstart</code></li>
+      <li>Client: PHP plugin <code>synapse-wp/src/Client.php</code> with persistent UNIX socket</li>
+      <li>Driver: <code>/tmp/wp_bench.php</code> (committed in session)</li>
+      <li>Embedder: BGE-small-en-v1.5 warmed via <code>--lazy-embed</code> on first call</li>
+      <li>Result file: <code>wp-plugin-keepalive-fix.md</code></li>
+    </ul>
+
+    <h3>WordPress install</h3>
+    <ul>
+      <li>Daemon: <code>target/release/synapse-mysql-async</code> (5.2 MB) on <code>127.0.0.1:13317</code></li>
+      <li>Mode: <code>wp</code> · DB file: <code>/tmp/wp-install-retry.db</code> (clean each run)</li>
+      <li>WP 6.x at <code>/tmp/wp-retry/</code> (copy of <code>/tmp/wordpress-mysql/</code> minus config)</li>
+      <li>Driver: <code>wp-cli</code> (<code>wp core install</code>, <code>wp post create</code>, <code>wp user list</code>)</li>
+      <li>Result file: <code>wp-install-retry-final.md</code></li>
+    </ul>
+
+    <h3>OLTP point-select</h3>
+    <ul>
+      <li>Harness: <code>bench/oltp_repro.py</code> · pymysql · 8 threads × 2,000 queries</li>
+      <li>Schema: <code>sbtest1</code> with 10k rows (same DB as <code>synapse-vs-mysql-honest.md</code>)</li>
+      <li>Reference: MariaDB <code>SELECT 1</code> @ 8t = 7,626 OPS (in-memory, friendlier workload)</li>
+      <li>Result file: <code>oltp-gap-fix.md</code></li>
+    </ul>
+
+    <h3>Embed (MLX vs fastembed)</h3>
+    <ul>
+      <li>Same WP plugin harness as Lex/Vec/Hybrid above; only the embedder backend swapped</li>
+      <li>Parity: bf16 cosine similarity vs fastembed CPU on the BGE-small parity suite</li>
+      <li>Compile-verified release build; graceful fallback path checked on a fastembed-only host</li>
+      <li>Result file: <code>mlx-default-promoted.md</code></li>
+    </ul>
+
+    <h3>WP page-load throughput (context)</h3>
+    <ul>
+      <li>Load tool: <code>oha 1.14.0</code></li>
+      <li>Web tier: PHP 8.5.5 built-in server (<code>php -S</code>) — single-threaded, identical for both backends</li>
+      <li>WP 6.5 core only, default theme, no plugins</li>
+      <li>Fixture: 102 published posts</li>
+      <li>Workload: 15 s × 9 cases × backend</li>
+      <li>Result file: <code>wp-pageload-throughput.md</code></li>
+    </ul>
+
+    <h2>Source-of-truth files (2026-04-25)</h2>
+    <ul>
+      <li><code>wp-install-retry-final.md</code> — WP install drop-in proven</li>
+      <li><code>wp-plugin-keepalive-fix.md</code> — Lex 4.5 ms / Vec 81.9 ms / Hybrid 56.4 ms</li>
+      <li><code>oltp-gap-fix.md</code> — 1,078 → 7,153 OPS (matches MariaDB)</li>
+      <li><code>mlx-default-promoted.md</code> — MLX wired, Vec p95 −48%</li>
+      <li><code>wp-pageload-throughput.md</code> — MySQL 9.6 baseline</li>
+      <li><code>wp-plugin-real-bench.md</code> — superseded; kept for context</li>
+    </ul>
+  </main>
+</Base>

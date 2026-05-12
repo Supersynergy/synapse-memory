@@ -51,4 +51,7 @@ release VER:
 turbo-daemon:
     python3 tools/turbo/synapse_turbo.py daemon
 
+bench-micro:
+    cd bench/comprehensive && ~/.venvs/synapse-bench/bin/python3 micro.py
+
 check-all: test lint fmt audit deny

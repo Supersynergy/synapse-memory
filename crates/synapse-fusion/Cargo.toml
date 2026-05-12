@@ -1,0 +1,29 @@
+[package]
+name = "synapse-fusion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "MUVERA fusion: Reciprocal-Rank-Fusion over dense + ColBERT result sets"
+keywords = ["rrf", "fusion", "colbert", "retrieval", "rag"]
+categories = ["algorithms"]
+
+[dependencies]
+# No required deps — pure Rust RRF core
+
+# fusion-full optional deps
+anyhow = { workspace = true, optional = true }
+rusqlite = { workspace = true, optional = true }
+synapse-colbert = { path = "../synapse-colbert", optional = true }
+synapse-splade  = { path = "../synapse-splade",  optional = true }
+
+[features]
+# light: RRF-only (no extra deps)
+fusion = []
+# full pipeline: dense ANN (in-proc) + SPLADE BMP + RRF + ColBERT i8 rerank
+fusion-full = ["fusion", "dep:anyhow", "dep:rusqlite", "dep:synapse-colbert", "dep:synapse-splade"]
+
+[dev-dependencies]
+anyhow = { workspace = true }
+rusqlite = { workspace = true }

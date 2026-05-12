@@ -37,6 +37,68 @@ pub enum Request {
         id: i64,
         vk: Vec<u8>,
     },
+    /// Embed a single text string server-side. Returns the raw float vector.
+    /// Does NOT store the document — pure compute, no side effects.
+    /// Optional `dim` truncates via Matryoshka MRL (BGE-small trained for it).
+    /// `dim < native_dim` returns L2-renormalized truncated vec.
+    Embed {
+        text: String,
+        #[serde(default)]
+        dim: Option<usize>,
+    },
+    /// Vector search with a raw client-supplied embedding (no server-side embed needed).
+    SearchVec {
+        embedding: Vec<f32>,
+        limit: usize,
+    },
+    /// Rerank candidates server-side using cross-encoder (IdentityReranker unless `onnx` feature).
+    /// Returns top_k hits sorted by rerank score.
+    Rerank {
+        query: String,
+        candidates: Vec<Hit>,
+        top_k: usize,
+    },
+    /// Merge a peer brainpack snapshot into the DB file. daemon must have fs access.
+    SnapMerge {
+        snapshot_path: String,
+        out_path: String,
+        level: i32,
+    },
+    /// Batched search — multiple queries in one socket roundtrip.
+    /// Daemon executes them sequentially and returns results in same order.
+    BatchSearch {
+        queries: Vec<BatchSearchItem>,
+    },
+    /// Read-only raw SQL on brain.db. Read-only mode enforced.
+    /// Returns rows as msgpack array of arrays.
+    Sql {
+        query: String,
+        #[serde(default)]
+        params: Vec<serde_json::Value>,
+    },
+    /// Atomic transaction: multiple writes all-or-nothing.
+    /// Currently supports Put-batch semantics; extensible to mixed ops later.
+    Transaction {
+        ops: Vec<PutReq>,
+    },
+    /// Authenticate session with API key. If `SYNAPSE_API_KEY` env is set on
+    /// the daemon, all ops except Auth/Ping/Stats require valid auth token.
+    Auth {
+        token: String,
+    },
+    /// Switch active tenant — ATTACH per-tenant brain-{name}.db read-only as alias.
+    /// Daemon must have read access to the tenant DB file.
+    UseTenant {
+        name: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchSearchItem {
+    pub mode: SearchMode,
+    pub q: String,
+    pub limit: usize,
+    pub embed_query: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,8 +107,11 @@ pub struct PutReq {
     pub uri: Option<String>,
     pub text: String,
     pub meta: Option<serde_json::Value>,
-    /// If true, embed server-side before insert.
+    /// If true, embed server-side before insert. Ignored when `embedding` is provided.
     pub embed: bool,
+    /// Client-supplied embedding. If Some, skips server-side embed step.
+    #[serde(default)]
+    pub embedding: Option<Vec<f32>>,
 }
 
 impl From<PutReq> for PutRequest {
@@ -71,4 +136,13 @@ pub enum Response {
     Stats { docs: i64, vecs: i64 },
     Ok,
     Err(String),
+    /// Response to `Request::Embed`. Contains the raw embedding vector.
+    Embed { vec: Vec<f32> },
+    /// Response to `Request::BatchSearch`. One Hit-list per query, same order.
+    BatchHits(Vec<Vec<Hit>>),
+    /// Response to `Request::Sql`. Rows as msgpack arrays.
+    Rows {
+        cols: Vec<String>,
+        rows: Vec<Vec<serde_json::Value>>,
+    },
 }

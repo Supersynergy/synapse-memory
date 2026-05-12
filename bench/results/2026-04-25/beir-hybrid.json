@@ -1,0 +1,28 @@
+{
+  "dataset": "BEIR SciFact (real qrels, test split)",
+  "corpus_size": 5183,
+  "test_queries": 300,
+  "ingest_time_s": 222.0,
+  "hybrid": {
+    "queries_with_results": 300,
+    "queries_no_results": 0,
+    "recall_at_10": 0.8567,
+    "ndcg_at_10": 0.72,
+    "avg_latency_ms": 15.3,
+    "p95_latency_ms": 20.2
+  },
+  "lex_synapse": {
+    "recall_at_10": 0.0033,
+    "ndcg_at_10": 0.0033,
+    "avg_latency_ms": 0.1
+  },
+  "published_baselines": {
+    "bm25_ndcg10": 0.665,
+    "dense_bert_ndcg10": 0.72,
+    "fts5_lex_only_ndcg10": 0.6477,
+    "fts5_lex_only_recall10": 0.8
+  },
+  "method": "Synapse Hybrid (FTS5 Lex + fastembed BGE-small-384 Vec)",
+  "embedder": "fastembed ONNX CPU bge-small-en-v1.5 (384-dim)",
+  "synapse_version": "Rust daemon, socket msgpack"
+}

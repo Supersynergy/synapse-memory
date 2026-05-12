@@ -50,6 +50,10 @@ pub enum Strategy {
     SimSimdHamming,
     /// Matryoshka-truncated (k=128) + SimSIMD cos — 3× cheap, needs MRL model.
     MrlSimSimd,
+    /// RaBitQ cascade — Hamming sweep → RaBitQ unbiased rerank. Closes the
+    /// recall ceiling from 0.72 (raw Hamming) toward 0.95 with ~50× smaller
+    /// memory than f16. Best at medium-large scale where memory matters.
+    RaBitQCascade,
 }
 
 impl Strategy {
@@ -60,6 +64,7 @@ impl Strategy {
             Self::SimSimdI8                                    => 0.97,
             Self::MrlSimSimd                                   => 0.95,
             Self::SimSimdHamming                               => 0.72, // w/o rerank
+            Self::RaBitQCascade                                => 0.95, // Hamming + RaBitQ rerank
         }
     }
 
@@ -72,6 +77,7 @@ impl Strategy {
             Self::SimSimdI8      => 325.0,
             Self::SimSimdHamming => 250.0,
             Self::MrlSimSimd     => 400.0,
+            Self::RaBitQCascade  => 500.0, // Hamming + rerank N candidates
         }
     }
 }
@@ -140,13 +146,14 @@ impl AdaptiveRouter {
         s
     }
 
-    const fn enumerated() -> [Strategy; 6] {
+    const fn enumerated() -> [Strategy; 7] {
         [
             Strategy::ScalarF32,
             Strategy::RayonF32,
             Strategy::SimSimdF32,
             Strategy::SimSimdI8,
             Strategy::SimSimdHamming,
+            Strategy::RaBitQCascade,
             Strategy::MrlSimSimd,
         ]
     }
@@ -245,6 +252,7 @@ fn passes_corpus_gate(strat: Strategy, n: usize) -> bool {
         Strategy::SimSimdI8                  => n <= 50_000_000,
         Strategy::SimSimdHamming             => n >= 10_000,
         Strategy::MrlSimSimd                 => n >= 5_000,
+        Strategy::RaBitQCascade              => n >= 5_000 && n <= 50_000_000,
     }
 }
 

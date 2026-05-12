@@ -9,7 +9,7 @@
 //! * [`TextEmbedder::embed_one`] — convenience default delegating to `embed_batch`.
 //!
 //! Selection at runtime is driven by [`EmbedderKind`] + [`build_embedder`], which
-//! honours the `SYNAPSE_EMBEDDER` env var (`fastembed` | `ollama` | default = `fastembed`).
+//! honours the `SYNAPSE_EMBEDDER` env var (`fastembed` | `ollama` | `metal` | `mlx` | default = `fastembed`).
 //!
 //! # Example
 //! ```no_run
@@ -34,6 +34,9 @@ pub enum EmbedderKind {
     Ollama,
     /// Candle-Metal BGE-small (Apple Silicon GPU) — scaffold only in v2.1.
     CandleMetal,
+    /// MLX Metal sidecar BGE-small (Apple Silicon, `embed-mlx` feature).
+    /// p50 ~4.3ms single, ~0.22ms/doc batch-32. See `embed_mlx`.
+    Mlx,
 }
 
 impl EmbedderKind {
@@ -44,6 +47,7 @@ impl EmbedderKind {
             "fastembed" | "" => Some(Self::Fastembed),
             "ollama"          => Some(Self::Ollama),
             "candle-metal" | "candle" | "metal" => Some(Self::CandleMetal),
+            "mlx" | "mlx-metal" => Some(Self::Mlx),
             _                 => None,
         }
     }
@@ -79,7 +83,7 @@ pub trait TextEmbedder: Send + Sync {
 
 // --- fastembed adapter ---------------------------------------------------
 
-#[cfg(feature = "embed")]
+#[cfg(any(feature = "embed", feature = "embed-dynamic"))]
 impl TextEmbedder for crate::embed::Embedder {
     fn name(&self) -> &str { "fastembed:bge-small-en-v1.5" }
     fn dim(&self) -> usize { 384 }
@@ -116,15 +120,15 @@ pub fn build_embedder(kind: Option<EmbedderKind>) -> Result<Box<dyn TextEmbedder
     let k = kind.unwrap_or_else(EmbedderKind::from_env);
     match k {
         EmbedderKind::Fastembed => {
-            #[cfg(feature = "embed")]
+            #[cfg(any(feature = "embed", feature = "embed-dynamic"))]
             {
                 let e = crate::embed::Embedder::new()?;
                 Ok(Box::new(e))
             }
-            #[cfg(not(feature = "embed"))]
+            #[cfg(not(any(feature = "embed", feature = "embed-dynamic")))]
             {
                 Err(Error::Other(
-                    "fastembed backend requested but crate built without `embed` feature".into(),
+                    "fastembed backend requested but crate built without `embed` or `embed-dynamic` feature".into(),
                 ))
             }
         }
@@ -144,6 +148,19 @@ pub fn build_embedder(kind: Option<EmbedderKind>) -> Result<Box<dyn TextEmbedder
         EmbedderKind::CandleMetal => {
             let e = candle_metal_embedder::CandleMetalEmbedder::new("bge-small")?;
             Ok(Box::new(e))
+        }
+        EmbedderKind::Mlx => {
+            #[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "embed-mlx"))]
+            {
+                let e = crate::embed_mlx::MlxMetalEmbedder::new()?;
+                Ok(Box::new(e))
+            }
+            #[cfg(not(all(target_os = "macos", target_arch = "aarch64", feature = "embed-mlx")))]
+            {
+                Err(Error::Other(
+                    "mlx backend requested but crate built without `embed-mlx` feature (or not on apple-silicon)".into(),
+                ))
+            }
         }
     }
 }

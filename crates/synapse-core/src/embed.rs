@@ -4,7 +4,10 @@
 //! reused across all Embedder instances — eliminates per-request model reload overhead.
 
 use crate::error::{Error, Result};
+#[cfg(feature = "embed")]
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+#[cfg(all(feature = "embed-dynamic", not(feature = "embed")))]
+use fastembed_dynamic::{EmbeddingModel, InitOptions, TextEmbedding};
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use redb::{Database, ReadableTableMetadata, TableDefinition};
@@ -13,18 +16,53 @@ use std::sync::Arc;
 
 const EMB_TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("emb_cache_v1");
 
-/// Number of ONNX sessions in the global pool.
-pub const POOL_SIZE: usize = 2;
+/// Returns number of ONNX sessions: half of logical cores, min 2.
+/// On M4 Max (12 cores) → 6 sessions. Replaces old `POOL_SIZE = 2`.
+fn get_pool_size() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| (n.get() / 2).max(2))
+        .unwrap_or(4)
+}
 
 /// Global pool of pre-warmed TextEmbedding sessions.
 static SESSION_POOL: OnceCell<Mutex<Vec<TextEmbedding>>> = OnceCell::new();
 
+/// Select embedding model from `SYNAPSE_EMBED_MODEL` env-var.
+/// Default `bge-small` (384-dim, MTEB 53.0) for backward compatibility.
+///
+/// IMPORTANT: switching models invalidates existing vector corpora (different dim).
+/// Use a fresh `.synapse/` directory after switching.
+///
+/// Accepted values:
+///   `bge-small`   → BGESmallENV15            (384-dim, MTEB 53.0, default)
+///   `bge-small-q` → BGESmallENV15Q           (384-dim, int8 quantized, smaller)
+///   `arctic-xs`   → SnowflakeArcticEmbedXS   (384-dim, MTEB 56.6)
+///   `arctic-s`    → SnowflakeArcticEmbedS    (384-dim, MTEB 60.0)
+///   `arctic-m`    → SnowflakeArcticEmbedM    (768-dim, MTEB 62.5) ← upgrade target
+///   `arctic-l`    → SnowflakeArcticEmbedL    (1024-dim, MTEB 63.0)
+///   `mxbai-large` → MxbaiEmbedLargeV1        (1024-dim, MTEB 64.7)
+///   `nomic-1.5`   → NomicEmbedTextV15        (768-dim, MTEB 62.4)
+fn select_model() -> EmbeddingModel {
+    match std::env::var("SYNAPSE_EMBED_MODEL").unwrap_or_default().to_lowercase().as_str() {
+        "bge-small-q"          => EmbeddingModel::BGESmallENV15Q,
+        "arctic-xs"            => EmbeddingModel::SnowflakeArcticEmbedXS,
+        "arctic-s"             => EmbeddingModel::SnowflakeArcticEmbedS,
+        "arctic-m"             => EmbeddingModel::SnowflakeArcticEmbedM,
+        "arctic-l"             => EmbeddingModel::SnowflakeArcticEmbedL,
+        "mxbai-large"          => EmbeddingModel::MxbaiEmbedLargeV1,
+        "nomic-1.5"            => EmbeddingModel::NomicEmbedTextV15,
+        _                      => EmbeddingModel::BGESmallENV15,
+    }
+}
+
 fn get_or_init_pool() -> Result<&'static Mutex<Vec<TextEmbedding>>> {
     SESSION_POOL.get_or_try_init(|| {
-        let mut sessions = Vec::with_capacity(POOL_SIZE);
-        for _ in 0..POOL_SIZE {
+        let pool_size = get_pool_size();
+        let model = select_model();
+        let mut sessions = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
             let m = TextEmbedding::try_new(
-                InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(false),
+                InitOptions::new(model.clone()).with_show_download_progress(false),
             )
             .map_err(|e| Error::Other(format!("fastembed init: {e}")))?;
             sessions.push(m);
@@ -77,15 +115,18 @@ impl Embedder {
 
     fn embed_raw(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
         let pool = get_or_init_pool()?;
-        let mut guard = pool.lock();
-        // Round-robin: pop last session, embed, push back.
-        let mut session = guard
-            .pop()
-            .ok_or_else(|| Error::Other("pool empty".into()))?;
+        // Acquire lock only to pop — drop guard before ONNX inference (~5-15ms).
+        let mut session = {
+            let mut guard = pool.lock();
+            guard
+                .pop()
+                .ok_or_else(|| Error::Other("pool empty".into()))?
+        };
         let result = session
             .embed(texts, None)
             .map_err(|e| Error::Other(format!("embed: {e}")));
-        guard.push(session);
+        // Re-acquire to push back.
+        pool.lock().push(session);
         result
     }
 
@@ -172,14 +213,42 @@ impl Embedder {
 /// falls back to fastembed on error. Everywhere else: returns fastembed ONNX CPU.
 #[cfg(feature = "turbo")]
 pub fn pick_embedder() -> Box<dyn crate::embedder_trait::TextEmbedder> {
+    pick_embedder_with_cache::<&std::path::Path>(None)
+}
+
+/// Variant that lets the caller supply a fastembed cache path. The MLX path
+/// has no equivalent cache concept (sidecar handles model load itself), so
+/// the cache argument is only consumed by the fastembed fallback.
+#[cfg(feature = "turbo")]
+pub fn pick_embedder_with_cache<P: AsRef<std::path::Path>>(
+    cache_path: Option<P>,
+) -> Box<dyn crate::embedder_trait::TextEmbedder> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "embed-mlx"))]
     {
         use crate::embed_mlx::MlxMetalEmbedder;
-        if let Ok(mlx) = MlxMetalEmbedder::new() {
-            return Box::new(mlx);
+        match MlxMetalEmbedder::new() {
+            Ok(mlx) => {
+                tracing::info!(
+                    backend = "mlx-metal",
+                    model = "bge-small-en-v1.5-bf16",
+                    "pick_embedder: MLX Metal selected (Apple Silicon)"
+                );
+                return Box::new(mlx);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "pick_embedder: MLX sidecar init failed, falling back to fastembed CPU"
+                );
+            }
         }
-        // MLX scaffold not ready yet — fall through to fastembed.
     }
-    // Default: fastembed ONNX CPU (always available when `embed` feature is on).
-    Box::new(Embedder::new().expect("fastembed pool init failed"))
+    tracing::info!(
+        backend = "fastembed-onnx-cpu",
+        model = "bge-small-en-v1.5",
+        "pick_embedder: fastembed ONNX CPU selected"
+    );
+    Box::new(
+        Embedder::new_with_cache(cache_path).expect("fastembed pool init failed"),
+    )
 }

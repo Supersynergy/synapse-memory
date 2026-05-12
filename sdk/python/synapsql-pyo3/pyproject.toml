@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.4"]
+build-backend = "maturin"
+
+[project]
+name = "synapsql-pyo3"
+version = "0.1.0"
+description = "Rust fast-path for synapsql T0Cache (~50ns hot-hit vs 600ns Python)"
+requires-python = ">=3.9"
+classifiers = ["Programming Language :: Rust"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]

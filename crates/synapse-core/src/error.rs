@@ -16,4 +16,6 @@ pub enum Error {
     NotFound(String),
     #[error("other: {0}")]
     Other(String),
+    #[error("format: {0}")]
+    Format(String),
 }

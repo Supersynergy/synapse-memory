@@ -1,0 +1,20 @@
+[package]
+name = "synapse-libsql"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "libSQL async-WAL backend for Synapse Store. Cluster-B of synapse-gap-sprint."
+
+[dependencies]
+async-trait = "0.1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
+libsql = { version = "0.9", optional = true, default-features = false, features = ["core"] }
+parking_lot = { version = "0.12", optional = true }
+
+[features]
+default = []
+libsql-backend = ["dep:libsql", "dep:parking_lot"]
+
+[dev-dependencies]
+tempfile = "3"

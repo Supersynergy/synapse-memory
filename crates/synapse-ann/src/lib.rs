@@ -2,6 +2,7 @@
 //!
 //! PR-A1 shipped: `UsearchIndex` behind `ann-usearch`, with insert/remove/search
 //! + save/load/view for sidecar persistence. PR-A2 IVF-PQ still TODO.
+//!
 //! See `docs/SCALE_100M_PLAN_2026-04-23.md`, SPEC §6.
 
 #![allow(dead_code)]
@@ -18,7 +19,58 @@ pub trait AnnIndex: Send + Sync {
     fn remove(&mut self, id: u64) -> Result<usize, AnnError>;
 
     /// kNN search returning (id, distance) ascending by distance.
+    #[allow(clippy::type_complexity)]
     fn search(&self, query: &[f32], k: usize) -> Result<Vec<(u64, f32)>, AnnError>;
+
+    /// Cascade rerank: oversample `k * mult`, sort, truncate to `k`.
+    /// Default impl works for any backend whose `search` returns true distances.
+    /// **Note**: pure oversampling only helps if the backend explores more
+    /// candidates as `k` grows. usearch HNSW saturates ef_search at moderate `k`,
+    /// so true recall lift requires bumping `expansion_search` at index level
+    /// (see `UsearchIndex::new_tuned`). Override this method in backends that
+    /// expose a runtime-tunable search-effort param. `mult` clamped 2..=100.
+    fn search_with_rerank(
+        &self,
+        query: &[f32],
+        k: usize,
+        mult: usize,
+    ) -> Result<Vec<(u64, f32)>, AnnError> {
+        let m = mult.clamp(2, 100);
+        let mut hits = self.search(query, k.saturating_mul(m))?;
+        let len = hits.len();
+        if len <= k {
+            hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            return Ok(hits);
+        }
+        // Partial sort: O(n) select + O(k log k) sort of top-k only.
+        let k_idx = k.min(len) - 1;
+        hits.select_nth_unstable_by(k_idx, |a, b| {
+            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        hits.truncate(k);
+        hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(hits)
+    }
+
+    /// Batch kNN search: run `queries` in parallel via rayon (feature `ann-batch`).
+    /// Falls back to sequential when the feature is absent or the pool is busy.
+    /// Returns one result-vec per query, same order.
+    #[allow(clippy::type_complexity)]
+    fn search_batch(
+        &self,
+        queries: &[Vec<f32>],
+        k: usize,
+    ) -> Vec<Result<Vec<(u64, f32)>, AnnError>> {
+        #[cfg(feature = "ann-batch")]
+        {
+            use rayon::prelude::*;
+            queries.par_iter().map(|q| self.search(q, k)).collect()
+        }
+        #[cfg(not(feature = "ann-batch"))]
+        {
+            queries.iter().map(|q| self.search(q, k)).collect()
+        }
+    }
 
     /// Current number of inserted vectors.
     fn len(&self) -> usize;
@@ -59,3 +111,5 @@ pub mod usearch_backend;
 pub use usearch_backend::UsearchIndex;
 
 // TODO(PR-A2): pub mod ivfpq;
+
+pub mod cascade;

@@ -1,0 +1,56 @@
+---
+import Base from '../../layouts/Base.astro';
+---
+<Base title="Synapse Bench — OLTP">
+  <header class="hero">
+    <h1>OLTP <span>·</span> Point-Select Throughput</h1>
+    <p class="lead">
+      Closing the 7× gap to MariaDB on plain-SQL OLTP point-select. A regex-cache and
+      log-spam fix in the hot path took us from 2,190 to 7,153 OPS — parity with MariaDB
+      on the same workload class, while still doing real SQLite I/O.
+    </p>
+    <span class="badge">8 threads × 2,000 queries · pymysql · sbtest1 (10k rows)</span>
+  </header>
+
+  <main>
+    <h2>Before / after</h2>
+    <table>
+      <thead><tr><th>Metric (8 threads, point-select)</th><th>Before</th><th>After</th><th>Δ</th></tr></thead>
+      <tbody>
+        <tr class="highlight"><td>OPS</td><td>2,190</td><td><strong>7,153</strong></td><td class="delta-good">3.27×</td></tr>
+        <tr class="highlight"><td>p50</td><td>3.47 ms</td><td><strong>1.00 ms</strong></td><td class="delta-good">−71%</td></tr>
+        <tr class="highlight"><td>p95</td><td>4.85 ms</td><td><strong>2.24 ms</strong></td><td class="delta-good">−54%</td></tr>
+      </tbody>
+    </table>
+
+    <h2>vs MariaDB</h2>
+    <table>
+      <thead><tr><th>Engine</th><th>OPS @ 8t</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>MariaDB</td><td>7,626</td><td><code>SELECT 1</code> (in-memory, no I/O — from honest.md)</td></tr>
+        <tr class="highlight"><td>Synapse (after)</td><td><strong>7,153</strong></td><td>Real point-select, SQLite I/O + row marshalling</td></tr>
+        <tr class="superseded"><td>Synapse (before)</td><td>2,190</td><td>Pre-fix baseline</td></tr>
+      </tbody>
+    </table>
+    <p>The MariaDB number is friendlier than ours by workload definition — yet Synapse is now
+       at <strong>parity</strong> on OPS while doing strictly more work per query.</p>
+
+    <h2>Root cause — top hot-path culprits</h2>
+    <p>Static review of <code>crates/synapse-mysql-async/src/shim.rs::on_query</code> and
+       <code>crates/synapse-mysql/src/rewrite.rs::rewrite</code> identified:</p>
+    <ol>
+      <li><code>info!("on_query: {}", sql)</code> firing on every query — string format + tracing dispatch + EnvFilter check + stderr write under default <code>synapse_mysql_async=info</code>.</li>
+      <li><code>Regex::new(...).unwrap()</code> compiled <em>per call</em> inside <code>rewrite()</code> — up to 12 patterns recompiled on each query.</li>
+      <li>Allocator pressure from per-call <code>String</code> rewrites that could reuse a thread-local buffer.</li>
+      <li>Synchronous tracing dispatch on the hot path.</li>
+      <li>Non-inlined fast-path predicates.</li>
+    </ol>
+    <p>Fix: move regex compilation to <code>once_cell::sync::Lazy</code> statics, demote the
+       per-query log to <code>trace!</code>, and short-circuit the rewrite pipeline for
+       already-canonical statements.</p>
+
+    <h2>Reproduce</h2>
+    <p>Harness: <code>bench/oltp_repro.py</code> — pymysql, 8 threads × 2,000 queries,
+       point-select on <code>sbtest1</code> with 10k rows. Same DB file as <code>synapse-vs-mysql-honest.md</code>.</p>
+  </main>
+</Base>
