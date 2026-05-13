@@ -4,7 +4,7 @@ use std::process::Command;
 use tempfile::tempdir;
 
 fn synapse_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_synapse")
+    env!("CARGO_BIN_EXE_synx")
 }
 
 #[test]

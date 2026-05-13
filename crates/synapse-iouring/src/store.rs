@@ -112,6 +112,49 @@ impl IoUringStore {
         }
     }
 
+    /// Append with explicit durability control (TigerBeetle submit_link pattern).
+    ///
+    /// - `Durability::Fast`    — writes only, no fsync (~5-10M/s expected on Linux NVMe)
+    /// - `Durability::Batched` — N writes + 1 fsync via SQE_LINK chain (~100k-500k/s durable)
+    /// - `Durability::Strict`  — 1 write + 1 fsync per row (~100-10k/s, per-row durable)
+    pub async fn batched_append(
+        &mut self,
+        entries: Vec<Entry>,
+        #[cfg(feature = "io-uring")] durability: crate::uring::Durability,
+        #[cfg(not(feature = "io-uring"))] _durability: (),
+    ) -> Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        #[cfg(not(feature = "io-uring"))]
+        return Err(IoUringError::UnsupportedPlatform);
+
+        #[cfg(feature = "io-uring")]
+        {
+            let stamped: Vec<Entry> = entries
+                .into_iter()
+                .map(|mut e| {
+                    e.seq = self.seq.fetch_add(1, Ordering::Relaxed);
+                    e
+                })
+                .collect();
+
+            self.uring.batched_append(stamped.clone(), durability).await?;
+
+            let mut needs_flush = false;
+            for e in &stamped {
+                if self.l0.insert(e.clone()) {
+                    needs_flush = true;
+                }
+            }
+            if needs_flush {
+                self.flush_l0()?;
+            }
+            Ok(())
+        }
+    }
+
     /// Range scan: L0 + SSTables (L0 wins on conflict by higher seq).
     pub async fn read_range(&self, key_range: Range<Key>) -> Result<Vec<Entry>> {
         #[cfg(not(feature = "io-uring"))]

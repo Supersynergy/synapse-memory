@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "synapse"
+name = "synx"
 path = "src/main.rs"
 
 [dependencies]
@@ -21,8 +21,14 @@ synapse-graph = { path = "../synapse-graph" }
 # synapse-core base (no embed features) — embed variant selected via [features] below.
 synapse-core = { path = "../synapse-core" }
 tempfile = "3"
+csv = "1"
+# optional: parquet import/export via arrow2 (lightweight, no arrow ecosystem pull)
+parquet = { version = "54", optional = true, default-features = false, features = ["snap"] }
+arrow-array = { version = "54", optional = true }
+arrow-schema = { version = "54", optional = true }
 
 [dev-dependencies]
+tempfile = "3"
 
 [features]
 # default: static ORT + jemalloc (lower fragmentation, better throughput for alloc-heavy HNSW workloads).
@@ -34,8 +40,10 @@ static-ort = ["synapse-core/embed"]
 # cross-linux: enable synapse-core's `embed-dynamic` feature (ORT via dlopen at runtime).
 # Required when cross-compiling from mac-arm64 to linux without a Linux libstdc++ sysroot.
 # Build: cargo zigbuild --profile release-hardened --target aarch64-unknown-linux-gnu
-#          --no-default-features --features cross-linux --bin synapse
+#          --no-default-features --features cross-linux --bin synx
 # Ship libonnxruntime.so alongside the binary (see release/README.md for download URL).
 cross-linux = ["synapse-core/embed-dynamic"]
 embed-768 = ["synapse-core/embed-768"]
 embed-1024 = ["synapse-core/embed-1024"]
+# import-parquet: enable Parquet import/export (adds ~3MB to binary)
+import-parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema"]

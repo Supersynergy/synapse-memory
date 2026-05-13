@@ -1,0 +1,36 @@
+[package]
+name = "synapse-e2e"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "End-to-end integration tests wiring 10+ synapse crates together."
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+tempfile = "3"
+rusqlite.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true }
+tracing.workspace = true
+tracing-subscriber = { workspace = true }
+chrono.workspace = true
+
+synapse-core = { path = "../synapse-core", features = ["tantivy-fts", "hippo", "conformal"] }
+synapse-fts = { path = "../synapse-fts" }
+synapse-graph = { path = "../synapse-graph", features = ["hippo"] }
+synapse-fusion = { path = "../synapse-fusion" }
+synapse-cluster = { path = "../synapse-cluster" }
+synapse-stream = { path = "../synapse-stream" }
+synapse-tsdb = { path = "../synapse-tsdb" }
+synapse-multimodal = { path = "../synapse-multimodal", features = ["multimodal-dummy"] }
+# synapse-migrate is a bin-only crate; migration logic inlined in story10
+
+[[test]]
+name = "integration_killer_demo"
+path = "tests/integration_killer_demo.rs"
+
+[lib]
+name = "synapse_e2e"
+path = "src/lib.rs"

@@ -1,22 +1,22 @@
 class Synx < Formula
   desc "Synapse CLI — 8ms hybrid search, 113k docs, SimSIMD kernels"
   homepage "https://github.com/Supersynergy/synapse"
-  version "1.0.1"
+  version "1.0.1-rc.1"
 
   on_macos do
     on_arm do
-      url "https://github.com/Supersynergy/synapse/releases/download/v1.0.1/synx-aarch64-apple-darwin.tar.gz"
+      url "https://github.com/Supersynergy/synapse/releases/download/v1.0.1-rc.1/synx-aarch64-apple-darwin.tar.gz"
       sha256 "PLACEHOLDER_SHA256_AARCH64_APPLE_DARWIN"
     end
     on_intel do
-      url "https://github.com/Supersynergy/synapse/releases/download/v1.0.1/synx-x86_64-apple-darwin.tar.gz"
+      url "https://github.com/Supersynergy/synapse/releases/download/v1.0.1-rc.1/synx-x86_64-apple-darwin.tar.gz"
       sha256 "PLACEHOLDER_SHA256_X86_64_APPLE_DARWIN"
     end
   end
 
   on_linux do
     on_intel do
-      url "https://github.com/Supersynergy/synapse/releases/download/v1.0.1/synx-x86_64-unknown-linux-gnu.tar.gz"
+      url "https://github.com/Supersynergy/synapse/releases/download/v1.0.1-rc.1/synx-x86_64-unknown-linux-gnu.tar.gz"
       sha256 "PLACEHOLDER_SHA256_X86_64_LINUX_GNU"
     end
   end

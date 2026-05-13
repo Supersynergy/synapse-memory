@@ -41,6 +41,11 @@ name = "bench_iouring"
 path = "src/bin/bench_iouring.rs"
 required-features = ["io-uring"]
 
+[[bin]]
+name = "bench_iouring_fair"
+path = "src/bin/bench_iouring_fair.rs"
+required-features = ["io-uring"]
+
 [lib]
 name = "synapse_iouring"
 path = "src/lib.rs"

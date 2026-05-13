@@ -3,63 +3,65 @@
 [![CI](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/synapse-core.svg)](https://crates.io/crates/synapse-core)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-CORE.md)
-[![Discord](https://img.shields.io/discord/placeholder?label=Discord&logo=discord)](https://discord.gg/supersynergy)
 
-**Single Rust binary. Embedded vec + FTS + graph + CRDT. No Docker. No cloud. 35ms hybrid search over 294k docs.**
+**Single-binary embedded knowledge engine. Vec + FTS + Graph + SQL-wire + Conformal-guarantee + Multimodal.**
 
-Local-first agent memory with Ed25519 signatures, CRDT peer sync, and MCP-native tooling. One SQLite-backed file. Offline-first. Tamper-evident.
-
----
-
-## 5 sharpest features
-
-1. **334 k/s insert** with full feature stack: FTS5 + vector + CRDT + WAL. Persisted. Not in-memory.
-2. **35ms hybrid search** on 294k production docs — BM25 + ANN + RRF fusion + rerank, one Unix-socket call.
-3. **R@10 = 1.000 conformal guarantee** — calibrated recall bound, not just an efSearch knob.
-4. **CRDT-mergeable `.synx` snapshots** — offline peer sync, <200ms LAN convergence, no coordinator.
-5. **MCP-native** — `synapse_search / put / find / stats / merge / verify` work out of the box with Claude and Cursor.
+One SQLite-backed file. No Docker. No cloud. Local-first with Ed25519 signatures, CRDT peer sync, and MCP-native tooling.
 
 ---
 
-## Quick-start
+## Three verified numbers
+
+| What | Number | Source |
+|------|--------|--------|
+| HNSW-i8 p50 latency (SIFT-1M, ef=64) | **0.10 ms** | [SIFT1M_BENCH_2026-05-12.md](bench-dashboard/SIFT1M_BENCH_2026-05-12.md) |
+| Pub/sub throughput (ring-buffer, tokio broadcast) | **13.1 M events/s** (76 ns/msg) | [REAL_BENCH_WAVE17_18_2026-05-13.md](bench-dashboard/REAL_BENCH_WAVE17_18_2026-05-13.md) |
+| Conformal recall bound | **R=1.0 guaranteed** (split-conformal, validated LongMemEval) | [RELEASE_NOTES_v1.0.1-rc.md](RELEASE_NOTES_v1.0.1-rc.md) |
+
+**Caveats**: HNSW-i8 has R@10=0.908 at ef=64 on SIFT-1M (use ef=192 for R@10≥0.99 at 3240 QPS). Pub/sub is in-process tokio channel — not a persistent durable queue. Conformal guarantee validated on LongMemEval only.
+
+---
+
+## Install
 
 ```bash
-# Install (stable)
 cargo install synx
-# or: brew tap supersynergy/synapse && brew install synx
-# or: npx @supersynergy/synx
-```
-
-```bash
-synx put --text "Synapse is embedded hybrid search for AI agents"   # index
-synx hybrid "embedded search"                                        # BM25+vec RRF
-synx find "agent memory"                                             # semantic only
-synx stats                                                           # doc count + db size
-synx snap peer-a.brainpack && synx merge peer-a.brainpack peer-b.brainpack --out merged.brainpack
-```
-
-Start the daemon (Unix-socket, multiplexes one DB across N callers):
-
-```bash
-synapsed --sock /tmp/synapse.sock --db ~/.synapse/brain.db
+# pending: brew tap supersynergy/synapse && brew install synx
+# pending: npx @supersynergy/synx
 ```
 
 ---
 
-## Benchmarks
+## 5-line demo
 
-Full numbers: [bench-dashboard/REAL_BENCH_2026-05-11.md](bench-dashboard/REAL_BENCH_2026-05-11.md)
+```bash
+# start daemon
+synapsed --sock /tmp/synapse.sock --db ~/.synapse/brain.db
 
-| System | Insert k/s | Query p50 µs | R@10 |
-|--------|-----------|-------------|------|
-| FAISS-Flat | 20 897 | 208 | 1.000 (in-memory, no persist) |
-| SQLite-FTS5 | 751 | 13 | N/A (text only) |
-| **Synapse hybrid** | **334** | **~35 000** | **1.000** (FTS+ANN+rerank, 294k docs) |
-| LanceDB flat | 266 | 2 803 | 1.000 |
-| sqlite-vec | 68 | 648 | 1.000 |
-| Qdrant (HTTP/call) | 6.6 | 1 255 | 1.000 |
+# index + search
+synx put --text "Synapse is embedded hybrid search for AI agents"
+synx hybrid "embedded search"   # BM25 + ANN + RRF fusion
+synx find "agent memory"         # semantic only
+synx stats                       # doc count + db size
+```
 
-Synapse hybrid latency includes BM25 + ANN + RRF + cross-encoder rerank in one call. Pure ANN-only on 10k vectors: estimated 0.5–3ms (not separately benchmarked). See bench file for honest notes on each comparison.
+---
+
+## Architecture
+
+```mermaid
+graph TD
+    CLI["synx CLI"] --> Daemon["synapsed (Unix-socket)"]
+    MCP["synapse-mcp (6 tools)"] --> Daemon
+    Daemon --> Core["synapse-core (SQLite + FTS5 + sqlite-vec)"]
+    Daemon --> Ann["synapse-ann (usearch HNSW)"]
+    Daemon --> Fts["synapse-fts (Tantivy)"]
+    Daemon --> Fusion["synapse-fusion (RRF)"]
+    Daemon --> Rerank["synapse-rerank (ColBERT-i8)"]
+    Core --> DB[(brain.db)]
+    Ann --> DB
+    Fts --> DB
+```
 
 ---
 
@@ -69,101 +71,181 @@ Synapse hybrid latency includes BM25 + ANN + RRF + cross-encoder rerank in one c
 
 | Crate | Role |
 |-------|------|
-| `synapse-core` | Store, FTS5, vector index (sqlite-vec), KG triples, zstd/blake3 |
+| `synapse-core` | Store, FTS5, sqlite-vec index, KG triples, zstd/blake3 |
 | `synapse-engine` | ABI bridge + RRF fusion |
 | `synapsed` | Unix-socket RPC daemon |
 | `synapse-cli` | CLI: put / find / hybrid / merge / sign / verify / stats |
-| `synapse-mcp` | MCP server (6 tools) |
+| `synapse-mcp` | MCP server (6 tools + coding-agent tools) |
 | `synapse-space` | Agent-memory hierarchy: Space → Wing → Room → Drawer |
 | `synapse-learn` | Thompson-sampling bandit router |
 | `synapse-rerank` | Cross-encoder rerank (identity default; ONNX optional) |
 | `synapse-extract` | Text extraction + chunking |
 | `synapse-temporal` | NL date parser, bitemporal filter |
-| `synapse-kernel` | Core kernel abstractions |
+| `synapse-kernel` | NEON int8/f16/hamming kernel crate |
 | `synapse-quant` | f32→i8/f16/binary, Matryoshka MRL |
-| `synapse-ann` | Scale-100M HNSW+PQ scaffold |
-| `synapse-fts` | Block-Max WAND tantivy posting lists (BMP) |
+| `synapse-ann` | HNSW via usearch + brute-force SIMD scan |
+| `synapse-fts` | Tantivy persistent index (BMP block-max pruning) |
 | `synapse-fusion` | MUVERA RRF API |
 | `synapse-colbert` | MaxSim late-interaction scaffold |
-| `synapse-splade` | Neural-sparse inverted index |
-| `synapse-cluster` | CRDT gossip, AP, <200ms LAN convergence |
-| `synapse-graph` | Knowledge-graph triples |
+| `synapse-splade` | Neural-sparse inverted index (SPLADE-v3) |
+| `synapse-cluster` | CRDT gossip + Raft CP-mode |
+| `synapse-graph` | Knowledge-graph triples + Datalog (⚠️ semi-naive broken above 100 facts) |
 | `synapse-media` | Video keyframe + audio + image embedding index |
 | `synapse-multimodal` | Multimodal asset pipeline |
 | `synapse-py` | PyO3 wheel (Brain, LangChain/LlamaIndex adapters) |
 | `synapse-js` | JS/TS SDK via napi-rs |
-| `synapse-auth` | Auth primitives |
-| `synapse-cms` | Content-management helpers |
-| `synapse-libsql` | libSQL/Turso backend |
-| `synapse-obs` | Observability / metrics |
-| `synapse-ops` | Ops helpers |
-| `synapse-raft` | Multi-node Raft consensus (scaffold) |
-| `synapse-server` | HTTP server layer |
-| `synapse-tier` | Tier / pricing enforcement |
-| `synapse-tune` | Hyperparameter tuning |
-| `synapse-license` | License key validation |
-| `synapse-market` | HFT/backtest engine: OHLCV + regime-vec |
+| `synapse-cms` | WordPress/CMS Thompson-Beta TTL bandit |
+| `synapse-market` | HFT/backtest: OHLCV + regime-vec |
 | `synapse-migrate` | Import from Qdrant/LanceDB/Chroma |
-| `synapse-spann` | Disk-tier SPANN: mmap posting-lists |
-| `synapse-splade` | SPLADE-v3 neural-sparse |
+| `synapse-obs` | OTel + Prometheus dashboards |
+| `synapse-stream` | Pub/sub + CDC (pub/sub: 76 ns/msg; CDC: 2,241/s SQLite-bottleneck) |
+| `synapse-tsdb` | Time-series: 4.26M inserts/s (fallback store; Arrow-path unbenched) |
+| `synapse-mlx-olap` | GROUP BY analytics CPU: ~25M rows/s (Metal path not verified) |
+| `synapse-jit` | Cranelift JIT filter: 2× vs SQLite (no speedup vs interpreter) |
+| `synapsql` | MySQL-wire proxy (MariaDB bench: 700×/32×/1.85×) |
+| `synapse-raft` | WAL-Raft segments, 3-node election <1s |
+| `synapse-spann` | Disk-tier SPANN scaffold |
 
 ### Experimental (`experimental/`)
 
-Not included in default workspace build. Stubs — contributions welcome.
+Stubs — excluded from default workspace build.
 
 | Crate | Status |
 |-------|--------|
 | `synapse-mysql` | MySQL wire-protocol proxy (0 tests) |
 | `synapse-pg` | Postgres wire-protocol proxy (0 tests) |
-| `synapse-edge` | Pingora HTTP frontend (RUSTSEC blocked, opt-in) |
-| `synapse-rank` | LambdaMART scaffold (6 LOC) |
+| `synapse-edge` | Pingora HTTP frontend (RUSTSEC blocked) |
+| `synapse-rank` | LambdaMART scaffold (skeleton only) |
 | `synapse-embed-gpu` | GPU embedding bridge (standalone workspace) |
 
 ---
 
-## Feature matrix (wave-5 state)
+## Benchmarks (verified, M4 Max)
+
+Full bench files in [`bench-dashboard/`](bench-dashboard/).
+
+### ANN — SIFT-1M 128d (1M vectors, 1000 queries)
+
+Source: [SIFT1M_BENCH_2026-05-12.md](bench-dashboard/SIFT1M_BENCH_2026-05-12.md)
+
+| Mode | p50 ms | QPS | R@10 | Notes |
+|------|--------|-----|------|-------|
+| hnsw-i8 (ef=64) | **0.10** | 10 474 | 0.908 | lowest latency, recall loss |
+| hnsw-f16 (ef=64) | 0.18 | 5 723 | 0.979 | balanced |
+| hnsw-f16 (ef=192) | 0.32 | 3 240 | 0.993 | recommended production |
+| hnsw-f32 (ef=64) | 0.34 | 3 013 | 0.982 | highest recall potential |
+| brute-force i8 | 5.43 | 182 | 0.969 | exact, no index |
+| brute-force f32 | 18.53 | 54 | 1.000 | exact, no index |
+
+**Build time caveat**: HNSW index build is 197–672s for 1M vectors (sequential usearch insert). faiss-hnsw builds in ~30–60s. Parallel batch insert is TODO.
+
+### ANN — Small corpus (N=10k, 384d)
+
+Source: [RAW_ANN_BENCH_2026-05-11.md](bench-dashboard/RAW_ANN_BENCH_2026-05-11.md), [LINUX_VS_MACOS_2026-05-13.md](bench-dashboard/LINUX_VS_MACOS_2026-05-13.md)
+
+| Backend | p50 µs | R@10 |
+|---------|--------|------|
+| usearch-HNSW (synapse) | **77** (macOS) / **74** (Linux) | 0.942 |
+| FAISS-HNSW | 98 | 0.9 |
+| FAISS-Flat (exact) | 208 | 0.9 |
+
+R@10=0.942 < 0.95 target. Needs `expansion_search` tuning for ≥0.95.
+
+### Hybrid search — production daemon (294k docs)
+
+Source: [REAL_BENCH_2026-05-11.md](bench-dashboard/REAL_BENCH_2026-05-11.md)
+
+| Metric | Value |
+|--------|-------|
+| hybrid search p50 | **35 ms** (FTS5 + ANN + RRF + rerank, single Unix-socket call) |
+| put-batch | **334 k/s** (FTS5 + vec + CRDT, persisted) |
+| Qdrant gRPC vs synapse put-batch | Synapse 56× faster (local, not iso-recall) |
+
+### MTEB retrieval (2 tasks, CPU-only)
+
+Source: [MTEB_MINI_2026-05-11.md](bench-dashboard/MTEB_MINI_2026-05-11.md)
+
+| Model | Task | nDCG@10 | Published | Delta |
+|-------|------|---------|-----------|-------|
+| bge-small-en-v1.5 | NFCorpus | 0.343 | 0.327 | +0.016 |
+| bge-small-en-v1.5 | SciFact | 0.713 | 0.671 | +0.042 |
+
+Delta vs published likely reflects MTEB 2.x scoring changes. 2 of 56 MTEB tasks measured.
+
+### Durability — SQLite-WAL (macOS, io_uring pending Linux)
+
+Source: [FAIR_DURABILITY_BENCH_2026-05-13.md](bench-dashboard/FAIR_DURABILITY_BENCH_2026-05-13.md)
+
+| Durability | Batch-1 | Batch-1000 |
+|------------|---------|------------|
+| strict (fsync) | 7 K/s | 943 K/s |
+| batched | 45 K/s | 926 K/s |
+| fast (no fsync) | 110 K/s | 1.1 M/s |
+| in-memory | 384 K/s | 1.3 M/s |
+
+io_uring (Linux bare-metal) not measured; see `scripts/fair_durability_linux.sh`.
+
+### Stream / TSDB (wave-17/18)
+
+Source: [REAL_BENCH_WAVE17_18_2026-05-13.md](bench-dashboard/REAL_BENCH_WAVE17_18_2026-05-13.md)
+
+| Component | Number | Notes |
+|-----------|--------|-------|
+| pub/sub | **13.1 M events/s** (76 ns/msg) | tokio broadcast-channel |
+| TSDB insert (fallback store) | **4.26 M rows/s** | Arrow-path unbenched |
+| CDC (on-disk SQLite) | 2,241 events/s | SQLite-write-per-event bottleneck |
+| Datalog ancestor-closure | ❌ 7s for 100 facts | semi-naive broken, not production-ready |
+
+---
+
+## Feature matrix
 
 | Feature | Status | Notes |
 |---------|--------|-------|
 | BM25 full-text (FTS5) | ✅ stable | 23µs/q on 10k docs |
 | sqlite-vec ANN | ✅ stable | |
-| Tantivy BM25 (`synapse-fts`) | ✅ stable | 18.3× warm-start |
-| usearch HNSW (`ann-usearch`) | ✅ stable | 21% faster than FAISS-HNSW |
-| RRF hybrid fusion | ✅ stable | NEON SIMD 4.3–5.1× |
-| ColBERT-i8 rerank | ✅ stable | 12.2× speed, 3.9× storage |
+| Tantivy BM25 | ✅ stable | 18.3× warm-start |
+| usearch HNSW | ✅ stable | 0.10ms p50 at ef=64 (SIFT-1M) |
+| RRF hybrid fusion | ✅ stable | NEON SIMD 5–8× vs scalar |
+| ColBERT-i8 rerank | ✅ stable | 12.2× speed, 3.9× storage vs f32 |
 | SPLADE neural-sparse (BMP) | ✅ stable | 9.7× vs naive scan |
 | MUVERA full pipeline | ✅ stable | Dense+SPLADE+RRF+ColBERT, sub-ms |
-| Conformal R=1.0 guarantee | ✅ stable | split-conformal |
+| Conformal R=1.0 guarantee | ✅ stable | split-conformal, LongMemEval validated |
 | CRDT gossip cluster | ✅ stable | <200ms LAN convergence |
-| Raft CP-mode | ✅ scaffold | `cluster-raft` feature, 3-node <1s election |
+| Raft CP-mode | ✅ minimal | `cluster-raft` feature, 3-node <1s election |
 | Ed25519 signing | ✅ stable | 25µs sign + verify |
 | MCP server (6 tools) | ✅ stable | Claude + Cursor native |
-| CLIP cross-modal | ✅ scaffold | `multimodal` feature |
-| Audio CLAP | ✅ scaffold | `audio-clap` feature, mel-filterbank |
-| VJEPA-2 video | ✅ scaffold | ONNX swap-path |
-| jina-clip-v2 ONNX | ✅ scaffold | `clip-jina` feature |
-| SPLADE-v3 ONNX | ✅ scaffold | `splade-onnx` feature |
-| jina-colbert-v2 candle | ✅ scaffold | `colbert-jina` feature |
-| Grafana dashboards | ✅ stable | OTel + Prometheus |
-| Homebrew tap | ✅ dist | `dist/homebrew/synx.rb` |
-| npm wrapper | ✅ dist | `@supersynergy/synx` |
-| GH release CI | ✅ dist | 3-target matrix |
+| Pub/sub stream | ✅ stable | 76 ns/msg |
+| TSDB insert | ✅ partial | fallback store 4.26M/s; Arrow-path unbenched |
+| JIT filter (Cranelift) | ✅ partial | 2× vs SQLite, no gain vs interpreter |
+| Metal/MLX OLAP | ⚠️ unverified | CPU-only confirmed; Metal dispatch not observed |
+| Datalog (synapse-graph) | ❌ broken | semi-naive quadratic, 7s for 100 facts |
 | Python wheel (PyO3) | 🔜 planned | `synapse-py` maturin publish |
-| ANN iso-recall 1M bench | 🔜 planned | vs FAISS-HNSW OOS |
+| Linux CI (aarch64) | ⚠️ partial | `synapse-extract` E0463 + `synapse-market` opensrv dep |
+| CLIP cross-modal | ✅ scaffold | `multimodal` feature, ONNX swap-path |
+| Audio CLAP | ✅ scaffold | `audio-clap` feature |
+| VJEPA-2 video | ✅ scaffold | ONNX swap-path |
 
-## Roadmap
+---
 
-- [ ] ANN-only bench on 1M corpus (iso-recall vs FAISS-HNSW OOS)
-- [ ] `synapse-raft` production hardening (multi-node consensus)
-- [ ] `synapse-colbert` MaxSim full pipeline
-- [ ] `synapse-splade` neural-sparse production path
+## Roadmap (next 3 months)
+
+- [ ] Datalog semi-naive: delta-join + HashMap index (currently broken above 100 facts)
+- [ ] HNSW parallel batch insert (target <10s for 1M vs current 197–672s)
+- [ ] glass-backend CPU-SIMD beam search (expected ≥2× QPS vs usearch)
+- [ ] io_uring durability bench on bare-metal Linux
+- [ ] Metal dispatch verification for `synapse-mlx-olap`
+- [ ] Fix `synapse-extract` Linux build (E0463 crate link-order)
+- [ ] MTEB full 56-task suite (2/56 measured today)
 - [ ] Python wheel publish to PyPI (`synapse-py` via maturin)
+- [ ] `synapse-raft` production hardening
+- [ ] Windows: not planned
 
 ---
 
 ## License
 
-MIT — library crates.  
+MIT — library crates.
 `synapse-engine` — source-available Engine License (non-commercial free; commercial license available).
 
 See [LICENSE-CORE.md](LICENSE-CORE.md) and [LICENSE-ENGINE.md](LICENSE-ENGINE.md).

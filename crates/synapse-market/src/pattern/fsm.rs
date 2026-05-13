@@ -29,6 +29,27 @@ enum FsmState {
         ring_pos: usize,
         filled: bool,
     },
+    Filing13D {
+        window_days: u32,
+        seen_ts: Option<i64>,
+    },
+    FdaMeetingPlusS3 {
+        window_days: u32,
+        seen_meeting: Option<i64>,
+        seen_s3: Option<i64>,
+    },
+    SpinoffApproaching {
+        window_days: u32,
+    },
+    FloatSqueeze {
+        si_min: f32,
+        ctb_bps_min: u32,
+    },
+    CongressTrade {
+        window_days: u32,
+        seen_ts: Option<i64>,
+    },
+    SmartExcludeFail,
     And {
         left_id: u64,
         right_id: u64,
@@ -100,6 +121,27 @@ impl FsmEngine {
                     filled: false,
                 }
             }
+            Pattern::Filing13D { window_days } => FsmState::Filing13D {
+                window_days: *window_days,
+                seen_ts: None,
+            },
+            Pattern::FdaMeetingPlusS3 { window_days } => FsmState::FdaMeetingPlusS3 {
+                window_days: *window_days,
+                seen_meeting: None,
+                seen_s3: None,
+            },
+            Pattern::SpinoffApproaching { window_days } => FsmState::SpinoffApproaching {
+                window_days: *window_days,
+            },
+            Pattern::FloatSqueeze { si_min, ctb_bps_min } => FsmState::FloatSqueeze {
+                si_min: *si_min,
+                ctb_bps_min: *ctb_bps_min,
+            },
+            Pattern::CongressTrade { window_days } => FsmState::CongressTrade {
+                window_days: *window_days,
+                seen_ts: None,
+            },
+            Pattern::SmartExcludeFail => FsmState::SmartExcludeFail,
             Pattern::And(l, r) => {
                 let lid = l.id();
                 let rid = r.id();
@@ -273,6 +315,124 @@ impl FsmEngine {
                             }];
                         }
                     }
+                }
+                vec![]
+            }
+            FsmState::Filing13D { window_days, seen_ts } => {
+                if let Event::Filing13D { ticker: t, ts: fts, .. } = event {
+                    if t != ticker { return vec![]; }
+                    let prev = *seen_ts;
+                    *seen_ts = Some(*fts);
+                    if let Some(prev_ts) = prev {
+                        let window = *window_days as i64 * SECS_PER_DAY;
+                        if fts - prev_ts <= window {
+                            return vec![Match {
+                                pattern_id: id,
+                                ticker: ticker.to_string(),
+                                ts_start: prev_ts,
+                                ts_end: *fts,
+                                confidence: 1.0,
+                                catalyst_ids: vec![],
+                            }];
+                        }
+                    }
+                }
+                vec![]
+            }
+            FsmState::FdaMeetingPlusS3 { window_days, seen_meeting, seen_s3 } => {
+                let window = *window_days as i64 * SECS_PER_DAY;
+                match event {
+                    Event::FdaMeeting { ticker: t, ts: fts, .. } if t == ticker => {
+                        *seen_meeting = Some(*fts);
+                    }
+                    Event::S3Filing { ticker: t, ts: fts, .. } if t == ticker => {
+                        *seen_s3 = Some(*fts);
+                    }
+                    _ => {}
+                }
+                if let (Some(tm), Some(ts3)) = (*seen_meeting, *seen_s3) {
+                    if (tm - ts3).abs() <= window {
+                        return vec![Match {
+                            pattern_id: id,
+                            ticker: ticker.to_string(),
+                            ts_start: tm.min(ts3),
+                            ts_end: tm.max(ts3),
+                            confidence: 1.0,
+                            catalyst_ids: vec![],
+                        }];
+                    }
+                }
+                vec![]
+            }
+            FsmState::SpinoffApproaching { window_days } => {
+                let window = *window_days as i64 * SECS_PER_DAY;
+                if let Event::SpinoffAnnouncement { ticker: t, ts: ann_ts, distribution_date } = event {
+                    if t != ticker { return vec![]; }
+                    let days_until = distribution_date - ann_ts;
+                    if days_until >= 0 && days_until <= window {
+                        return vec![Match {
+                            pattern_id: id,
+                            ticker: ticker.to_string(),
+                            ts_start: *ann_ts,
+                            ts_end: *distribution_date,
+                            confidence: 1.0 - (days_until as f32 / window as f32),
+                            catalyst_ids: vec![],
+                        }];
+                    }
+                }
+                vec![]
+            }
+            FsmState::FloatSqueeze { si_min, ctb_bps_min } => {
+                if let Event::Squeeze { ticker: t, ts: sts, si_pct, ctb_bps } = event {
+                    if t != ticker { return vec![]; }
+                    if *si_pct >= *si_min && *ctb_bps >= *ctb_bps_min {
+                        return vec![Match {
+                            pattern_id: id,
+                            ticker: ticker.to_string(),
+                            ts_start: *sts,
+                            ts_end: *sts,
+                            confidence: (*si_pct / 100.0).min(1.0),
+                            catalyst_ids: vec![],
+                        }];
+                    }
+                }
+                vec![]
+            }
+            FsmState::CongressTrade { window_days, seen_ts } => {
+                if let Event::CongressTradeEvent { ticker: t, ts: cts, .. } = event {
+                    if t != ticker { return vec![]; }
+                    let prev = *seen_ts;
+                    *seen_ts = Some(*cts);
+                    if let Some(prev_ts) = prev {
+                        let window = *window_days as i64 * SECS_PER_DAY;
+                        if cts - prev_ts <= window {
+                            return vec![Match {
+                                pattern_id: id,
+                                ticker: ticker.to_string(),
+                                ts_start: prev_ts,
+                                ts_end: *cts,
+                                confidence: 1.0,
+                                catalyst_ids: vec![],
+                            }];
+                        }
+                    }
+                }
+                vec![]
+            }
+            FsmState::SmartExcludeFail => {
+                match event {
+                    Event::ReverseSplit { ticker: t, .. } |
+                    Event::DilutionRaise { ticker: t, .. } if t == ticker => {
+                        return vec![Match {
+                            pattern_id: id,
+                            ticker: ticker.to_string(),
+                            ts_start: ts,
+                            ts_end: ts,
+                            confidence: 1.0,
+                            catalyst_ids: vec![],
+                        }];
+                    }
+                    _ => {}
                 }
                 vec![]
             }

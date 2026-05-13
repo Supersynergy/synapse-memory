@@ -1,0 +1,20 @@
+[package]
+name = "synapse-vlog"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+memmap2 = "0.9"
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
+
+[[bench]]
+name = "vlog_vs_sqlite"
+harness = false

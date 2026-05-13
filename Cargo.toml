@@ -92,6 +92,12 @@ members = [
     "crates/synapse-iouring",
     # Cranelift-JIT query compiler (feature-gated `jit`)
     "crates/synapse-jit",
+    # HFT-pattern in-memory ring buffer + background SQLite snapshot
+    "crates/synapse-ring",
+    # WiscKey-pattern: separate key-LSM from value-log (5× write-amp reduction)
+    "crates/synapse-vlog",
+    # E2E integration tests wiring 10+ crates
+    "crates/synapse-e2e",
 ]
 
 [workspace.metadata]

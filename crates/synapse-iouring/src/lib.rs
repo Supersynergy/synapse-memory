@@ -34,4 +34,7 @@ pub use error::IoUringError;
 pub use lsm::{BloomFilter, Entry, Key};
 pub use store::IoUringStore;
 
+#[cfg(feature = "io-uring")]
+pub use uring::Durability;
+
 mod tests;
