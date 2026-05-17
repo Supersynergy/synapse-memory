@@ -13,7 +13,7 @@
 //! so `memories` is a typed view over `docs` plus relations.
 
 use crate::error::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 /// OMEGA / Mem0 / Hindsight typed-memory taxonomy.
@@ -330,6 +330,82 @@ pub fn put_memory(
     Ok(conn.last_insert_rowid())
 }
 
+/// Ensure a raw memory row exists for a doc and return its memory id.
+///
+/// This wires the base `docs` table into the SOTA memory layer without forcing
+/// callers to know about typed-memory internals. Typed extractors can later
+/// supersede or augment this raw row.
+pub fn ensure_raw_memory(conn: &Connection, doc_id: i64) -> Result<i64> {
+    let existing = conn
+        .query_row(
+            "SELECT id FROM memories
+             WHERE doc_id = ?1
+               AND memory_type = 'raw'
+               AND entity_id IS NULL
+               AND superseded_by IS NULL
+             LIMIT 1",
+            rusqlite::params![doc_id],
+            |r| r.get::<_, i64>(0),
+        )
+        .optional()?;
+    if let Some(id) = existing {
+        return Ok(id);
+    }
+    put_memory(conn, doc_id, MemoryType::Raw, None, None, 1.0)
+}
+
+/// Ensure the doc is present in both the raw memory layer and extraction queue.
+pub fn ensure_raw_memory_and_enqueue(conn: &Connection, doc_id: i64) -> Result<i64> {
+    let memory_id = ensure_raw_memory(conn, doc_id)?;
+    enqueue_extraction(conn, doc_id)?;
+    Ok(memory_id)
+}
+
+/// Batch variant used by high-throughput ingest paths.
+///
+/// Returns the number of newly-created raw memory rows. Queue inserts are
+/// `INSERT OR IGNORE`, so duplicate docs stay cheap and idempotent.
+pub fn ensure_raw_memory_and_enqueue_batch(
+    conn: &mut Connection,
+    doc_ids: &[i64],
+) -> Result<usize> {
+    if doc_ids.is_empty() {
+        return Ok(0);
+    }
+    let tx = conn.transaction()?;
+    let ts = now_ts();
+    let raw_weight = MemoryType::Raw.default_weight();
+    // Set-based bulk insert via json_each — replaces the per-doc
+    // SELECT+INSERT+INSERT loop (O(n) round-trips → 2 statements total).
+    // 2026-05-13 perf fix: prior loop was 1.98s/10k docs (93% of put_batch_fast).
+    let ids_json = serde_json::to_string(doc_ids).unwrap_or_else(|_| "[]".to_string());
+    let created = {
+        let n = tx.execute(
+            "INSERT INTO memories
+                (doc_id, memory_type, entity_id, weight, confidence,
+                 project_tags, created_ts, updated_ts)
+             SELECT j.value, 'raw', NULL, ?1, 1.0, NULL, ?2, ?2
+             FROM json_each(?3) j
+             WHERE NOT EXISTS (
+                 SELECT 1 FROM memories m
+                 WHERE m.doc_id = j.value
+                   AND m.memory_type = 'raw'
+                   AND m.entity_id IS NULL
+                   AND m.superseded_by IS NULL
+             )",
+            rusqlite::params![raw_weight, ts, ids_json],
+        )?;
+        tx.execute(
+            "INSERT OR IGNORE INTO extraction_queue (doc_id, enqueued_ts, status)
+             SELECT value, ?1, 'pending' FROM json_each(?2)",
+            rusqlite::params![ts, ids_json],
+        )?;
+        n
+    };
+    tx.commit()?;
+    Ok(created)
+}
+
 /// Mark `old_id` superseded by `new_id`. Records an edge.
 pub fn supersede(conn: &Connection, old_id: i64, new_id: i64) -> Result<()> {
     let ts = now_ts();
@@ -382,10 +458,9 @@ pub fn multi_hop_neighbors(
         }
         let sql = "SELECT dst_id FROM memory_edges WHERE src_id = ?1 LIMIT ?2";
         let mut stmt = conn.prepare_cached(sql)?;
-        let rows = stmt.query_map(
-            rusqlite::params![node, per_hop_cap as i64],
-            |r| r.get::<_, i64>(0),
-        )?;
+        let rows = stmt.query_map(rusqlite::params![node, per_hop_cap as i64], |r| {
+            r.get::<_, i64>(0)
+        })?;
         for row in rows {
             let dst = row?;
             if !dist.contains_key(&dst) {
@@ -432,11 +507,7 @@ fn jaccard(a: &str, b: &str) -> f64 {
     }
     let inter = ta.intersection(&tb).count() as f64;
     let union = ta.union(&tb).count() as f64;
-    if union == 0.0 {
-        0.0
-    } else {
-        inter / union
-    }
+    if union == 0.0 { 0.0 } else { inter / union }
 }
 
 /// Find an existing memory whose doc-text is highly similar to `new_text`.
@@ -454,14 +525,13 @@ pub fn find_evolve_target(
 ) -> Result<Option<i64>> {
     let mut best: Option<(i64, f64)> = None;
     for doc_id in candidate_doc_ids {
-        let txt: String = match conn.query_row(
-            "SELECT text FROM docs WHERE id = ?1",
-            [doc_id],
-            |r| r.get::<_, String>(0),
-        ) {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
+        let txt: String =
+            match conn.query_row("SELECT text FROM docs WHERE id = ?1", [doc_id], |r| {
+                r.get::<_, String>(0)
+            }) {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
         let score = if let Some(_q) = new_emb {
             // Embedding-based cosine path: caller would pass per-doc embeddings via
             // a sidecar table. For now we approximate via Jaccard so the function
@@ -496,7 +566,9 @@ pub fn cluster_for_compact(
                LIMIT ?1";
     let mut stmt = conn.prepare(sql)?;
     let rows: Vec<(i64, String)> = stmt
-        .query_map([max_rows as i64], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+        .query_map([max_rows as i64], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let n = rows.len();
     let mut parent: Vec<usize> = (0..n).collect();
@@ -609,7 +681,8 @@ impl Store {
         let pool = (params.k.max(params.rerank_top) * 4).max(40);
         let base_hits = if let Some(emb) = query_emb {
             let vec_hits = self.search_vec_with_backend(emb, pool, backend)?;
-            let lex_hits = self.search(&effective_query, SearchMode::Lex, None, pool)
+            let lex_hits = self
+                .search(&effective_query, SearchMode::Lex, None, pool)
                 .unwrap_or_default();
             // Fuse lex + vec via RRF (same as search_hybrid but with backend control).
             let rrf_k = params.rrf_k;
@@ -617,17 +690,30 @@ impl Store {
                 std::collections::HashMap::new();
             for (i, h) in lex_hits.into_iter().enumerate() {
                 let s = 1.0 / (rrf_k + (i + 1) as f64);
-                scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+                scores
+                    .entry(h.id)
+                    .and_modify(|e| e.0 += s)
+                    .or_insert((s, h));
             }
             for (i, h) in vec_hits.into_iter().enumerate() {
                 let s = 1.0 / (rrf_k + (i + 1) as f64);
-                scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+                scores
+                    .entry(h.id)
+                    .and_modify(|e| e.0 += s)
+                    .or_insert((s, h));
             }
             let mut merged: Vec<crate::types::Hit> = scores
                 .into_values()
-                .map(|(s, mut h)| { h.score = s; h })
+                .map(|(s, mut h)| {
+                    h.score = s;
+                    h
+                })
                 .collect();
-            merged.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+            merged.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             merged.truncate(pool);
             merged
         } else {
@@ -845,10 +931,8 @@ mod tests {
     fn open_mem() -> Connection {
         let c = Connection::open_in_memory().unwrap();
         // Minimal docs table so FK constraints are satisfied for tests.
-        c.execute_batch(
-            "CREATE TABLE docs (id INTEGER PRIMARY KEY, text TEXT NOT NULL);",
-        )
-        .unwrap();
+        c.execute_batch("CREATE TABLE docs (id INTEGER PRIMARY KEY, text TEXT NOT NULL);")
+            .unwrap();
         c
     }
 
@@ -936,7 +1020,7 @@ mod tests {
 
     #[test]
     fn recall_fuses_vec_and_fts() {
-        use crate::types::{PutRequest, EMBED_DIM};
+        use crate::types::{EMBED_DIM, PutRequest};
         let (mut store, _tmp) = open_store();
         let fake_emb = |seed: u8| -> Vec<f32> {
             (0..EMBED_DIM)
@@ -981,7 +1065,7 @@ mod tests {
 
     #[test]
     fn recall_entity_1hop_expands() {
-        use crate::types::{PutRequest, EMBED_DIM};
+        use crate::types::{EMBED_DIM, PutRequest};
         let (mut store, _tmp) = open_store();
         let fake_emb = |seed: u8| -> Vec<f32> {
             (0..EMBED_DIM)
@@ -1033,7 +1117,10 @@ mod tests {
         // Both doc_a and doc_b should surface (direct hit + 1-hop).
         let ids: Vec<i64> = hits.iter().map(|h| h.hit.id).collect();
         assert!(ids.contains(&id_a), "doc_a must be in results");
-        assert!(ids.contains(&id_b), "doc_b must surface via 1-hop expansion");
+        assert!(
+            ids.contains(&id_b),
+            "doc_b must surface via 1-hop expansion"
+        );
     }
 
     // --- auto_route / SearchBackend tests ---
