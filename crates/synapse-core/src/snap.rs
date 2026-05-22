@@ -260,7 +260,7 @@ fn import_raw(raw: &[u8], out: impl AsRef<Path>) -> Result<()> {
 
 /// Restore a .brainpack into a fresh db file at `out`.
 /// Extension is ignored — content (magic bytes) determines format.
-/// Accepts .syn, .synapse, .brainpack, .bp — all equivalent.
+/// Accepts .synx, .synapse, .brainpack, .bp — all equivalent.
 pub fn import(pack: impl AsRef<Path>, out: impl AsRef<Path>) -> Result<()> {
     import_magic(pack, out)
 }
@@ -270,8 +270,7 @@ pub fn encrypt_pack(pack: impl AsRef<Path>, out: impl AsRef<Path>, passphrase: &
     use age::secrecy::SecretString;
     use std::io::Write as _;
     let data = std::fs::read(pack)?;
-    let encryptor =
-        age::Encryptor::with_user_passphrase(SecretString::new(passphrase.to_string()));
+    let encryptor = age::Encryptor::with_user_passphrase(SecretString::from(passphrase.to_owned()));
     let mut output = vec![];
     let mut writer = encryptor
         .wrap_output(&mut output)
@@ -288,18 +287,14 @@ pub fn decrypt_pack(
     out: impl AsRef<Path>,
     passphrase: &str,
 ) -> Result<()> {
-    
     use std::io::Read as _;
     let data = std::fs::read(enc_pack)?;
-    let decryptor = match age::Decryptor::new(&data[..]).map_err(|e| Error::Other(e.to_string()))? {
-        age::Decryptor::Passphrase(d) => d,
-        _ => return Err(Error::Other("expected passphrase-encrypted pack".into())),
-    };
+    let decryptor = age::Decryptor::new(&data[..]).map_err(|e| Error::Other(e.to_string()))?;
+    let identity = age::scrypt::Identity::new(
+        age::secrecy::SecretString::from(passphrase.to_owned()),
+    );
     let mut reader = decryptor
-        .decrypt(
-            &age::secrecy::SecretString::new(passphrase.to_string()),
-            None,
-        )
+        .decrypt(std::iter::once(&identity as &dyn age::Identity))
         .map_err(|e| Error::Other(e.to_string()))?;
     let mut plaintext = vec![];
     reader.read_to_end(&mut plaintext)?;
@@ -333,7 +328,6 @@ mod tests {
 
     #[test]
     fn signed_roundtrip() {
-        
         use crate::sign::random_signing_key;
         let sk = random_signing_key();
         let db = tempfile::NamedTempFile::new().unwrap();

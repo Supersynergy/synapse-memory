@@ -148,8 +148,8 @@ fastembed = { version = "5", default-features = false, features = ["ort-download
 redb = "2"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.10"
-# yrs bumped 0.21 → 0.26 (2026-05-06, no breaks). age 0.11 has Decryptor enum→struct break + SecretString Box<str> change — TODO migration in snap.rs:294-300.
-age = { version = "0.10", features = ["armor"] }
+# age bumped 0.10 → 0.11 (2026-05-22): Decryptor enum→struct + scrypt::Identity + SecretString::from. Resolves RUSTSEC proc-macro-error advisory.
+age = { version = "0.11", features = ["armor"] }
 yrs = "0.26"
 linfa = "0.8"
 linfa-clustering = "0.8"
