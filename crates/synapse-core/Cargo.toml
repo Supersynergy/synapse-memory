@@ -85,6 +85,11 @@ candle-nn = { version = "0.9", optional = true }
 candle-transformers = { version = "0.9", optional = true }
 tokenizers = { version = "0.21", optional = true, default-features = false, features = ["http", "progressbar", "fancy-regex"] }
 hf-hub = { version = "0.4", optional = true, features = ["tokio"] }
+# Optional .synx helpers (off by default).
+automerge = { version = "0.6", optional = true }
+hex = { version = "0.4", optional = true }
+memmap2 = { version = "0.9", optional = true }
+instant-distance = { version = "0.6", optional = true }
 
 [dependencies.libsql]
 version = "0.9"
@@ -104,6 +109,7 @@ embed-dynamic = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"
 encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
 turbo = []
 ollama = ["turbo", "dep:reqwest"]
+fresh-registry = ["dep:reqwest"]
 # M4 Max NEON SIMD (f32/i8/b8). Apple Silicon + Linux aarch64 / x86_64 AVX2+.
 simsimd = ["turbo", "dep:simsimd"]
 # Apple Accelerate framework link (AMX + vDSP). macOS-only; auto via accelerate-src.
@@ -116,7 +122,7 @@ mlock = []
 huge-pages = []
 # PR-A1-wire: enable usearch-backed Store::search_vec fast-path with
 # sidecar persistence. Default OFF per SPEC §3 (pure-Rust default build).
-ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot"]
+ann-usearch = ["dep:synapse-ann", "synapse-ann/ann-usearch", "dep:parking_lot", "dep:instant-distance"]
 # Phase 5 MLX Metal embedder (Apple Silicon only). IPC sidecar to mlx-embeddings.
 # Implies `turbo` (needed for embedder_trait module).
 embed-mlx = ["turbo", "dep:rmpv"]
@@ -133,6 +139,13 @@ observability = ["dep:synapse-obs", "synapse-obs/observability"]
 hippo = ["dep:synapse-graph"]
 # Auto disk-tier via SPANN when corpus > SYNAPSE_RAM_THRESHOLD_DOCS (default 100_000).
 spann-tier = ["dep:synapse-spann"]
+# Optional .synx helper features.
+automerge-crdt = ["dep:automerge", "dep:hex"]
+synx-mmap = ["dep:memmap2"]
+synx-sign = []
+synx-tantivy = []
+# Compatibility alias for older docs/patches.
+vec-hnsw = ["ann-usearch"]
 # Embedding dimension compile-time selection. Default = 384 (BGE-small / Arctic-XS/S).
 # embed-768:  Arctic-M / Nomic-1.5  (MTEB ≤62.5)
 # embed-1024: Mxbai-large / Arctic-L (MTEB ≤64.7)
@@ -143,6 +156,7 @@ embed-1024 = []
 tempfile = "3"
 tokio = { workspace = true }
 criterion = { version = "0.8", default-features = false }
+parking_lot = "0.12"
 # scale-bench example (PR-G2)
 clap = { version = "4", features = ["derive"] }
 sha2 = "0.11"
@@ -218,3 +232,8 @@ required-features = ["turbo"]
 name = "embed_cache"
 harness = false
 required-features = ["embed"]
+
+[[bench]]
+name = "adaptive_router_concurrent"
+harness = false
+required-features = ["turbo"]
