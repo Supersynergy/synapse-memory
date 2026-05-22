@@ -12,7 +12,7 @@
 //! print(synapse.truncate_row([1.0, 2.0, 3.0, 4.0], 2)) # → [~0.447, ~0.894]
 //! ```
 
-use std::sync::Mutex;
+use parking_lot::{Mutex, RwLock};
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -183,14 +183,14 @@ fn rerank(
 /// Python-facing wrapper around the SIMSIMD / MRL adaptive strategy picker.
 #[pyclass(name = "AdaptiveRouter")]
 pub struct PyAdaptiveRouter {
-    inner: Mutex<AdaptiveRouter>,
+    inner: RwLock<AdaptiveRouter>,
 }
 
 #[pymethods]
 impl PyAdaptiveRouter {
     #[new]
     fn new() -> Self {
-        Self { inner: Mutex::new(AdaptiveRouter::new()) }
+        Self { inner: RwLock::new(AdaptiveRouter::new()) }
     }
 
     /// Pick a strategy for the given query hints. Returns a short string
@@ -198,7 +198,7 @@ impl PyAdaptiveRouter {
     /// `"simsimd_hamming"`, `"mrl_simsimd"`.
     #[pyo3(signature = (corpus_size, latency_budget_us=0, min_recall=0.0))]
     fn choose(&self, corpus_size: usize, latency_budget_us: u64, min_recall: f64) -> PyResult<&'static str> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.read();
         Ok(strategy_name(g.choose(&QueryHints { corpus_size, latency_budget_us, min_recall })))
     }
 
@@ -206,20 +206,20 @@ impl PyAdaptiveRouter {
     fn observe(&self, strategy: &str, us: f64, recall: f64) -> PyResult<()> {
         let s = strategy_from_name(strategy)
             .ok_or_else(|| PyValueError::new_err(format!("unknown strategy: {strategy}")))?;
-        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let mut g = self.inner.write();
         g.observe(s, us, recall);
         Ok(())
     }
 
     /// Number of observations recorded so far.
     fn decisions(&self) -> PyResult<u64> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.read();
         Ok(g.decisions())
     }
 
     /// Current `(strategy, posterior_recall, ewma_us)` tuples.
     fn posterior(&self) -> PyResult<Vec<(&'static str, f64, f64)>> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.read();
         Ok(g.posterior_means()
             .into_iter()
             .map(|(s, r, u)| (strategy_name(s), r, u))
@@ -313,13 +313,13 @@ impl PyBrain {
     #[pyo3(signature = (text, uri=None, title=None))]
     fn put_text(&self, text: String, uri: Option<String>, title: Option<String>) -> PyResult<i64> {
         let req = PutRequest { uri, title, text, meta: None, embedding: None };
-        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let mut g = self.inner.lock();
         g.put(&req).map_err(|e| PyRuntimeError::new_err(format!("put: {e}")))
     }
 
     #[pyo3(signature = (q, limit=10))]
     fn search_lex(&self, q: &str, limit: usize) -> PyResult<Vec<(i64, String, f64)>> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.lock();
         let hits = g
             .search(q, SearchMode::Lex, None, limit)
             .map_err(|e| PyRuntimeError::new_err(format!("search: {e}")))?;
@@ -332,7 +332,7 @@ impl PyBrain {
     /// `sentence-transformers` or OpenAI call) to avoid a round-trip.
     #[pyo3(signature = (embedding, limit=10))]
     fn search_vec(&self, embedding: Vec<f32>, limit: usize) -> PyResult<Vec<(i64, String, f64)>> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.lock();
         let hits = g
             .search("", SearchMode::Vec, Some(&embedding), limit)
             .map_err(|e| PyRuntimeError::new_err(format!("search_vec: {e}")))?;
@@ -347,7 +347,7 @@ impl PyBrain {
         embedding: Vec<f32>,
         limit: usize,
     ) -> PyResult<Vec<(i64, String, f64)>> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.lock();
         let hits = g
             .search(q, SearchMode::Hybrid, Some(&embedding), limit)
             .map_err(|e| PyRuntimeError::new_err(format!("search_hybrid: {e}")))?;
@@ -370,7 +370,7 @@ impl PyBrain {
             meta: None,
             embedding: Some(embedding),
         };
-        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let mut g = self.inner.lock();
         g.put(&req)
             .map_err(|e| PyRuntimeError::new_err(format!("put_with_embedding: {e}")))
     }
@@ -415,7 +415,7 @@ impl PySynapse {
             meta: meta_val,
             embedding: None,
         };
-        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let mut g = self.inner.lock();
         let store = g.as_mut().ok_or_else(|| PyRuntimeError::new_err("store is closed"))?;
         store.put(&req).map_err(|e| PyRuntimeError::new_err(format!("put: {e}")))
     }
@@ -423,7 +423,7 @@ impl PySynapse {
     /// Lexical BM25 search. Returns `[(id, text, score)]`.
     #[pyo3(signature = (query, k=10))]
     fn search(&self, query: &str, k: usize) -> PyResult<Vec<(i64, String, f64)>> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.lock();
         let store = g.as_ref().ok_or_else(|| PyRuntimeError::new_err("store is closed"))?;
         let hits = store
             .search(query, SearchMode::Lex, None, k)
@@ -434,7 +434,7 @@ impl PySynapse {
     /// Hybrid BM25 + vector search. Caller must supply query embedding.
     #[pyo3(signature = (query, embedding, k=10))]
     fn search_hybrid(&self, query: &str, embedding: Vec<f32>, k: usize) -> PyResult<Vec<(i64, String, f64)>> {
-        let g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let g = self.inner.lock();
         let store = g.as_ref().ok_or_else(|| PyRuntimeError::new_err("store is closed"))?;
         let hits = store
             .search(query, SearchMode::Hybrid, Some(&embedding), k)
@@ -444,7 +444,7 @@ impl PySynapse {
 
     /// Release the store handle. Subsequent calls will raise RuntimeError.
     fn close(&self) -> PyResult<()> {
-        let mut g = self.inner.lock().map_err(|_| PyRuntimeError::new_err("lock poisoned"))?;
+        let mut g = self.inner.lock();
         *g = None;
         Ok(())
     }
