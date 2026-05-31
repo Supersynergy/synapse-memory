@@ -95,7 +95,8 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
         "initialize" => Ok(json!({
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": "synapse", "version": env!("CARGO_PKG_VERSION")}
+            "serverInfo": {"name": "synapse", "version": env!("CARGO_PKG_VERSION")},
+            "instructions": CTXOS_INSTRUCTIONS
         })),
         "tools/list" => Ok(json!({"tools": [
             // ── Coding-agent-friendly aliases ────────────────────────────────
@@ -142,6 +143,25 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
                 "query": {"type": "string"}, "hit_ids": {"type": "array", "items": {"type": "integer"}},
                 "outcome": {"type": "string"}, "accepted": {"type": "boolean", "default": true}
             }, "required": ["agent_id", "query", "outcome"]}},
+            // ── Context-OS: works for ANY agent, no scope required ────────────
+            {"name": "context_pack", "description": "Retrieve + pack the minimal VERBATIM context for a task within a token budget. Returns a STATE card (best-first, lost-in-the-middle-safe), never narrative. Call this FIRST for any task needing prior knowledge.", "inputSchema": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "Task or question to gather context for"},
+                "budget_tokens": {"type": "integer", "default": 4000},
+                "k": {"type": "integer", "default": 24, "description": "Candidates to retrieve before packing"},
+                "kinds": {"type": "array", "items": {"type": "string"}, "description": "Optional filter: known-fact, decision, file, chat"}
+            }, "required": ["query"]}},
+            {"name": "context_feedback", "description": "After the turn, report which doc ids you actually used and whether your verify-gate passed. Closes the self-learning loop so retrieval improves.", "inputSchema": {"type": "object", "properties": {
+                "pack_id": {"type": "string"}, "used_ids": {"type": "array", "items": {"type": "integer"}},
+                "gate": {"type": "string", "enum": ["pass", "fail", "unknown"], "default": "unknown"}
+            }, "required": ["used_ids"]}},
+            {"name": "context_state", "description": "Current-truth card for a topic: latest verified facts + decisions, newest-first, with supersession marked. Use to know what is currently true.", "inputSchema": {"type": "object", "properties": {
+                "topic": {"type": "string"}, "k": {"type": "integer", "default": 12}
+            }, "required": ["topic"]}},
+            {"name": "context_remember", "description": "Persist a durable fact or decision (embedded, searchable). Optionally supersede an older doc id and tag a topic.", "inputSchema": {"type": "object", "properties": {
+                "text": {"type": "string"}, "title": {"type": "string"},
+                "kind": {"type": "string", "enum": ["known-fact", "decision"], "default": "known-fact"},
+                "topic": {"type": "string"}, "supersedes": {"type": "integer"}
+            }, "required": ["text"]}},
             // ── Low-level tools ───────────────────────────────────────────────
             {"name": "put", "description": "Append a memory.", "inputSchema": {"type": "object", "properties": {
                 "text": {"type": "string"}, "title": {"type": "string"}, "uri": {"type": "string"}, "embed": {"type": "boolean"}
@@ -211,6 +231,10 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
         "agent_get_observations" => return agent_get_observations(sock, &args).await,
         "agent_context" => return agent_context(sock, &args).await,
         "agent_feedback" => return agent_feedback(sock, &args).await,
+        "context_pack" => return context_pack(sock, &args).await,
+        "context_feedback" => return context_feedback(sock, &args).await,
+        "context_state" => return context_state(sock, &args).await,
+        "context_remember" => return context_remember(sock, &args).await,
         _ => {}
     }
 
@@ -956,6 +980,282 @@ async fn agent_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
         }}),
     )
     .await
+}
+
+// ── Context-OS (ctxos) tools ──────────────────────────────────────────────────
+
+/// Server-wide guidance Codex/Gemini read on init. First 512 chars are self-contained.
+const CTXOS_INSTRUCTIONS: &str = "Synapse Context-OS (local, no cloud). Call context_pack FIRST for any task needing prior context — it returns the minimal VERBATIM state within a token budget, best-first ordered, never narrative. After the turn, call context_feedback with the doc ids you actually used and whether your verify-gate passed, so retrieval self-improves. Use context_state to get the current truth for a topic plus what superseded what. Use context_remember to persist a durable fact or decision.";
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
+}
+
+/// Stable short id for a pack (query + selected ids), so feedback can reference it.
+fn pack_id(query: &str, ids: &[i64]) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in query.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    for id in ids {
+        for b in id.to_le_bytes() {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x100000001b3);
+        }
+    }
+    format!("pk_{h:016x}")
+}
+
+fn hit_kind(title: &str, meta: &Value) -> Kind {
+    let s = meta
+        .get("kind")
+        .or_else(|| meta.get("type"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .unwrap_or_else(|| title.to_string());
+    Kind::from_meta(&s)
+}
+
+fn kind_tag(k: Kind) -> &'static str {
+    match k {
+        Kind::KnownFact => "known-fact",
+        Kind::Decision => "decision",
+        Kind::File => "file",
+        Kind::Chat => "chat",
+        Kind::Other => "other",
+    }
+}
+
+async fn hybrid_hits(sock: &PathBuf, query: &str, limit: usize) -> Result<Vec<Value>> {
+    let resp = daemon_call(
+        sock,
+        json!({"op": "Search", "args": {
+            "mode": "Hybrid", "q": query, "limit": limit, "embed_query": true
+        }}),
+    )
+    .await?;
+    Ok(resp
+        .get("Hits")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default())
+}
+
+async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let query = args
+        .get("query")
+        .or_else(|| args.get("task"))
+        .and_then(|v| v.as_str())
+        .context("query")?;
+    let budget = args
+        .get("budget_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(4000) as usize;
+    let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(24) as usize;
+    let kinds_filter: Option<Vec<String>> = args.get("kinds").and_then(|v| v.as_array()).map(|a| {
+        a.iter()
+            .filter_map(|x| x.as_str().map(|s| s.to_ascii_lowercase()))
+            .collect()
+    });
+
+    let hits = hybrid_hits(sock, query, k).await?;
+    let mut cands = Vec::new();
+    for h in &hits {
+        let text = h.get("text").and_then(|v| v.as_str()).unwrap_or_default();
+        if text.is_empty() {
+            continue;
+        }
+        let id = h.get("id").and_then(|v| v.as_i64()).unwrap_or_default();
+        let title = h
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let score = h.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        let meta = h.get("meta").cloned().unwrap_or(Value::Null);
+        let kind = hit_kind(&title, &meta);
+        if let Some(filter) = &kinds_filter
+            && !filter.iter().any(|f| kind_tag(kind).contains(f.as_str()))
+        {
+            continue;
+        }
+        cands.push(Candidate {
+            id,
+            title,
+            text: text.to_string(),
+            score,
+            kind,
+        });
+    }
+
+    let opts = PackOptions {
+        budget_tokens: budget,
+        header_reserve: 64,
+    };
+    let packed = pack(cands, &opts);
+    let rendered = render(&packed);
+    let used_ids: Vec<i64> = packed.blocks.iter().map(|b| b.id).collect();
+    let pid = pack_id(query, &used_ids);
+    let blocks: Vec<Value> = packed
+        .blocks
+        .iter()
+        .map(|b| {
+            json!({
+                "id": b.id,
+                "kind": kind_tag(b.kind),
+                "tier": format!("{:?}", b.tier),
+                "tokens": b.tokens
+            })
+        })
+        .collect();
+    Ok(json!({
+        "pack_id": pid,
+        "context": rendered,
+        "manifest": {
+            "used_ids": used_ids,
+            "dropped_ids": packed.dropped_ids,
+            "deduped_ids": packed.deduped_ids,
+            "used_tokens": packed.used_tokens,
+            "budget_tokens": packed.budget_tokens,
+            "naive_tokens": packed.naive_tokens,
+            "savings_pct": packed.savings_pct(),
+            "blocks": blocks,
+        }
+    }))
+}
+
+async fn context_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let pack_id = args.get("pack_id").and_then(|v| v.as_str()).unwrap_or("");
+    let used_ids = args.get("used_ids").cloned().unwrap_or(json!([]));
+    let gate = args
+        .get("gate")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let payload = json!({
+        "pack_id": pack_id,
+        "used_ids": used_ids,
+        "gate": gate,
+        "ts": now_secs(),
+    });
+    let meta = json!({"schema": "synapse.ctxos.v1", "kind": "ctx-feedback", "gate": gate});
+    daemon_call(
+        sock,
+        json!({"op": "Put", "args": {
+            "title": format!("ctx-feedback/{gate}"),
+            "uri": Value::Null,
+            "text": payload.to_string(),
+            "meta": meta,
+            "embed": false,
+        }}),
+    )
+    .await?;
+    Ok(json!({"ok": true, "recorded": payload}))
+}
+
+async fn context_remember(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let text = args.get("text").and_then(|v| v.as_str()).context("text")?;
+    let title = args.get("title").and_then(|v| v.as_str());
+    let kind = args
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("known-fact");
+    let mut meta = json!({"schema": "synapse.ctxos.v1", "kind": kind});
+    if let Some(topic) = args.get("topic").and_then(|v| v.as_str()) {
+        meta["topic"] = json!(topic);
+    }
+    if let Some(sup) = args.get("supersedes").and_then(|v| v.as_i64()) {
+        meta["supersedes"] = json!(sup);
+    }
+    daemon_call(
+        sock,
+        json!({"op": "Put", "args": {
+            "title": title,
+            "uri": Value::Null,
+            "text": text,
+            "meta": meta,
+            "embed": true,
+        }}),
+    )
+    .await
+}
+
+async fn context_state(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let topic = args
+        .get("topic")
+        .and_then(|v| v.as_str())
+        .context("topic")?;
+    let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(12) as usize;
+    let hits = hybrid_hits(sock, topic, k * 2).await?;
+
+    // Keep verified knowledge only (facts + decisions); collect supersession edges.
+    let mut superseded: HashSet<i64> = HashSet::new();
+    let mut items: Vec<Value> = Vec::new();
+    for h in &hits {
+        let meta = h.get("meta").cloned().unwrap_or(Value::Null);
+        if let Some(sup) = meta.get("supersedes").and_then(|v| v.as_i64()) {
+            superseded.insert(sup);
+        }
+        let title = h.get("title").and_then(|v| v.as_str()).unwrap_or_default();
+        let kind = hit_kind(title, &meta);
+        if !matches!(kind, Kind::KnownFact | Kind::Decision) {
+            continue;
+        }
+        let id = h.get("id").and_then(|v| v.as_i64()).unwrap_or_default();
+        let text = h.get("text").and_then(|v| v.as_str()).unwrap_or_default();
+        let head = text
+            .lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty())
+            .unwrap_or("");
+        let open = text.lines().any(|l| {
+            let u = l.to_ascii_uppercase();
+            u.contains("TODO") || u.contains("OPEN") || u.contains("UNVERIFIED")
+        });
+        items.push(json!({
+            "id": id,
+            "kind": kind_tag(kind),
+            "title": title,
+            "head": head,
+            "ts": h.get("ts").cloned().unwrap_or(Value::Null),
+            "open": open,
+        }));
+    }
+    // newest-first, drop superseded, cap at k
+    items.sort_by(|a, b| {
+        b.get("ts")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0)
+            .cmp(&a.get("ts").and_then(|v| v.as_i64()).unwrap_or(0))
+    });
+    let current: Vec<Value> = items
+        .into_iter()
+        .filter(|it| {
+            !superseded.contains(&it.get("id").and_then(|v| v.as_i64()).unwrap_or_default())
+        })
+        .take(k)
+        .collect();
+
+    let mut card = format!("CURRENT STATE — {topic} [{} verified]\n", current.len());
+    for it in &current {
+        let flag = if it.get("open").and_then(|v| v.as_bool()).unwrap_or(false) {
+            " ⚠open"
+        } else {
+            ""
+        };
+        card.push_str(&format!(
+            "- [{}|{}]{} {} :: {}\n",
+            it.get("id").and_then(|v| v.as_i64()).unwrap_or_default(),
+            it.get("kind").and_then(|v| v.as_str()).unwrap_or("other"),
+            flag,
+            it.get("title").and_then(|v| v.as_str()).unwrap_or_default(),
+            it.get("head").and_then(|v| v.as_str()).unwrap_or_default(),
+        ));
+    }
+    Ok(json!({"topic": topic, "state": card, "items": current}))
 }
 
 /// Handle smx_* market tools locally (no synapsed socket needed).
