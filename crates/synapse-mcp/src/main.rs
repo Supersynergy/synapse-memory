@@ -15,7 +15,7 @@ use tokio::net::UnixStream;
 use synapse_market::Market;
 #[cfg(feature = "market")]
 use synapse_market::ffi::smx_query_range;
-use synapse_pack::{Candidate, Kind, PackOptions, pack, render};
+use synapse_pack::{Candidate, Kind, PackOptions, kind_tag, pack, render};
 
 type AgentScope = (String, Option<String>, String);
 #[cfg(feature = "market")]
@@ -1067,16 +1067,6 @@ fn hit_kind(title: &str, meta: &Value) -> Kind {
         .map(str::to_string)
         .unwrap_or_else(|| title.to_string());
     Kind::from_meta(&s)
-}
-
-fn kind_tag(k: Kind) -> &'static str {
-    match k {
-        Kind::KnownFact => "known-fact",
-        Kind::Decision => "decision",
-        Kind::File => "file",
-        Kind::Chat => "chat",
-        Kind::Other => "other",
-    }
 }
 
 async fn hybrid_hits(sock: &PathBuf, query: &str, limit: usize) -> Result<Vec<Value>> {

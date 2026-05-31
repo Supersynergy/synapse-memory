@@ -290,9 +290,11 @@ pub fn render(pack: &Pack) -> String {
     out
 }
 
-fn kind_tag(k: Kind) -> &'static str {
+/// Canonical short tag for a kind. Single source of truth shared with callers
+/// (e.g. synapse-mcp) so the same kind never gets two different labels.
+pub fn kind_tag(k: Kind) -> &'static str {
     match k {
-        Kind::KnownFact => "fact",
+        Kind::KnownFact => "known-fact",
         Kind::Decision => "decision",
         Kind::File => "file",
         Kind::Chat => "chat",
