@@ -5,6 +5,11 @@ check: check-all
 test:
     cargo nextest run --workspace
 
+# Retrain the Context-OS learned noise classifier from the brain + feedback signal.
+# Writes ~/.synapse/ctxos_noise_model.json, applied natively by synapse-mcp (no runtime Python).
+ctxos-train:
+    uv run tools/ctxos/train_noise_model.py
+
 lint:
     cargo clippy --workspace -- -D warnings
 

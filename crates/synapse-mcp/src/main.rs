@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
@@ -1109,6 +1110,125 @@ fn is_noise(h: &Value) -> bool {
     false
 }
 
+/// Learned noise classifier (logistic), trained offline by tools/ctxos/train_noise_model.py
+/// and applied natively here — no Python at runtime. Generalizes beyond the hard `is_noise`
+/// patterns. Absent file → `None` → pattern-only filtering (graceful).
+#[derive(Debug, Deserialize)]
+struct NoiseModel {
+    weights: HashMap<String, f64>,
+    bias: f64,
+    #[serde(default = "default_threshold")]
+    threshold: f64,
+}
+
+fn default_threshold() -> f64 {
+    0.5
+}
+
+fn noise_model_path() -> PathBuf {
+    if let Ok(p) = std::env::var("SYNAPSE_CTXOS_MODEL")
+        && !p.is_empty()
+    {
+        return PathBuf::from(p);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".synapse/ctxos_noise_model.json");
+    }
+    PathBuf::from(".synapse/ctxos_noise_model.json")
+}
+
+static NOISE_MODEL: LazyLock<Option<NoiseModel>> = LazyLock::new(|| {
+    let path = noise_model_path();
+    let bytes = std::fs::read(&path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+});
+
+/// Doc features for the learned classifier. MUST stay byte-for-byte identical to
+/// `features()` in tools/ctxos/train_noise_model.py (char-based counts, same ratios).
+fn noise_features(title: &str, uri: &str, text: &str) -> HashMap<&'static str, f64> {
+    let n = text.chars().count();
+    let nf = n as f64;
+    let digits = text.chars().filter(|c| c.is_numeric()).count() as f64;
+    let upper = text.chars().filter(|c| c.is_uppercase()).count() as f64;
+    let punct = text
+        .chars()
+        .filter(|c| !c.is_alphanumeric() && !c.is_whitespace())
+        .count() as f64;
+    let nlines = text.split('\n').count();
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let nwords = words.len();
+    let uniq = words
+        .iter()
+        .map(|w| w.to_lowercase())
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let angles = (text.matches('<').count() + text.matches('>').count()) as f64;
+
+    let mut m = HashMap::new();
+    m.insert("log_len", (1.0 + nf).ln());
+    m.insert("frac_digit", if n > 0 { digits / nf } else { 0.0 });
+    m.insert("frac_upper", if n > 0 { upper / nf } else { 0.0 });
+    m.insert("frac_punct", if n > 0 { punct / nf } else { 0.0 });
+    m.insert(
+        "brace_json",
+        if text.contains("\": ") || text.trim_start().starts_with('{') {
+            1.0
+        } else {
+            0.0
+        },
+    );
+    m.insert("log_nlines", (1.0 + nlines as f64).ln());
+    m.insert(
+        "avg_line_len",
+        if nlines > 0 { nf / nlines as f64 } else { 0.0 },
+    );
+    m.insert(
+        "title_marker",
+        if title.contains(':') || title.contains('/') {
+            1.0
+        } else {
+            0.0
+        },
+    );
+    m.insert("uri_log", if uri.ends_with(".log") { 1.0 } else { 0.0 });
+    m.insert("angle_frac", if n > 0 { angles / nf } else { 0.0 });
+    m.insert(
+        "uniq_ratio",
+        if nwords > 0 {
+            uniq as f64 / nwords as f64
+        } else {
+            0.0
+        },
+    );
+    m
+}
+
+/// P(noise) from the learned logistic model.
+fn learned_noise_prob(m: &NoiseModel, feats: &HashMap<&'static str, f64>) -> f64 {
+    let mut z = m.bias;
+    for (k, w) in &m.weights {
+        z += w * feats.get(k.as_str()).copied().unwrap_or(0.0);
+    }
+    1.0 / (1.0 + (-z).exp())
+}
+
+/// True if `h` is noise — hard patterns first, then the learned model if loaded.
+fn drop_as_noise(h: &Value) -> bool {
+    if is_noise(h) {
+        return true;
+    }
+    if let Some(model) = NOISE_MODEL.as_ref() {
+        let title = h.get("title").and_then(|v| v.as_str()).unwrap_or("");
+        let uri = h.get("uri").and_then(|v| v.as_str()).unwrap_or("");
+        let text = h.get("text").and_then(|v| v.as_str()).unwrap_or("");
+        let feats = noise_features(title, uri, text);
+        if learned_noise_prob(model, &feats) > model.threshold {
+            return true;
+        }
+    }
+    false
+}
+
 /// Recall booster: union the raw-query hybrid search with a high-signal-terms search,
 /// drop noise (via negativa), dedup by id (keeping the higher daemon score).
 /// Returns the clean candidates and the number of noise docs filtered out.
@@ -1126,7 +1246,7 @@ async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<(Vec
     let mut order: Vec<i64> = Vec::new();
     let mut noise = 0usize;
     for h in raw.into_iter().chain(extra) {
-        if is_noise(&h) {
+        if drop_as_noise(&h) {
             noise += 1;
             continue;
         }
@@ -1657,5 +1777,22 @@ mod tests {
             assert!(is_noise(n), "should drop noise: {n}");
         }
         assert!(!is_noise(&real), "must keep real knowledge");
+    }
+
+    #[test]
+    fn noise_features_and_logistic_apply() {
+        let f = noise_features("known-fact:x", "", "value = 42\npath src/a.rs:9");
+        // keys present + flags correct (parity with the Python trainer)
+        assert!(f.contains_key("log_len") && f.contains_key("uniq_ratio"));
+        assert_eq!(f["title_marker"], 1.0); // title has ':'
+        assert_eq!(f["uri_log"], 0.0);
+        assert!(f["frac_digit"] > 0.0);
+        // logistic apply: positive bias + no weights => sigmoid(bias)
+        let m = NoiseModel {
+            weights: HashMap::new(),
+            bias: 0.0,
+            threshold: 0.5,
+        };
+        assert!((learned_noise_prob(&m, &f) - 0.5).abs() < 1e-9);
     }
 }

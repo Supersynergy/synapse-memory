@@ -110,3 +110,26 @@ context_pack ──► agent uses some doc ids ──► context_feedback(used_i
 ```
 Stored in `~/.synapse/brain.learn.db` (`memory_type_reward`, `learn_bandit`). The CLI's
 `synx hybrid` ranking reads the same table, so feedback compounds across CLI and MCP.
+
+## Noise filter — patterns + learned classifier
+
+`context_pack` drops low-signal docs from recall before packing (via negativa), in two stages:
+
+1. **Hard patterns** (`is_noise`): telepathy heartbeats, harness task-notifications, status
+   JSON, `.log`/briefing files, tiny stubs — always dropped.
+2. **Learned classifier** (optional): a logistic model over cheap, char-based doc features
+   (length, digit/upper/punct ratios, json-ness, line shape, title markers, unique-word ratio)
+   that generalizes beyond the patterns. Trained offline by SuperML and applied natively in
+   Rust — **no Python at runtime**, and absent model → patterns-only (graceful).
+
+Train / retrain it from your brain + the `context_feedback` signal:
+
+```bash
+just ctxos-train            # uv run tools/ctxos/train_noise_model.py
+```
+
+It labels noise from patterns + useful docs from `context_feedback`/known-facts/decisions,
+trains LogisticRegression (exported to `~/.synapse/ctxos_noise_model.json`, applied by Rust)
+and validates against CatBoost (held-out AUC). Re-run as feedback accumulates — the model
+sharpens. `manifest.noise_filtered` reports how many docs were dropped per pack.
+
