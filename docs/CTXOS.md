@@ -8,9 +8,24 @@ anything that speaks MCP stdio) **always-best, token-budget-bounded, self-learni
 - **Budget-bounded** — you ask for N tokens, you never get more.
 - **Self-learning** — feedback on what you used lifts the right kinds of knowledge next time.
 
-## Install
+## Install (worldwide one-liner)
 
-Requires the Synapse daemon (`synapsed`) running and the `synapse-mcp` binary built
+```bash
+curl -fsSL https://raw.githubusercontent.com/supersynergy/synapse/main/scripts/install.sh | sh
+```
+
+This downloads a sha256-verified prebuilt `synapse-mcp` for your platform, installs it to
+`~/.local/bin`, re-signs on macOS, then registers it into every agent CLI you have. If no
+prebuilt exists it falls back to `cargo install --git` and then to a local source build.
+
+Prebuilt targets (from the `release-ctxos` CI): `aarch64-apple-darwin`, `x86_64-apple-darwin`,
+`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`. Other platforms build from source.
+
+Rust users can also: `cargo install --git https://github.com/supersynergy/synapse synapse-mcp`.
+
+### From a checkout
+
+Requires the Synapse daemon (`synapsed`) running and `synapse-mcp` built
 (`cargo build --release -p synapse-mcp`, or installed at `~/.local/bin/synapse-mcp`).
 
 ```bash

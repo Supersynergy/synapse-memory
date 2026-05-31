@@ -63,7 +63,14 @@ synx -f "$HOME/.synapse/brain.db" doctor --fix
 
 One local MCP server that gives any agent **always-best, token-budget-bounded, self-learning**
 context. Deletion-based (verbatim) — file paths, error strings and numbers survive exactly;
-no cloud, no vendor lock. Install into every CLI you have with one command:
+no cloud, no vendor lock. Worldwide one-liner (sha256-verified prebuilt, falls back to
+`cargo install`/source; re-signs on macOS):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/supersynergy/synapse/main/scripts/install.sh | sh
+```
+
+From a checkout instead:
 
 ```bash
 sh scripts/install-ctxos.sh install --all   # detects claude / codex / gemini, registers the MCP server

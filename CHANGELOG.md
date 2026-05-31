@@ -14,7 +14,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   - `synapse-pack` crate: pure token-budget packer (deletion-based tiers `full → signatures → fact-delta → one-line`, SimHash near-dup collapse, greedy budget knapsack, serial-position ordering). 9 unit tests.
   - `synapse-mcp` tools: `context_pack`, `context_state`, `context_feedback`, `context_remember`; MCP `instructions` for cross-tool guidance; `--brain`/`SYNAPSE_BRAIN` knob.
   - Self-learning loop: `context_feedback` writes per-kind reward (`memory_type_reward`), `context_pack` applies `memory_type_bonus` to ranking.
-  - `scripts/install-ctxos.sh` (`install`/`doctor`/`uninstall`, `--dry-run`) registers the server into Claude Code, Codex and Gemini CLI via their official `mcp add`; `scripts/install.sh` curl-pipe bootstrap.
+  - `scripts/install-ctxos.sh` (`install`/`doctor`/`uninstall`, `--dry-run`) registers the server into Claude Code, Codex and Gemini CLI via their official `mcp add`.
+  - Worldwide one-liner `scripts/install.sh`: platform-detect → sha256-verified prebuilt download → `cargo install --git` → source fallback, with macOS ad-hoc re-sign (fixes copied-Mach-O SIGKILL) and an MCP-initialize smoke test. `scripts/build-dist.sh` + `.github/workflows/release-ctxos.yml` produce/publish per-target binaries + `SHA256SUMS` (macOS arm64/x64, Linux gnu x64/arm64).
   - Docs: `docs/CTXOS.md`, `docs/SPEC-ctxos-v2.md`, `docs/adr/0001-context-os-mcp.md`, README section.
 
 ---
