@@ -1071,9 +1071,48 @@ fn term_overlap_boost(terms: &[String], text: &str) -> f32 {
     (hits as f32 / terms.len() as f32) * 0.1
 }
 
+/// Low-signal noise that must never enter a context pack (via negativa): telepathy
+/// heartbeats, harness task-notifications, status JSON, session/briefing logs, tiny stubs.
+/// Dropping these is the highest-leverage recall win — they crowd out real knowledge.
+fn is_noise(h: &Value) -> bool {
+    let title = h.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    let uri = h.get("uri").and_then(|v| v.as_str()).unwrap_or("");
+    let text = h.get("text").and_then(|v| v.as_str()).unwrap_or("");
+
+    // telepathy status / reply spam
+    if title.contains("[telepathy]") || text.contains("[telepathy]") {
+        return true;
+    }
+    // harness task-notification / tool-call dumps
+    if text.contains("<task-notification>") || text.contains("tool-use-id") {
+        return true;
+    }
+    // machine status heartbeats (JSON)
+    if text.contains("\"models_loaded\"")
+        || text.contains("\"desktop_procs\"")
+        || text.contains("\"cli_sessions\"")
+    {
+        return true;
+    }
+    // log / briefing artifacts
+    if uri.ends_with(".log")
+        || title.ends_with(".log")
+        || title.contains("sched_briefing")
+        || text.starts_with("Agent [briefing]")
+    {
+        return true;
+    }
+    // empty / stub — no real content to pack
+    if text.trim().len() < 40 {
+        return true;
+    }
+    false
+}
+
 /// Recall booster: union the raw-query hybrid search with a high-signal-terms search,
-/// deduped by id (keeping the higher daemon score). Two angles catch docs one misses.
-async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<Vec<Value>> {
+/// drop noise (via negativa), dedup by id (keeping the higher daemon score).
+/// Returns the clean candidates and the number of noise docs filtered out.
+async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<(Vec<Value>, usize)> {
     let raw = hybrid_hits(sock, query, k).await?;
     let terms = query_terms(query);
     let term_query = terms.join(" ");
@@ -1085,7 +1124,12 @@ async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<Vec<
 
     let mut by_id: HashMap<i64, Value> = HashMap::new();
     let mut order: Vec<i64> = Vec::new();
+    let mut noise = 0usize;
     for h in raw.into_iter().chain(extra) {
+        if is_noise(&h) {
+            noise += 1;
+            continue;
+        }
         let id = h.get("id").and_then(|v| v.as_i64()).unwrap_or_default();
         match by_id.get(&id) {
             Some(existing) => {
@@ -1104,10 +1148,11 @@ async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<Vec<
             }
         }
     }
-    Ok(order
+    let clean = order
         .into_iter()
         .filter_map(|id| by_id.remove(&id))
-        .collect())
+        .collect();
+    Ok((clean, noise))
 }
 
 async fn hybrid_hits(sock: &PathBuf, query: &str, limit: usize) -> Result<Vec<Value>> {
@@ -1142,8 +1187,8 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
             .collect()
     });
 
-    // Recall: union of the raw-query search and a high-signal-terms search, deduped.
-    let hits = recall_candidates(sock, query, k).await?;
+    // Recall: union of the raw-query search and a high-signal-terms search, noise-filtered + deduped.
+    let (hits, noise_filtered) = recall_candidates(sock, query, k).await?;
     let terms = query_terms(query);
     let learned = learn_bonus_map();
     let mut cands = Vec::new();
@@ -1211,6 +1256,7 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
             "budget_tokens": packed.budget_tokens,
             "naive_tokens": packed.naive_tokens,
             "savings_pct": packed.savings_pct(),
+            "noise_filtered": noise_filtered,
             "blocks": blocks,
         }
     }))
@@ -1597,5 +1643,19 @@ mod tests {
         assert!(some > none && all > some, "more matches => bigger boost");
         assert!(all <= 0.1 + f32::EPSILON, "boost is bounded");
         assert_eq!(term_overlap_boost(&[], "anything"), 0.0);
+    }
+
+    #[test]
+    fn is_noise_drops_spam_keeps_knowledge() {
+        let telepathy = json!({"text": "[telepathy][ollama.status] {\"models_loaded\": 18}"});
+        let notif = json!({"text": "<task-notification> <task-id>abc</task-id> done"});
+        let status = json!({"text": "{\"desktop_procs\": 0, \"cli_sessions\": 2}"});
+        let log = json!({"uri": "sched_briefing.log", "text": "Agent [briefing] log running ..."});
+        let stub = json!({"text": "ok"});
+        let real = json!({"title": "known-fact:speedtune", "text": "Context-OS packs verbatim STATE within a token budget; deletion tiers."});
+        for n in [&telepathy, &notif, &status, &log, &stub] {
+            assert!(is_noise(n), "should drop noise: {n}");
+        }
+        assert!(!is_noise(&real), "must keep real knowledge");
     }
 }
