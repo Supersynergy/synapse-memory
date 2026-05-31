@@ -18,10 +18,18 @@ This downloads a sha256-verified prebuilt `synapse-mcp` for your platform, insta
 `~/.local/bin`, re-signs on macOS, then registers it into every agent CLI you have. If no
 prebuilt exists it falls back to `cargo install --git` and then to a local source build.
 
-Prebuilt targets (from the `release-ctxos` CI): `aarch64-apple-darwin`, `x86_64-apple-darwin`,
-`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`. Other platforms build from source.
+The distributed binary is built with `--no-default-features`: a **portable Context-OS binary**
+with no engine/market code and no openssl — its only native dependency is bundled SQLite, so
+Linux builds are **static musl** that run on any distro (Alpine, old glibc, containers), and
+binaries use a baseline CPU target so they run on any CPU of that arch.
 
-Rust users can also: `cargo install --git https://github.com/supersynergy/synapse synapse-mcp`.
+Prebuilt targets (from the `release-ctxos` CI): `aarch64-apple-darwin`, `x86_64-apple-darwin`,
+`x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`. Other platforms build from source.
+
+Rust users can also: `cargo install --git https://github.com/supersynergy/synapse synapse-mcp --no-default-features`.
+
+> The full `synapse-mcp` (default features) additionally exposes `smx_*` market/engine tools and
+> is for internal use; the portable Context-OS distribution omits them by design.
 
 ### From a checkout
 

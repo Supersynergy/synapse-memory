@@ -40,8 +40,8 @@ detect_target() {
       x86_64)        echo "x86_64-apple-darwin" ;;
       *) return 1 ;; esac ;;
     Linux) case "$arch" in
-      aarch64|arm64) echo "aarch64-unknown-linux-gnu" ;;
-      x86_64|amd64)  echo "x86_64-unknown-linux-gnu" ;;
+      aarch64|arm64) echo "aarch64-unknown-linux-musl" ;;
+      x86_64|amd64)  echo "x86_64-unknown-linux-musl" ;;
       *) return 1 ;; esac ;;
     *) return 1 ;;
   esac

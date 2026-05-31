@@ -13,6 +13,12 @@ HERE=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 cd "${HERE}/.."
 mkdir -p "$OUT"
 
+# Distribution binaries must run on ANY CPU of the target arch, so override the
+# workspace's `target-cpu=native` (great for local perf, fatal for portability).
+# Respected if the caller already set RUSTFLAGS.
+: "${RUSTFLAGS=}"
+export RUSTFLAGS
+
 HOST=$(rustc -vV | sed -n 's/host: //p')
 # Host target by default. Cross targets (Linux gnu) are produced by the
 # release-ctxos CI workflow on native runners; override locally with e.g.
@@ -23,10 +29,11 @@ built=0
 for t in $TARGETS; do
   printf '› building %s\n' "$t"
   rustup target add "$t" >/dev/null 2>&1 || true
+  # --no-default-features = portable Context-OS binary (no engine/market, no openssl).
   if [ "$t" = "$HOST" ]; then
-    cargo build --release -p synapse-mcp --target "$t" || { printf '! %s failed, skipping\n' "$t" >&2; continue; }
+    cargo build --release -p synapse-mcp --no-default-features --target "$t" || { printf '! %s failed, skipping\n' "$t" >&2; continue; }
   else
-    cargo zigbuild --release -p synapse-mcp --target "$t" || { printf '! %s failed (cross), skipping\n' "$t" >&2; continue; }
+    cargo zigbuild --release -p synapse-mcp --no-default-features --target "$t" || { printf '! %s failed (cross), skipping\n' "$t" >&2; continue; }
   fi
   cp "target/${t}/release/synapse-mcp" "${OUT}/synapse-mcp-${t}"
   built=$((built + 1))

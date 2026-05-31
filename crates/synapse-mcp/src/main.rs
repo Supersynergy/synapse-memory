@@ -11,11 +11,14 @@ use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
+#[cfg(feature = "market")]
 use synapse_market::Market;
+#[cfg(feature = "market")]
 use synapse_market::ffi::smx_query_range;
 use synapse_pack::{Candidate, Kind, PackOptions, pack, render};
 
 type AgentScope = (String, Option<String>, String);
+#[cfg(feature = "market")]
 type MarketSeries = Vec<(String, Vec<f64>)>;
 
 #[derive(Parser)]
@@ -106,7 +109,9 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
             "serverInfo": {"name": "synapse", "version": env!("CARGO_PKG_VERSION")},
             "instructions": CTXOS_INSTRUCTIONS
         })),
-        "tools/list" => Ok(json!({"tools": [
+        "tools/list" => {
+            #[allow(unused_mut)]
+            let mut list = json!({"tools": [
             // ── Coding-agent-friendly aliases ────────────────────────────────
             {"name": "memory_save", "description": "Save a memory with optional tags. Returns doc id.", "inputSchema": {"type": "object", "properties": {
                 "text": {"type": "string"}, "title": {"type": "string"},
@@ -194,26 +199,15 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
             }, "required": ["snapshot_path"]}},
             {"name": "synapse_verify", "description": "Verify Ed25519 signature on a doc by id. Returns ok or error.", "inputSchema": {"type": "object", "properties": {
                 "doc_id": {"type": "integer"}, "vk": {"type": "array", "items": {"type": "integer"}}
-            }, "required": ["doc_id", "vk"]}},
-            {"name": "smx_candles", "description": "Return OHLCV candles for a ticker in a time range.", "inputSchema": {"type": "object", "properties": {
-                "ticker": {"type": "string"},
-                "start": {"type": "integer", "description": "Unix timestamp seconds"},
-                "end": {"type": "integer", "description": "Unix timestamp seconds"},
-                "limit": {"type": "integer", "default": 500}
-            }, "required": ["ticker", "start", "end"]}},
-            {"name": "smx_signal_similar", "description": "Find N most similar past market regimes for ticker at date_ts.", "inputSchema": {"type": "object", "properties": {
-                "ticker": {"type": "string"},
-                "date_ts": {"type": "integer", "description": "Unix timestamp seconds of reference day"},
-                "n": {"type": "integer", "default": 10}
-            }, "required": ["ticker", "date_ts"]}},
-            {"name": "smx_pattern_stats", "description": "Aggregate stats for a named pattern across all stored signals.", "inputSchema": {"type": "object", "properties": {
-                "pattern": {"type": "string", "description": "Pattern name or SQL LIKE expression"}
-            }, "required": ["pattern"]}},
-            {"name": "smx_correlation", "description": "Return pairwise close-price correlation matrix for tickers over last N days.", "inputSchema": {"type": "object", "properties": {
-                "tickers": {"type": "array", "items": {"type": "string"}},
-                "days": {"type": "integer", "default": 30}
-            }, "required": ["tickers"]}}
-        ]})),
+            }, "required": ["doc_id", "vk"]}}
+            ]});
+            // smx_* market tools only exist in the full (engine) build.
+            #[cfg(feature = "market")]
+            if let Some(arr) = list.get_mut("tools").and_then(|v| v.as_array_mut()) {
+                arr.extend(market_tools());
+            }
+            Ok(list)
+        }
         "tools/call" => {
             let name = req
                 .params
@@ -222,7 +216,7 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
                 .context("missing tool name")?;
             let args = req.params.get("arguments").cloned().unwrap_or(json!({}));
             let result = if name.starts_with("smx_") {
-                market_tool_call(market_db, name, &args)?
+                market_dispatch(market_db, name, &args)?
             } else {
                 tool_call(sock, name, args).await?
             };
@@ -1355,7 +1349,46 @@ async fn context_state(sock: &PathBuf, args: &Value) -> Result<Value> {
     Ok(json!({"topic": topic, "state": card, "items": current}))
 }
 
+/// smx_* tool schemas — only present in the full (engine) build.
+#[cfg(feature = "market")]
+fn market_tools() -> Vec<Value> {
+    vec![
+        json!({"name": "smx_candles", "description": "Return OHLCV candles for a ticker in a time range.", "inputSchema": {"type": "object", "properties": {
+            "ticker": {"type": "string"},
+            "start": {"type": "integer", "description": "Unix timestamp seconds"},
+            "end": {"type": "integer", "description": "Unix timestamp seconds"},
+            "limit": {"type": "integer", "default": 500}
+        }, "required": ["ticker", "start", "end"]}}),
+        json!({"name": "smx_signal_similar", "description": "Find N most similar past market regimes for ticker at date_ts.", "inputSchema": {"type": "object", "properties": {
+            "ticker": {"type": "string"},
+            "date_ts": {"type": "integer", "description": "Unix timestamp seconds of reference day"},
+            "n": {"type": "integer", "default": 10}
+        }, "required": ["ticker", "date_ts"]}}),
+        json!({"name": "smx_pattern_stats", "description": "Aggregate stats for a named pattern across all stored signals.", "inputSchema": {"type": "object", "properties": {
+            "pattern": {"type": "string", "description": "Pattern name or SQL LIKE expression"}
+        }, "required": ["pattern"]}}),
+        json!({"name": "smx_correlation", "description": "Return pairwise close-price correlation matrix for tickers over last N days.", "inputSchema": {"type": "object", "properties": {
+            "tickers": {"type": "array", "items": {"type": "string"}},
+            "days": {"type": "integer", "default": 30}
+        }, "required": ["tickers"]}}),
+    ]
+}
+
+/// Route smx_* tool calls; bails in the portable build that excludes the engine.
+#[cfg(feature = "market")]
+fn market_dispatch(market_db: &PathBuf, name: &str, args: &Value) -> Result<Value> {
+    market_tool_call(market_db, name, args)
+}
+
+#[cfg(not(feature = "market"))]
+fn market_dispatch(_market_db: &PathBuf, _name: &str, _args: &Value) -> Result<Value> {
+    anyhow::bail!(
+        "market (smx_*) tools are not built in this binary; rebuild with --features market"
+    )
+}
+
 /// Handle smx_* market tools locally (no synapsed socket needed).
+#[cfg(feature = "market")]
 fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Value> {
     let m = Market::open(market_db).context("open market db")?;
     match name {
@@ -1463,6 +1496,7 @@ fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Val
     }
 }
 
+#[cfg(feature = "market")]
 fn pearson(a: &[f64], b: &[f64]) -> f64 {
     let n = a.len().min(b.len());
     if n < 2 {

@@ -8,6 +8,14 @@ license.workspace = true
 name = "synapse-mcp"
 path = "src/main.rs"
 
+[features]
+# `market` pulls synapse-market (HFT/engine) for the smx_* tools. Default ON for the
+# full internal binary. Build the portable Context-OS binary without it:
+#   cargo build --release -p synapse-mcp --no-default-features
+# That binary has no engine/openssl deps → cross-compiles to static musl for any Linux.
+default = ["market"]
+market = ["dep:synapse-market"]
+
 [dependencies]
 anyhow.workspace = true
 serde.workspace = true
@@ -15,7 +23,7 @@ serde_json.workspace = true
 rmp-serde.workspace = true
 tokio.workspace = true
 clap.workspace = true
-synapse-market = { path = "../synapse-market" }
+synapse-market = { path = "../synapse-market", optional = true }
 synapse-pack = { path = "../synapse-pack" }
 synapse-learn = { path = "../synapse-learn" }
 rusqlite.workspace = true

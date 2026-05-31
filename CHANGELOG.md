@@ -16,6 +16,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   - Self-learning loop: `context_feedback` writes per-kind reward (`memory_type_reward`), `context_pack` applies `memory_type_bonus` to ranking.
   - `scripts/install-ctxos.sh` (`install`/`doctor`/`uninstall`, `--dry-run`) registers the server into Claude Code, Codex and Gemini CLI via their official `mcp add`.
   - Worldwide one-liner `scripts/install.sh`: platform-detect → sha256-verified prebuilt download → `cargo install --git` → source fallback, with macOS ad-hoc re-sign (fixes copied-Mach-O SIGKILL) and an MCP-initialize smoke test. `scripts/build-dist.sh` + `.github/workflows/release-ctxos.yml` produce/publish per-target binaries + `SHA256SUMS` (macOS arm64/x64, Linux gnu x64/arm64).
+  - Portable build: `synapse-mcp` `market` feature (default on) gates the `smx_*` engine tools behind `dep:synapse-market`. `--no-default-features` yields an engine-free, **openssl-free** Context-OS binary (only native dep is bundled SQLite) → static musl Linux + baseline-CPU artifacts that run anywhere. `release-ctxos.yml` builds the lean binary as static musl on native runners; `build-dist.sh` forces baseline `RUSTFLAGS`. `.cargo/config.toml` clears `target-cpu=native` for the musl targets.
   - Docs: `docs/CTXOS.md`, `docs/SPEC-ctxos-v2.md`, `docs/adr/0001-context-os-mcp.md`, README section.
 
 ---

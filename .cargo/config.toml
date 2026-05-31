@@ -19,6 +19,13 @@ rustflags = []
 [target.x86_64-unknown-linux-gnu]
 rustflags = []
 
+# Static musl targets — portable single-binary distribution (Alpine, old glibc, containers).
+[target.aarch64-unknown-linux-musl]
+rustflags = []
+
+[target.x86_64-unknown-linux-musl]
+rustflags = []
+
 [target.'cfg(target_os = "linux")']
 # mold is 2–5x faster than ld/lld for Rust workspaces. Install: `cargo install --git https://github.com/rui314/mold`.
 # Uncomment after installing mold:
