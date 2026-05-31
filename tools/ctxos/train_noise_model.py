@@ -170,38 +170,107 @@ def main() -> int:
     lr_auc = roc_auc_score(yte, lr.predict_proba(Xte)[:, 1])
     print(f"LogReg held-out AUC: {lr_auc:.4f}")
 
+    cb = None
     cb_auc = None
     try:
         from catboost import CatBoostClassifier
 
         cb = CatBoostClassifier(
-            iterations=300, depth=4, learning_rate=0.1, verbose=False
+            iterations=400, depth=6, learning_rate=0.1, verbose=False
         )
         cb.fit(Xtr, ytr)
         cb_auc = float(roc_auc_score(yte, cb.predict_proba(Xte)[:, 1]))
-        print(f"CatBoost held-out AUC: {cb_auc:.4f} (validator)")
+        print(f"CatBoost held-out AUC: {cb_auc:.4f}")
     except Exception as e:  # CatBoost optional
-        print(f"CatBoost skipped: {e}", file=sys.stderr)
+        print(f"CatBoost unavailable: {e}", file=sys.stderr)
 
-    weights = {k: float(w) for k, w in zip(FEATURE_ORDER, lr.coef_[0])}
-    model = {
-        "version": 1,
-        "kind": "logistic",
-        "feature_order": FEATURE_ORDER,
-        "weights": weights,
-        "bias": float(lr.intercept_[0]),
-        "threshold": 0.5,
-        "metrics": {
-            "logreg_auc": float(lr_auc),
-            "catboost_auc": cb_auc,
-            "n_noise": int(n_noise),
-            "n_useful": int(n_useful),
-        },
+    metrics = {
+        "logreg_auc": float(lr_auc),
+        "catboost_auc": cb_auc,
+        "n_noise": int(n_noise),
+        "n_useful": int(n_useful),
     }
+
+    # Prefer the tree model (higher AUC); fall back to the exported linear model.
+    if cb is not None:
+        trees, scale, bias = export_catboost_oblivious(cb)
+        model = {
+            "version": 2,
+            "kind": "catboost_oblivious",
+            "feature_order": FEATURE_ORDER,
+            "scale": scale,
+            "bias": bias,
+            "threshold": 0.5,
+            "trees": trees,
+            "metrics": metrics,
+        }
+        print(f"exported {len(trees)} oblivious trees")
+    else:
+        model = {
+            "version": 1,
+            "kind": "logistic",
+            "feature_order": FEATURE_ORDER,
+            "weights": {k: float(w) for k, w in zip(FEATURE_ORDER, lr.coef_[0])},
+            "bias": float(lr.intercept_[0]),
+            "threshold": 0.5,
+            "metrics": metrics,
+        }
+
     with open(args.out, "w") as fh:
-        json.dump(model, fh, indent=2)
+        json.dump(model, fh)
     print(f"wrote {args.out}")
+
+    # Parity vectors: (features, prob) for the Rust evaluator to match exactly.
+    if cb is not None:
+        probs = cb.predict_proba(Xte[:8])[:, 1]
+        parity = [
+            {"features": Xte[i].tolist(), "prob": float(probs[i])}
+            for i in range(min(8, len(Xte)))
+        ]
+        with open(args.out + ".parity.json", "w") as fh:
+            json.dump({"feature_order": FEATURE_ORDER, "cases": parity}, fh, indent=2)
+        print(f"wrote {args.out}.parity.json ({len(parity)} cases)")
     return 0
+
+
+def export_catboost_oblivious(cb):
+    """Extract CatBoost's oblivious (symmetric) trees into a compact form the Rust
+    evaluator applies natively: per tree a list of (feature, border) splits + 2^depth leaves.
+    Returns (trees, scale, bias)."""
+    import os as _os
+    import tempfile
+
+    p = _os.path.join(tempfile.gettempdir(), "ctxos_cb.json")
+    cb.save_model(p, format="json")
+    with open(p) as fh:
+        j = json.load(fh)
+
+    finfo = j.get("features_info", {}).get("float_features", [])
+    idx_map = {}
+    for ff in finfo:
+        fi = ff.get("feature_index")
+        flat = ff.get("flat_feature_index", fi)
+        if fi is not None:
+            idx_map[fi] = flat
+
+    trees = []
+    for t in j["oblivious_trees"]:
+        splits = []
+        for s in t.get("splits", []):
+            fi = s.get("float_feature_index")
+            flat = idx_map.get(fi, fi)
+            splits.append({"feature": int(flat), "border": float(s["border"])})
+        trees.append({"splits": splits, "leaves": [float(v) for v in t["leaf_values"]]})
+
+    sb = j.get("scale_and_bias", [1.0, [0.0]])
+    scale, bias = 1.0, 0.0
+    try:
+        scale = float(sb[0][0]) if isinstance(sb[0], list) else float(sb[0])
+        b = sb[1]
+        bias = float(b[0]) if isinstance(b, (list, tuple)) else float(b)
+    except Exception:
+        pass
+    return trees, scale, bias
 
 
 if __name__ == "__main__":

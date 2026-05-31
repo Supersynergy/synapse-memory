@@ -117,10 +117,13 @@ Stored in `~/.synapse/brain.learn.db` (`memory_type_reward`, `learn_bandit`). Th
 
 1. **Hard patterns** (`is_noise`): telepathy heartbeats, harness task-notifications, status
    JSON, `.log`/briefing files, tiny stubs — always dropped.
-2. **Learned classifier** (optional): a logistic model over cheap, char-based doc features
-   (length, digit/upper/punct ratios, json-ness, line shape, title markers, unique-word ratio)
-   that generalizes beyond the patterns. Trained offline by SuperML and applied natively in
-   Rust — **no Python at runtime**, and absent model → patterns-only (graceful).
+2. **Learned classifier** (optional): a **CatBoost oblivious-tree ensemble** (held-out AUC
+   ~0.998; logistic fallback) over cheap, char-based doc features (length, digit/upper/punct
+   ratios, json-ness, line shape, title markers, unique-word ratio) that generalizes beyond
+   the patterns. Trained offline by SuperML, exported as compact JSON, and applied **natively
+   in Rust** (oblivious-tree evaluator — no Python at runtime; absent model → patterns-only).
+   Parity with CatBoost is verifiable: `synapse-mcp --noise-selftest <model>.parity.json`
+   (matches `predict_proba` to ~1e-16).
 
 Train / retrain it from your brain + the `context_feedback` signal:
 

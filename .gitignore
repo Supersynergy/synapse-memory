@@ -45,3 +45,6 @@ bench/**/results*.json
 
 # --- private ---
 docs/strategy/
+
+# tooling artifacts
+.grepgod/

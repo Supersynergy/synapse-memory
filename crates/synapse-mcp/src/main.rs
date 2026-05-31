@@ -34,6 +34,41 @@ struct Cli {
     /// Default: $SYNAPSE_BRAIN or ~/.synapse/brain.db.
     #[arg(long, env = "SYNAPSE_BRAIN")]
     brain: Option<PathBuf>,
+    /// Verify the loaded noise model matches the trainer: evaluate a parity file
+    /// (`*.parity.json`) and report max |Rust − CatBoost| prob diff, then exit.
+    #[arg(long)]
+    noise_selftest: Option<PathBuf>,
+}
+
+/// Compare the native Rust noise-model eval against the Python/CatBoost parity vectors.
+fn run_noise_selftest(path: &PathBuf) -> Result<()> {
+    let model = NOISE_MODEL.as_ref().context(
+        "no noise model loaded (set SYNAPSE_CTXOS_MODEL or ~/.synapse/ctxos_noise_model.json)",
+    )?;
+    let data: Value = serde_json::from_slice(&std::fs::read(path)?)?;
+    let cases = data
+        .get("cases")
+        .and_then(|v| v.as_array())
+        .context("parity file missing cases")?;
+    let mut max_diff = 0.0f64;
+    for (i, c) in cases.iter().enumerate() {
+        let fv: Vec<f64> = c
+            .get("features")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_f64()).collect())
+            .unwrap_or_default();
+        let expected = c.get("prob").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let got = catboost_prob(model, &fv);
+        let diff = (got - expected).abs();
+        max_diff = max_diff.max(diff);
+        println!("case {i}: expected={expected:.6} got={got:.6} diff={diff:.2e}");
+    }
+    println!("max_diff={max_diff:.2e}");
+    if max_diff > 1e-5 {
+        anyhow::bail!("parity FAILED (max_diff {max_diff:.2e} > 1e-5)");
+    }
+    println!("parity OK");
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +98,9 @@ async fn main() -> Result<()> {
     if let Some(b) = &cli.brain {
         // Make the brain path visible to the self-learning helpers.
         unsafe { std::env::set_var("SYNAPSE_BRAIN", b) };
+    }
+    if let Some(parity) = &cli.noise_selftest {
+        return run_noise_selftest(parity);
     }
     let stdin = tokio::io::stdin();
     let mut reader = BufReader::new(stdin).lines();
@@ -1113,16 +1151,44 @@ fn is_noise(h: &Value) -> bool {
 /// Learned noise classifier (logistic), trained offline by tools/ctxos/train_noise_model.py
 /// and applied natively here — no Python at runtime. Generalizes beyond the hard `is_noise`
 /// patterns. Absent file → `None` → pattern-only filtering (graceful).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct NoiseModel {
+    #[serde(default)]
+    kind: String,
+    // logistic
+    #[serde(default)]
     weights: HashMap<String, f64>,
+    #[serde(default)]
     bias: f64,
     #[serde(default = "default_threshold")]
     threshold: f64,
+    // catboost_oblivious
+    #[serde(default)]
+    feature_order: Vec<String>,
+    #[serde(default = "default_scale")]
+    scale: f64,
+    #[serde(default)]
+    trees: Vec<CatTree>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct CatTree {
+    splits: Vec<CatSplit>,
+    leaves: Vec<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatSplit {
+    feature: usize,
+    border: f64,
 }
 
 fn default_threshold() -> f64 {
     0.5
+}
+
+fn default_scale() -> f64 {
+    1.0
 }
 
 fn noise_model_path() -> PathBuf {
@@ -1203,13 +1269,42 @@ fn noise_features(title: &str, uri: &str, text: &str) -> HashMap<&'static str, f
     m
 }
 
-/// P(noise) from the learned logistic model.
+fn sigmoid(z: f64) -> f64 {
+    1.0 / (1.0 + (-z).exp())
+}
+
+/// P(noise) from the learned model — CatBoost oblivious-tree ensemble or logistic fallback.
 fn learned_noise_prob(m: &NoiseModel, feats: &HashMap<&'static str, f64>) -> f64 {
+    if m.kind == "catboost_oblivious" && !m.trees.is_empty() {
+        let fvec: Vec<f64> = m
+            .feature_order
+            .iter()
+            .map(|k| feats.get(k.as_str()).copied().unwrap_or(0.0))
+            .collect();
+        return catboost_prob(m, &fvec);
+    }
     let mut z = m.bias;
     for (k, w) in &m.weights {
         z += w * feats.get(k.as_str()).copied().unwrap_or(0.0);
     }
-    1.0 / (1.0 + (-z).exp())
+    sigmoid(z)
+}
+
+/// Evaluate the CatBoost oblivious ensemble over a feature vector aligned to `feature_order`.
+/// Oblivious tree: leaf index = OR of (feature > border) << split_position. Same convention
+/// as CatBoost's model JSON, verified against predict_proba parity vectors.
+fn catboost_prob(m: &NoiseModel, fvec: &[f64]) -> f64 {
+    let mut sum = 0.0;
+    for tree in &m.trees {
+        let mut idx = 0usize;
+        for (pos, s) in tree.splits.iter().enumerate() {
+            if fvec.get(s.feature).copied().unwrap_or(0.0) > s.border {
+                idx |= 1 << pos;
+            }
+        }
+        sum += tree.leaves.get(idx).copied().unwrap_or(0.0);
+    }
+    sigmoid(m.scale * sum + m.bias)
 }
 
 /// True if `h` is noise — hard patterns first, then the learned model if loaded.
@@ -1792,6 +1887,7 @@ mod tests {
             weights: HashMap::new(),
             bias: 0.0,
             threshold: 0.5,
+            ..Default::default()
         };
         assert!((learned_noise_prob(&m, &f) - 0.5).abs() < 1e-9);
     }
