@@ -18,23 +18,24 @@ fn main() {
             .unwrap_or(default)
     };
     let dim = get("--dim", 128);
-    let n   = get("--n",   100_000);
-    let q   = get("--q",   64);
-    let k   = get("--k",   10);
+    let n = get("--n", 100_000);
+    let q = get("--q", 64);
+    let k = get("--k", 10);
 
     println!("ann_bench_aot dim={dim} n={n} q={q} k={k}");
     println!("rayon threads: {}", rayon::current_num_threads());
 
     // Build index.
     let mut idx = UsearchIndex::new(dim, n).unwrap();
-    let vecs: Vec<Vec<f32>> = (0..n as u64)
-        .map(|i| synthetic_vec(i, dim))
-        .collect();
+    let vecs: Vec<Vec<f32>> = (0..n as u64).map(|i| synthetic_vec(i, dim)).collect();
     let t0 = std::time::Instant::now();
     for (i, v) in vecs.iter().enumerate() {
         idx.insert(i as u64, v).unwrap();
     }
-    println!("build {n} vecs: {:.1}ms", t0.elapsed().as_secs_f64() * 1000.0);
+    println!(
+        "build {n} vecs: {:.1}ms",
+        t0.elapsed().as_secs_f64() * 1000.0
+    );
 
     // Queries.
     let queries: Vec<Vec<f32>> = (0..q as u64)
@@ -54,7 +55,11 @@ fn main() {
     // Batch (rayon parallel).
     let t2 = std::time::Instant::now();
     let batch_results = idx.search_batch(&queries, k);
-    let hits_batch: usize = batch_results.iter().filter_map(|r| r.as_ref().ok()).map(|r| r.len()).sum();
+    let hits_batch: usize = batch_results
+        .iter()
+        .filter_map(|r| r.as_ref().ok())
+        .map(|r| r.len())
+        .sum();
     let batch_ms = t2.elapsed().as_secs_f64() * 1000.0;
     let batch_qps = q as f64 / (batch_ms / 1000.0);
 
@@ -66,7 +71,10 @@ fn main() {
     let t3 = std::time::Instant::now();
     let _ = idx.search_batch(&queries, k);
     let batch_ms2 = t3.elapsed().as_secs_f64() * 1000.0;
-    println!("batch run-2: {batch_ms2:.2}ms  speedup: {:.2}×", single_ms / batch_ms2);
+    println!(
+        "batch run-2: {batch_ms2:.2}ms  speedup: {:.2}×",
+        single_ms / batch_ms2
+    );
 }
 
 fn synthetic_vec(seed: u64, dim: usize) -> Vec<f32> {

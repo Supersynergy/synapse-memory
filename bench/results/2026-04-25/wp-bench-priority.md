@@ -4,7 +4,7 @@
 - SQLite `/tmp/wp-bench.db`, WAL mode, 64MB cache
 - 300 `wp_options` autoload rows, 1000 `wp_posts` (publish)
 - FTS5 virtual table built over `wp_posts.post_content`
-- Synapse daemon queried via `syn hybrid` CLI (IPC overhead included)
+- Synapse daemon queried via `synx hybrid` CLI (IPC overhead included)
 
 ## Results
 
@@ -24,14 +24,14 @@
 **At 1k posts, vanilla LIKE wins outright.**
 SQLite's query planner is fast enough that a full-table scan over 1000 rows (with an index on `post_status, post_type`) takes ~6 µs. FTS5 adds tokenization overhead and is slightly *slower* at this scale (10 µs p50). This is expected — FTS5 break-even is typically ~50k+ rows.
 
-**Synapse via `syn hybrid` CLI takes ~45 ms p50.**
+**Synapse via `synx hybrid` CLI takes ~45 ms p50.**
 This is subprocess IPC + socket round-trip + embedding overhead. On 1k posts it is not competitive with raw SQLite. Synapse wins on *relevance* (semantic search), not raw speed at small scale.
 
 **autoload pattern: SQLite is already fast.**
 95 µs to fetch all 300 autoload rows is the WP TTFB bottleneck only when PHP serialization + network stack is added. Synapse autoload-cache (target <0.5 ms warm) is not yet implemented (Phase 4 plugin).
 
 ### Where Synapse actually wins today
-- **Semantic relevance**: `syn hybrid "rust web framework"` returns semantically matched results across 659+ indexed docs; LIKE returns lexical hits only.
+- **Semantic relevance**: `synx hybrid "rust web framework"` returns semantically matched results across 659+ indexed docs; LIKE returns lexical hits only.
 - **Cross-content recall**: Synapse searches posts + options + custom tables in one pass; vanilla requires N LIKE queries.
 - **Scale**: At 50k+ posts, FTS5 will beat LIKE, and Synapse daemon latency amortizes via keep-alive (no fork cost).
 

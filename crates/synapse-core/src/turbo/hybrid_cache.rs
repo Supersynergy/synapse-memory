@@ -15,6 +15,8 @@
 //! let emb = cache.get(&"MiniMax".to_string()).unwrap();
 //! ```
 
+#![allow(clippy::type_complexity)]
+
 use crate::error::Result;
 use blake3::hash;
 use dashmap::DashMap;
@@ -86,24 +88,24 @@ impl HybridCache {
         }
 
         // T2: Check SQLite cache
-        if let Some(ref path) = self.sqlite_cache_path {
-            if let Ok(conn) = rusqlite::Connection::open(path) {
-                let result: std::result::Result<Vec<u8>, _> = conn.query_row(
-                    "SELECT embedding FROM emb_cache WHERE query_hash = ?",
-                    [h.as_slice()],
-                    |row| row.get(0),
-                );
-                if let Ok(bytes) = result {
-                    let floats: Vec<f32> = bytes
-                        .chunks_exact(4)
-                        .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
-                        .collect();
+        if let Some(ref path) = self.sqlite_cache_path
+            && let Ok(conn) = rusqlite::Connection::open(path)
+        {
+            let result: std::result::Result<Vec<u8>, _> = conn.query_row(
+                "SELECT embedding FROM emb_cache WHERE query_hash = ?",
+                [h.as_slice()],
+                |row| row.get(0),
+            );
+            if let Ok(bytes) = result {
+                let floats: Vec<f32> = bytes
+                    .chunks_exact(4)
+                    .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
+                    .collect();
 
-                    // Promote to T2
-                    self.emb_cache.insert(h, floats.clone());
+                // Promote to T2
+                self.emb_cache.insert(h, floats.clone());
 
-                    return Some(floats);
-                }
+                return Some(floats);
             }
         }
 
@@ -119,13 +121,13 @@ impl HybridCache {
         self.emb_cache.insert(h, embedding.to_vec());
 
         // T2: Store in SQLite
-        if let Some(ref path) = self.sqlite_cache_path {
-            if let Ok(conn) = rusqlite::Connection::open(path) {
-                conn.execute(
+        if let Some(ref path) = self.sqlite_cache_path
+            && let Ok(conn) = rusqlite::Connection::open(path)
+        {
+            conn.execute(
                     "INSERT OR REPLACE INTO emb_cache (query_hash, query_text, embedding) VALUES (?, ?, ?)",
                     rusqlite::params![h.as_slice(), query, emb_bytes],
                 ).ok();
-            }
         }
     }
 
@@ -157,12 +159,12 @@ impl HybridCache {
             .sqlite_cache_path
             .as_ref()
             .map(|path| {
-                if let Ok(conn) = rusqlite::Connection::open(path) {
-                    if let Ok(count) = conn.query_row("SELECT COUNT(*) FROM emb_cache", [], |row| {
+                if let Ok(conn) = rusqlite::Connection::open(path)
+                    && let Ok(count) = conn.query_row("SELECT COUNT(*) FROM emb_cache", [], |row| {
                         row.get::<_, i64>(0)
-                    }) {
-                        return count as usize;
-                    }
+                    })
+                {
+                    return count as usize;
                 }
                 0
             })

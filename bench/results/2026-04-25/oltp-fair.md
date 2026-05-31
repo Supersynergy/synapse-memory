@@ -30,4 +30,4 @@ Workload: `sysbench oltp_point_select` (10k rows, 10s, threads {1,4,8,16})
 
 ## Artifacts
 - raw: `/Users/master/projects/synapse/bench/results/2026-04-25/oltp-fair.json`
-- daemon log: `/tmp/syn-async-fair.log`
+- daemon log: `/tmp/synx-async-fair.log`

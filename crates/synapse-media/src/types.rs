@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 pub type DocId = i64;
 
@@ -17,10 +17,10 @@ pub enum MediaKind {
 impl std::fmt::Display for MediaKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MediaKind::Image   => write!(f, "image"),
-            MediaKind::Video   => write!(f, "video"),
-            MediaKind::Audio   => write!(f, "audio"),
-            MediaKind::Frame   => write!(f, "frame"),
+            MediaKind::Image => write!(f, "image"),
+            MediaKind::Video => write!(f, "video"),
+            MediaKind::Audio => write!(f, "audio"),
+            MediaKind::Frame => write!(f, "frame"),
             MediaKind::Caption => write!(f, "caption"),
         }
     }
@@ -30,12 +30,12 @@ impl std::str::FromStr for MediaKind {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "image"   => Ok(MediaKind::Image),
-            "video"   => Ok(MediaKind::Video),
-            "audio"   => Ok(MediaKind::Audio),
-            "frame"   => Ok(MediaKind::Frame),
+            "image" => Ok(MediaKind::Image),
+            "video" => Ok(MediaKind::Video),
+            "audio" => Ok(MediaKind::Audio),
+            "frame" => Ok(MediaKind::Frame),
             "caption" => Ok(MediaKind::Caption),
-            other     => anyhow::bail!("unknown MediaKind: {other}"),
+            other => anyhow::bail!("unknown MediaKind: {other}"),
         }
     }
 }

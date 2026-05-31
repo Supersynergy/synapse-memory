@@ -15,7 +15,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use yrs::updates::encoder::Encode;
-use yrs::{updates::decoder::Decode, Doc, ReadTxn, StateVector, Transact, Update};
+use yrs::{Doc, ReadTxn, StateVector, Transact, Update, updates::decoder::Decode};
 
 // ── Wire messages ──────────────────────────────────────────────────────────────
 
@@ -217,10 +217,10 @@ impl Federation {
                 doc_id: rid,
                 update,
             } = msg
+                && rid == *doc_id
+                && !update.is_empty()
             {
-                if rid == *doc_id && !update.is_empty() {
-                    self.store.lock().unwrap().apply_update(&rid, &update)?;
-                }
+                self.store.lock().unwrap().apply_update(&rid, &update)?;
             }
         }
         Ok(())
@@ -379,7 +379,7 @@ fn handle_stream(
 mod tests {
     use super::*;
     use crate::crdt;
-    
+
     use crate::sign::random_signing_key;
 
     fn make_fed() -> Federation {

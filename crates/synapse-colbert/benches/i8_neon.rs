@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use synapse_kernel::{dot_i8, dot_i8_scalar};
 
 fn bench_dot_i8(c: &mut Criterion) {

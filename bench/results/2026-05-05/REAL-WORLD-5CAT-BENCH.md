@@ -32,7 +32,7 @@ cd bench/longmemeval && cargo run --release -- --eval
 **Harness commit**: 2026-04-25 (`bench/results/2026-04-25/beir-hybrid.{md,json}`).  
 **Reproduce**:
 ```bash
-~/.local/bin/syn-venv-python /tmp/beir_hybrid_harness.py
+~/.local/bin/synx-venv-python /tmp/beir_hybrid_harness.py
 # Prerequisites: synapsed fresh instance at /tmp/synapse-scifact.sock
 ```
 

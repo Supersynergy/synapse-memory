@@ -65,7 +65,7 @@ Hindsight has: sanity-blog, notion-import, github-activity, slack-threads
 **Addons**:
 - `synapse-sanity` / `synapse-notion` / `synapse-github-commits` / `synapse-slack` / `synapse-obsidian` / `synapse-miniflux` / `synapse-gmail` / `synapse-calendar`
 
-Pattern: cron pulls source → normalize → `syn put-batch` → scope-tagged.
+Pattern: cron pulls source → normalize → `synx put-batch` → scope-tagged.
 
 ## Tier 6 — Unique synapse-only addons (moat)
 

@@ -2,10 +2,10 @@
 ///
 /// 100k synthetic 768-d f32 vectors, 1000 queries, top-10.
 /// Metrics: build_time, query p50, recall@10, bytes/vec.
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use synapse_market::signal::similar::{dot_product_top_k, BruteForceI8Index};
-use synapse_market::signal::turbovec_index::TurboVecIndex;
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use synapse_market::signal::SignalId;
+use synapse_market::signal::similar::{BruteForceI8Index, dot_product_top_k};
+use synapse_market::signal::turbovec_index::TurboVecIndex;
 
 const N: usize = 100_000;
 const DIM: usize = 768;
@@ -17,7 +17,9 @@ fn make_rng_vec(seed: u64, len: usize) -> Vec<f32> {
     let mut x = seed.wrapping_add(1);
     let mut v = Vec::with_capacity(len);
     for _ in 0..len {
-        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        x = x
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         v.push(((x >> 33) as f32) / (u32::MAX as f32) * 2.0 - 1.0);
     }
     // normalise
@@ -119,7 +121,8 @@ pub fn bench_recall(c: &mut Criterion) {
     let n = queries.len() as f32;
     println!(
         "\n=== recall@{TOP_K} (10k corpus, 100q) ===\n  turbovec-4bit : {:.3}\n  simsimd-i8    : {:.3}\n  rabitq-ivf    : SKIP (ex_bits=4 panic, rabitq-rs 0.9 bug)",
-        total_tv / n, total_bf / n
+        total_tv / n,
+        total_bf / n
     );
 
     // bytes/vec

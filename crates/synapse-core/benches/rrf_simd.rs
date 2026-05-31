@@ -3,7 +3,7 @@
 //! Run:
 //!   cargo bench -p synapse-core --bench rrf_simd --features turbo
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 fn rrf_scalar(ranks: &[f64], k: f64) -> Vec<f64> {
     ranks.iter().map(|&r| 1.0 / (k + r)).collect()
@@ -20,9 +20,7 @@ fn bench_rrf(c: &mut Criterion) {
 
     #[cfg(feature = "turbo")]
     c.bench_function("rrf_simd 2k (turbo)", |b| {
-        b.iter(|| {
-            synapse_core::turbo::rrf_simd::reciprocal_ranks(black_box(&ranks), black_box(k))
-        })
+        b.iter(|| synapse_core::turbo::rrf_simd::reciprocal_ranks(black_box(&ranks), black_box(k)))
     });
 }
 

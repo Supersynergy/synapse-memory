@@ -2,7 +2,7 @@
 //! Config: SYNAPSE_METRICS_ADDR (default 127.0.0.1:9090)
 
 use anyhow::Result;
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use metrics::{counter, gauge, histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::net::SocketAddr;
@@ -20,6 +20,7 @@ impl MetricsHandle {
         Ok(Self { handle })
     }
 
+    #[allow(dead_code)]
     pub fn render(&self) -> String {
         self.handle.render()
     }
@@ -59,10 +60,12 @@ pub fn record_query(mode: &str, duration: Duration) {
         .record(duration.as_secs_f64());
 }
 
+#[allow(dead_code)]
 pub fn record_embed(duration: Duration) {
     histogram!("synapse_embed_duration_seconds").record(duration.as_secs_f64());
 }
 
+#[allow(dead_code)]
 pub fn record_shard_hit(shard: &str) {
     counter!("synapse_shard_hit_total", "shard" => shard.to_string()).increment(1);
 }
@@ -71,10 +74,12 @@ pub fn set_doc_count(n: i64) {
     gauge!("synapse_doc_count").set(n as f64);
 }
 
+#[allow(dead_code)]
 pub fn set_shard_count(n: usize) {
     gauge!("synapse_shard_count").set(n as f64);
 }
 
+#[allow(dead_code)]
 pub fn set_queue_depth(n: usize) {
     gauge!("synapse_queue_depth").set(n as f64);
 }

@@ -80,7 +80,6 @@ impl L0 {
 /// Persisted as `<sstable>.bloom` alongside each SSTable.
 pub struct BloomFilter {
     bits: Vec<u64>,
-    k_hashes: usize,
     /// Number of bit-slots (len(bits) * 64).
     m: usize,
 }
@@ -91,10 +90,9 @@ impl BloomFilter {
     /// Formula: m = -n*ln(p) / (ln2)^2  ≈ n * 9.59  for p=0.01
     pub fn new(capacity: usize) -> Self {
         let m = ((capacity as f64 * 9.59).ceil() as usize).max(64);
-        let words = (m + 63) / 64;
+        let words = m.div_ceil(64);
         Self {
             bits: vec![0u64; words],
-            k_hashes: 4,
             m: words * 64,
         }
     }
@@ -106,7 +104,7 @@ impl BloomFilter {
             .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
             .collect();
         let m = words.len() * 64;
-        Self { bits: words, k_hashes: 4, m }
+        Self { bits: words, m }
     }
 
     /// Serialize to bytes for persistence.
@@ -201,12 +199,11 @@ impl SSTable {
     pub fn read_entries(&self, bloom_key: Option<&[u8]>) -> crate::error::Result<Vec<Entry>> {
         use std::io::Read;
 
-        if let Some(key) = bloom_key {
-            if let Some(bloom) = self.load_bloom() {
-                if !bloom.contains(key) {
-                    return Ok(vec![]);
-                }
-            }
+        if let Some(key) = bloom_key
+            && let Some(bloom) = self.load_bloom()
+            && !bloom.contains(key)
+        {
+            return Ok(vec![]);
         }
 
         let mut f = std::fs::File::open(&self.path)?;
@@ -231,7 +228,10 @@ impl SSTable {
 
 fn bloom_path_for(sst_path: &std::path::Path) -> std::path::PathBuf {
     let mut p = sst_path.to_path_buf();
-    let ext = p.extension().map(|e| format!("{}.bloom", e.to_string_lossy())).unwrap_or_else(|| "bloom".into());
+    let ext = p
+        .extension()
+        .map(|e| format!("{}.bloom", e.to_string_lossy()))
+        .unwrap_or_else(|| "bloom".into());
     p.set_extension(ext);
     p
 }

@@ -19,9 +19,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use synapse_core::{PutRequest, SearchMode, Store};
 use synapse_core::snap;
 use synapse_core::types::EMBED_DIM;
+use synapse_core::{PutRequest, SearchMode, Store};
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -68,7 +68,10 @@ fn story1_ingestion_text_and_multimodal() -> Result<()> {
         }
         let hits = idx.query_text("caption", &emb, 3);
         assert!(!hits.is_empty(), "multimodal index returned no hits");
-        println!("[PASS] story1: 100 docs ingested, {} multimodal hits", hits.len());
+        println!(
+            "[PASS] story1: 100 docs ingested, {} multimodal hits",
+            hits.len()
+        );
     }
     #[cfg(not(feature = "multimodal-dummy"))]
     {
@@ -97,18 +100,25 @@ fn story2_fts_and_graph_indexing() -> Result<()> {
 
     // FTS search via store.search (uses tantivy-fts when feature enabled)
     let hits = store.search("rust async", SearchMode::Lex, None, 5)?;
-    assert!(!hits.is_empty(), "tantivy-FTS returned no hits for 'rust async'");
+    assert!(
+        !hits.is_empty(),
+        "tantivy-FTS returned no hits for 'rust async'"
+    );
 
     // synapse-graph: init schema + insert edges
     {
-        use synapse_graph::{ensure_schema, relate, neighbors};
+        use synapse_graph::{ensure_schema, neighbors, relate};
         let conn = rusqlite::Connection::open(tmp.path())?;
         ensure_schema(&conn)?;
         relate(&conn, 1, 2, "relates_to", 1.0, None)?;
         relate(&conn, 2, 3, "relates_to", 0.8, None)?;
         let nbrs = neighbors(&conn, 1, None, 10)?;
         assert!(!nbrs.is_empty(), "graph neighbors empty");
-        println!("[PASS] story2: {} FTS hits, {} graph neighbors", hits.len(), nbrs.len());
+        println!(
+            "[PASS] story2: {} FTS hits, {} graph neighbors",
+            hits.len(),
+            nbrs.len()
+        );
     }
 
     Ok(())
@@ -146,12 +156,25 @@ fn story4_hybrid_search_and_rrf_fusion() -> Result<()> {
     // synapse-fusion: RRF over two ranked lists (simulate dense + ColBERT legs)
     {
         use synapse_fusion::muvera_rrf;
-        let dense: Vec<(i64, f32)> = hits.iter().enumerate().map(|(i, h)| (h.id, 1.0 / (i as f32 + 1.0))).collect();
-        let colbert: Vec<(i64, f32)> = hits.iter().rev().enumerate().map(|(i, h)| (h.id, 1.0 / (i as f32 + 1.0))).collect();
+        let dense: Vec<(i64, f32)> = hits
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (h.id, 1.0 / (i as f32 + 1.0)))
+            .collect();
+        let colbert: Vec<(i64, f32)> = hits
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(i, h)| (h.id, 1.0 / (i as f32 + 1.0)))
+            .collect();
         let fused = muvera_rrf(&dense, &colbert, 60.0);
         assert!(!fused.is_empty(), "muvera_rrf returned empty");
         assert_eq!(fused.len(), hits.len(), "RRF result count mismatch");
-        println!("[PASS] story4: {} hybrid hits, {} RRF-fused", hits.len(), fused.len());
+        println!(
+            "[PASS] story4: {} hybrid hits, {} RRF-fused",
+            hits.len(),
+            fused.len()
+        );
     }
 
     Ok(())
@@ -189,7 +212,10 @@ fn story5_persistence_export_import() -> Result<()> {
         "doc count mismatch after import: {} vs {}",
         stats_before.docs, stats_after.docs
     );
-    println!("[PASS] story5: exported+imported {} docs, identity verified", stats_after.docs);
+    println!(
+        "[PASS] story5: exported+imported {} docs, identity verified",
+        stats_after.docs
+    );
     Ok(())
 }
 
@@ -197,8 +223,8 @@ fn story5_persistence_export_import() -> Result<()> {
 
 #[tokio::test]
 async fn story6_cdc_streaming() -> Result<()> {
-    use synapse_stream::cdc::{CdcReader, Op};
     use rusqlite::Connection;
+    use synapse_stream::cdc::{CdcReader, Op};
 
     let tmp = tempfile::NamedTempFile::new()?;
     let mut cdc = CdcReader::new(tmp.path())?;
@@ -208,7 +234,7 @@ async fn story6_cdc_streaming() -> Result<()> {
         let conn = Connection::open(tmp.path())?;
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, name TEXT);"
+            "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY, name TEXT);",
         )?;
     }
 
@@ -235,7 +261,7 @@ async fn story6_cdc_streaming() -> Result<()> {
 
 #[test]
 fn story7_tsdb_insert_and_aggregate() -> Result<()> {
-    use synapse_tsdb::{TsdbStore, AggOp};
+    use synapse_tsdb::{AggOp, TsdbStore};
 
     let tmp_dir = tempfile::tempdir()?;
     let mut tsdb = TsdbStore::open(tmp_dir.path())?;
@@ -251,7 +277,11 @@ fn story7_tsdb_insert_and_aggregate() -> Result<()> {
     let rows = tsdb.query_range("cpu_usage", base_ts, base_ts + 1_000_000)?;
     assert_eq!(rows.len(), 1000, "expected 1000 rows, got {}", rows.len());
 
-    let agg = tsdb.aggregate("cpu_usage", AggOp::Avg, std::time::Duration::from_secs(1_000_000))?;
+    let agg = tsdb.aggregate(
+        "cpu_usage",
+        AggOp::Avg,
+        std::time::Duration::from_secs(1_000_000),
+    )?;
     assert!(!agg.is_empty(), "aggregate returned empty");
     let avg_val = agg[0].value;
     assert!(
@@ -299,17 +329,23 @@ fn story8_olap_aggregate() -> Result<()> {
 
 #[tokio::test]
 async fn story9_cluster_crdt_gossip() -> Result<()> {
+    use std::net::SocketAddr;
     use synapse_cluster::{Node, PeerInfo};
     use synapse_core::sync::Op;
-    use std::net::SocketAddr;
 
     let addr1: SocketAddr = "127.0.0.1:0".parse()?;
     let addr2: SocketAddr = "127.0.0.1:0".parse()?;
     let mut node1 = Node::new("node-1", addr1);
     let mut node2 = Node::new("node-2", addr2);
 
-    node1.add_peer(PeerInfo { id: "node-2".into(), addr: addr2 });
-    node2.add_peer(PeerInfo { id: "node-1".into(), addr: addr1 });
+    node1.add_peer(PeerInfo {
+        id: "node-2".into(),
+        addr: addr2,
+    });
+    node2.add_peer(PeerInfo {
+        id: "node-1".into(),
+        addr: addr1,
+    });
 
     // Put on node1
     let op = Op::Put {
@@ -329,9 +365,14 @@ async fn story9_cluster_crdt_gossip() -> Result<()> {
     assert!(!ops2.is_empty(), "node2 has no ops after merge");
 
     // Verify the Put op is present in node2
-    let found = ops2.iter().any(|(_, o)| matches!(o, Op::Put { doc_id, .. } if doc_id == "doc-hello"));
+    let found = ops2
+        .iter()
+        .any(|(_, o)| matches!(o, Op::Put { doc_id, .. } if doc_id == "doc-hello"));
     assert!(found, "Put op not found in node2 after gossip");
-    println!("[PASS] story9: gossip propagated {} ops to node2", ops2.len());
+    println!(
+        "[PASS] story9: gossip propagated {} ops to node2",
+        ops2.len()
+    );
     Ok(())
 }
 
@@ -357,7 +398,7 @@ fn story10_mock_chroma_migrate() -> Result<()> {
              );
              CREATE TABLE embedding_metadata (
                  id TEXT, key TEXT, str_value TEXT, int_value INTEGER, float_value REAL
-             );"
+             );",
         )?;
         conn.execute(
             "INSERT INTO collections VALUES ('col-1', 'test_collection')",
@@ -391,9 +432,8 @@ fn story10_mock_chroma_migrate() -> Result<()> {
         |r| r.get(0),
     )?;
 
-    let mut stmt = conn.prepare(
-        "SELECT id, document, uri, embedding FROM embeddings WHERE collection_id=?1",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, document, uri, embedding FROM embeddings WHERE collection_id=?1")?;
     let rows: Vec<(String, Option<String>, Option<String>, Option<Vec<u8>>)> = stmt
         .query_map(params![coll_id], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
@@ -408,7 +448,9 @@ fn story10_mock_chroma_migrate() -> Result<()> {
                 .collect::<Vec<f32>>()
         });
         store.put(&PutRequest {
-            uri: uri.clone().or_else(|| Some(format!("chroma://{chroma_id}"))),
+            uri: uri
+                .clone()
+                .or_else(|| Some(format!("chroma://{chroma_id}"))),
             text: doc.clone().unwrap_or_default(),
             embedding,
             ..Default::default()
@@ -423,6 +465,9 @@ fn story10_mock_chroma_migrate() -> Result<()> {
         rows.len(),
         stats.docs
     );
-    println!("[PASS] story10: migrated {} chroma docs into synapse", stats.docs);
+    println!(
+        "[PASS] story10: migrated {} chroma docs into synapse",
+        stats.docs
+    );
     Ok(())
 }

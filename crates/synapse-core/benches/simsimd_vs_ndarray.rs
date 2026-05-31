@@ -8,7 +8,7 @@
 //!   --bench simsimd_vs_ndarray
 //! ```
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 
 const N: usize = 100_000;
 const DIM: usize = 384;
@@ -36,7 +36,9 @@ fn make_normalized(n: usize, d: usize, seed: u64) -> Vec<f32> {
 fn top_k_indices(sims: &[f32], k: usize) -> Vec<usize> {
     let mut idx: Vec<usize> = (0..sims.len()).collect();
     idx.select_nth_unstable_by(k - 1, |a, b| {
-        sims[*b].partial_cmp(&sims[*a]).unwrap_or(std::cmp::Ordering::Equal)
+        sims[*b]
+            .partial_cmp(&sims[*a])
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
     idx[..k].to_vec()
 }
@@ -44,7 +46,7 @@ fn top_k_indices(sims: &[f32], k: usize) -> Vec<usize> {
 // ── ndarray path ──────────────────────────────────────────────────────────────
 
 fn ndarray_cosine_batch(query: &[f32], db: &[f32], dim: usize) -> Vec<f32> {
-    use ndarray::{arr1, Array2};
+    use ndarray::{Array2, arr1};
     let n = db.len() / dim;
     let matrix = Array2::from_shape_vec((n, dim), db.to_vec()).unwrap();
     let q = arr1(query);

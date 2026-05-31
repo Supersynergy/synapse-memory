@@ -94,9 +94,7 @@ fn try_expand(config: &HydeConfig, query: &str) -> Result<String, String> {
         return Err(format!("HTTP {}", resp.status()));
     }
 
-    let parsed: GenerateResponse = resp
-        .json()
-        .map_err(|e| format!("parse: {e}"))?;
+    let parsed: GenerateResponse = resp.json().map_err(|e| format!("parse: {e}"))?;
 
     Ok(parsed.response.trim().to_string())
 }

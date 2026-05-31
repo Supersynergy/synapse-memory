@@ -16,6 +16,20 @@ pub enum Request {
         limit: usize,
         embed_query: bool,
     },
+    /// Scope-first search for agent memory hot paths. Filters by a JSON meta
+    /// key before fallback ranking so a large global brain cannot hide local
+    /// project/session facts.
+    SearchScoped {
+        mode: SearchMode,
+        q: String,
+        limit: usize,
+        embed_query: bool,
+        #[serde(default)]
+        scope_key: Option<String>,
+        scope_value: String,
+        #[serde(default)]
+        candidate_limit: Option<usize>,
+    },
     Stats,
     Snap {
         out: String,
@@ -26,6 +40,10 @@ pub enum Request {
     Merge {
         id: i64,
         state: Vec<u8>,
+    },
+    /// Delete a doc by id, including vector and FTS side tables.
+    Delete {
+        id: i64,
     },
     /// Return docs ordered by timestamp descending.
     Timeline {
@@ -133,11 +151,16 @@ pub enum Response {
     Ids(Vec<i64>),
     Hits(Vec<Hit>),
     Docs(Vec<synapse_core::Doc>),
-    Stats { docs: i64, vecs: i64 },
+    Stats {
+        docs: i64,
+        vecs: i64,
+    },
     Ok,
     Err(String),
     /// Response to `Request::Embed`. Contains the raw embedding vector.
-    Embed { vec: Vec<f32> },
+    Embed {
+        vec: Vec<f32>,
+    },
     /// Response to `Request::BatchSearch`. One Hit-list per query, same order.
     BatchHits(Vec<Vec<Hit>>),
     /// Response to `Request::Sql`. Rows as msgpack arrays.

@@ -20,7 +20,11 @@ pub struct RelateEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum EventOp { Insert, Delete, Update }
+pub enum EventOp {
+    Insert,
+    Delete,
+    Update,
+}
 
 /// LiveRelate — broadcast hub.
 /// Capacity 1024 — older events dropped for slow subscribers (lag-tolerant).
@@ -55,14 +59,18 @@ impl LiveRelate {
                 .map(|d| d.as_secs())
                 .unwrap_or(0),
         };
-        let _ = self.sender.send(event);  // ignore send-err if no subscribers
+        let _ = self.sender.send(event); // ignore send-err if no subscribers
     }
 
-    pub fn subscriber_count(&self) -> usize { self.sender.receiver_count() }
+    pub fn subscriber_count(&self) -> usize {
+        self.sender.receiver_count()
+    }
 }
 
 impl Default for LiveRelate {
-    fn default() -> Self { Self::new(1024) }
+    fn default() -> Self {
+        Self::new(1024)
+    }
 }
 
 #[cfg(test)]

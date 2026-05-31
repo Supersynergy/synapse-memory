@@ -6,12 +6,12 @@ set -uo pipefail
 
 PASS=0; FAIL=0
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SYN="$ROOT/target/release/synapse"
+SYNAPSE_BIN="$ROOT/target/release/synapse"
 SYND="$ROOT/target/release/synapsed"
 MCP="$ROOT/target/release/synapse-mcp"
 MIGRATE="$ROOT/tools/migrate_superknow.py"
 
-if [[ ! -x "$SYN" || ! -x "$SYND" || ! -x "$MCP" ]]; then
+if [[ ! -x "$SYNAPSE_BIN" || ! -x "$SYND" || ! -x "$MCP" ]]; then
     echo "FATAL: binaries not built — run: cargo build --release" >&2
     exit 1
 fi
@@ -26,37 +26,37 @@ skip() { echo "PASS [$1] (skip: $2)"; ((PASS++)); }
 
 # ─── 1. CLI: put / find / stats ───────────────────────────────────────────────
 DB1="$D/t1.db"
-"$SYN" -f "$DB1" put --no-embed --title "Rust Async" --text "Tokio is the async runtime for Rust" >/dev/null
-"$SYN" -f "$DB1" put --no-embed --title "Python GIL" --text "The Global Interpreter Lock limits Python threading" >/dev/null
-"$SYN" -f "$DB1" put --no-embed --title "SQLite FTS5" --text "SQLite FTS5 full-text search is very fast" >/dev/null
+"$SYNAPSE_BIN" -f "$DB1" put --no-embed --title "Rust Async" --text "Tokio is the async runtime for Rust" >/dev/null
+"$SYNAPSE_BIN" -f "$DB1" put --no-embed --title "Python GIL" --text "The Global Interpreter Lock limits Python threading" >/dev/null
+"$SYNAPSE_BIN" -f "$DB1" put --no-embed --title "SQLite FTS5" --text "SQLite FTS5 full-text search is very fast" >/dev/null
 
-hits=$("$SYN" -f "$DB1" find "rust async" 2>/dev/null || echo "")
+hits=$("$SYNAPSE_BIN" -f "$DB1" find "rust async" 2>/dev/null || echo "")
 if echo "$hits" | grep -q "Tokio"; then
     ok "1a-lex-find"
 else
     fail "1a-lex-find" "expected Tokio in hits: ${hits:0:200}"
 fi
 
-if "$SYN" -f "$DB1" put --no-embed --text "embedding test doc" >/dev/null 2>&1; then
+if "$SYNAPSE_BIN" -f "$DB1" put --no-embed --text "embedding test doc" >/dev/null 2>&1; then
     ok "1b-put-no-embed"
 else
     fail "1b-put-no-embed" "put --no-embed failed"
 fi
 
-stats=$("$SYN" -f "$DB1" stats 2>/dev/null || echo "")
+stats=$("$SYNAPSE_BIN" -f "$DB1" stats 2>/dev/null || echo "")
 if echo "$stats" | grep -qE '"doc_count"|"docs"'; then
     ok "1c-stats"
 else
     fail "1c-stats" "stats missing docs field: ${stats:0:200}"
 fi
 
-# ─── 2. Multi-ext: .syn / .brainpack / .synapse ───────────────────────────────
-for ext in syn brainpack synapse; do
+# ─── 2. Multi-ext: .synx / .brainpack / .synapse ───────────────────────────────
+for ext in synx brainpack synapse; do
     out="$D/snap.$ext"
-    "$SYN" -f "$DB1" snap "$out" >/dev/null 2>&1
+    "$SYNAPSE_BIN" -f "$DB1" snap "$out" >/dev/null 2>&1
     DB_EXT="$D/restore_$ext.db"
-    "$SYN" -f "$DB_EXT" restore "$out" >/dev/null 2>&1
-    h=$("$SYN" -f "$DB_EXT" find "Rust" 2>/dev/null || echo "")
+    "$SYNAPSE_BIN" -f "$DB_EXT" restore "$out" >/dev/null 2>&1
+    h=$("$SYNAPSE_BIN" -f "$DB_EXT" find "Rust" 2>/dev/null || echo "")
     if echo "$h" | grep -q "Tokio"; then
         ok "2-ext-$ext"
     else
@@ -65,21 +65,21 @@ for ext in syn brainpack synapse; do
 done
 
 # ─── 3. Ed25519: keygen / sign put / verify / tamper-detect ───────────────────
-if "$SYN" -f "$DB1" keygen --sk "$D/node.sk" --vk "$D/node.vk" >/dev/null 2>&1; then
+if "$SYNAPSE_BIN" -f "$DB1" keygen --sk "$D/node.sk" --vk "$D/node.vk" >/dev/null 2>&1; then
     ok "3a-keygen"
 else
     fail "3a-keygen" "keygen failed"
 fi
 
 DB_SIGN="$D/signed.db"
-sid=$("$SYN" -f "$DB_SIGN" put --no-embed --text "signed content" --sign "$D/node.sk" 2>/dev/null || echo "")
+sid=$("$SYNAPSE_BIN" -f "$DB_SIGN" put --no-embed --text "signed content" --sign "$D/node.sk" 2>/dev/null || echo "")
 if [[ -n "$sid" ]]; then
     ok "3b-signed-put"
 else
     fail "3b-signed-put" "signed put returned empty id"
 fi
 
-verify_out=$("$SYN" -f "$DB_SIGN" verify "$sid" --vk "$D/node.vk" 2>&1 || echo "")
+verify_out=$("$SYNAPSE_BIN" -f "$DB_SIGN" verify "$sid" --vk "$D/node.vk" 2>&1 || echo "")
 if echo "$verify_out" | grep -q "ok verified"; then
     ok "3c-verify"
 else
@@ -100,7 +100,7 @@ if sig:
 PY
 
 if [[ "$tamper_ok" == "1" ]]; then
-    tamper_out=$("$SYN" -f "$DB_SIGN" verify "$sid" --vk "$D/node.vk" 2>&1 || echo "error")
+    tamper_out=$("$SYNAPSE_BIN" -f "$DB_SIGN" verify "$sid" --vk "$D/node.vk" 2>&1 || echo "error")
     if echo "$tamper_out" | grep -q "ok verified"; then
         fail "3d-tamper-detect" "tampered doc should NOT verify"
     else
@@ -112,25 +112,25 @@ fi
 
 # ─── 4. CRDT merge: 3 writers → merge → no-loss ──────────────────────────────
 DBA="$D/a.db"; DBB="$D/b.db"; DBC="$D/c.db"
-"$SYN" -f "$DBA" put --no-embed --uri "urn:doc:shared" --text "writer A content" >/dev/null
-"$SYN" -f "$DBB" put --no-embed --uri "urn:doc:shared" --text "writer B content" >/dev/null
-"$SYN" -f "$DBC" put --no-embed --uri "urn:doc:unique" --text "writer C unique" >/dev/null
+"$SYNAPSE_BIN" -f "$DBA" put --no-embed --uri "urn:doc:shared" --text "writer A content" >/dev/null
+"$SYNAPSE_BIN" -f "$DBB" put --no-embed --uri "urn:doc:shared" --text "writer B content" >/dev/null
+"$SYNAPSE_BIN" -f "$DBC" put --no-embed --uri "urn:doc:unique" --text "writer C unique" >/dev/null
 
 SNPA="$D/a.brainpack"; SNPB="$D/b.brainpack"; SNPC="$D/c.brainpack"
-"$SYN" -f "$DBA" snap "$SNPA" >/dev/null
-"$SYN" -f "$DBB" snap "$SNPB" >/dev/null
-"$SYN" -f "$DBC" snap "$SNPC" >/dev/null
+"$SYNAPSE_BIN" -f "$DBA" snap "$SNPA" >/dev/null
+"$SYNAPSE_BIN" -f "$DBB" snap "$SNPB" >/dev/null
+"$SYNAPSE_BIN" -f "$DBC" snap "$SNPC" >/dev/null
 
 SNPAB="$D/ab.brainpack"
-"$SYN" merge "$SNPA" "$SNPB" -o "$SNPAB" >/dev/null 2>&1 || true
+"$SYNAPSE_BIN" merge "$SNPA" "$SNPB" -o "$SNPAB" >/dev/null 2>&1 || true
 
 if [[ -f "$SNPAB" ]]; then
     SNPABC="$D/abc.brainpack"
-    "$SYN" merge "$SNPAB" "$SNPC" -o "$SNPABC" >/dev/null 2>&1 || true
+    "$SYNAPSE_BIN" merge "$SNPAB" "$SNPC" -o "$SNPABC" >/dev/null 2>&1 || true
     if [[ -f "$SNPABC" ]]; then
         DBMERGE="$D/merged.db"
-        "$SYN" -f "$DBMERGE" restore "$SNPABC" >/dev/null
-        mc=$("$SYN" -f "$DBMERGE" stats 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('doc_count', d.get('docs',0)))" 2>/dev/null || echo 0)
+        "$SYNAPSE_BIN" -f "$DBMERGE" restore "$SNPABC" >/dev/null
+        mc=$("$SYNAPSE_BIN" -f "$DBMERGE" stats 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('doc_count', d.get('docs',0)))" 2>/dev/null || echo 0)
         if [[ "$mc" -ge 2 ]]; then
             ok "4-crdt-merge"
         else
@@ -147,14 +147,14 @@ fi
 # Sharding requires embedded vectors — put WITH embeddings (model is cached)
 DBSH="$D/shard_src.db"
 for i in $(seq 1 20); do
-    "$SYN" -f "$DBSH" put --text "shard document number $i about topic $((i % 5))" >/dev/null 2>&1
+    "$SYNAPSE_BIN" -f "$DBSH" put --text "shard document number $i about topic $((i % 5))" >/dev/null 2>&1
 done
 SHDIR="$D/shards"; mkdir -p "$SHDIR"
-split_out=$("$SYN" shard split "$DBSH" -o "$SHDIR" --shards 3 2>&1 || echo "")
+split_out=$("$SYNAPSE_BIN" shard split "$DBSH" -o "$SHDIR" --shards 3 2>&1 || echo "")
 MANIFEST="$SHDIR/brain.shards.toml"
 if [[ -f "$MANIFEST" ]]; then
     ok "5a-shard-split"
-    qout=$("$SYN" shard query "$MANIFEST" "topic" --limit 5 2>&1 || echo "")
+    qout=$("$SYNAPSE_BIN" shard query "$MANIFEST" "topic" --limit 5 2>&1 || echo "")
     if echo "$qout" | grep -qE '[0-9]'; then
         ok "5b-shard-query"
     else
@@ -173,8 +173,8 @@ skip "6-encryption" "compile-time gate: not in default release build — by desi
 # Full 2-daemon TCP sync is flaky in CI (port binding races).
 # We test: keygen + federate peers subcommand returns without crash.
 # Full integration covered by federate.rs tests (cargo nextest -p synapse-core).
-"$SYN" -f "$D/fed.db" keygen --sk "$D/fed.sk" --vk "$D/fed.vk" >/dev/null 2>&1
-peers_out=$("$SYN" -f "$D/fed.db" federate peers --sk "$D/fed.sk" 2>&1 || echo "exit=$?")
+"$SYNAPSE_BIN" -f "$D/fed.db" keygen --sk "$D/fed.sk" --vk "$D/fed.vk" >/dev/null 2>&1
+peers_out=$("$SYNAPSE_BIN" -f "$D/fed.db" federate peers --sk "$D/fed.sk" 2>&1 || echo "exit=$?")
 if echo "$peers_out" | grep -qv "thread.*panic\|SIGSEGV"; then
     ok "7-federation-peers"
 else
@@ -262,24 +262,24 @@ fi
 
 # ─── 11. synapse-learn: bandit convergence + feedback + learn status ──────────
 DB_LEARN="$D/learn.db"
-"$SYN" -f "$DB_LEARN" put --no-embed --text "bandit test doc alpha" >/dev/null 2>&1
-"$SYN" -f "$DB_LEARN" put --no-embed --text "bandit test doc beta" >/dev/null 2>&1
+"$SYNAPSE_BIN" -f "$DB_LEARN" put --no-embed --text "bandit test doc alpha" >/dev/null 2>&1
+"$SYNAPSE_BIN" -f "$DB_LEARN" put --no-embed --text "bandit test doc beta" >/dev/null 2>&1
 
-fb_out=$("$SYN" -f "$DB_LEARN" feedback "q_test" 1 --shard-id "shard0" 2>&1 || echo "")
+fb_out=$("$SYNAPSE_BIN" -f "$DB_LEARN" feedback "q_test" 1 --shard-id "shard0" 2>&1 || echo "")
 if echo "$fb_out" | grep -q "ok feedback"; then
     ok "11a-feedback-record"
 else
     fail "11a-feedback-record" "feedback cmd failed: ${fb_out:0:200}"
 fi
 
-status_out=$("$SYN" -f "$DB_LEARN" learn status 2>&1 || echo "")
+status_out=$("$SYNAPSE_BIN" -f "$DB_LEARN" learn status 2>&1 || echo "")
 if echo "$status_out" | grep -q "bandit_shards="; then
     ok "11b-learn-status"
 else
     fail "11b-learn-status" "learn status failed: ${status_out:0:200}"
 fi
 
-consolidate_out=$("$SYN" -f "$DB_LEARN" learn consolidate 2>&1 || echo "")
+consolidate_out=$("$SYNAPSE_BIN" -f "$DB_LEARN" learn consolidate 2>&1 || echo "")
 if echo "$consolidate_out" | grep -qE "pairs_found="; then
     ok "11c-consolidate"
 else

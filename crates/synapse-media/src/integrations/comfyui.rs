@@ -34,7 +34,8 @@ impl ComfyUi {
     /// Submit a workflow JSON, return prompt_id.
     pub fn submit_workflow(&self, workflow: Value) -> Result<String> {
         let body = serde_json::json!({ "prompt": workflow });
-        let resp = self.client
+        let resp = self
+            .client
             .post(format!("{}/prompt", self.host))
             .json(&body)
             .send()
@@ -54,7 +55,8 @@ impl ComfyUi {
             if std::time::Instant::now() > deadline {
                 anyhow::bail!("ComfyUI poll timeout after {timeout_secs}s");
             }
-            let resp = self.client
+            let resp = self
+                .client
                 .get(format!("{}/history/{}", self.host, prompt_id))
                 .send()
                 .context("poll history")?;

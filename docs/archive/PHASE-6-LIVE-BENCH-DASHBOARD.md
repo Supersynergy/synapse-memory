@@ -39,7 +39,7 @@ Charts:
 ## Suites Covered (publish weekly)
 1. real_competitors.py (1k vec)
 2. bench_scale_ladder.py (1k-1M)
-3. syn bench (ping/lex/vec/hybrid)
+3. synx bench (ping/lex/vec/hybrid)
 4. sysbench oltp_point_select 1t/8t/64t
 5. go-ycsb workloads A-F
 6. LoCoMo recall@1/5/10

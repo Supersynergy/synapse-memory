@@ -7,6 +7,9 @@ pub fn record_accept(
     accepted_doc_id: i64,
     shard_id: &str,
 ) -> Result<()> {
+    if let Some(context_id) = query.strip_prefix("context:") {
+        store.reward_context(context_id, accepted_doc_id, true)?;
+    }
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

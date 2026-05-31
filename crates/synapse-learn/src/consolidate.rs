@@ -5,9 +5,10 @@ use rand::RngExt;
 pub const COSINE_THRESHOLD: f64 = 0.95;
 pub const N_PLANES: usize = 8;
 
+type ConsolidateRow = (i64, Option<String>, Vec<u8>);
+
 pub struct LshIndex {
     planes: Vec<Vec<f32>>,
-    dim: usize,
 }
 
 impl LshIndex {
@@ -16,7 +17,8 @@ impl LshIndex {
         let planes = (0..N_PLANES)
             .map(|_| (0..dim).map(|_| rng.random_range(-1.0f32..1.0)).collect())
             .collect();
-        Self { planes, dim }
+        let _ = dim;
+        Self { planes }
     }
 
     pub fn hash(&self, emb: &[f32]) -> u8 {
@@ -43,7 +45,7 @@ pub fn run_consolidate(conn: &rusqlite::Connection) -> Result<MergeReport> {
         "SELECT d.id, d.uri, v.embedding FROM docs d
          JOIN docs_vec v ON v.id = d.id",
     )?;
-    let rows: Vec<(i64, Option<String>, Vec<u8>)> = stmt
+    let rows: Vec<ConsolidateRow> = stmt
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get::<_, Vec<u8>>(2)?)))?
         .filter_map(|r| r.ok())
         .collect();

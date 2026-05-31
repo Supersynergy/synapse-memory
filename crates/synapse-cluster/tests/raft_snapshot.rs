@@ -12,7 +12,10 @@ mod snapshot_tests {
     }
 
     fn make_op(i: u64) -> Op {
-        Op::Delete { doc_id: format!("doc-{i}"), ts: i as i64 }
+        Op::Delete {
+            doc_id: format!("doc-{i}"),
+            ts: i as i64,
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -24,18 +27,21 @@ mod snapshot_tests {
         let p2: SocketAddr = format!("127.0.0.1:{}", free_port()).parse().unwrap();
         let p3: SocketAddr = format!("127.0.0.1:{}", free_port()).parse().unwrap();
 
-        let node1 = RaftNode::new(1, p1, vec![
-            RaftPeer { id: 2, addr: p2 },
-            RaftPeer { id: 3, addr: p3 },
-        ]);
-        let node2 = RaftNode::new(2, p2, vec![
-            RaftPeer { id: 1, addr: p1 },
-            RaftPeer { id: 3, addr: p3 },
-        ]);
-        let node3 = RaftNode::new(3, p3, vec![
-            RaftPeer { id: 1, addr: p1 },
-            RaftPeer { id: 2, addr: p2 },
-        ]);
+        let node1 = RaftNode::new(
+            1,
+            p1,
+            vec![RaftPeer { id: 2, addr: p2 }, RaftPeer { id: 3, addr: p3 }],
+        );
+        let node2 = RaftNode::new(
+            2,
+            p2,
+            vec![RaftPeer { id: 1, addr: p1 }, RaftPeer { id: 3, addr: p3 }],
+        );
+        let node3 = RaftNode::new(
+            3,
+            p3,
+            vec![RaftPeer { id: 1, addr: p1 }, RaftPeer { id: 2, addr: p2 }],
+        );
 
         // Set low compaction threshold so 100 ops triggers it
         node1.set_compaction_threshold(50).await;
@@ -58,11 +64,15 @@ mod snapshot_tests {
         let leader = tokio::time::timeout(std::time::Duration::from_secs(3), async {
             loop {
                 for n in [&node1, &node2, &node3] {
-                    if n.is_leader().await { return n.clone(); }
+                    if n.is_leader().await {
+                        return n.clone();
+                    }
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             }
-        }).await.expect("no leader elected in 3s");
+        })
+        .await
+        .expect("no leader elected in 3s");
 
         // Propose 100 ops
         for i in 0..100u64 {
@@ -74,7 +84,12 @@ mod snapshot_tests {
 
         // Verify leader state-machine has 100 ops
         let ops = leader.applied_ops().await;
-        assert_eq!(ops.len(), 100, "expected 100 applied ops, got {}", ops.len());
+        assert_eq!(
+            ops.len(),
+            100,
+            "expected 100 applied ops, got {}",
+            ops.len()
+        );
 
         // Explicitly trigger compaction on leader (may already be done auto)
         let compacted = leader.maybe_compact().await.unwrap();

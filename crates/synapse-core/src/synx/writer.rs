@@ -6,7 +6,7 @@ use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use super::chunk::{Chunk, ChunkKind, Codec};
-use super::header::{SynxFlags, SynxFooter, SynxHeader, HEADER_SIZE};
+use super::header::{HEADER_SIZE, SynxFlags, SynxFooter, SynxHeader};
 use super::manifest::Manifest;
 
 pub struct SynxWriter {

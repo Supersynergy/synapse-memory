@@ -1,5 +1,5 @@
-pub mod fsm;
 pub mod dsl;
+pub mod fsm;
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -58,17 +58,63 @@ pub struct Match {
 #[derive(Debug, Clone)]
 pub enum Event {
     Candle(crate::store::page::Bar),
-    InsiderBuy { value_usd: f64, ts: i64, ticker: String },
-    Filing { kind: String, ticker: String, ts: i64 },
-    News { headline: String, ts: i64, ticker: String },
-    Filing13D { ticker: String, ts: i64, percent_owned: f32 },
-    FdaMeeting { ticker: String, ts: i64, meeting_type: String },
-    S3Filing { ticker: String, ts: i64, raise_size: f64 },
-    SpinoffAnnouncement { ticker: String, ts: i64, distribution_date: i64 },
-    Squeeze { ticker: String, ts: i64, si_pct: f32, ctb_bps: u32 },
-    CongressTradeEvent { ticker: String, ts: i64, amount_max: f64, member: String },
-    ReverseSplit { ticker: String, ts: i64, ratio: f32 },
-    DilutionRaise { ticker: String, ts: i64, n_recent_12mo: u32 },
+    InsiderBuy {
+        value_usd: f64,
+        ts: i64,
+        ticker: String,
+    },
+    Filing {
+        kind: String,
+        ticker: String,
+        ts: i64,
+    },
+    News {
+        headline: String,
+        ts: i64,
+        ticker: String,
+    },
+    Filing13D {
+        ticker: String,
+        ts: i64,
+        percent_owned: f32,
+    },
+    FdaMeeting {
+        ticker: String,
+        ts: i64,
+        meeting_type: String,
+    },
+    S3Filing {
+        ticker: String,
+        ts: i64,
+        raise_size: f64,
+    },
+    SpinoffAnnouncement {
+        ticker: String,
+        ts: i64,
+        distribution_date: i64,
+    },
+    Squeeze {
+        ticker: String,
+        ts: i64,
+        si_pct: f32,
+        ctb_bps: u32,
+    },
+    CongressTradeEvent {
+        ticker: String,
+        ts: i64,
+        amount_max: f64,
+        member: String,
+    },
+    ReverseSplit {
+        ticker: String,
+        ts: i64,
+        ratio: f32,
+    },
+    DilutionRaise {
+        ticker: String,
+        ts: i64,
+        n_recent_12mo: u32,
+    },
 }
 
 impl Event {

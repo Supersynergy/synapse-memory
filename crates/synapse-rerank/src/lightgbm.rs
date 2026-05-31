@@ -1,12 +1,12 @@
 // Requires LightGBM C library: brew install lightgbm
 // Build with: LIGHTGBM_LIB_DIR=/opt/homebrew/lib cargo check -p synapse-rerank --features lightgbm
 
-use std::path::Path;
-use std::sync::Mutex;
+use crate::Reranker;
 use anyhow::Result;
 use lightgbm3::Booster;
+use std::path::Path;
+use std::sync::Mutex;
 use synapse_core::Hit;
-use crate::Reranker;
 
 pub struct LightGbmReranker {
     booster: Mutex<Booster>,
@@ -18,9 +18,13 @@ unsafe impl Sync for LightGbmReranker {}
 
 impl LightGbmReranker {
     pub fn load(path: &Path) -> Result<Self> {
-        let path_str = path.to_str().ok_or_else(|| anyhow::anyhow!("non-UTF8 path"))?;
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("non-UTF8 path"))?;
         let booster = Booster::from_file(path_str)?;
-        Ok(Self { booster: Mutex::new(booster) })
+        Ok(Self {
+            booster: Mutex::new(booster),
+        })
     }
 }
 
@@ -33,7 +37,13 @@ fn extract_features(query: &str, hit: &Hit) -> [f32; 6] {
     let title_exact_match = hit
         .title
         .as_deref()
-        .map(|t| if t.to_lowercase().contains(&query.to_lowercase()) { 1.0_f32 } else { 0.0 })
+        .map(|t| {
+            if t.to_lowercase().contains(&query.to_lowercase()) {
+                1.0_f32
+            } else {
+                0.0
+            }
+        })
         .unwrap_or(0.0);
     let path_depth = hit
         .uri
@@ -42,7 +52,14 @@ fn extract_features(query: &str, hit: &Hit) -> [f32; 6] {
         .unwrap_or(3.0);
     let doc_len_log = (hit.text.len() as f32 + 1.0).ln();
 
-    [vec_score, fts_score, recency_days, title_exact_match, path_depth, doc_len_log]
+    [
+        vec_score,
+        fts_score,
+        recency_days,
+        title_exact_match,
+        path_depth,
+        doc_len_log,
+    ]
 }
 
 impl Reranker for LightGbmReranker {
@@ -67,7 +84,11 @@ impl Reranker for LightGbmReranker {
             hit.score = crate::blend(lgb_score as f64, hit.score);
         }
 
-        candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         candidates.truncate(top_k);
         Ok(candidates)
     }
@@ -78,7 +99,15 @@ mod tests {
     use super::*;
 
     fn h(id: i64, score: f64, text: &str) -> Hit {
-        Hit { id, uri: None, title: None, text: text.into(), score }
+        Hit {
+            id,
+            uri: None,
+            title: None,
+            text: text.into(),
+            score,
+            meta: None,
+            ts: None,
+        }
     }
 
     #[test]

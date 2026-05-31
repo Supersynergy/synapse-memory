@@ -4,13 +4,38 @@
 [![Crates.io](https://img.shields.io/crates/v/synapse-core.svg)](https://crates.io/crates/synapse-core)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-CORE.md)
 
-**Single-binary embedded knowledge engine. Vec + FTS + Graph + SQL-wire + Conformal-guarantee + Multimodal.**
+**Local-first Context OS for AI agents: bounded, cited, freshness-aware context with feedback.**
 
-One SQLite-backed file. No Docker. No cloud. Local-first with Ed25519 signatures, CRDT peer sync, and MCP-native tooling.
+One SQLite-backed local brain. No Docker. No cloud. CLI, daemon, and MCP tooling
+for giving coding agents the best relevant context before they act.
+
+> Core promise: best context, not biggest context.
+
+## Current Release Path
+
+For a clean Mac/Linux user install, use the Context OS release:
+
+```bash
+tar -xzf release/dist/synapse-context-os-1.0.1-rc.1.tar.gz
+cd synapse-context-os-1.0.1-rc.1
+./install.sh
+```
+
+From a repo checkout:
+
+```bash
+release/context-os/install.sh
+release/context-os/verify.sh
+SYNAPSE_VERIFY_INSTALL=1 SYNAPSE_VERIFY_BUILD_PROFILE=dev release/context-os/verify.sh
+```
+
+Release docs and evidence live in [`release/context-os/`](release/context-os/).
+The broad engine and benchmark sections below describe the substrate and
+experimental surface. They are not the default first-run product promise.
 
 ---
 
-## Three verified numbers
+## Engine Benchmark Notes
 
 | What | Number | Source |
 |------|--------|--------|
@@ -22,27 +47,14 @@ One SQLite-backed file. No Docker. No cloud. Local-first with Ed25519 signatures
 
 ---
 
-## Install
+## 5-line Context OS demo
 
 ```bash
-cargo install synx
-# pending: brew tap supersynergy/synapse && brew install synx
-# pending: npx @supersynergy/synx
-```
-
----
-
-## 5-line demo
-
-```bash
-# start daemon
-synapsed --sock /tmp/synapse.sock --db ~/.synapse/brain.db
-
-# index + search
-synx put --text "Synapse is embedded hybrid search for AI agents"
-synx hybrid "embedded search"   # BM25 + ANN + RRF fusion
-synx find "agent memory"         # semantic only
-synx stats                       # doc count + db size
+synx -f "$HOME/.synapse/brain.db" prime .
+synx -f "$HOME/.synapse/brain.db" remember --kind decision "Use Synapse context packs before major code edits."
+synx -f "$HOME/.synapse/brain.db" context "current repo task" --mode coding
+synx -f "$HOME/.synapse/brain.db" fresh-context --cwd . --prompt "latest package API changes"
+synx -f "$HOME/.synapse/brain.db" doctor --fix
 ```
 
 ---
@@ -52,11 +64,13 @@ synx stats                       # doc count + db size
 ```mermaid
 graph TD
     CLI["synx CLI"] --> Daemon["synapsed (Unix-socket)"]
-    MCP["synapse-mcp (6 tools)"] --> Daemon
+    MCP["synapse-mcp (agent memory tools)"] --> Daemon
     Daemon --> Core["synapse-core (SQLite + FTS5 + sqlite-vec)"]
+    CLI --> Context["context / prime / fresh-context / feedback"]
+    Context --> Core
+    Context --> Learn["synapse-learn feedback loop"]
     Daemon --> Ann["synapse-ann (usearch HNSW)"]
     Daemon --> Fts["synapse-fts (Tantivy)"]
-    Daemon --> Fusion["synapse-fusion (RRF)"]
     Daemon --> Rerank["synapse-rerank (ColBERT-i8)"]
     Core --> DB[(brain.db)]
     Ann --> DB

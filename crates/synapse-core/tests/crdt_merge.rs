@@ -1,5 +1,5 @@
 use synapse_core::crdt::new_meta;
-use synapse_core::{snap, PutRequest, Store};
+use synapse_core::{PutRequest, Store, snap};
 
 fn put_with_crdt(store: &mut Store, uri: &str, text: &str, tags: &str) -> i64 {
     let crdt = new_meta(&[("tags", tags)]).unwrap();
@@ -92,11 +92,11 @@ fn extension_agnostic_roundtrip() {
         .unwrap();
     }
 
-    // Export as .syn
-    let pack_syn = tempfile::Builder::new().suffix(".syn").tempfile().unwrap();
+    // Export as .synx
+    let pack_syn = tempfile::Builder::new().suffix(".synx").tempfile().unwrap();
     snap::export(db.path(), pack_syn.path(), 3).unwrap();
 
-    // Import using path with .brainpack extension (rename via symlink workaround: just pass the .syn path directly)
+    // Import using path with .brainpack extension (rename via symlink workaround: just pass the .synx path directly)
     let restored = tempfile::Builder::new()
         .suffix(".brainpack")
         .tempfile()

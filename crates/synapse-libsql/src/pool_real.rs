@@ -3,15 +3,15 @@
 //!
 //! Beats per-call connect() by 10-100× under concurrent mixed workloads.
 
+use crate::{Error, QueryResult, Store};
 use async_trait::async_trait;
 use libsql::{Builder, Connection, Database};
 use parking_lot::Mutex as PLMutex;
 use std::sync::Arc;
-use crate::{Error, QueryResult, Store};
 use tokio::sync::Semaphore;
 
 pub struct RealPoolStore {
-    db: Arc<Database>,
+    _db: Arc<Database>,
     /// Pool of pre-warmed connections. Each Mutex protects one Connection.
     pool: Arc<Vec<PLMutex<Connection>>>,
     sem: Arc<Semaphore>,
@@ -46,7 +46,7 @@ impl RealPoolStore {
             conns.push(PLMutex::new(c));
         }
         Ok(Self {
-            db: Arc::new(db),
+            _db: Arc::new(db),
             pool: Arc::new(conns),
             sem: Arc::new(Semaphore::new(pool_size)),
             counter: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -84,10 +84,18 @@ impl Store for RealPoolStore {
                 .await
                 .map_err(|e| Error::Backend(e.to_string()))?;
             let mut count = 0u64;
-            while let Some(_) = rows.next().await.map_err(|e| Error::Backend(e.to_string()))? {
+            while rows
+                .next()
+                .await
+                .map_err(|e| Error::Backend(e.to_string()))?
+                .is_some()
+            {
                 count += 1;
             }
-            Ok(QueryResult { affected: count, rows: vec![] })
+            Ok(QueryResult {
+                affected: count,
+                rows: vec![],
+            })
         } else {
             let conn_clone = {
                 let guard = self.pool[slot].lock();
@@ -97,7 +105,10 @@ impl Store for RealPoolStore {
                 .execute(sql, ())
                 .await
                 .map_err(|e| Error::Backend(e.to_string()))?;
-            Ok(QueryResult { affected, rows: vec![] })
+            Ok(QueryResult {
+                affected,
+                rows: vec![],
+            })
         }
     }
     async fn exec(&self, sql: &str) -> Result<u64, Error> {
@@ -125,7 +136,9 @@ mod tests {
     async fn real_pool_works() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("rp.db");
-        let s = RealPoolStore::open_local(path.to_str().unwrap(), 8).await.unwrap();
+        let s = RealPoolStore::open_local(path.to_str().unwrap(), 8)
+            .await
+            .unwrap();
         s.exec("CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)")
             .await
             .unwrap();

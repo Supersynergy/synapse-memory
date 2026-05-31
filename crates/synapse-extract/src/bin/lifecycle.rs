@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use rusqlite::Connection;
-use synapse_core::sota_pipeline::{compact, RuleHooks};
+use synapse_core::sota_pipeline::{RuleHooks, compact};
 
 #[derive(Parser, Debug)]
 #[command(name = "synapse-lifecycle")]

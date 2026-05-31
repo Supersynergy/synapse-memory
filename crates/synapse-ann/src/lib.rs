@@ -9,6 +9,9 @@
 
 use std::path::Path;
 
+pub type SearchHit = (u64, f32);
+pub type SearchResults = Vec<SearchHit>;
+
 /// Minimal pluggable ANN surface. Add/search/remove + durable save.
 pub trait AnnIndex: Send + Sync {
     /// Insert a vector with an external id.
@@ -20,7 +23,7 @@ pub trait AnnIndex: Send + Sync {
 
     /// kNN search returning (id, distance) ascending by distance.
     #[allow(clippy::type_complexity)]
-    fn search(&self, query: &[f32], k: usize) -> Result<Vec<(u64, f32)>, AnnError>;
+    fn search(&self, query: &[f32], k: usize) -> Result<SearchResults, AnnError>;
 
     /// Cascade rerank: oversample `k * mult`, sort, truncate to `k`.
     /// Default impl works for any backend whose `search` returns true distances.
@@ -34,12 +37,14 @@ pub trait AnnIndex: Send + Sync {
         query: &[f32],
         k: usize,
         mult: usize,
-    ) -> Result<Vec<(u64, f32)>, AnnError> {
+    ) -> Result<SearchResults, AnnError> {
         let m = mult.clamp(2, 100);
         let mut hits = self.search(query, k.saturating_mul(m))?;
         let len = hits.len();
         if len <= k {
-            hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            hits.sort_unstable_by(|a, b| {
+                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            });
             return Ok(hits);
         }
         // Partial sort: O(n) select + O(k log k) sort of top-k only.
@@ -56,11 +61,7 @@ pub trait AnnIndex: Send + Sync {
     /// Falls back to sequential when the feature is absent or the pool is busy.
     /// Returns one result-vec per query, same order.
     #[allow(clippy::type_complexity)]
-    fn search_batch(
-        &self,
-        queries: &[Vec<f32>],
-        k: usize,
-    ) -> Vec<Result<Vec<(u64, f32)>, AnnError>> {
+    fn search_batch(&self, queries: &[Vec<f32>], k: usize) -> Vec<Result<SearchResults, AnnError>> {
         #[cfg(feature = "ann-batch")]
         {
             use rayon::prelude::*;

@@ -33,7 +33,7 @@ pub fn embed_thesis_v2(text: &str) -> Vec<f32> {
     // 4-gram character n-grams
     if n >= 4 {
         for i in 0..=(n - 4) {
-            let h = xxh3_64(&bytes[i..i+4]) as usize % DIM;
+            let h = xxh3_64(&bytes[i..i + 4]) as usize % DIM;
             v[h] += 0.5;
         }
     }
@@ -41,7 +41,7 @@ pub fn embed_thesis_v2(text: &str) -> Vec<f32> {
     // 8-gram character n-grams
     if n >= 8 {
         for i in 0..=(n - 8) {
-            let h = xxh3_64(&bytes[i..i+8]) as usize % DIM;
+            let h = xxh3_64(&bytes[i..i + 8]) as usize % DIM;
             v[h] += 0.25;
         }
     }

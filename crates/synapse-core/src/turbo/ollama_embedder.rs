@@ -17,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
-const DEFAULT_MODEL: &str = "all-minilm";
 
 /// Ollama single-embedding response (legacy `/api/embeddings`).
 #[derive(Serialize, Deserialize)]

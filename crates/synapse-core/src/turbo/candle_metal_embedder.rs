@@ -40,11 +40,11 @@ impl CandleMetalEmbedder {
         #[cfg(feature = "embed-metal")]
         {
             let inner = MetalBertInner::load("BAAI/bge-small-en-v1.5")?;
-            return Ok(Self {
+            Ok(Self {
                 model_id: "BAAI/bge-small-en-v1.5".to_string(),
                 dim: 384,
                 inner: std::sync::Arc::new(inner),
-            });
+            })
         }
         #[cfg(not(feature = "embed-metal"))]
         Ok(Self {
@@ -57,7 +57,7 @@ impl CandleMetalEmbedder {
     pub fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         #[cfg(feature = "embed-metal")]
         {
-            return self.inner.embed(texts);
+            self.inner.embed(texts)
         }
         #[cfg(not(feature = "embed-metal"))]
         {
@@ -131,15 +131,11 @@ impl MetalBertInner {
             .map_err(|e| Error::Other(format!("load tokenizer: {e}")))?;
 
         let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(
-                &[weights_path],
-                DType::F32,
-                &device,
-            )
-            .map_err(|e| Error::Other(format!("load weights: {e}")))?
+            VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
+                .map_err(|e| Error::Other(format!("load weights: {e}")))?
         };
-        let model = BertModel::load(vb, &config)
-            .map_err(|e| Error::Other(format!("build bert: {e}")))?;
+        let model =
+            BertModel::load(vb, &config).map_err(|e| Error::Other(format!("build bert: {e}")))?;
 
         Ok(Self {
             model: std::sync::Mutex::new(model),
@@ -190,7 +186,9 @@ impl MetalBertInner {
             .map_err(|e| Error::Other(format!("type_ids tensor: {e}")))?;
 
         let hidden = {
-            let mut model = self.model.lock()
+            let model = self
+                .model
+                .lock()
                 .map_err(|_| Error::Other("bert mutex poisoned".into()))?;
             model
                 .forward(&ids, &type_ids, Some(&mask))

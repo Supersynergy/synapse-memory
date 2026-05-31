@@ -1,8 +1,9 @@
 use std::{
     path::PathBuf,
     sync::{
+        Arc,
         atomic::{AtomicU64, Ordering},
-        mpsc, Arc,
+        mpsc,
     },
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -27,7 +28,11 @@ impl Entry {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_micros() as u64;
-        Self { seq, ts_us, payload }
+        Self {
+            seq,
+            ts_us,
+            payload,
+        }
     }
 }
 

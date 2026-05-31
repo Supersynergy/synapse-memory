@@ -49,7 +49,7 @@ pub fn blend(rerank_score: f64, original_score: f64) -> f64 {
 #[cfg(feature = "onnx")]
 pub mod onnx {
     use super::*;
-    use fastembed::{TextRerank, RerankInitOptions, RerankerModel};
+    use fastembed::{RerankInitOptions, RerankerModel, TextRerank};
     use std::sync::Mutex;
 
     pub struct OnnxCrossEncoder {
@@ -72,7 +72,9 @@ pub mod onnx {
 
         pub fn from_model(model: RerankerModel) -> Result<Self> {
             let inner = TextRerank::try_new(RerankInitOptions::new(model))?;
-            Ok(Self { inner: Mutex::new(inner) })
+            Ok(Self {
+                inner: Mutex::new(inner),
+            })
         }
     }
 
@@ -94,7 +96,11 @@ pub mod onnx {
                     h
                 })
                 .collect();
-            out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+            out.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             out.truncate(top_k);
             Ok(out)
         }
@@ -106,7 +112,15 @@ mod tests {
     use super::*;
 
     fn h(id: i64, score: f64, text: &str) -> Hit {
-        Hit { id, uri: None, title: None, text: text.into(), score }
+        Hit {
+            id,
+            uri: None,
+            title: None,
+            text: text.into(),
+            score,
+            meta: None,
+            ts: None,
+        }
     }
 
     #[test]

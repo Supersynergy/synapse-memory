@@ -1,6 +1,6 @@
 /// Benchmark: cascade search (hamming → f16 rerank) across 1k/10k/100k synthetic vectors.
 /// Uses xorshift for deterministic normalized 384-d vectors.
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use synapse_ultra::search::{self, query_to_f16};
 
 // ── xorshift PRNG ────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ use simsimd::SpatialSimilarity;
 
 use super::SignalId;
 use crate::error::{Error, Result};
+use crate::{SignalEntry, SignalHit};
 
 // ── RaBitQ IVF index ────────────────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ pub struct RabitqSignalIndex {
 impl RabitqSignalIndex {
     /// Build from a slice of (id, 768-d f32 vector) pairs.
     /// `n_clusters` ~ sqrt(N) is a good default.
-    pub fn build(entries: &[(SignalId, Vec<f32>)], n_clusters: usize) -> Result<Self> {
+    pub fn build(entries: &[SignalEntry], n_clusters: usize) -> Result<Self> {
         if entries.is_empty() {
             return Err(Error::Market("empty entries".into()));
         }
@@ -37,10 +38,9 @@ impl RabitqSignalIndex {
         Ok(Self { inner, ids })
     }
 
-    pub fn search(&self, query: &[f32], top_k: usize) -> Result<Vec<(SignalId, f32)>> {
+    pub fn search(&self, query: &[f32], top_k: usize) -> Result<Vec<SignalHit>> {
         // nprobe = 20% of clusters gives good recall/speed trade-off for 768d vecs
-        let nprobe = ((self.inner.cluster_count() / 5).max(1))
-            .min(self.inner.cluster_count());
+        let nprobe = ((self.inner.cluster_count() / 5).max(1)).min(self.inner.cluster_count());
         let params = SearchParams::new(top_k, nprobe);
         let results = self
             .inner
@@ -58,18 +58,14 @@ impl RabitqSignalIndex {
             .map_err(|e| Error::Market(e.to_string()))?;
         // Save ids alongside: path + ".ids"
         let ids_path = path.with_extension("ids.bin");
-        let bytes: Vec<u8> = self
-            .ids
-            .iter()
-            .flat_map(|id| id.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = self.ids.iter().flat_map(|id| id.to_le_bytes()).collect();
         std::fs::write(ids_path, bytes)?;
         Ok(())
     }
 
     pub fn load(path: &Path) -> Result<Self> {
-        let inner = IvfRabitqIndex::load_from_path(path)
-            .map_err(|e| Error::Market(e.to_string()))?;
+        let inner =
+            IvfRabitqIndex::load_from_path(path).map_err(|e| Error::Market(e.to_string()))?;
         let ids_path = path.with_extension("ids.bin");
         let bytes = std::fs::read(ids_path)?;
         let ids: Vec<SignalId> = bytes
@@ -94,13 +90,13 @@ fn quantise_i8(v: &[f32]) -> Vec<i8> {
 }
 
 impl BruteForceI8Index {
-    pub fn build(entries: &[(SignalId, Vec<f32>)]) -> Self {
+    pub fn build(entries: &[SignalEntry]) -> Self {
         let ids = entries.iter().map(|(id, _)| *id).collect();
         let vecs_i8 = entries.iter().map(|(_, v)| quantise_i8(v)).collect();
         Self { ids, vecs_i8 }
     }
 
-    pub fn search(&self, query: &[f32], top_k: usize) -> Vec<(SignalId, f32)> {
+    pub fn search(&self, query: &[f32], top_k: usize) -> Vec<SignalHit> {
         let q_i8 = quantise_i8(query);
         let mut scores: Vec<(usize, f32)> = self
             .vecs_i8
@@ -123,12 +119,8 @@ impl BruteForceI8Index {
 
 // ── Plain f32 dot-product ground-truth ──────────────────────────────────────
 
-pub fn dot_product_top_k(
-    entries: &[(SignalId, Vec<f32>)],
-    query: &[f32],
-    top_k: usize,
-) -> Vec<(SignalId, f32)> {
-    let mut scores: Vec<(SignalId, f32)> = entries
+pub fn dot_product_top_k(entries: &[SignalEntry], query: &[f32], top_k: usize) -> Vec<SignalHit> {
+    let mut scores: Vec<SignalHit> = entries
         .iter()
         .map(|(id, v)| {
             let s: f32 = v.iter().zip(query).map(|(a, b)| a * b).sum();

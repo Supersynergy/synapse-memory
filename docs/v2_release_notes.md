@@ -31,7 +31,7 @@ Point two Synapse daemons at each other. Memory propagates peer-to-peer over TCP
 Ranking improves as you use it. `synapse feedback --id <id> --score 1.0` trains the in-process bandit. Heat and consolidation prevent stale promotions.
 
 ### Multi-extension format
-`.syn`, `.synapse`, `.brainpack` — all read by the same binary. Magic-byte detection; no extension guessing.
+`.synx`, `.synapse`, `.brainpack` — all read by the same binary. Magic-byte detection; no extension guessing.
 
 ### SQLCipher encryption (feature-flagged)
 `cargo build --features encrypt` for AES-256 at-rest. Not on by default — zero overhead for the common case.
@@ -45,7 +45,7 @@ Zero breaking changes. All new features are additive.
 cargo install --locked --git https://github.com/Supersynergy/synapse --tag v2.0.0 \
   synapse-cli synapsed synapse-mcp
 
-# Your existing .brainpack / .syn files work unchanged
+# Your existing .brainpack / .synx files work unchanged
 synapse search "anything"
 ```
 

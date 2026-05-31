@@ -101,8 +101,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.sst");
         let entries = vec![
-            Entry { key: b"a".to_vec(), value: b"1".to_vec(), seq: 0, deleted: false },
-            Entry { key: b"b".to_vec(), value: b"2".to_vec(), seq: 1, deleted: false },
+            Entry {
+                key: b"a".to_vec(),
+                value: b"1".to_vec(),
+                seq: 0,
+                deleted: false,
+            },
+            Entry {
+                key: b"b".to_vec(),
+                value: b"2".to_vec(),
+                seq: 1,
+                deleted: false,
+            },
         ];
         let sst = SSTable::write(path.clone(), &entries).unwrap();
         // bloom file should exist
@@ -120,7 +130,11 @@ mod tests {
         use crate::compaction::{CompactCmd, Compactor, TieredConfig};
         use crate::lsm::Entry;
         let dir = tempfile::tempdir().unwrap();
-        let config = TieredConfig { l1_max: 2, l2_max: 4, dir: dir.path().to_path_buf() };
+        let config = TieredConfig {
+            l1_max: 2,
+            l2_max: 4,
+            dir: dir.path().to_path_buf(),
+        };
         let tx = Compactor::spawn(config);
 
         // Send 3 flushes — 2 should trigger L1→L2 compaction

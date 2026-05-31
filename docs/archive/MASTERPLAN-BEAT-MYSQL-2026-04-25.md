@@ -242,7 +242,7 @@ Run ghgrep for each pattern: `ghgrep "<pattern>" --lang rust --stars 1000+`.
 80. Circuit breaker
 
 ### Developer Experience (10)
-81. CLI ergonomics ✅ `syn` 1-line cmds
+81. CLI ergonomics ✅ `synx` 1-line cmds
 82. Embedded library mode ✅ 6µs reads
 83. WASM target (synapse-wasm)
 84. iOS/Android binding

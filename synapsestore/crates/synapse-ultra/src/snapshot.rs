@@ -5,9 +5,15 @@ use std::{fs, mem};
 
 use memmap2::Mmap;
 use ndarray::Array2;
-use rusqlite::{ffi::sqlite3_auto_extension, Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, ffi::sqlite3_auto_extension};
 
 use crate::error::{Result, UltraError};
+
+type SqliteAutoExtensionFn = unsafe extern "C" fn(
+    *mut rusqlite::ffi::sqlite3,
+    *mut *mut i8,
+    *const rusqlite::ffi::sqlite3_api_routines,
+) -> i32;
 
 pub const MAGIC: u64 = 0x534E55_4C543200; // "SNULT2\0"
 pub const HEADER_BYTES: usize = 64; // magic(8)+version(2)+dim(2)+n_rows(4)+mtime(8)+flags(4)+hash(32)+pad(4)
@@ -158,7 +164,7 @@ pub fn rebuild(brain_path: &Path, snap_path: &Path) -> Result<Snapshot> {
     tracing::info!("rebuilding snapshot from {:?}", brain_path);
 
     unsafe {
-        sqlite3_auto_extension(Some(mem::transmute(
+        sqlite3_auto_extension(Some(mem::transmute::<*const (), SqliteAutoExtensionFn>(
             sqlite_vec::sqlite3_vec_init as *const (),
         )));
     }
@@ -241,7 +247,7 @@ pub fn normalize_rows(matrix: &mut Array2<f32>) {
     }
 }
 
-pub fn normalize_vec(v: &mut Vec<f32>) {
+pub fn normalize_vec(v: &mut [f32]) {
     let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
     if norm > 1e-9 {
         v.iter_mut().for_each(|x| *x /= norm);

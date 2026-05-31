@@ -8,7 +8,7 @@ use std::io::{BufReader, Seek, SeekFrom};
 use std::path::Path;
 
 use super::chunk::Chunk;
-use super::header::{SynxFooter, SynxHeader, FOOTER_SIZE};
+use super::header::{FOOTER_SIZE, SynxFooter, SynxHeader};
 use super::manifest::Manifest;
 
 pub struct SynxReader {

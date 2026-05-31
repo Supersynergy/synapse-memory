@@ -10,6 +10,8 @@
 //! Math: nonconformity score s_i = 1 - recall(predicted_i, ground_truth_i).
 //! Conformal guarantee: P(recall >= lower_bound) >= 1 - alpha over cal distribution.
 
+#![allow(clippy::type_complexity)]
+
 use std::collections::HashSet;
 
 pub type DocId = i64;
@@ -28,7 +30,10 @@ pub struct ConformalCalibrator {
 impl ConformalCalibrator {
     pub fn new(alpha: f32) -> Self {
         assert!(alpha > 0.0 && alpha < 1.0, "alpha must be in (0,1)");
-        Self { residuals: Vec::new(), alpha }
+        Self {
+            residuals: Vec::new(),
+            alpha,
+        }
     }
 
     /// Calibrate on a held-out calibration set.
@@ -109,7 +114,9 @@ fn conformal_quantile(scores: &[f32], alpha: f32) -> f32 {
     let mut sorted = scores.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     // Index into sorted array (0-based)
-    let idx = ((q_level * n as f32).ceil() as usize).saturating_sub(1).min(n - 1);
+    let idx = ((q_level * n as f32).ceil() as usize)
+        .saturating_sub(1)
+        .min(n - 1);
     sorted[idx]
 }
 
@@ -142,12 +149,12 @@ mod tests {
         miss_fraction: f32,
         alpha: f32,
     ) -> ConformalCalibrator {
-        use std::collections::HashSet;
-
         // Simple deterministic pseudo-random via LCG
         let mut rng_state: u64 = 0xdeadbeef_cafebabe;
         let mut next_u64 = move || {
-            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            rng_state = rng_state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             rng_state
         };
 
@@ -229,9 +236,8 @@ mod tests {
     #[test]
     fn test_poor_predictor_triggers_fallback() {
         // Predictor returns wrong docs → residuals ~1 → lower bound ~0
-        let queries: Vec<(String, Vec<DocId>)> = (0..200)
-            .map(|i| (format!("q{i}"), vec![0, 1, 2]))
-            .collect();
+        let queries: Vec<(String, Vec<DocId>)> =
+            (0..200).map(|i| (format!("q{i}"), vec![0, 1, 2])).collect();
         let mut cal = ConformalCalibrator::new(0.05);
         cal.calibrate(&queries, |_| vec![100, 101, 102]);
         let lb = cal.predict_recall_lower_bound();
@@ -285,9 +291,8 @@ mod tests {
     #[test]
     fn test_needs_exact_fallback_triggers() {
         // Bad predictor → should_fallback returns true
-        let queries: Vec<(String, Vec<DocId>)> = (0..100)
-            .map(|i| (format!("q{i}"), vec![1, 2, 3]))
-            .collect();
+        let queries: Vec<(String, Vec<DocId>)> =
+            (0..100).map(|i| (format!("q{i}"), vec![1, 2, 3])).collect();
         let mut cal = ConformalCalibrator::new(0.05);
         cal.calibrate(&queries, |_| vec![10, 11, 12]); // all misses
         assert!(needs_exact_fallback(Some(&cal), Some(0.9)));

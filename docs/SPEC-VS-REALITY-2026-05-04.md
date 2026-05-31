@@ -36,7 +36,7 @@ Read each crate's `src/lib.rs` and counted real LOC vs stub markers.
 | synapse-engine | "hybrid FTS+vec planner, fusion, cache" | 47 LOC lib.rs, abi.rs + rrf.rs only | ⚠️ | Only RRF fuse via C-ABI. No planner/cache module visible — claim oversells |
 | synapse-space | "Space→Wing→Room→Drawer + sweep/compact/evolve" | 412 LOC, real types + mcp.rs | ✅ | Hierarchy + MCP module present |
 | synapsed | "Unix-socket RPC daemon" | src/ confirmed exists | ✅ | (didn't fully audit; assume real per Cargo) |
-| synapse-cli (`syn`) | "syn put/hybrid/find/stats/daemon" | main.rs present | ✅ | Per project memory: socket recall 8ms |
+| synapse-cli (`synx`) | "synx put/hybrid/find/stats/daemon" | main.rs present | ✅ | Per project memory: socket recall 8ms |
 | synapse-mcp | "synapse_search/put/find/stats" | main.rs present | ✅ | Cargo workspace member |
 | synapse-learn | "Bandit, calibrate, EWMA" | bandit.rs, calibrate.rs, drift.rs, feedback.rs, heat.rs, rrf_tune.rs, consolidate.rs, db.rs | ✅ | Rich impl |
 | synapse-rerank | "Cross-encoder ONNX two-stage" | 110 LOC + cascade.rs. IdentityReranker default. OnnxCrossEncoder behind `onnx` feature | ⚠️ | Trait + identity ✅, ONNX path feature-gated, NOT wired into LongMemEval runner (KNOWN-ISSUES confirms) |

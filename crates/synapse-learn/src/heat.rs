@@ -14,7 +14,7 @@ pub fn migrate_heat(conn: &rusqlite::Connection) -> Result<()> {
     "#,
     )
     .ok(); // ignore if columns exist (SQLite error on duplicate)
-           // Fallback: try each separately
+    // Fallback: try each separately
     conn.execute(
         "ALTER TABLE docs ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0",
         [],
@@ -70,7 +70,6 @@ pub fn rerank(hits: Vec<Hit>, conn: &rusqlite::Connection) -> Result<Vec<Hit>> {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn heat_score_increases_with_access() {

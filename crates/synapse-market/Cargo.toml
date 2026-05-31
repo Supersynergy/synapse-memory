@@ -40,10 +40,10 @@ reqwest = { version = "0.12", features = ["json"] }
 tokio-tungstenite = { version = "0.27", features = ["native-tls"] }
 futures-util = "0.3"
 async-trait = "0.1"
-rumqttc = { version = "0.24", optional = true }
+rumqttc = { version = "0.25", optional = true, default-features = false }
 opensrv-mysql = { git = "https://github.com/databendlabs/opensrv.git", tag = "v0.10.0", optional = true }
 synapse-tsdb = { path = "../synapse-tsdb", features = ["tsdb"], optional = true }
-arrow = { version = "53", features = ["ipc"], optional = true }
+arrow = { version = "58", features = ["ipc"], optional = true }
 
 [features]
 default = []

@@ -73,7 +73,10 @@ impl QueryPlan {
 
     /// HASH JOIN left on left_key == right on right_key
     pub fn hash_join(left_key: usize, right_key: usize) -> HashJoinPlan {
-        HashJoinPlan { left_key, right_key }
+        HashJoinPlan {
+            left_key,
+            right_key,
+        }
     }
 
     /// blake3 fingerprint for cache keying
@@ -92,10 +95,10 @@ impl QueryPlan {
 pub fn interpret(plan: &QueryPlan, rows: &[crate::Row]) -> Vec<crate::Row> {
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        if let Some(pred) = &plan.filter {
-            if eval_expr(pred, row) == 0 {
-                continue;
-            }
+        if let Some(pred) = &plan.filter
+            && eval_expr(pred, row) == 0
+        {
+            continue;
         }
         if plan.projections.is_empty() {
             out.push(row.clone());
@@ -122,12 +125,19 @@ pub fn interpret_group_by_sum(plan: &GroupBySumPlan, rows: &[crate::Row]) -> Vec
 
 /// Interpreter: HASH JOIN left ⋈ right on left.left_key == right.right_key.
 /// Returns rows from left that have a matching key in right.
-pub fn interpret_hash_join(plan: &HashJoinPlan, left: &[crate::Row], right: &[crate::Row]) -> Vec<crate::Row> {
+pub fn interpret_hash_join(
+    plan: &HashJoinPlan,
+    left: &[crate::Row],
+    right: &[crate::Row],
+) -> Vec<crate::Row> {
     let mut build: std::collections::HashSet<i64> = std::collections::HashSet::new();
     for row in right {
         build.insert(row.0[plan.right_key]);
     }
-    left.iter().filter(|r| build.contains(&r.0[plan.left_key])).cloned().collect()
+    left.iter()
+        .filter(|r| build.contains(&r.0[plan.left_key]))
+        .cloned()
+        .collect()
 }
 
 fn eval_expr(e: &Expr, row: &crate::Row) -> i64 {
@@ -139,11 +149,11 @@ fn eval_expr(e: &Expr, row: &crate::Row) -> i64 {
             let l = eval_expr(lhs, row);
             let r = eval_expr(rhs, row);
             let b = match op {
-                CmpOp::Gt  => l > r,
+                CmpOp::Gt => l > r,
                 CmpOp::Gte => l >= r,
-                CmpOp::Lt  => l < r,
+                CmpOp::Lt => l < r,
                 CmpOp::Lte => l <= r,
-                CmpOp::Eq  => l == r,
+                CmpOp::Eq => l == r,
                 CmpOp::Neq => l != r,
             };
             b as i64

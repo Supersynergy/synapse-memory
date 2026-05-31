@@ -6,6 +6,8 @@
 //! `crdt` feature in `automerge_wire`; the LWW merge here remains the
 //! zero-dep baseline and is always available.
 
+#![allow(clippy::type_complexity)]
+
 pub mod automerge_wire;
 
 use crate::error::Result;
@@ -75,7 +77,7 @@ pub fn merge_lww(local: &[(OpId, Op)], remote: &[(OpId, Op)]) -> Vec<(OpId, Op)>
         }
     }
     let mut out: Vec<_> = winners.into_values().collect();
-    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.sort_by_key(|a| a.0);
     out
 }
 

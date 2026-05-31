@@ -1,13 +1,13 @@
 //! SPANN build: k-means cluster assignment → write centroids + posting lists.
 
-use std::{fs, path::Path};
 use anyhow::Result;
-use linfa::traits::Fit;
 use linfa::DatasetBase;
+use linfa::traits::Fit;
 use linfa_clustering::KMeans;
 use ndarray::Array2;
+use std::{fs, path::Path};
 
-use crate::posting::write_posting;
+use crate::{DocumentEmbedding, posting::write_posting};
 
 /// Assign each doc to nearest centroid (L2).
 pub fn assign_centroid(centroids: &Array2<f32>, vec: &[f32]) -> usize {
@@ -33,7 +33,7 @@ pub fn assign_centroid(centroids: &Array2<f32>, vec: &[f32]) -> usize {
 ///   <dir>/posting/<id>.bin  (one per cluster)
 pub fn build_index(
     dir: &Path,
-    docs: &[(u64, Vec<f32>)],
+    docs: &[DocumentEmbedding],
     n_clusters: usize,
     dim: usize,
     max_iter: u64,
@@ -48,9 +48,7 @@ pub fn build_index(
     let dataset = DatasetBase::from(arr);
 
     let k = n_clusters.min(n);
-    let model = KMeans::params(k)
-        .max_n_iterations(max_iter)
-        .fit(&dataset)?;
+    let model = KMeans::params(k).max_n_iterations(max_iter).fit(&dataset)?;
 
     // Centroids as f32
     let centroids_f32: Vec<Vec<f32>> = model
@@ -65,7 +63,7 @@ pub fn build_index(
     let centroids_arr = Array2::from_shape_vec((k, dim), flat_c.clone())?;
 
     // Assign each doc
-    let mut clusters: Vec<Vec<(u64, Vec<f32>)>> = vec![vec![]; k];
+    let mut clusters: Vec<Vec<DocumentEmbedding>> = vec![vec![]; k];
     for (docid, vec) in docs {
         let c = assign_centroid(&centroids_arr, vec);
         clusters[c].push((*docid, vec.clone()));

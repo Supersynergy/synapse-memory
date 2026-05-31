@@ -48,13 +48,19 @@ fn test_interval_symmetry() {
     let (lo, hi) = cp.interval(5.0);
     assert!(hi > lo, "interval must be ordered");
     let half = (hi - lo) / 2.0;
-    assert!((half - cp.q_hat).abs() < 1e-5, "interval half-width = q_hat");
+    assert!(
+        (half - cp.q_hat).abs() < 1e-5,
+        "interval half-width = q_hat"
+    );
 }
 
 #[test]
 fn test_q_hat_positive() {
     let cp = build_conformal_80(300);
-    assert!(cp.q_hat > 0.0, "q_hat must be positive for non-trivial scores");
+    assert!(
+        cp.q_hat > 0.0,
+        "q_hat must be positive for non-trivial scores"
+    );
 }
 
 #[test]

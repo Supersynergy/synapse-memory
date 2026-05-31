@@ -1,9 +1,14 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::collections::HashMap;
 
 use synapse_market::Market;
 use synapse_market::ffi::smx_query_range;
+
+type OhlcvTuple = (i64, f64, f64, f64, f64, f64);
+type PyRow = HashMap<String, PyObject>;
+type PyRows = Vec<PyRow>;
 
 fn py_err(e: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(e.to_string())
@@ -18,13 +23,13 @@ struct SeriesHandle {
 #[pymethods]
 impl SeriesHandle {
     /// Append rows: list of (ts_secs, open, high, low, close, volume) tuples.
-    fn append(&self, rows: Vec<(i64, f64, f64, f64, f64, f64)>) -> PyResult<()> {
+    fn append(&self, rows: Vec<OhlcvTuple>) -> PyResult<()> {
         let m = unsafe { &*(self.market_ptr as *const Market) };
         m.ingest_ohlcv(&self.ticker, &rows).map_err(py_err)
     }
 
     /// Return OHLCV rows in [start, end] as list of dicts.
-    fn range(&self, start: i64, end: i64) -> PyResult<Vec<HashMap<String, PyObject>>> {
+    fn range(&self, start: i64, end: i64) -> PyResult<PyRows> {
         let m = unsafe { &*(self.market_ptr as *const Market) };
         let rows = smx_query_range(m, &self.ticker, start, end).map_err(py_err)?;
         Python::with_gil(|py| {
@@ -32,15 +37,15 @@ impl SeriesHandle {
                 .iter()
                 .map(|r| {
                     let mut d: HashMap<String, PyObject> = HashMap::new();
-                    d.insert("ts".into(), r.0.into_py(py));
-                    d.insert("open".into(), r.1.into_py(py));
-                    d.insert("high".into(), r.2.into_py(py));
-                    d.insert("low".into(), r.3.into_py(py));
-                    d.insert("close".into(), r.4.into_py(py));
-                    d.insert("volume".into(), r.5.into_py(py));
-                    d
+                    d.insert("ts".into(), r.0.into_pyobject(py)?.into_any().unbind());
+                    d.insert("open".into(), r.1.into_pyobject(py)?.into_any().unbind());
+                    d.insert("high".into(), r.2.into_pyobject(py)?.into_any().unbind());
+                    d.insert("low".into(), r.3.into_pyobject(py)?.into_any().unbind());
+                    d.insert("close".into(), r.4.into_pyobject(py)?.into_any().unbind());
+                    d.insert("volume".into(), r.5.into_pyobject(py)?.into_any().unbind());
+                    Ok(d)
                 })
-                .collect();
+                .collect::<PyResult<_>>()?;
             Ok(out)
         })
     }
@@ -49,11 +54,8 @@ impl SeriesHandle {
     fn closes_bytes(&self, start: i64, end: i64) -> PyResult<PyObject> {
         let m = unsafe { &*(self.market_ptr as *const Market) };
         let rows = smx_query_range(m, &self.ticker, start, end).map_err(py_err)?;
-        let bytes: Vec<u8> = rows
-            .iter()
-            .flat_map(|r| r.4.to_le_bytes())
-            .collect();
-        Python::with_gil(|py| Ok(pyo3::types::PyBytes::new_bound(py, &bytes).into()))
+        let bytes: Vec<u8> = rows.iter().flat_map(|r| r.4.to_le_bytes()).collect();
+        Python::with_gil(|py| Ok(PyBytes::new(py, &bytes).into_any().unbind()))
     }
 }
 

@@ -3,7 +3,9 @@ mod jit_tests {
     use crate::{GroupByJitEngine, HashJoinJitEngine, JitEngine, QueryPlan, Row, Schema};
 
     fn schema_1col() -> Schema {
-        Schema { columns: vec!["val".into()] }
+        Schema {
+            columns: vec!["val".into()],
+        }
     }
 
     /// Smoke 1: compile + execute WHERE val > 5
@@ -66,7 +68,9 @@ mod jit_tests {
 
         let left: Vec<Row> = (0..20i64).map(|i| Row(vec![i, i * 10])).collect();
         let right: Vec<Row> = (0..10i64).map(|i| Row(vec![i * 2])).collect();
-        let mut result = engine.execute(func, &plan, &left, &right).expect("execute hj");
+        let mut result = engine
+            .execute(func, &plan, &left, &right)
+            .expect("execute hj");
         result.sort_unstable_by_key(|r| r.0[0]);
 
         assert_eq!(result.len(), 10);
@@ -89,7 +93,7 @@ mod jit_tests {
 
 #[cfg(test)]
 mod interp_tests {
-    use crate::{ir::interpret, QueryPlan, Row};
+    use crate::{QueryPlan, Row, ir::interpret};
 
     #[test]
     fn interpreter_filter_gt() {

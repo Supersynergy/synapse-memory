@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use synapse_mlx_olap::{AggOp, Column, MlxOlapEngine, RecordBatch};
 
 fn make_batch(n: usize, n_groups: usize) -> RecordBatch {
@@ -32,12 +32,7 @@ fn bench_group_by(c: &mut Criterion) {
             |b, _| {
                 b.iter(|| {
                     engine
-                        .execute_agg(
-                            black_box(&batch),
-                            AggOp::Sum,
-                            "val",
-                            Some("grp"),
-                        )
+                        .execute_agg(black_box(&batch), AggOp::Sum, "val", Some("grp"))
                         .unwrap()
                 });
             },
@@ -50,7 +45,11 @@ fn bench_scalar(c: &mut Criterion) {
     let engine = MlxOlapEngine::new().unwrap();
     let batch = make_batch(10_000_000, 1);
     c.bench_function("sum_scalar_10M", |b| {
-        b.iter(|| engine.execute_agg(black_box(&batch), AggOp::Sum, "val", None).unwrap())
+        b.iter(|| {
+            engine
+                .execute_agg(black_box(&batch), AggOp::Sum, "val", None)
+                .unwrap()
+        })
     });
 }
 

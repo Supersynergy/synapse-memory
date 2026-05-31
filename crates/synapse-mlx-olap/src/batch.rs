@@ -20,15 +20,27 @@ impl Column {
     }
 
     pub fn as_floats(&self) -> Option<&[f64]> {
-        if let Column::Float(v) = self { Some(v) } else { None }
+        if let Column::Float(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 
     pub fn as_ints(&self) -> Option<&[i64]> {
-        if let Column::Int(v) = self { Some(v) } else { None }
+        if let Column::Int(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 
     pub fn as_strs(&self) -> Option<&[String]> {
-        if let Column::Str(v) = self { Some(v) } else { None }
+        if let Column::Str(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
 }
 
@@ -60,6 +72,9 @@ impl RecordBatch {
     }
 
     pub fn column_by_name(&self, name: &str) -> Option<&Column> {
-        self.schema.iter().position(|s| s == name).map(|i| &self.columns[i])
+        self.schema
+            .iter()
+            .position(|s| s == name)
+            .map(|i| &self.columns[i])
     }
 }

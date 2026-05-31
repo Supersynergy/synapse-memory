@@ -12,9 +12,13 @@ pub struct FfmpegOpts<'a> {
 pub fn extract_frames(input: &str, output_pattern: &str, fps: f32) -> Result<()> {
     let status = Command::new("ffmpeg")
         .args([
-            "-y", "-i", input,
-            "-vf", &format!("fps={fps}"),
-            "-q:v", "5",
+            "-y",
+            "-i",
+            input,
+            "-vf",
+            &format!("fps={fps}"),
+            "-q:v",
+            "5",
             output_pattern,
         ])
         .output()
@@ -45,9 +49,16 @@ pub fn concat(inputs: &[&str], output: &str) -> Result<()> {
     std::fs::write(&tmp, content)?;
     let out = Command::new("ffmpeg")
         .args([
-            "-y", "-f", "concat", "-safe", "0",
-            "-i", tmp.to_str().unwrap(),
-            "-c", "copy", output,
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            tmp.to_str().unwrap(),
+            "-c",
+            "copy",
+            output,
         ])
         .output()
         .context("ffmpeg spawn")?;
@@ -62,10 +73,16 @@ pub fn concat(inputs: &[&str], output: &str) -> Result<()> {
 pub fn trim(input: &str, output: &str, start: f32, end: f32) -> Result<()> {
     let out = Command::new("ffmpeg")
         .args([
-            "-y", "-i", input,
-            "-ss", &start.to_string(),
-            "-to", &end.to_string(),
-            "-c", "copy", output,
+            "-y",
+            "-i",
+            input,
+            "-ss",
+            &start.to_string(),
+            "-to",
+            &end.to_string(),
+            "-c",
+            "copy",
+            output,
         ])
         .output()
         .context("ffmpeg spawn")?;

@@ -5,9 +5,9 @@
 //!   - append-only content-addressed chunks
 //!   - JSON-archived manifest (rkyv migration TBD)
 //!   - buffered writer + reader roundtrip
-//!   - `mmap` feature: zero-copy reader (Phase 3 Track b)
-//!   - `fts-tantivy` feature: Tantivy BM25 index
-//!   - `vec-hnsw` feature: HNSW kNN + scalar-quant codebook
+//!   - `synx-mmap` feature: zero-copy reader (Phase 3 Track b)
+//!   - `synx-tantivy` feature: Tantivy BM25 index
+//!   - `ann-usearch` feature: HNSW kNN + scalar-quant codebook
 //!   - migrate path from v1 SQLite
 //!   - temporal KG edges + memory scopes (mem0 / Graphiti parity)
 //!
@@ -27,7 +27,7 @@ pub mod writer;
 
 pub use chunk::{Chunk, ChunkKind, Codec};
 pub use fts::FtsIndex;
-pub use header::{SynxFooter, SynxHeader, FOOTER_MAGIC, MAGIC, VERSION};
+pub use header::{FOOTER_MAGIC, MAGIC, SynxFooter, SynxHeader, VERSION};
 pub use kg::{Edge, EdgeKind, EdgeSet, Scope};
 pub use manifest::{ChunkRef, Manifest, SchemaVersion};
 pub use mmap::MmapReader;

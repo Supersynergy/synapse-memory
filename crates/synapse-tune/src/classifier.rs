@@ -9,14 +9,14 @@ use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Classification {
-    RealUser,    // serve from cache + populate cache
-    Bot,         // bypass cache, no cache populate
-    Unknown,     // default safe path (cache, conservative TTL)
+    RealUser, // serve from cache + populate cache
+    Bot,      // bypass cache, no cache populate
+    Unknown,  // default safe path (cache, conservative TTL)
 }
 
 pub struct BotClassifier {
     rates: RwLock<HashMap<String, RateWindow>>,
-    bot_rate_threshold: f64,  // requests/sec
+    bot_rate_threshold: f64, // requests/sec
 }
 
 #[derive(Clone, Copy)]
@@ -36,10 +36,14 @@ impl BotClassifier {
     /// Classify request. `key` = IP/UA hash. `user_agent` = HTTP UA header.
     pub fn classify(&self, key: &str, user_agent: &str) -> Classification {
         // Fast path: known bot UA patterns
-        if is_bot_ua(user_agent) { return Classification::Bot; }
+        if is_bot_ua(user_agent) {
+            return Classification::Bot;
+        }
         if is_real_browser(user_agent) {
             // Rate check — even browsers can be malicious-script
-            if self.over_rate(key) { return Classification::Bot; }
+            if self.over_rate(key) {
+                return Classification::Bot;
+            }
             return Classification::RealUser;
         }
         Classification::Unknown
@@ -48,7 +52,10 @@ impl BotClassifier {
     fn over_rate(&self, key: &str) -> bool {
         let now = Instant::now();
         if let Ok(mut g) = self.rates.write() {
-            let entry = g.entry(key.into()).or_insert(RateWindow { count: 0, started: now });
+            let entry = g.entry(key.into()).or_insert(RateWindow {
+                count: 0,
+                started: now,
+            });
             if now.duration_since(entry.started) > Duration::from_secs(1) {
                 entry.count = 1;
                 entry.started = now;
@@ -64,24 +71,44 @@ impl BotClassifier {
 }
 
 impl Default for BotClassifier {
-    fn default() -> Self { Self::new(50.0) }  // 50 req/sec threshold
+    fn default() -> Self {
+        Self::new(50.0)
+    } // 50 req/sec threshold
 }
 
 fn is_bot_ua(ua: &str) -> bool {
     let l = ua.to_lowercase();
     // Top-N bot fingerprints (Crawler/Bot/Spider/curl/wget/python/scrapy)
     const PATTERNS: &[&str] = &[
-        "bot", "crawler", "spider", "curl/", "wget/", "python-requests",
-        "scrapy", "ahrefs", "semrush", "googlebot", "bingbot", "yandex",
-        "facebookexternalhit", "twitterbot", "linkedinbot", "slackbot",
-        "headlesschrome", "phantomjs", "selenium",
+        "bot",
+        "crawler",
+        "spider",
+        "curl/",
+        "wget/",
+        "python-requests",
+        "scrapy",
+        "ahrefs",
+        "semrush",
+        "googlebot",
+        "bingbot",
+        "yandex",
+        "facebookexternalhit",
+        "twitterbot",
+        "linkedinbot",
+        "slackbot",
+        "headlesschrome",
+        "phantomjs",
+        "selenium",
     ];
     PATTERNS.iter().any(|p| l.contains(p))
 }
 
 fn is_real_browser(ua: &str) -> bool {
     let l = ua.to_lowercase();
-    (l.contains("mozilla/") || l.contains("safari/") || l.contains("chrome/") || l.contains("firefox/"))
+    (l.contains("mozilla/")
+        || l.contains("safari/")
+        || l.contains("chrome/")
+        || l.contains("firefox/"))
         && !is_bot_ua(ua)
 }
 
@@ -93,7 +120,10 @@ mod tests {
     fn detects_googlebot() {
         let c = BotClassifier::default();
         assert_eq!(
-            c.classify("k1", "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"),
+            c.classify(
+                "k1",
+                "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+            ),
             Classification::Bot
         );
     }
@@ -101,7 +131,10 @@ mod tests {
     fn detects_real_browser() {
         let c = BotClassifier::default();
         assert_eq!(
-            c.classify("user1", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605 Chrome/130.0"),
+            c.classify(
+                "user1",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605 Chrome/130.0"
+            ),
             Classification::RealUser
         );
     }

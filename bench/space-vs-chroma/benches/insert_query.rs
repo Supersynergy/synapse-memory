@@ -5,9 +5,12 @@
 
 use std::path::PathBuf;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use serde::Deserialize;
-use synapse_core::{db::Store, types::{PutRequest, SearchMode}};
+use synapse_core::{
+    db::Store,
+    types::{PutRequest, SearchMode},
+};
 use tempfile::NamedTempFile;
 
 #[derive(Deserialize)]
@@ -19,8 +22,7 @@ struct LmeRecord {
 }
 
 fn load_records() -> Vec<LmeRecord> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../longmemeval/data/lme_s_50.json");
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../longmemeval/data/lme_s_50.json");
     let raw = std::fs::read_to_string(&p).expect("lme_s_50.json not found");
     serde_json::from_str(&raw).expect("parse lme_s_50.json")
 }
@@ -40,13 +42,15 @@ fn bench_insert(c: &mut Criterion) {
                     } else {
                         r.conversation_str[..r.conversation_str.len().min(2000)].to_string()
                     };
-                    store.put(&PutRequest {
-                        uri: Some(format!("lme://{}", r.question_id)),
-                        title: Some(r.question[..r.question.len().min(120)].to_string()),
-                        text,
-                        meta: None,
-                        embedding: None,
-                    }).unwrap();
+                    store
+                        .put(&PutRequest {
+                            uri: Some(format!("lme://{}", r.question_id)),
+                            title: Some(r.question[..r.question.len().min(120)].to_string()),
+                            text,
+                            meta: None,
+                            embedding: None,
+                        })
+                        .unwrap();
                 }
             });
         },
@@ -64,13 +68,15 @@ fn bench_query(c: &mut Criterion) {
         } else {
             r.conversation_str[..r.conversation_str.len().min(2000)].to_string()
         };
-        store.put(&PutRequest {
-            uri: Some(format!("lme://{}", r.question_id)),
-            title: Some(r.question[..r.question.len().min(120)].to_string()),
-            text,
-            meta: None,
-            embedding: None,
-        }).unwrap();
+        store
+            .put(&PutRequest {
+                uri: Some(format!("lme://{}", r.question_id)),
+                title: Some(r.question[..r.question.len().min(120)].to_string()),
+                text,
+                meta: None,
+                embedding: None,
+            })
+            .unwrap();
     }
 
     c.bench_with_input(
@@ -80,13 +86,16 @@ fn bench_query(c: &mut Criterion) {
             b.iter(|| {
                 for r in recs {
                     // FTS keyword query: first 5 alphanumeric words only (avoid FTS5 syntax errors)
-                    let q: String = r.question
+                    let q: String = r
+                        .question
                         .split_whitespace()
                         .filter(|w| w.chars().all(|c| c.is_alphanumeric()))
                         .take(5)
                         .collect::<Vec<_>>()
                         .join(" ");
-                    if q.is_empty() { continue; }
+                    if q.is_empty() {
+                        continue;
+                    }
                     let _ = store.search(&q, SearchMode::Lex, None, 5).unwrap();
                 }
             });

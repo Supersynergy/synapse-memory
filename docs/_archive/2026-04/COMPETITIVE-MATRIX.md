@@ -1,7 +1,7 @@
 # Synapse Competitive Matrix — Top 50 Memory / Vector / KG Stores
 
 **Date**: 2026-05-04
-**Method**: Synapse memory (`syn hybrid`), `ghgrep` searches (`ai memory mcp`, `claude memory persistent`, `vector database embedded rust`, `agent memory framework`), known-set from training + project memory.
+**Method**: Synapse memory (`synx hybrid`), `ghgrep` searches (`ai memory mcp`, `claude memory persistent`, `vector database embedded rust`, `agent memory framework`), known-set from training + project memory.
 **Honesty**: Capabilities marked `?` mean unverified from primary source in this pass — do not cite as fact.
 **Columns**: Stack | License | Vector | FTS | KG | CRDT | Sign | Persist | Local-first | MCP | Distinct
 

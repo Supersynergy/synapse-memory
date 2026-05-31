@@ -1,5 +1,5 @@
 /// C-ABI surface — Day 1 stubs + Phase 10 Day 5 RRF kernel + Day 7 obfstr hardening.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn synapse_engine_init(db_path: *const u8, db_path_len: usize) -> i32 {
     let _ = (db_path, db_path_len);
     0
@@ -12,24 +12,20 @@ pub extern "C" fn synapse_engine_init(db_path: *const u8, db_path_len: usize) ->
 /// `top_k`     — number of results requested
 ///
 /// Returns 0 on success, negative errno on error.
-#[no_mangle]
-pub extern "C" fn synapse_engine_score(
-    query: *const u8,
-    query_len: usize,
-    top_k: u32,
-) -> i32 {
+#[unsafe(no_mangle)]
+pub extern "C" fn synapse_engine_score(query: *const u8, query_len: usize, top_k: u32) -> i32 {
     let _ = (query, query_len, top_k);
     0
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn synapse_engine_version() -> *const u8 {
     static VERSION_STR: &str = "synapse-engine-v0.1.0\0";
     VERSION_STR.as_ptr()
 }
 
 /// Returns obfuscated version string at runtime (heap-allocated, not a literal).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn synapse_engine_version_obf() -> *const u8 {
     let s = obfstr::obfstr!("synapse-engine-v0.1.0").to_owned();
     let b = s.into_bytes().into_boxed_slice();
@@ -46,7 +42,7 @@ pub extern "C" fn synapse_engine_version_obf() -> *const u8 {
 /// `a_ptr` must point to `a_len` valid `f64` values (or be null when `a_len == 0`).
 /// `b_ptr` must point to `b_len` valid `f64` values (or be null when `b_len == 0`).
 /// `out_ptr` must point to a writable buffer of at least `out_cap` `f64` values.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn synapse_engine_rrf_fuse(
     a_ptr: *const f64,
     a_len: usize,
@@ -59,10 +55,12 @@ pub unsafe extern "C" fn synapse_engine_rrf_fuse(
     if (a_len > 0 && a_ptr.is_null()) || (b_len > 0 && b_ptr.is_null()) || out_ptr.is_null() {
         return -1;
     }
-    let a = std::slice::from_raw_parts(a_ptr, a_len);
-    let b = std::slice::from_raw_parts(b_ptr, b_len);
+    let a = unsafe { std::slice::from_raw_parts(a_ptr, a_len) };
+    let b = unsafe { std::slice::from_raw_parts(b_ptr, b_len) };
     let scored = crate::rrf::rrf_fuse(a, b, k);
     let n = scored.len().min(out_cap);
-    std::ptr::copy_nonoverlapping(scored.as_ptr(), out_ptr, n);
+    unsafe {
+        std::ptr::copy_nonoverlapping(scored.as_ptr(), out_ptr, n);
+    }
     n as i32
 }

@@ -3,7 +3,7 @@
 //! Run:
 //!   cargo bench -p synapse-core --bench rrf_neon
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use synapse_core::types::Hit;
 
 fn make_hits(n: usize, id_offset: i64) -> Vec<Hit> {
@@ -14,6 +14,8 @@ fn make_hits(n: usize, id_offset: i64) -> Vec<Hit> {
             title: None,
             text: String::new(),
             score: 0.0,
+            meta: None,
+            ts: None,
         })
         .collect()
 }
@@ -24,11 +26,17 @@ fn rrf_merge_scalar(lex: Vec<Hit>, vec: Vec<Hit>, limit: usize) -> Vec<Hit> {
     let rrf_k = 60.0_f64;
     for (i, h) in lex.into_iter().enumerate() {
         let s = 1.0 / (rrf_k + (i + 1) as f64);
-        scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+        scores
+            .entry(h.id)
+            .and_modify(|e| e.0 += s)
+            .or_insert((s, h));
     }
     for (i, h) in vec.into_iter().enumerate() {
         let s = 1.0 / (rrf_k + (i + 1) as f64);
-        scores.entry(h.id).and_modify(|e| e.0 += s).or_insert((s, h));
+        scores
+            .entry(h.id)
+            .and_modify(|e| e.0 += s)
+            .or_insert((s, h));
     }
     let mut out: Vec<_> = scores
         .into_values()

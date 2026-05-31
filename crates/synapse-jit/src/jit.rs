@@ -17,9 +17,9 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use crate::{
+    Row,
     ir::{CmpOp, Expr, GroupBySumPlan, HashJoinPlan, QueryPlan},
     schema::Schema,
-    Row,
 };
 
 // ── extern-C callbacks for GROUP BY / HASH JOIN ──────────────────────────────
@@ -82,7 +82,10 @@ pub struct GroupByJitEngine {
 impl GroupByJitEngine {
     pub fn new() -> Result<Self> {
         let module = make_module()?;
-        Ok(Self { module, func_id: None })
+        Ok(Self {
+            module,
+            func_id: None,
+        })
     }
 
     /// Compile GROUP BY SUM plan. Signature:
@@ -97,27 +100,29 @@ impl GroupByJitEngine {
 
         // Declare extern jit_gb_accumulate
         let mut acc_sig = self.module.make_signature();
-        acc_sig.params.push(AbiParam::new(ptr_type));   // bucket_ptr
+        acc_sig.params.push(AbiParam::new(ptr_type)); // bucket_ptr
         acc_sig.params.push(AbiParam::new(types::I64)); // n_buckets
         acc_sig.params.push(AbiParam::new(types::I64)); // key
         acc_sig.params.push(AbiParam::new(types::I64)); // val
-        let acc_id = self.module.declare_function(
-            "jit_gb_accumulate", Linkage::Import, &acc_sig,
-        ).context("declare jit_gb_accumulate")?;
+        let acc_id = self
+            .module
+            .declare_function("jit_gb_accumulate", Linkage::Import, &acc_sig)
+            .context("declare jit_gb_accumulate")?;
 
         let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(ptr_type));   // rows_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // rows_ptr
         sig.params.push(AbiParam::new(types::I64)); // ncols
         sig.params.push(AbiParam::new(types::I64)); // nrows
-        sig.params.push(AbiParam::new(ptr_type));   // bucket_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // bucket_ptr
         sig.params.push(AbiParam::new(types::I64)); // n_buckets
 
         let col_group = plan.col_group as i64;
-        let col_agg   = plan.col_agg   as i64;
+        let col_agg = plan.col_agg as i64;
 
-        let func_id = self.module.declare_function(
-            "gb_sum_loop", Linkage::Local, &sig,
-        ).context("declare gb_sum_loop")?;
+        let func_id = self
+            .module
+            .declare_function("gb_sum_loop", Linkage::Local, &sig)
+            .context("declare gb_sum_loop")?;
 
         let mut ctx = self.module.make_context();
         ctx.func.signature = sig;
@@ -126,23 +131,24 @@ impl GroupByJitEngine {
             let mut fbc = FunctionBuilderContext::new();
             let mut b = FunctionBuilder::new(&mut ctx.func, &mut fbc);
 
-            let entry  = b.create_block();
+            let entry = b.create_block();
             let header = b.create_block();
-            let body   = b.create_block();
-            let end    = b.create_block();
+            let body = b.create_block();
+            let end = b.create_block();
 
             b.append_block_params_for_function_params(entry);
             b.switch_to_block(entry);
             b.seal_block(entry);
 
             let ps = b.block_params(entry).to_vec();
-            let rows_ptr   = ps[0];
-            let ncols      = ps[1];
-            let nrows      = ps[2];
+            let rows_ptr = ps[0];
+            let ncols = ps[1];
+            let nrows = ps[2];
             let bucket_ptr = ps[3];
-            let n_buckets  = ps[4];
+            let n_buckets = ps[4];
 
-            let i_slot = b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            let i_slot =
+                b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
             let zero = b.ins().iconst(types::I64, 0);
             b.ins().stack_store(zero, i_slot, 0);
             b.ins().jump(header, &[]);
@@ -155,9 +161,9 @@ impl GroupByJitEngine {
 
             // body: extract key + val, call jit_gb_accumulate
             b.switch_to_block(body);
-            let ncols_x8  = b.ins().imul_imm(ncols, 8);
-            let row_off   = b.ins().imul(i, ncols_x8);
-            let row_base  = b.ins().iadd(rows_ptr, row_off);
+            let ncols_x8 = b.ins().imul_imm(ncols, 8);
+            let row_off = b.ins().imul(i, ncols_x8);
+            let row_base = b.ins().iadd(rows_ptr, row_off);
 
             let key_off = b.ins().iconst(types::I64, col_group * 8);
             let key_addr = b.ins().iadd(row_base, key_off);
@@ -183,7 +189,9 @@ impl GroupByJitEngine {
             b.finalize();
         }
 
-        self.module.define_function(func_id, &mut ctx).context("define gb_sum")?;
+        self.module
+            .define_function(func_id, &mut ctx)
+            .context("define gb_sum")?;
         self.module.clear_context(&mut ctx);
         self.module.finalize_definitions().context("finalize gb")?;
         self.func_id = Some(func_id);
@@ -191,11 +199,20 @@ impl GroupByJitEngine {
     }
 
     /// Execute GROUP BY SUM. Returns (key, sum) sorted by key.
-    pub fn execute(&self, func_id: FuncId, plan: &GroupBySumPlan, rows: &[Row]) -> Result<Vec<(i64, i64)>> {
-        if rows.is_empty() { return Ok(vec![]); }
+    pub fn execute(
+        &self,
+        func_id: FuncId,
+        plan: &GroupBySumPlan,
+        rows: &[Row],
+    ) -> Result<Vec<(i64, i64)>> {
+        if rows.is_empty() {
+            return Ok(vec![]);
+        }
         let ncols = rows[0].0.len();
         let mut flat: Vec<i64> = Vec::with_capacity(ncols * rows.len());
-        for r in rows { flat.extend_from_slice(&r.0); }
+        for r in rows {
+            flat.extend_from_slice(&r.0);
+        }
 
         // Estimate cardinality: next power of 2, min 16
         let card = rows.len().next_power_of_two().max(16);
@@ -217,7 +234,8 @@ impl GroupByJitEngine {
             );
         }
 
-        let mut out: Vec<(i64, i64)> = buckets.chunks_exact(2)
+        let mut out: Vec<(i64, i64)> = buckets
+            .chunks_exact(2)
             .filter(|p| p[0] != i64::MIN)
             .map(|p| (p[0], p[1]))
             .collect();
@@ -235,7 +253,10 @@ pub struct HashJoinJitEngine {
 impl HashJoinJitEngine {
     pub fn new() -> Result<Self> {
         let module = make_module()?;
-        Ok(Self { module, func_id: None })
+        Ok(Self {
+            module,
+            func_id: None,
+        })
     }
 
     /// Compile hash join probe loop. Signature:
@@ -243,34 +264,38 @@ impl HashJoinJitEngine {
     ///      set_ptr: *const i64, n_buckets: i64,
     ///      out_ptr: *mut i64, out_len_ptr: *mut i64) -> ()
     pub fn compile(&mut self, plan: &HashJoinPlan) -> Result<FuncId> {
-        if let Some(id) = self.func_id { return Ok(id); }
+        if let Some(id) = self.func_id {
+            return Ok(id);
+        }
 
         let ptr_type = self.module.target_config().pointer_type();
 
         // Declare extern jit_hj_probe
         let mut probe_sig = self.module.make_signature();
-        probe_sig.params.push(AbiParam::new(ptr_type));   // set_ptr
+        probe_sig.params.push(AbiParam::new(ptr_type)); // set_ptr
         probe_sig.params.push(AbiParam::new(types::I64)); // n_buckets
         probe_sig.params.push(AbiParam::new(types::I64)); // key
         probe_sig.returns.push(AbiParam::new(types::I64)); // found
-        let probe_id = self.module.declare_function(
-            "jit_hj_probe", Linkage::Import, &probe_sig,
-        ).context("declare jit_hj_probe")?;
+        let probe_id = self
+            .module
+            .declare_function("jit_hj_probe", Linkage::Import, &probe_sig)
+            .context("declare jit_hj_probe")?;
 
         let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(ptr_type));   // rows_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // rows_ptr
         sig.params.push(AbiParam::new(types::I64)); // ncols
         sig.params.push(AbiParam::new(types::I64)); // nrows
-        sig.params.push(AbiParam::new(ptr_type));   // set_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // set_ptr
         sig.params.push(AbiParam::new(types::I64)); // n_buckets
-        sig.params.push(AbiParam::new(ptr_type));   // out_ptr
-        sig.params.push(AbiParam::new(ptr_type));   // out_len_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // out_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // out_len_ptr
 
         let left_key = plan.left_key as i64;
 
-        let func_id = self.module.declare_function(
-            "hj_probe_loop", Linkage::Local, &sig,
-        ).context("declare hj_probe_loop")?;
+        let func_id = self
+            .module
+            .declare_function("hj_probe_loop", Linkage::Local, &sig)
+            .context("declare hj_probe_loop")?;
 
         let mut ctx = self.module.make_context();
         ctx.func.signature = sig;
@@ -279,28 +304,30 @@ impl HashJoinJitEngine {
             let mut fbc = FunctionBuilderContext::new();
             let mut b = FunctionBuilder::new(&mut ctx.func, &mut fbc);
 
-            let entry   = b.create_block();
-            let header  = b.create_block();
-            let body    = b.create_block();
+            let entry = b.create_block();
+            let header = b.create_block();
+            let body = b.create_block();
             let matched = b.create_block();
-            let lend    = b.create_block();
-            let exit    = b.create_block();
+            let lend = b.create_block();
+            let exit = b.create_block();
 
             b.append_block_params_for_function_params(entry);
             b.switch_to_block(entry);
             b.seal_block(entry);
 
             let ps = b.block_params(entry).to_vec();
-            let rows_ptr   = ps[0];
-            let ncols      = ps[1];
-            let nrows      = ps[2];
-            let set_ptr    = ps[3];
-            let n_buckets  = ps[4];
-            let out_ptr    = ps[5];
-            let out_len_p  = ps[6];
+            let rows_ptr = ps[0];
+            let ncols = ps[1];
+            let nrows = ps[2];
+            let set_ptr = ps[3];
+            let n_buckets = ps[4];
+            let out_ptr = ps[5];
+            let out_len_p = ps[6];
 
-            let i_slot  = b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
-            let oc_slot = b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            let i_slot =
+                b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            let oc_slot =
+                b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
             let zero = b.ins().iconst(types::I64, 0);
             b.ins().stack_store(zero, i_slot, 0);
             b.ins().stack_store(zero, oc_slot, 0);
@@ -313,10 +340,10 @@ impl HashJoinJitEngine {
 
             b.switch_to_block(body);
             let ncols_x8 = b.ins().imul_imm(ncols, 8);
-            let row_off  = b.ins().imul(i, ncols_x8);
+            let row_off = b.ins().imul(i, ncols_x8);
             let row_base = b.ins().iadd(rows_ptr, row_off);
 
-            let key_off  = b.ins().iconst(types::I64, left_key * 8);
+            let key_off = b.ins().iconst(types::I64, left_key * 8);
             let key_addr = b.ins().iadd(row_base, key_off);
             let key = b.ins().load(types::I64, MemFlags::trusted(), key_addr, 0);
 
@@ -336,7 +363,8 @@ impl HashJoinJitEngine {
             // store key col only (simplification: full row copy via byte-level loop)
             // For bench accuracy we copy ncols cols using dynamic loop
             // (This is still JIT — cranelift emits the copy loop natively)
-            let copy_slot = b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            let copy_slot =
+                b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
             b.ins().stack_store(zero, copy_slot, 0);
             let copy_hdr = b.create_block();
             let copy_body = b.create_block();
@@ -349,11 +377,11 @@ impl HashJoinJitEngine {
             b.ins().brif(jcond, copy_body, &[], copy_end, &[]);
 
             b.switch_to_block(copy_body);
-            let src_off  = b.ins().imul_imm(j, 8);
+            let src_off = b.ins().imul_imm(j, 8);
             let src_addr = b.ins().iadd(row_base, src_off);
-            let col_val  = b.ins().load(types::I64, MemFlags::trusted(), src_addr, 0);
-            let dst_off  = b.ins().imul(oc, ncols);
-            let dst_idx  = b.ins().iadd(dst_off, j);
+            let col_val = b.ins().load(types::I64, MemFlags::trusted(), src_addr, 0);
+            let dst_off = b.ins().imul(oc, ncols);
+            let dst_idx = b.ins().iadd(dst_off, j);
             let dst_byte = b.ins().imul_imm(dst_idx, 8);
             let dst_addr = b.ins().iadd(out_ptr, dst_byte);
             b.ins().store(MemFlags::trusted(), col_val, dst_addr, 0);
@@ -369,7 +397,7 @@ impl HashJoinJitEngine {
             b.ins().jump(lend, &[]);
 
             b.switch_to_block(lend);
-            let i_cur  = b.ins().stack_load(types::I64, i_slot, 0);
+            let i_cur = b.ins().stack_load(types::I64, i_slot, 0);
             let i_next = b.ins().iadd_imm(i_cur, 1);
             b.ins().stack_store(i_next, i_slot, 0);
             b.ins().jump(header, &[]);
@@ -383,7 +411,9 @@ impl HashJoinJitEngine {
             b.finalize();
         }
 
-        self.module.define_function(func_id, &mut ctx).context("define hj")?;
+        self.module
+            .define_function(func_id, &mut ctx)
+            .context("define hj")?;
         self.module.clear_context(&mut ctx);
         self.module.finalize_definitions().context("finalize hj")?;
         self.func_id = Some(func_id);
@@ -398,7 +428,9 @@ impl HashJoinJitEngine {
         left: &[Row],
         right: &[Row],
     ) -> Result<Vec<Row>> {
-        if left.is_empty() || right.is_empty() { return Ok(vec![]); }
+        if left.is_empty() || right.is_empty() {
+            return Ok(vec![]);
+        }
         let ncols = left[0].0.len();
 
         // Build phase (Rust): open-address set of right keys
@@ -410,22 +442,36 @@ impl HashJoinJitEngine {
             let mut h = (key as usize).wrapping_mul(0x9e3779b97f4a7c15);
             loop {
                 let slot = h & mask;
-                if set[slot] == i64::MIN { set[slot] = key; break; }
-                if set[slot] == key { break; }
+                if set[slot] == i64::MIN {
+                    set[slot] = key;
+                    break;
+                }
+                if set[slot] == key {
+                    break;
+                }
                 h = h.wrapping_add(1);
             }
         }
 
         // Flatten left
         let mut flat: Vec<i64> = Vec::with_capacity(ncols * left.len());
-        for r in left { flat.extend_from_slice(&r.0); }
+        for r in left {
+            flat.extend_from_slice(&r.0);
+        }
 
         let mut out_buf: Vec<i64> = vec![0i64; ncols * left.len()];
         let mut out_len: i64 = 0;
 
         let fn_ptr = self.module.get_finalized_function(func_id);
-        let compiled: unsafe extern "C" fn(*const i64, i64, i64, *const i64, i64, *mut i64, *mut i64) =
-            unsafe { std::mem::transmute(fn_ptr) };
+        let compiled: unsafe extern "C" fn(
+            *const i64,
+            i64,
+            i64,
+            *const i64,
+            i64,
+            *mut i64,
+            *mut i64,
+        ) = unsafe { std::mem::transmute(fn_ptr) };
 
         unsafe {
             compiled(
@@ -440,7 +486,9 @@ impl HashJoinJitEngine {
         }
 
         let n = out_len as usize;
-        Ok((0..n).map(|r| Row(out_buf[r * ncols..(r + 1) * ncols].to_vec())).collect())
+        Ok((0..n)
+            .map(|r| Row(out_buf[r * ncols..(r + 1) * ncols].to_vec()))
+            .collect())
     }
 }
 
@@ -469,7 +517,10 @@ pub struct JitEngine {
 impl JitEngine {
     pub fn new() -> Result<Self> {
         let module = make_module()?;
-        Ok(JitEngine { module, cache: HashMap::new() })
+        Ok(JitEngine {
+            module,
+            cache: HashMap::new(),
+        })
     }
 
     /// Compile a QueryPlan for a given schema. Returns FuncId (cached by blake3).
@@ -482,14 +533,15 @@ impl JitEngine {
         let ptr_type = self.module.target_config().pointer_type();
         let mut sig = self.module.make_signature();
         // rows_ptr, ncols, nrows, out_ptr, out_len_ptr
-        sig.params.push(AbiParam::new(ptr_type));  // rows_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // rows_ptr
         sig.params.push(AbiParam::new(types::I64)); // ncols
         sig.params.push(AbiParam::new(types::I64)); // nrows
-        sig.params.push(AbiParam::new(ptr_type));  // out_ptr
-        sig.params.push(AbiParam::new(ptr_type));  // out_len_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // out_ptr
+        sig.params.push(AbiParam::new(ptr_type)); // out_len_ptr
 
         let func_name = format!("query_{key:016x}");
-        let func_id = self.module
+        let func_id = self
+            .module
             .declare_function(&func_name, Linkage::Local, &sig)
             .context("declare_function")?;
 
@@ -501,12 +553,12 @@ impl JitEngine {
             let mut builder = FunctionBuilder::new(&mut ctx.func, &mut fn_builder_ctx);
 
             // Blocks
-            let entry_block  = builder.create_block();
-            let loop_header  = builder.create_block();
-            let loop_body    = builder.create_block();
-            let filter_pass  = builder.create_block();
-            let loop_end     = builder.create_block();
-            let exit_block   = builder.create_block();
+            let entry_block = builder.create_block();
+            let loop_header = builder.create_block();
+            let loop_body = builder.create_block();
+            let filter_pass = builder.create_block();
+            let loop_end = builder.create_block();
+            let exit_block = builder.create_block();
 
             // Entry
             builder.append_block_params_for_function_params(entry_block);
@@ -514,19 +566,27 @@ impl JitEngine {
             builder.seal_block(entry_block);
 
             let params = builder.block_params(entry_block).to_vec();
-            let rows_ptr   = params[0];
-            let ncols      = params[1];
-            let nrows      = params[2];
-            let out_ptr    = params[3];
-            let out_len    = params[4];
+            let rows_ptr = params[0];
+            let ncols = params[1];
+            let nrows = params[2];
+            let out_ptr = params[3];
+            let out_len = params[4];
 
             // i = 0  (row index)
-            let i_slot = builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            let i_slot = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                8,
+                3,
+            ));
             let zero64 = builder.ins().iconst(types::I64, 0);
             builder.ins().stack_store(zero64, i_slot, 0);
 
             // out_count = 0
-            let oc_slot = builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
+            let oc_slot = builder.create_sized_stack_slot(StackSlotData::new(
+                StackSlotKind::ExplicitSlot,
+                8,
+                3,
+            ));
             builder.ins().stack_store(zero64, oc_slot, 0);
 
             builder.ins().jump(loop_header, &[]);
@@ -534,16 +594,16 @@ impl JitEngine {
             // ── loop_header: check i < nrows ──────────────────────────────
             builder.switch_to_block(loop_header);
             let i_val = builder.ins().stack_load(types::I64, i_slot, 0);
-            let cond  = builder.ins().icmp(IntCC::SignedLessThan, i_val, nrows);
+            let cond = builder.ins().icmp(IntCC::SignedLessThan, i_val, nrows);
             builder.ins().brif(cond, loop_body, &[], exit_block, &[]);
 
             // ── loop_body: load row columns ───────────────────────────────
             builder.switch_to_block(loop_body);
 
             // row_base_ptr = rows_ptr + i * ncols * 8
-            let ncols_x8   = builder.ins().imul_imm(ncols, 8);
+            let ncols_x8 = builder.ins().imul_imm(ncols, 8);
             let row_offset = builder.ins().imul(i_val, ncols_x8);
-            let row_base   = builder.ins().iadd(rows_ptr, row_offset);
+            let row_base = builder.ins().iadd(rows_ptr, row_offset);
 
             let ncols_usize = schema.columns.len();
 
@@ -551,7 +611,7 @@ impl JitEngine {
             let load_col = |b: &mut FunctionBuilder, col: usize| -> Value_ {
                 let off = (col as i64) * 8;
                 let offset = b.ins().iconst(types::I64, off);
-                let addr   = b.ins().iadd(row_base, offset);
+                let addr = b.ins().iadd(row_base, offset);
                 b.ins().load(types::I64, MemFlags::trusted(), addr, 0)
             };
 
@@ -563,7 +623,9 @@ impl JitEngine {
             };
 
             let keep_bool = builder.ins().icmp_imm(IntCC::NotEqual, keep, 0);
-            builder.ins().brif(keep_bool, filter_pass, &[], loop_end, &[]);
+            builder
+                .ins()
+                .brif(keep_bool, filter_pass, &[], loop_end, &[]);
 
             // ── filter_pass: write row to output ──────────────────────────
             builder.switch_to_block(filter_pass);
@@ -576,9 +638,9 @@ impl JitEngine {
                     let val = load_col(&mut builder, j);
                     // out_ptr[(out_count * ncols + j) * 8]
                     let row_out_offset = builder.ins().imul(out_count, ncols);
-                    let col_out_idx    = builder.ins().iadd_imm(row_out_offset, j as i64);
-                    let byte_off       = builder.ins().imul_imm(col_out_idx, 8);
-                    let out_addr       = builder.ins().iadd(out_ptr, byte_off);
+                    let col_out_idx = builder.ins().iadd_imm(row_out_offset, j as i64);
+                    let byte_off = builder.ins().imul_imm(col_out_idx, 8);
+                    let out_addr = builder.ins().iadd(out_ptr, byte_off);
                     builder.ins().store(MemFlags::trusted(), val, out_addr, 0);
                 }
             } else {
@@ -587,9 +649,9 @@ impl JitEngine {
                 for (j, proj) in plan.projections.iter().enumerate() {
                     let val = emit_expr(&mut builder, proj, row_base, ncols_usize);
                     let row_out_offset = builder.ins().imul_imm(out_count, proj_len);
-                    let col_out_idx    = builder.ins().iadd_imm(row_out_offset, j as i64);
-                    let byte_off       = builder.ins().imul_imm(col_out_idx, 8);
-                    let out_addr       = builder.ins().iadd(out_ptr, byte_off);
+                    let col_out_idx = builder.ins().iadd_imm(row_out_offset, j as i64);
+                    let byte_off = builder.ins().imul_imm(col_out_idx, 8);
+                    let out_addr = builder.ins().iadd(out_ptr, byte_off);
                     builder.ins().store(MemFlags::trusted(), val, out_addr, 0);
                 }
             }
@@ -601,7 +663,7 @@ impl JitEngine {
 
             // ── loop_end: i++ ─────────────────────────────────────────────
             builder.switch_to_block(loop_end);
-            let i_cur  = builder.ins().stack_load(types::I64, i_slot, 0);
+            let i_cur = builder.ins().stack_load(types::I64, i_slot, 0);
             let i_next = builder.ins().iadd_imm(i_cur, 1);
             builder.ins().stack_store(i_next, i_slot, 0);
             builder.ins().jump(loop_header, &[]);
@@ -609,7 +671,9 @@ impl JitEngine {
             // ── exit: store out_count ─────────────────────────────────────
             builder.switch_to_block(exit_block);
             let final_oc = builder.ins().stack_load(types::I64, oc_slot, 0);
-            builder.ins().store(MemFlags::trusted(), final_oc, out_len, 0);
+            builder
+                .ins()
+                .store(MemFlags::trusted(), final_oc, out_len, 0);
             builder.ins().return_(&[]);
 
             builder.seal_all_blocks();
@@ -620,7 +684,9 @@ impl JitEngine {
             .define_function(func_id, &mut ctx)
             .context("define_function")?;
         self.module.clear_context(&mut ctx);
-        self.module.finalize_definitions().context("finalize_definitions")?;
+        self.module
+            .finalize_definitions()
+            .context("finalize_definitions")?;
 
         self.cache.insert(key, func_id);
         Ok(func_id)
@@ -640,7 +706,11 @@ impl JitEngine {
             flat.extend_from_slice(&r.0);
         }
 
-        let out_cols = if plan.projections.is_empty() { ncols } else { plan.projections.len() };
+        let out_cols = if plan.projections.is_empty() {
+            ncols
+        } else {
+            plan.projections.len()
+        };
         let mut out_buf: Vec<i64> = vec![0i64; out_cols * nrows];
         let mut out_len: i64 = 0;
 
@@ -672,17 +742,12 @@ impl JitEngine {
 
 type Value_ = cranelift::prelude::Value;
 
-fn emit_expr(
-    b: &mut FunctionBuilder,
-    expr: &Expr,
-    row_base: Value_,
-    _ncols: usize,
-) -> Value_ {
+fn emit_expr(b: &mut FunctionBuilder, expr: &Expr, row_base: Value_, _ncols: usize) -> Value_ {
     match expr {
         Expr::Col(i) => {
             let off = (*i as i64) * 8;
             let offset = b.ins().iconst(types::I64, off);
-            let addr   = b.ins().iadd(row_base, offset);
+            let addr = b.ins().iadd(row_base, offset);
             b.ins().load(types::I64, MemFlags::trusted(), addr, 0)
         }
         Expr::Const(v) => b.ins().iconst(types::I64, *v),
@@ -694,11 +759,11 @@ fn emit_expr(
             let l = emit_expr(b, lhs, row_base, _ncols);
             let r = emit_expr(b, rhs, row_base, _ncols);
             let cc = match op {
-                CmpOp::Gt  => IntCC::SignedGreaterThan,
+                CmpOp::Gt => IntCC::SignedGreaterThan,
                 CmpOp::Gte => IntCC::SignedGreaterThanOrEqual,
-                CmpOp::Lt  => IntCC::SignedLessThan,
+                CmpOp::Lt => IntCC::SignedLessThan,
                 CmpOp::Lte => IntCC::SignedLessThanOrEqual,
-                CmpOp::Eq  => IntCC::Equal,
+                CmpOp::Eq => IntCC::Equal,
                 CmpOp::Neq => IntCC::NotEqual,
             };
             let cond = b.ins().icmp(cc, l, r);

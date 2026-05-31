@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -7,7 +9,7 @@ use rusqlite::Connection;
 
 use crate::embed_mlx::MlxEmbedder;
 use crate::error::{Result, UltraError};
-use crate::snapshot::{normalize_vec, EMBED_DIM};
+use crate::snapshot::{EMBED_DIM, normalize_vec};
 
 const MEM_CACHE_CAP: usize = 4096;
 
@@ -73,15 +75,15 @@ impl Embedder {
                     rusqlite::params![hex],
                     |row| row.get(0),
                 );
-                if let Ok(blob) = result {
-                    if blob.len() == EMBED_DIM * 4 {
-                        let v: Vec<f32> = blob
-                            .chunks_exact(4)
-                            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
-                            .collect();
-                        self.mem_cache.lock().unwrap().put(key, v.clone());
-                        return Ok(v);
-                    }
+                if let Ok(blob) = result
+                    && blob.len() == EMBED_DIM * 4
+                {
+                    let v: Vec<f32> = blob
+                        .chunks_exact(4)
+                        .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+                        .collect();
+                    self.mem_cache.lock().unwrap().put(key, v.clone());
+                    return Ok(v);
                 }
             }
         }

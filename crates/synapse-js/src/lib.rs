@@ -4,8 +4,8 @@ use napi_derive::napi;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use synapse_core::types::{PutRequest, SearchMode};
 use synapse_core::Store;
+use synapse_core::types::{PutRequest, SearchMode};
 
 #[napi(object)]
 pub struct SearchHit {
@@ -54,7 +54,9 @@ impl Synapse {
             embedding: None,
         };
         let mut store = inner.lock().await;
-        store.put(&req).map_err(|e| napi::Error::from_reason(e.to_string()))
+        store
+            .put(&req)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
     /// Full-text (lexical) search. Returns top-k hits.

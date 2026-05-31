@@ -20,8 +20,8 @@ zstd.workspace = true
 tracing.workspace = true
 parking_lot.workspace = true
 
-arrow    = { version = "53", features = ["ipc"], optional = true }
-parquet  = { version = "53", features = ["snap"], optional = true }
+arrow    = { version = "58", features = ["ipc"], optional = true }
+parquet  = { version = "58", features = ["snap"], optional = true }
 snap     = { version = "1", optional = true }
 
 [dev-dependencies]

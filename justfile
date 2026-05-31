@@ -1,5 +1,7 @@
 default: check-all
 
+check: check-all
+
 test:
     cargo nextest run --workspace
 

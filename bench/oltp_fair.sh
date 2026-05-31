@@ -50,11 +50,11 @@ sleep 1
 rm -f "$SYN_DB"
 nohup "$BIN" -f "$SYN_DB" -b "127.0.0.1:${SYN_PORT}" --mode strict --pool-size 32 \
   --tls-cert "$TLS_CERT" --tls-key "$TLS_KEY" \
-  > /tmp/syn-async-fair.log 2>&1 &
+  > /tmp/synx-async-fair.log 2>&1 &
 disown
 sleep 2
 if ! lsof -iTCP:${SYN_PORT} -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "ERROR: Synapse daemon failed to bind ${SYN_PORT}"; tail /tmp/syn-async-fair.log; exit 1
+  echo "ERROR: Synapse daemon failed to bind ${SYN_PORT}"; tail /tmp/synx-async-fair.log; exit 1
 fi
 echo "synapse daemon up on ${SYN_PORT} (pid=$(lsof -tiTCP:${SYN_PORT} -sTCP:LISTEN | head -1))"
 
@@ -161,7 +161,7 @@ for r in data:
   echo ""
   echo "## Artifacts"
   echo "- raw: \`$JSON\`"
-  echo "- daemon log: \`/tmp/syn-async-fair.log\`"
+  echo "- daemon log: \`/tmp/synx-async-fair.log\`"
 } > "$MD"
 
 echo ""

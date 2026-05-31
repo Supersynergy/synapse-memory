@@ -57,11 +57,7 @@ mod bench {
             for i in chunk_start..end {
                 tx.execute(
                     "INSERT OR REPLACE INTO kv VALUES (?1, ?2, ?3)",
-                    rusqlite::params![
-                        format!("key{:08}", i),
-                        format!("value_{}", i),
-                        i as i64
-                    ],
+                    rusqlite::params![format!("key{:08}", i), format!("value_{}", i), i as i64],
                 )
                 .unwrap();
             }
@@ -101,11 +97,14 @@ mod bench {
 - SQLite: WAL mode, synchronous=NORMAL, batch transactions
 "#
         );
-        std::fs::write("/synapse/bench-dashboard/IOURING_LINUX_BENCH_2026-05-13.md", &md)
-            .unwrap_or_else(|_| {
-                // fallback if volume not mounted
-                println!("\n--- MARKDOWN ---\n{}", md);
-            });
+        std::fs::write(
+            "/synapse/bench-dashboard/IOURING_LINUX_BENCH_2026-05-13.md",
+            &md,
+        )
+        .unwrap_or_else(|_| {
+            // fallback if volume not mounted
+            println!("\n--- MARKDOWN ---\n{}", md);
+        });
         println!("Done.");
     }
 }

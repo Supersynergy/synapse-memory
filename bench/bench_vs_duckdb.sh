@@ -19,11 +19,11 @@ with open('docs.jsonl','w') as f:
 print(f'gen {$N} docs')
 "
 
-SYN=$HOME/projects/synapse/target/release/synapsed
+SYNAPSE_BIN=$HOME/projects/synapse/target/release/synapsed
 SOCK=/tmp/dbench.sock
 SYNDB=$DIR/synapse.db
 rm -f $SOCK $SYNDB*
-$SYN -f $SYNDB -s $SOCK --lazy-embed > /tmp/synd_dbench.log 2>&1 &
+$SYNAPSE_BIN -f $SYNDB -s $SOCK --lazy-embed > /tmp/synd_dbench.log 2>&1 &
 PID=$!
 sleep 0.4
 trap "kill $PID 2>/dev/null; rm -f $SOCK" EXIT

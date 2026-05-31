@@ -3,7 +3,7 @@
 //! Run:
 //!   cargo bench -p synapse-core --bench dist_score --features turbo
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 fn dist_score_scalar(dists: &[f32]) -> Vec<f32> {
     dists.iter().map(|d| 1.0_f32 / (1.0_f32 + d)).collect()
@@ -19,9 +19,7 @@ fn bench_dist_score(c: &mut Criterion) {
 
     #[cfg(feature = "turbo")]
     c.bench_function("dist_score_simd 1k (turbo)", |b| {
-        b.iter(|| {
-            synapse_core::turbo::rrf_simd::distance_to_score(black_box(&dists))
-        })
+        b.iter(|| synapse_core::turbo::rrf_simd::distance_to_score(black_box(&dists)))
     });
 }
 

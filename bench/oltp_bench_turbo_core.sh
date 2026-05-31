@@ -57,8 +57,8 @@ QUERIES=(
 
 # Warm up the daemon (this triggers the lazy ndarray build on first vec call)
 echo "[bench] warmup (triggers ndarray cache build, may take ~250ms)..."
-SYNAPSE_SOCK="$SOCK" syn vec "warmup query" >/dev/null 2>&1 || true
-SYNAPSE_SOCK="$SOCK" syn vec "warmup query" >/dev/null 2>&1 || true
+SYNAPSE_SOCK="$SOCK" synx vec "warmup query" >/dev/null 2>&1 || true
+SYNAPSE_SOCK="$SOCK" synx vec "warmup query" >/dev/null 2>&1 || true
 
 echo "[bench] running $N vec queries (in-process timing via python socket client)..."
 QSTR=$(printf '"%s",' "${QUERIES[@]}")

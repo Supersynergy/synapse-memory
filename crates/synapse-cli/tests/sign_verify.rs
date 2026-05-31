@@ -1,4 +1,4 @@
-//! Smoke tests for `syn sign` and `syn verify` subcommands.
+//! Smoke tests for `synx sign` and `synx verify` subcommands.
 
 use std::process::Command;
 use tempfile::tempdir;
@@ -22,18 +22,29 @@ fn sign_and_verify_roundtrip() {
 
     // keygen
     let status = Command::new(synapse_bin())
-        .args(["-f", db.to_str().unwrap(), "keygen",
-               "--sk", sk.to_str().unwrap(),
-               "--vk", vk.to_str().unwrap()])
+        .args([
+            "-f",
+            db.to_str().unwrap(),
+            "keygen",
+            "--sk",
+            sk.to_str().unwrap(),
+            "--vk",
+            vk.to_str().unwrap(),
+        ])
         .status()
         .expect("keygen");
     assert!(status.success(), "keygen failed");
 
     // put
     let out = Command::new(synapse_bin())
-        .args(["-f", db.to_str().unwrap(), "put",
-               "--text", "hello signed world",
-               "--no-embed"])
+        .args([
+            "-f",
+            db.to_str().unwrap(),
+            "put",
+            "--text",
+            "hello signed world",
+            "--no-embed",
+        ])
         .output()
         .expect("put");
     assert!(out.status.success(), "put failed");
@@ -42,18 +53,28 @@ fn sign_and_verify_roundtrip() {
 
     // sign
     let status = Command::new(synapse_bin())
-        .args(["-f", db.to_str().unwrap(), "sign",
-               &id.to_string(),
-               "--sk", sk.to_str().unwrap()])
+        .args([
+            "-f",
+            db.to_str().unwrap(),
+            "sign",
+            &id.to_string(),
+            "--sk",
+            sk.to_str().unwrap(),
+        ])
         .status()
         .expect("sign");
     assert!(status.success(), "sign failed");
 
     // verify
     let status = Command::new(synapse_bin())
-        .args(["-f", db.to_str().unwrap(), "verify",
-               &id.to_string(),
-               "--vk", vk.to_str().unwrap()])
+        .args([
+            "-f",
+            db.to_str().unwrap(),
+            "verify",
+            &id.to_string(),
+            "--vk",
+            vk.to_str().unwrap(),
+        ])
         .status()
         .expect("verify");
     assert!(status.success(), "verify failed");
@@ -72,7 +93,14 @@ fn merge_snap_produces_output() {
         .status()
         .expect("init");
     Command::new(synapse_bin())
-        .args(["-f", db.to_str().unwrap(), "put", "--text", "doc1", "--no-embed"])
+        .args([
+            "-f",
+            db.to_str().unwrap(),
+            "put",
+            "--text",
+            "doc1",
+            "--no-embed",
+        ])
         .status()
         .expect("put");
 
@@ -85,9 +113,14 @@ fn merge_snap_produces_output() {
 
     // merge-snap
     let status = Command::new(synapse_bin())
-        .args(["-f", db.to_str().unwrap(), "merge-snap",
-               peer.to_str().unwrap(),
-               "-o", out.to_str().unwrap()])
+        .args([
+            "-f",
+            db.to_str().unwrap(),
+            "merge-snap",
+            peer.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ])
         .status()
         .expect("merge-snap");
     assert!(status.success(), "merge-snap failed");

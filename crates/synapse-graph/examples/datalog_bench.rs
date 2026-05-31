@@ -19,17 +19,30 @@ fn main() {
 
     // ancestor(X,Y) :- parent(X,Y)
     eng.add_rule(
-        Predicate { name: "ancestor".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] },
-        vec![Predicate { name: "parent".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] }],
+        Predicate {
+            name: "ancestor".into(),
+            args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+        },
+        vec![Predicate {
+            name: "parent".into(),
+            args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+        }],
     );
     // ancestor(X,Y) :- parent(X,Z), ancestor(Z,Y)
     eng.add_rule(
-        Predicate { name: "ancestor".into(), args: vec![
-            Term::Var("X".into()), Term::Var("Y".into()),
-        ]},
+        Predicate {
+            name: "ancestor".into(),
+            args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+        },
         vec![
-            Predicate { name: "parent".into(), args: vec![Term::Var("X".into()), Term::Var("Z".into())] },
-            Predicate { name: "ancestor".into(), args: vec![Term::Var("Z".into()), Term::Var("Y".into())] },
+            Predicate {
+                name: "parent".into(),
+                args: vec![Term::Var("X".into()), Term::Var("Z".into())],
+            },
+            Predicate {
+                name: "ancestor".into(),
+                args: vec![Term::Var("Z".into()), Term::Var("Y".into())],
+            },
         ],
     );
 
@@ -48,7 +61,7 @@ fn main() {
     let mut count = 0usize;
     for c in 0..chains {
         for i in 0..=chain_len {
-            for j in i+1..=chain_len {
+            for j in i + 1..=chain_len {
                 let _ = (c, i, j); // just count
                 count += 1;
             }

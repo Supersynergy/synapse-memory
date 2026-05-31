@@ -3,8 +3,8 @@
 //! Closes "no slow query log" gap. Top-N analysis simpler than MySQL pt-query-digest.
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +65,10 @@ impl SlowQueryLog {
 
     pub fn len(&self) -> usize {
         self.entries.read().map(|g| g.len()).unwrap_or(0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.read().map(|g| g.is_empty()).unwrap_or(true)
     }
 }
 

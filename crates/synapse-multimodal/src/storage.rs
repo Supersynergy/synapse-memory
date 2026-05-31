@@ -3,9 +3,9 @@
 //! Thin wrapper — keeps synapse-multimodal independent from synapse-core at
 //! crate level (no circular dep). Callers link both and call `add_image_to_db`.
 
-use std::path::Path;
 use crate::embedder::MultimodalEmbedder;
 use crate::mime::MimeKind;
+use std::path::Path;
 
 /// Metadata stored alongside the image doc.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -16,12 +16,14 @@ pub struct ImageMeta {
     pub embed_dim: usize,
 }
 
+pub type PreparedImageDoc = (String, Vec<f32>, String);
+
 /// Serialize an image into `(doc_content, embed, meta_json)` for Db insertion.
 pub fn prepare_image_doc(
     path: &Path,
     caption: Option<&str>,
     emb: &dyn MultimodalEmbedder,
-) -> anyhow::Result<(String, Vec<f32>, String)> {
+) -> anyhow::Result<PreparedImageDoc> {
     let mime = MimeKind::from_path(path);
     let embed = emb.embed_image(path)?;
     let content = caption

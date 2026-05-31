@@ -6,7 +6,7 @@
 //! Hardware + rustc version are captured by `criterion` into
 //! `target/criterion/**/report.json`. Publish under `docs/BENCH-<date>.md`.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 #[cfg(feature = "fts-tantivy")]
 fn bench_bm25(c: &mut Criterion) {

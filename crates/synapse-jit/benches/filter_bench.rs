@@ -23,11 +23,17 @@ fn main() {
     let t0 = Instant::now();
     let interp_result = black_box(interpret(&plan, &rows));
     let interp_ms = t0.elapsed().as_millis();
-    println!("interp:  {}ms  ({} rows out)", interp_ms, interp_result.len());
+    println!(
+        "interp:  {}ms  ({} rows out)",
+        interp_ms,
+        interp_result.len()
+    );
 
     #[cfg(feature = "jit")]
     {
-        let schema = Schema { columns: vec!["val".into()] };
+        let schema = Schema {
+            columns: vec!["val".into()],
+        };
         let mut engine = JitEngine::new().expect("JitEngine::new");
         let func = engine.compile(&plan, &schema).expect("compile");
 
@@ -43,7 +49,8 @@ fn main() {
 
     // ── SQLite reference ─────────────────────────────────────────────────
     let conn = rusqlite::Connection::open_in_memory().unwrap();
-    conn.execute_batch("CREATE TABLE t (val INTEGER); BEGIN;").unwrap();
+    conn.execute_batch("CREATE TABLE t (val INTEGER); BEGIN;")
+        .unwrap();
     {
         let mut stmt = conn.prepare("INSERT INTO t VALUES (?)").unwrap();
         for i in 0..N as i64 {
@@ -63,5 +70,8 @@ fn main() {
     println!("sqlite:  {}ms  ({} rows out)", sqlite_ms, sqlite_n);
 
     #[cfg(feature = "jit")]
-    println!("jit vs sqlite: {:.1}×", sqlite_ms as f64 / t2.elapsed().as_millis().max(1) as f64);
+    println!(
+        "jit vs sqlite: {:.1}×",
+        sqlite_ms as f64 / t2.elapsed().as_millis().max(1) as f64
+    );
 }

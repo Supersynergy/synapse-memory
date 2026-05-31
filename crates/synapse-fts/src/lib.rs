@@ -3,10 +3,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
-use tantivy::schema::{NumericOptions, Schema, TextFieldIndexing, TextOptions, FAST, STORED};
-use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument};
+use tantivy::schema::{FAST, NumericOptions, STORED, Schema, TextFieldIndexing, TextOptions};
+use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, doc};
 
 const META_FILE: &str = "synapse_meta.json";
+
+pub type FtsHit = (u64, f32);
+pub type FtsResults = Vec<FtsHit>;
 
 pub struct FtsIndex {
     index: Index,
@@ -27,10 +30,8 @@ struct FtsSchema {
 impl FtsIndex {
     pub fn new(path: &Path) -> Result<Self> {
         let mut schema_builder = Schema::builder();
-        let doc_id = schema_builder.add_u64_field(
-            "doc_id",
-            NumericOptions::default() | STORED | FAST,
-        );
+        let doc_id =
+            schema_builder.add_u64_field("doc_id", NumericOptions::default() | STORED | FAST);
         let text = schema_builder.add_text_field(
             "text",
             TextOptions::default().set_indexing_options(
@@ -41,15 +42,16 @@ impl FtsIndex {
         );
         let schema = schema_builder.build();
 
-        let (index, index_path) = if path == Path::new(":memory:") {
-            (Index::create_in_ram(schema.clone()), None)
-        } else {
-            std::fs::create_dir_all(path)?;
-            let idx = Index::create_in_dir(path, schema.clone())
-                .or_else(|_| Index::open_in_dir(path))
-                .context("open/create tantivy index")?;
-            (idx, Some(path.to_path_buf()))
-        };
+        let (index, index_path) =
+            if path == Path::new(":memory:") || path.to_string_lossy().contains(":memory:") {
+                (Index::create_in_ram(schema.clone()), None)
+            } else {
+                std::fs::create_dir_all(path)?;
+                let idx = Index::create_in_dir(path, schema.clone())
+                    .or_else(|_| Index::open_in_dir(path))
+                    .context("open/create tantivy index")?;
+                (idx, Some(path.to_path_buf()))
+            };
 
         let writer = index.writer(50_000_000)?;
         let reader = index
@@ -60,7 +62,11 @@ impl FtsIndex {
             index,
             writer,
             reader,
-            schema: FtsSchema { schema, doc_id, text },
+            schema: FtsSchema {
+                schema,
+                doc_id,
+                text,
+            },
             index_path,
         })
     }
@@ -92,15 +98,21 @@ impl FtsIndex {
 
     /// Read the last persisted doc_id. Returns 0 if not yet written.
     pub fn last_indexed_doc_id(&self) -> u64 {
-        let Some(ref p) = self.index_path else { return 0 };
+        let Some(ref p) = self.index_path else {
+            return 0;
+        };
         let meta_path = p.join(META_FILE);
-        let Ok(bytes) = std::fs::read(&meta_path) else { return 0 };
-        let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else { return 0 };
+        let Ok(bytes) = std::fs::read(&meta_path) else {
+            return 0;
+        };
+        let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+            return 0;
+        };
         v["last_indexed_doc_id"].as_u64().unwrap_or(0)
     }
 
     /// Returns `(doc_id, bm25_score)` sorted by descending score.
-    pub fn search(&self, query: &str, top_k: usize) -> Result<Vec<(u64, f32)>> {
+    pub fn search(&self, query: &str, top_k: usize) -> Result<FtsResults> {
         let searcher = self.reader.searcher();
         let parser = QueryParser::for_index(&self.index, vec![self.schema.text]);
         let q = parser.parse_query(query)?;

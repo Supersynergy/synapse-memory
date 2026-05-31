@@ -16,7 +16,7 @@ use anyhow::Result;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use synapse_core::sota::{
-    enqueue_extraction, pop_extraction_batch, put_memory, put_memory_with_date, MemoryType,
+    MemoryType, enqueue_extraction, pop_extraction_batch, put_memory, put_memory_with_date,
 };
 
 #[cfg(feature = "minimax")]
@@ -85,7 +85,14 @@ pub trait Extractor: Send + Sync {
     /// Default: split on temporal/comparison cue words ("after", "before",
     /// "and then", "while", "vs"). Ported from langchain decomposition prompt.
     fn decompose_query(&self, query: &str) -> Result<Vec<String>> {
-        let cues = [" after ", " before ", " and then ", " while ", " vs ", " versus "];
+        let cues = [
+            " after ",
+            " before ",
+            " and then ",
+            " while ",
+            " vs ",
+            " versus ",
+        ];
         let lower = query.to_lowercase();
         for cue in cues.iter() {
             if let Some(pos) = lower.find(cue) {
@@ -112,7 +119,10 @@ pub trait Extractor: Send + Sync {
             return Ok(0.5);
         }
         let d_lower = doc.to_lowercase();
-        let hits = q_tokens.iter().filter(|t| d_lower.contains(t.as_str())).count();
+        let hits = q_tokens
+            .iter()
+            .filter(|t| d_lower.contains(t.as_str()))
+            .count();
         Ok((hits as f64 / q_tokens.len() as f64).min(1.0))
     }
 
@@ -239,11 +249,17 @@ pub fn relate_extracted(
     for r in relations {
         let s_id = match upsert_entity(conn, r.subject.trim(), None) {
             Ok(i) => i,
-            Err(e) => { tracing::warn!("upsert subject failed: {e}"); continue; }
+            Err(e) => {
+                tracing::warn!("upsert subject failed: {e}");
+                continue;
+            }
         };
         let o_id = match upsert_entity(conn, r.object.trim(), None) {
             Ok(i) => i,
-            Err(e) => { tracing::warn!("upsert object failed: {e}"); continue; }
+            Err(e) => {
+                tracing::warn!("upsert object failed: {e}");
+                continue;
+            }
         };
         let w = r.weight.unwrap_or(fallback_confidence).clamp(0.1, 1.0);
         match synapse_graph::relate(conn, s_id, o_id, r.verb.trim(), w, None) {
@@ -260,14 +276,11 @@ pub fn upsert_entity(conn: &Connection, canonical: &str, etype: Option<&str>) ->
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    if let Some(id) = conn
-        .query_row(
-            "SELECT id FROM entities WHERE canonical_name = ?1",
-            [canonical],
-            |r| r.get::<_, i64>(0),
-        )
-        .ok()
-    {
+    if let Ok(id) = conn.query_row(
+        "SELECT id FROM entities WHERE canonical_name = ?1",
+        [canonical],
+        |r| r.get::<_, i64>(0),
+    ) {
         return Ok(id);
     }
     conn.execute(
@@ -309,14 +322,7 @@ pub fn run_once(conn: &Connection, extractor: &dyn Extractor, batch: usize) -> R
                             it.event_date.as_deref(),
                         )?;
                     } else {
-                        put_memory(
-                            conn,
-                            doc_id,
-                            it.memory_type,
-                            entity_id,
-                            None,
-                            it.confidence,
-                        )?;
+                        put_memory(conn, doc_id, it.memory_type, entity_id, None, it.confidence)?;
                     }
                     // Auto-relate: write extracted triples into edges.
                     let _ = relate_extracted(conn, &it.relations, it.confidence);
@@ -422,9 +428,11 @@ mod tests {
         let n = ingest_and_extract(&c, 1, &RuleExtractor).unwrap();
         assert!(n >= 1);
         let count: i64 = c
-            .query_row("SELECT COUNT(*) FROM memories WHERE memory_type='decision'", [], |r| {
-                r.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM memories WHERE memory_type='decision'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert!(count >= 1);
     }
@@ -456,10 +464,15 @@ mod tests {
         ];
         let n = relate_extracted(&c, &rels, 0.7).unwrap();
         assert_eq!(n, 2);
-        let edges: i64 = c.query_row("SELECT COUNT(*) FROM edges", [], |r| r.get(0)).unwrap();
+        let edges: i64 = c
+            .query_row("SELECT COUNT(*) FROM edges", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(edges, 2);
-        let weight_acme: f64 = c.query_row(
-            "SELECT weight FROM edges WHERE rel='located_in'", [], |r| r.get(0)).unwrap();
+        let weight_acme: f64 = c
+            .query_row("SELECT weight FROM edges WHERE rel='located_in'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
         assert!((weight_acme - 0.9).abs() < 1e-9);
     }
 
@@ -467,11 +480,15 @@ mod tests {
     fn auto_relate_clamps_weight() {
         let c = fresh();
         let rels = vec![ExtractedRelation {
-            subject: "X".into(), verb: "rel".into(), object: "Y".into(),
+            subject: "X".into(),
+            verb: "rel".into(),
+            object: "Y".into(),
             weight: Some(2.5),
         }];
         relate_extracted(&c, &rels, 0.5).unwrap();
-        let w: f64 = c.query_row("SELECT weight FROM edges", [], |r| r.get(0)).unwrap();
+        let w: f64 = c
+            .query_row("SELECT weight FROM edges", [], |r| r.get(0))
+            .unwrap();
         assert!(w <= 1.0 && w >= 0.1);
     }
 }

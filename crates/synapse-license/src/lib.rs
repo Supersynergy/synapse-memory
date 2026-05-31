@@ -56,11 +56,17 @@ static CACHE_PATH_OVERRIDE: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 #[doc(hidden)]
 pub fn _set_cache_path_for_test(p: Option<PathBuf>) {
-    *CACHE_PATH_OVERRIDE.write().unwrap_or_else(|e| e.into_inner()) = p;
+    *CACHE_PATH_OVERRIDE
+        .write()
+        .unwrap_or_else(|e| e.into_inner()) = p;
 }
 
 fn cache_path() -> PathBuf {
-    if let Some(p) = CACHE_PATH_OVERRIDE.read().unwrap_or_else(|e| e.into_inner()).clone() {
+    if let Some(p) = CACHE_PATH_OVERRIDE
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
+    {
         return p;
     }
     dirs::config_dir()
@@ -229,10 +235,10 @@ fn get_machine_uid() -> String {
         {
             let text = String::from_utf8_lossy(&out.stdout);
             for line in text.lines() {
-                if line.contains("Hardware UUID") {
-                    if let Some(uid) = line.split(':').nth(1) {
-                        return uid.trim().to_string();
-                    }
+                if line.contains("Hardware UUID")
+                    && let Some(uid) = line.split(':').nth(1)
+                {
+                    return uid.trim().to_string();
                 }
             }
         }
@@ -296,7 +302,10 @@ fn get_cpu_brand() -> String {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
-        if let Ok(out) = Command::new("sysctl").args(["-n", "machdep.cpu.brand_string"]).output() {
+        if let Ok(out) = Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+        {
             return String::from_utf8_lossy(&out.stdout).trim().to_string();
         }
         "unknown-cpu".to_string()
@@ -366,13 +375,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("cache.bin");
         _set_cache_path_for_test(Some(path));
-        std::env::set_var("SYNAPSE_LICENSE_HW_FP_OVERRIDE", hw_fp);
+        unsafe { std::env::set_var("SYNAPSE_LICENSE_HW_FP_OVERRIDE", hw_fp) };
         dir
     }
 
     fn teardown() {
         _set_cache_path_for_test(None);
-        std::env::remove_var("SYNAPSE_LICENSE_HW_FP_OVERRIDE");
+        unsafe { std::env::remove_var("SYNAPSE_LICENSE_HW_FP_OVERRIDE") };
     }
 
     #[test]
@@ -496,7 +505,7 @@ mod tests {
         let path_b = dir_b.path().join("cache.bin");
         std::fs::write(&path_b, &cache_a).unwrap();
         _set_cache_path_for_test(Some(path_b));
-        std::env::set_var("SYNAPSE_LICENSE_HW_FP_OVERRIDE", "hw-B");
+        unsafe { std::env::set_var("SYNAPSE_LICENSE_HW_FP_OVERRIDE", "hw-B") };
 
         // Mint an expired jwt for hw-B (attacker's machine claims its own hw).
         let jwt_b_expired = mint_jwt(&kp, &make_claims(now - 86400, "hw-B"));

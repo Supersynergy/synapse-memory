@@ -3,7 +3,7 @@
 /// For each page-count in [20, 50, 100, 200, 500, 1000]:
 ///   measure smx_bloom vs smx_noBloom on 200 negative queries.
 ///   Output ASCII table + crossover identification.
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use synapse_market::series::Series;
 use synapse_market::store::page::{Bar, MAX_ROWS};
 use tempfile::TempDir;
@@ -71,31 +71,23 @@ fn bench_scale_curve(c: &mut Criterion) {
         let p = *pages;
         let queries = neg_queries(p);
 
-        group.bench_with_input(
-            BenchmarkId::new("smx_bloom", p),
-            &p,
-            |b, _| {
-                b.iter(|| {
-                    for q in &queries {
-                        let r = s.range_filter(q.clone()).unwrap();
-                        criterion::black_box(r);
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("smx_bloom", p), &p, |b, _| {
+            b.iter(|| {
+                for q in &queries {
+                    let r = s.range_filter(q.clone()).unwrap();
+                    criterion::black_box(r);
+                }
+            })
+        });
 
-        group.bench_with_input(
-            BenchmarkId::new("smx_noBloom", p),
-            &p,
-            |b, _| {
-                b.iter(|| {
-                    for q in &queries {
-                        let r = s.range(q.clone()).unwrap();
-                        criterion::black_box(r);
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("smx_noBloom", p), &p, |b, _| {
+            b.iter(|| {
+                for q in &queries {
+                    let r = s.range(q.clone()).unwrap();
+                    criterion::black_box(r);
+                }
+            })
+        });
     }
 
     group.finish();

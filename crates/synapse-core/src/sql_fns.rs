@@ -64,11 +64,9 @@ mod tests {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         register_synapse_match(&conn).unwrap();
         let s: f64 = conn
-            .query_row(
-                "SELECT synapse_match('hello world', 'world')",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT synapse_match('hello world', 'world')", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(s >= 0.0 && s <= 1.0, "score out of range: {s}");
     }

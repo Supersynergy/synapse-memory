@@ -5,19 +5,21 @@
 //! keyed by their content-hash `OpId` (hex-encoded). Because both peers write
 //! to the same root object by id, merges union trivially and deterministically.
 //!
-//! Feature-gated on `crdt`.
+//! Feature-gated on `automerge-crdt`.
 
-#[cfg(feature = "crdt")]
+#![allow(clippy::type_complexity)]
+
+#[cfg(feature = "automerge-crdt")]
 pub use imp::*;
-#[cfg(not(feature = "crdt"))]
+#[cfg(not(feature = "automerge-crdt"))]
 pub use stub::*;
 
-#[cfg(feature = "crdt")]
+#[cfg(feature = "automerge-crdt")]
 mod imp {
     use super::super::{Op, OpId};
     use crate::error::{Error, Result};
     use automerge::transaction::Transactable;
-    use automerge::{AutoCommit, ReadDoc, ROOT};
+    use automerge::{AutoCommit, ROOT, ReadDoc};
 
     /// Apply a batch of ops onto an existing Automerge document.
     pub fn apply_ops(doc: &mut AutoCommit, ops: &[(OpId, Op)]) -> Result<()> {
@@ -72,7 +74,7 @@ mod imp {
             oid.copy_from_slice(&decoded);
             out.push((oid, op));
         }
-        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out.sort_by_key(|a| a.0);
         Ok(out)
     }
 
@@ -140,7 +142,7 @@ mod imp {
     }
 }
 
-#[cfg(not(feature = "crdt"))]
+#[cfg(not(feature = "automerge-crdt"))]
 mod stub {
     use super::super::{Op, OpId};
     use crate::error::Result;

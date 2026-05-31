@@ -23,8 +23,15 @@ pub fn parse_as_of(sql: &str) -> (String, Option<Snapshot>) {
     if let Some(pos) = upper.find(" AS OF ") {
         let rest = sql[pos + 7..].trim();
 
-        if let Some(lamport_rest) = rest.strip_prefix("LAMPORT ").or_else(|| rest.strip_prefix("lamport ")) {
-            let n_str = lamport_rest.split_whitespace().next().unwrap_or("").trim_end_matches(';');
+        if let Some(lamport_rest) = rest
+            .strip_prefix("LAMPORT ")
+            .or_else(|| rest.strip_prefix("lamport "))
+        {
+            let n_str = lamport_rest
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_end_matches(';');
             if let Ok(n) = n_str.parse::<u64>() {
                 let clean = sql[..pos].to_owned();
                 return (clean, Some(Snapshot::Lamport(n)));
@@ -32,14 +39,14 @@ pub fn parse_as_of(sql: &str) -> (String, Option<Snapshot>) {
         }
 
         // Try ISO-8601 timestamp between quotes.
-        if let Some(q_start) = rest.find('\'') {
-            if let Some(q_end) = rest[q_start + 1..].find('\'') {
-                let ts_str = &rest[q_start + 1..q_start + 1 + q_end];
-                if let Ok(dt) = DateTime::parse_from_rfc3339(ts_str) {
-                    let ts = dt.timestamp() as u64;
-                    let clean = sql[..pos].to_owned();
-                    return (clean, Some(Snapshot::WallClock(ts)));
-                }
+        if let Some(q_start) = rest.find('\'')
+            && let Some(q_end) = rest[q_start + 1..].find('\'')
+        {
+            let ts_str = &rest[q_start + 1..q_start + 1 + q_end];
+            if let Ok(dt) = DateTime::parse_from_rfc3339(ts_str) {
+                let ts = dt.timestamp() as u64;
+                let clean = sql[..pos].to_owned();
+                return (clean, Some(Snapshot::WallClock(ts)));
             }
         }
     }
@@ -71,7 +78,10 @@ mod tests {
         match snap {
             Some(Snapshot::WallClock(ts)) => {
                 // 2026-05-12T10:00:00Z = 1778580000
-                assert_eq!(ts, 1778580000, "must parse actual timestamp, not SystemTime::now()");
+                assert_eq!(
+                    ts, 1778580000,
+                    "must parse actual timestamp, not SystemTime::now()"
+                );
             }
             other => panic!("expected WallClock, got {:?}", other),
         }

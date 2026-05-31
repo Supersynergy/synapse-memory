@@ -21,7 +21,7 @@
 //! The bench achieves the before/after comparison without patching lib.rs by
 //! implementing both lock variants here and selecting via env var.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
 use std::sync::Arc;
 use std::thread;
@@ -56,7 +56,9 @@ fn make_router(use_std: bool) -> Arc<dyn RouterLock> {
     if use_std {
         Arc::new(StdMutexRouter(std::sync::Mutex::new(AdaptiveRouter::new())))
     } else {
-        Arc::new(ParkingRwLockRouter(parking_lot::RwLock::new(AdaptiveRouter::new())))
+        Arc::new(ParkingRwLockRouter(parking_lot::RwLock::new(
+            AdaptiveRouter::new(),
+        )))
     }
 }
 
@@ -92,32 +94,34 @@ fn run_concurrent(router: &Arc<dyn RouterLock>, threads: usize, iters: u64) -> u
 // ── Benchmarks ────────────────────────────────────────────────────────────
 
 fn bench_router_concurrent(c: &mut Criterion) {
-    let use_std = std::env::var("ROUTER_USE_STD_MUTEX").map(|v| v == "1").unwrap_or(false);
-    let label = if use_std { "std_mutex" } else { "parking_lot_rwlock" };
+    let use_std = std::env::var("ROUTER_USE_STD_MUTEX")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let label = if use_std {
+        "std_mutex"
+    } else {
+        "parking_lot_rwlock"
+    };
 
     let mut group = c.benchmark_group(format!("adaptive_router/{label}"));
 
     for threads in [1usize, 4, 8] {
         group.throughput(Throughput::Elements(threads as u64));
-        group.bench_with_input(
-            BenchmarkId::new("threads", threads),
-            &threads,
-            |b, &t| {
-                let router = make_router(use_std);
-                // Warm up the bandit with a few observations so it's non-trivially warm
-                {
-                    let r = &*router;
-                    for _ in 0..20 {
-                        r.choose(&HINTS);
-                    }
+        group.bench_with_input(BenchmarkId::new("threads", threads), &threads, |b, &t| {
+            let router = make_router(use_std);
+            // Warm up the bandit with a few observations so it's non-trivially warm
+            {
+                let r = &*router;
+                for _ in 0..20 {
+                    r.choose(&HINTS);
                 }
-                b.iter_custom(|iters| {
-                    let start = std::time::Instant::now();
-                    run_concurrent(&router, t, iters);
-                    start.elapsed()
-                });
-            },
-        );
+            }
+            b.iter_custom(|iters| {
+                let start = std::time::Instant::now();
+                run_concurrent(&router, t, iters);
+                start.elapsed()
+            });
+        });
     }
 
     group.finish();

@@ -167,8 +167,10 @@ mod tests {
     #[test]
     fn json_roundtrip() {
         let set = EdgeSet {
-            edges: vec![Edge::new("x", "y", EdgeKind::Summarises)
-                .with_scope(Scope::Project("supersynergy".into()))],
+            edges: vec![
+                Edge::new("x", "y", EdgeKind::Summarises)
+                    .with_scope(Scope::Project("supersynergy".into())),
+            ],
         };
         let b = set.to_json();
         let set2 = EdgeSet::from_json(&b).unwrap();

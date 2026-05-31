@@ -12,6 +12,8 @@
 //! All rows reference `docs.id` (the existing doc table) for text + embedding,
 //! so `memories` is a typed view over `docs` plus relations.
 
+#![allow(clippy::type_complexity)]
+
 use crate::error::Result;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -463,8 +465,8 @@ pub fn multi_hop_neighbors(
         })?;
         for row in rows {
             let dst = row?;
-            if !dist.contains_key(&dst) {
-                dist.insert(dst, hop + 1);
+            if let std::collections::hash_map::Entry::Vacant(e) = dist.entry(dst) {
+                e.insert(hop + 1);
                 q.push_back((dst, hop + 1));
             }
         }
@@ -541,10 +543,8 @@ pub fn find_evolve_target(
             jaccard(new_text, &txt)
         };
         let s32 = score as f32;
-        if s32 >= cosine_lo && s32 <= cosine_hi {
-            if best.map(|(_, b)| score > b).unwrap_or(true) {
-                best = Some((*doc_id, score));
-            }
+        if s32 >= cosine_lo && s32 <= cosine_hi && best.map(|(_, b)| score > b).unwrap_or(true) {
+            best = Some((*doc_id, score));
         }
     }
     Ok(best.map(|(id, _)| id))
@@ -591,9 +591,9 @@ pub fn cluster_for_compact(
     }
     use std::collections::HashMap;
     let mut groups: HashMap<usize, Vec<i64>> = HashMap::new();
-    for i in 0..n {
+    for (i, row) in rows.iter().enumerate().take(n) {
         let r = find(&mut parent, i);
-        groups.entry(r).or_default().push(rows[i].0);
+        groups.entry(r).or_default().push(row.0);
     }
     Ok(groups.into_values().filter(|g| g.len() >= 2).collect())
 }
@@ -881,20 +881,22 @@ impl Store {
                     title: None,
                     text: String::new(),
                     score: 0.0,
+                    meta: None,
+                    ts: None,
                 },
             };
-            if params.heat {
-                if let Ok(updated) = self.conn.query_row::<i64, _, _>(
+            if params.heat
+                && let Ok(updated) = self.conn.query_row::<i64, _, _>(
                     "SELECT updated_ts FROM memories WHERE doc_id=?1
                      AND superseded_by IS NULL ORDER BY updated_ts DESC LIMIT 1",
                     [doc_id],
                     |r| r.get(0),
-                ) {
-                    let age_days = ((now - updated as f64) / 86400.0).max(0.0);
-                    // half-life 30 days: 0.97 ** age_days, clamped >= 0.3
-                    let decay = 0.97f64.powf(age_days).max(0.3);
-                    score *= decay;
-                }
+                )
+            {
+                let age_days = ((now - updated as f64) / 86400.0).max(0.0);
+                // half-life 30 days: 0.97 ** age_days, clamped >= 0.3
+                let decay = 0.97f64.powf(age_days).max(0.3);
+                score *= decay;
             }
             let mut h2 = hit;
             h2.score = score;

@@ -1,6 +1,6 @@
 //! SPANN query: top-nprobe centroids → scan posting lists → exact dot-product rerank.
 
-use crate::posting::MmapPostingList;
+use crate::{SearchHit, SearchResults, posting::MmapPostingList};
 
 /// Find top-nprobe centroid indices by L2 distance to query.
 pub fn nearest_centroids(centroids: &[Vec<f32>], query: &[f32], nprobe: usize) -> Vec<usize> {
@@ -29,8 +29,8 @@ pub fn scan_and_rerank(
     cluster_ids: &[usize],
     query: &[f32],
     k: usize,
-) -> Vec<(u64, f32)> {
-    let mut candidates: Vec<(u64, f32)> = Vec::new();
+) -> SearchResults {
+    let mut candidates: Vec<SearchHit> = Vec::new();
     for &cid in cluster_ids {
         if cid >= posting_lists.len() {
             continue;

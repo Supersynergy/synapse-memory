@@ -5,6 +5,8 @@ use anyhow::Result;
 pub const WARN_THRESHOLD: f64 = 0.98;
 pub const ERROR_THRESHOLD: f64 = 0.95;
 
+type DriftRow = (i64, String, Vec<u8>);
+
 #[derive(Debug, Clone)]
 pub struct DriftReport {
     pub mean_cosine: f64,
@@ -48,7 +50,7 @@ where
          JOIN docs_vec v ON v.id = d.id
          ORDER BY RANDOM() LIMIT ?1",
     )?;
-    let rows: Vec<(i64, String, Vec<u8>)> = stmt
+    let rows: Vec<DriftRow> = stmt
         .query_map(rusqlite::params![sample_size as i64], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get::<_, Vec<u8>>(2)?))
         })?

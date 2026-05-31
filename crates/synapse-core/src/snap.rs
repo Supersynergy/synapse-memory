@@ -2,7 +2,7 @@
 
 use crate::error::{Error, Result};
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
 
 const MAGIC: &[u8; 4] = b"BPK1";
@@ -73,12 +73,12 @@ pub fn import_signed(
     // verify signature
     crate::sign::verify_bytes(&vk, actual.as_bytes(), &sig_bytes)?;
     // optionally verify against expected key
-    if let Some(exp) = expected_vk {
-        if exp.as_bytes() != &pubkey_bytes {
-            return Err(Error::Other(
-                "public key in pack does not match expected".into(),
-            ));
-        }
+    if let Some(exp) = expected_vk
+        && exp.as_bytes() != &pubkey_bytes
+    {
+        return Err(Error::Other(
+            "public key in pack does not match expected".into(),
+        ));
     }
     let data = zstd::decode_all(body)?;
     std::fs::write(out, data)?;
@@ -290,9 +290,8 @@ pub fn decrypt_pack(
     use std::io::Read as _;
     let data = std::fs::read(enc_pack)?;
     let decryptor = age::Decryptor::new(&data[..]).map_err(|e| Error::Other(e.to_string()))?;
-    let identity = age::scrypt::Identity::new(
-        age::secrecy::SecretString::from(passphrase.to_owned()),
-    );
+    let identity =
+        age::scrypt::Identity::new(age::secrecy::SecretString::from(passphrase.to_owned()));
     let mut reader = decryptor
         .decrypt(std::iter::once(&identity as &dyn age::Identity))
         .map_err(|e| Error::Other(e.to_string()))?;

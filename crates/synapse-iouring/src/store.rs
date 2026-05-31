@@ -10,13 +10,14 @@ use crate::lsm::{Entry, Key, L0, SSTable};
 #[allow(unused_imports)]
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 #[allow(unused_imports)]
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 #[allow(unused_imports)]
 use tracing::{debug, info, warn};
 
 /// Batch size: number of io_uring SQEs submitted per syscall.
+#[cfg(feature = "io-uring")]
 const BATCH_SZ: usize = 32;
 
 /// L0 flush threshold (entries).
@@ -140,7 +141,9 @@ impl IoUringStore {
                 })
                 .collect();
 
-            self.uring.batched_append(stamped.clone(), durability).await?;
+            self.uring
+                .batched_append(stamped.clone(), durability)
+                .await?;
 
             let mut needs_flush = false;
             for e in &stamped {
@@ -156,13 +159,13 @@ impl IoUringStore {
     }
 
     /// Range scan: L0 + SSTables (L0 wins on conflict by higher seq).
-    pub async fn read_range(&self, key_range: Range<Key>) -> Result<Vec<Entry>> {
+    pub async fn read_range(&self, _key_range: Range<Key>) -> Result<Vec<Entry>> {
         #[cfg(not(feature = "io-uring"))]
         return Err(IoUringError::UnsupportedPlatform);
 
         #[cfg(feature = "io-uring")]
         {
-            let mut out = self.l0.scan(&key_range);
+            let mut out = self.l0.scan(&_key_range);
             // TODO: merge SSTable results (L1+ scan) — deduped by seq
             out.sort_by(|a, b| a.key.cmp(&b.key).then(b.seq.cmp(&a.seq)));
             out.dedup_by(|a, b| a.key == b.key); // keep highest seq (first after sort)
@@ -174,7 +177,9 @@ impl IoUringStore {
     fn flush_l0(&mut self) -> Result<()> {
         let mut entries = self.l0.drain();
         entries.sort_by(|a, b| a.key.cmp(&b.key));
-        let path = self.dir.join(format!("sst-{:016x}.sst", self.seq.load(Ordering::Relaxed)));
+        let path = self
+            .dir
+            .join(format!("sst-{:016x}.sst", self.seq.load(Ordering::Relaxed)));
         let sst = SSTable::write(path, &entries)?;
         info!(entries = sst.entry_count, "L0 flushed → SSTable");
         self.sstables.push(sst);

@@ -1,4 +1,7 @@
-use synapse_market::{Market, stream::{WebSocketTickStream, TickStream, Parser}};
+use synapse_market::{
+    Market,
+    stream::{Parser, WebSocketTickStream},
+};
 
 const BINANCE_WS: &str = "wss://stream.binance.com/ws/btcusdt@trade";
 const MAX_TICKS: usize = 100;

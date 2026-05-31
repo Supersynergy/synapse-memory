@@ -6,7 +6,7 @@ Example:
     >>> c.put("trailbase chosen over pocketbase", title="decision/backend")
     >>> hits = c.search("backend choice?", mode="hybrid", limit=5)
 """
-from .client import Client, SynapseError
+from .client import AgentDB, Bank, Client, SynapseError
 
 __version__ = "0.1.0"
-__all__ = ["Client", "SynapseError"]
+__all__ = ["AgentDB", "Bank", "Client", "SynapseError"]

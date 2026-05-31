@@ -4,12 +4,12 @@
 
 use crate::db::Store;
 use crate::error::{Error, Result};
-use crate::types::{Hit, SearchMode, EMBED_DIM};
+use crate::types::{EMBED_DIM, Hit, SearchMode};
 use anyhow::Context;
 use base64::Engine as _;
 use fastbloom::BloomFilter;
-use linfa::prelude::{Fit, Predict};
 use linfa::DatasetBase;
+use linfa::prelude::{Fit, Predict};
 use linfa_clustering::KMeans;
 use ndarray::{Array2, ArrayView1};
 use rayon::prelude::*;

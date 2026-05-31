@@ -1,6 +1,6 @@
 use crate::types::{DocId, MediaAsset, MediaKind};
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;

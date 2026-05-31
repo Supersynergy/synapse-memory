@@ -9,8 +9,8 @@
 //! Uses ARM NEON SIMD automatically on M4 Max / Apple Silicon.
 
 use crate::error::{Error, Result};
-use ndarray::{arr1, Array1, Array2};
-use rusqlite::{params, Connection};
+use ndarray::{Array1, Array2, arr1};
+use rusqlite::{Connection, params};
 use std::path::Path;
 
 /// In-memory vector search using ndarray
@@ -84,7 +84,10 @@ impl NdArraySearch {
     /// Hamming distance between two packed binary rows (popcount of XOR).
     #[inline]
     fn hamming(a: &[u64], b: &[u64]) -> u32 {
-        a.iter().zip(b.iter()).map(|(x, y)| (x ^ y).count_ones()).sum()
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x ^ y).count_ones())
+            .sum()
     }
 
     /// Binary pre-filter + f32 rerank cascade.
@@ -99,7 +102,7 @@ impl NdArraySearch {
         if self.n_vectors == 0 || k == 0 || query.len() != self.dim {
             return Vec::new();
         }
-        let words = (self.dim + 63) / 64;
+        let words = self.dim.div_ceil(64);
         // Normalize query and pack binary.
         let mut qn = query.to_vec();
         let nrm: f32 = qn.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-10);
@@ -173,7 +176,11 @@ impl NdArraySearch {
             ids.push(id);
             all_bytes.extend_from_slice(&emb);
         }
-        tracing::info!("ndarray_search: {} rows collected, {} bytes, starting f32 conversion", ids.len(), all_bytes.len());
+        tracing::info!(
+            "ndarray_search: {} rows collected, {} bytes, starting f32 conversion",
+            ids.len(),
+            all_bytes.len()
+        );
 
         if all_bytes.is_empty() {
             return Err(Error::Other("no vectors found".into()));
@@ -183,18 +190,10 @@ impl NdArraySearch {
 
         // Convert ALL bytes to f32 in one pass — O(n) with SIMD vectorization.
         // This is 200× faster than calling f32::from_le_bytes per element.
-        let flat_len = all_bytes.len() / 4;
-        let mut flat_vectors = Vec::<f32>::with_capacity(flat_len);
-        // SAFETY: all_bytes is u8 slice, flat_vectors will interpret as f32.
-        // The buffer is properly aligned and sized (multiple of 4 bytes).
-        unsafe {
-            flat_vectors.set_len(flat_len);
-            std::ptr::copy_nonoverlapping(
-                all_bytes.as_ptr() as *const f32,
-                flat_vectors.as_mut_ptr(),
-                flat_len,
-            );
-        }
+        let flat_vectors: Vec<f32> = all_bytes
+            .chunks_exact(4)
+            .map(|bytes| f32::from_le_bytes(bytes.try_into().expect("exact 4-byte chunk")))
+            .collect();
         tracing::info!("ndarray_search: f32 conversion done, normalizing...");
 
         // Create normalized matrix
@@ -233,11 +232,7 @@ impl NdArraySearch {
             .into_iter()
             .map(|row| {
                 let d = row.dot(&row);
-                if d > 1e-20 {
-                    d.sqrt()
-                } else {
-                    1.0
-                }
+                if d > 1e-20 { d.sqrt() } else { 1.0 }
             })
             .collect();
         // Broadcast-divide: each row divided by its norm, all at once.
@@ -253,7 +248,7 @@ impl NdArraySearch {
 
     /// Build binary sketch from the current (already-normalized) matrix.
     fn build_binary_matrix(&mut self) {
-        let words = (self.dim + 63) / 64;
+        let words = self.dim.div_ceil(64);
         let flat = self.matrix.as_slice().expect("row-major contiguous");
         let mut bm = Vec::with_capacity(self.n_vectors * words);
         for i in 0..self.n_vectors {
@@ -273,8 +268,8 @@ impl NdArraySearch {
         use crate::turbo::simsimd_kernels::cos_f32;
         use std::cell::RefCell;
         thread_local! {
-            static SIMS: RefCell<Vec<f32>> = RefCell::new(Vec::new());
-            static IDX: RefCell<Vec<usize>> = RefCell::new(Vec::new());
+            static SIMS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+            static IDX: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
         }
         if query.len() != self.dim || self.n_vectors == 0 || k == 0 {
             return Vec::new();
@@ -291,7 +286,8 @@ impl NdArraySearch {
         let flat = self.matrix.as_slice().expect("row-major contiguous");
 
         let k = k.min(self.n_vectors);
-        let out = SIMS.with(|sc| {
+
+        SIMS.with(|sc| {
             IDX.with(|ic| {
                 let mut sims = sc.borrow_mut();
                 let mut idx = ic.borrow_mut();
@@ -304,7 +300,9 @@ impl NdArraySearch {
                 idx.clear();
                 idx.extend(0..self.n_vectors);
                 idx.select_nth_unstable_by(k - 1, |a, b| {
-                    sims[*b].partial_cmp(&sims[*a]).unwrap_or(std::cmp::Ordering::Equal)
+                    sims[*b]
+                        .partial_cmp(&sims[*a])
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 });
                 idx.truncate(k);
                 let mut out: Vec<(i64, f32)> =
@@ -312,8 +310,7 @@ impl NdArraySearch {
                 out.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
                 out
             })
-        });
-        out
+        })
     }
 
     /// Search for k nearest neighbors
@@ -363,6 +360,9 @@ impl NdArraySearch {
     /// Append a single row (will be normalized in place).
     /// Cheap-ish (Array2 reallocates), but bounded by put rate.
     pub fn add_row(&mut self, id: i64, embedding: &[f32]) -> Result<()> {
+        if self.ids.contains(&id) {
+            return Ok(());
+        }
         if embedding.len() != self.dim {
             return Err(Error::Other(format!(
                 "ndarray add_row dim {} != index dim {}",
@@ -374,13 +374,12 @@ impl NdArraySearch {
         let inv = if norm > 1e-10 { 1.0 / norm } else { 0.0 };
         let normalized: Vec<f32> = embedding.iter().map(|x| x * inv).collect();
         // Append binary sketch for this row before matrix realloc.
-        let words = (self.dim + 63) / 64;
+        let words = self.dim.div_ceil(64);
         let packed = Self::pack_binary(&normalized, words);
         let row = Array2::from_shape_vec((1, self.dim), normalized)
             .map_err(|e| Error::Other(format!("ndarray add_row shape: {e}")))?;
-        let new_matrix =
-            ndarray::concatenate(ndarray::Axis(0), &[self.matrix.view(), row.view()])
-                .map_err(|e| Error::Other(format!("ndarray concatenate: {e}")))?;
+        let new_matrix = ndarray::concatenate(ndarray::Axis(0), &[self.matrix.view(), row.view()])
+            .map_err(|e| Error::Other(format!("ndarray concatenate: {e}")))?;
         self.matrix = new_matrix;
         self.binary_matrix.extend_from_slice(&packed);
         self.ids.push(id);

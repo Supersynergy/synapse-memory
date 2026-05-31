@@ -36,11 +36,11 @@ jobs:
         run: python3 bench/bench_scale_ladder.py > /tmp/scale.log
         continue-on-error: true
 
-      - name: syn bench (113k brain)
+      - name: synx bench (113k brain)
         run: |
           ./target/release/synapsed -f /tmp/bench-brain.db -s /tmp/bench.sock &
           sleep 5
-          ~/.local/bin/syn bench
+          ~/.local/bin/synx bench
           kill %1
         continue-on-error: true
 

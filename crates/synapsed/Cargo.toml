@@ -8,6 +8,10 @@ license.workspace = true
 name = "synapsed"
 path = "src/main.rs"
 
+[[bin]]
+name = "synx-fast"
+path = "src/bin/synx_fast.rs"
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
@@ -17,7 +21,7 @@ rmp-serde.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-synapse-core = { path = "../synapse-core", features = ["embed", "turbo", "ann-usearch"] }
+synapse-core = { path = "../synapse-core", default-features = false, features = ["backend-rusqlite", "embed", "turbo"] }
 synapse-rerank = { path = "../synapse-rerank", features = [] }
 synapse-license = { path = "../synapse-license", optional = true }
 hex = { version = "0.4", optional = true }
@@ -31,8 +35,10 @@ rusqlite.workspace = true
 mimalloc = { version = "0.1", default-features = false }
 
 [features]
-default = ["embed-mlx", "ann-usearch"]
+default = ["embed-mlx", "ann-usearch", "simsimd", "tantivy-fts"]
 embed-mlx = ["synapse-core/embed-mlx"]
 ann-usearch = ["synapse-core/ann-usearch"]
+simsimd = ["synapse-core/simsimd"]
+tantivy-fts = ["synapse-core/tantivy-fts"]
 licensed = ["dep:synapse-license", "dep:hex", "dep:dirs", "synapse-core/encryption"]
 onnx = ["synapse-rerank/onnx"]

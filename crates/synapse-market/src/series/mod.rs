@@ -3,19 +3,21 @@
 /// Index file format: line-delimited text — each line: `ts_min ts_max page_offset`
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
 use std::ops::Range;
+use std::path::{Path, PathBuf};
 
-use crate::store::mmap::MmapFile;
-use crate::store::page::{encode_page, decode_page, decode_page_soa_filtered, Bar, Page, MAX_ROWS};
-use crate::store::compact::ColdTier;
-use crate::router::{Plan, QueryKey, QueryKind, PlanCache};
 use crate::analytics::agg::{AggKind, AggResult, agg_pages};
-use crate::cache::{HotSet, PageKey, DecodedPage};
+use crate::cache::{DecodedPage, HotSet, PageKey};
 use crate::filter::{Bloom, SeriesXorFilter};
-use xxhash_rust::xxh3::xxh3_64;
-use blake3;
 use crate::learn::OnlineLearner;
+use crate::router::{Plan, PlanCache, QueryKey, QueryKind};
+use crate::store::compact::ColdTier;
+use crate::store::mmap::MmapFile;
+use crate::store::page::{Bar, MAX_ROWS, Page, decode_page, decode_page_soa_filtered, encode_page};
+use blake3;
+use xxhash_rust::xxh3::xxh3_64;
+
+type PageIndexEntry = (i64, i64, usize);
 
 pub struct Series {
     mmap: MmapFile,
@@ -26,7 +28,7 @@ pub struct Series {
     /// Path for learner sidecar.
     lnr_path: PathBuf,
     /// In-memory index: (ts_min, ts_max, page_idx)
-    index: Vec<(i64, i64, usize)>,
+    index: Vec<PageIndexEntry>,
     /// Pending bars not yet flushed to a page
     pending: Vec<Bar>,
     /// HotSet page cache — optional, shared or per-series
@@ -55,7 +57,7 @@ pub struct Series {
     /// Path for cold-tier file (base_path + ".csm")
     cold_path: PathBuf,
     /// Hot-index entries that have been moved to cold (page_idx values).
-    cold_index: Vec<(i64, i64, usize)>, // (ts_min, ts_max, cold_page_idx)
+    cold_index: Vec<PageIndexEntry>, // (ts_min, ts_max, cold_page_idx)
 }
 
 impl Series {
@@ -77,7 +79,9 @@ impl Series {
         };
         let bloom = Self::load_or_rebuild_bloom(&bloom_path, &index, &mmap);
         let xor_filter = if xor_path.exists() {
-            std::fs::read(&xor_path).ok().and_then(|b| SeriesXorFilter::deserialize(&b))
+            std::fs::read(&xor_path)
+                .ok()
+                .and_then(|b| SeriesXorFilter::deserialize(&b))
         } else {
             None
         };
@@ -91,20 +95,35 @@ impl Series {
         // Re-enable after auto-scaling bloom bits proportional to n_pages.
         // See BLOOM_SCALE_REPORT.md for full analysis.
         Ok(Self {
-            mmap, idx_path, bloom_path, xor_path, cold_path,
-            index, pending: Vec::new(), hot: None,
-            series_id, bloom, xor_filter, xor_keys: Vec::new(),
+            mmap,
+            idx_path,
+            bloom_path,
+            xor_path,
+            cold_path,
+            index,
+            pending: Vec::new(),
+            hot: None,
+            series_id,
+            bloom,
+            xor_filter,
+            xor_keys: Vec::new(),
             bloom_min_pages: usize::MAX,
-            cold, cold_index,
+            cold,
+            cold_index,
             learners: std::collections::HashMap::new(),
             lnr_path,
         })
     }
 
-    fn load_cold_index(cold_path: &Path) -> Vec<(i64, i64, usize)> {
+    fn load_cold_index(cold_path: &Path) -> Vec<PageIndexEntry> {
         let idx_path = PathBuf::from(format!("{}.idx", cold_path.display()));
-        if !idx_path.exists() { return Vec::new(); }
-        let f = match std::fs::File::open(&idx_path) { Ok(f) => f, Err(_) => return Vec::new() };
+        if !idx_path.exists() {
+            return Vec::new();
+        }
+        let f = match std::fs::File::open(&idx_path) {
+            Ok(f) => f,
+            Err(_) => return Vec::new(),
+        };
         let reader = std::io::BufReader::new(f);
         use std::io::BufRead;
         let mut out = Vec::new();
@@ -121,12 +140,16 @@ impl Series {
         out
     }
 
-    fn load_or_rebuild_bloom(bloom_path: &Path, index: &[(i64, i64, usize)], _mmap: &MmapFile) -> Bloom {
+    fn load_or_rebuild_bloom(
+        bloom_path: &Path,
+        index: &[PageIndexEntry],
+        _mmap: &MmapFile,
+    ) -> Bloom {
         // Try loading sidecar
-        if let Ok(bytes) = std::fs::read(bloom_path) {
-            if let Some(b) = Bloom::deserialize(&bytes) {
-                return b;
-            }
+        if let Ok(bytes) = std::fs::read(bloom_path)
+            && let Some(b) = Bloom::deserialize(&bytes)
+        {
+            return b;
         }
         // Rebuild from index ranges (fast approximate: add ts_min..ts_max at 900s step)
         let mut b = Bloom::new();
@@ -147,7 +170,7 @@ impl Series {
         self.hot = Some(HotSet::new(capacity));
     }
 
-    fn load_index(idx_path: &Path) -> std::io::Result<Vec<(i64, i64, usize)>> {
+    fn load_index(idx_path: &Path) -> std::io::Result<Vec<PageIndexEntry>> {
         if !idx_path.exists() {
             return Ok(Vec::new());
         }
@@ -167,8 +190,16 @@ impl Series {
         Ok(index)
     }
 
-    fn append_index_entry(&mut self, ts_min: i64, ts_max: i64, page_idx: usize) -> std::io::Result<()> {
-        let mut f = OpenOptions::new().append(true).create(true).open(&self.idx_path)?;
+    fn append_index_entry(
+        &mut self,
+        ts_min: i64,
+        ts_max: i64,
+        page_idx: usize,
+    ) -> std::io::Result<()> {
+        let mut f = OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&self.idx_path)?;
         writeln!(f, "{} {} {}", ts_min, ts_max, page_idx)?;
         self.index.push((ts_min, ts_max, page_idx));
         Ok(())
@@ -258,7 +289,10 @@ impl Series {
             range.end.saturating_sub(step),
         ];
         for &ts in &probes {
-            if ts >= range.start && ts < range.end && self.bloom.contains(xxh3_64(&ts.to_le_bytes())) {
+            if ts >= range.start
+                && ts < range.end
+                && self.bloom.contains(xxh3_64(&ts.to_le_bytes()))
+            {
                 return true;
             }
         }
@@ -280,8 +314,9 @@ impl Series {
                 if ts_max < range.start || ts_min >= range.end {
                     continue;
                 }
-                let bars = cold.read_page(cold_idx as u32)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                let bars = cold
+                    .read_page(cold_idx as u32)
+                    .map_err(|e| std::io::Error::other(e.to_string()))?;
                 for bar in bars {
                     if bar.ts >= range.start && bar.ts < range.end {
                         result.push(bar);
@@ -346,12 +381,20 @@ impl Series {
     }
 
     /// Routed range — dispatches to MmapScanFull or MmapScanSkipped based on coverage.
-    pub fn range_routed(&mut self, range: std::ops::Range<i64>, cache: &mut PlanCache) -> std::io::Result<Vec<Bar>> {
+    pub fn range_routed(
+        &mut self,
+        range: std::ops::Range<i64>,
+        cache: &mut PlanCache,
+    ) -> std::io::Result<Vec<Bar>> {
         let range_bars = ((range.end - range.start) / 900).max(0) as usize;
         let n_pages = self.index.len();
         let total_bars = n_pages * crate::store::page::MAX_ROWS;
         // Coverage ratio: if query covers <40% of series, page-skip wins
-        let coverage = if total_bars > 0 { range_bars as f64 / total_bars as f64 } else { 1.0 };
+        let coverage = if total_bars > 0 {
+            range_bars as f64 / total_bars as f64
+        } else {
+            1.0
+        };
         let key = QueryKey {
             kind: QueryKind::CandleRange,
             range_bars,
@@ -383,14 +426,22 @@ impl Series {
                 continue;
             }
             let bars = if let Some(hot) = self.hot.as_mut() {
-                let key = PageKey { series_id: self.series_id, page_idx: page_idx as u32 };
+                let key = PageKey {
+                    series_id: self.series_id,
+                    page_idx: page_idx as u32,
+                };
                 let mmap = &self.mmap;
                 let page = hot.get_or_load(key, || {
                     let raw = mmap.read_page(page_idx).expect("mmap read");
                     let (_hdr, bars) = decode_page(&raw);
                     let ts: Vec<i64> = bars.iter().map(|b| b.ts).collect();
                     let close: Vec<f32> = bars.iter().map(|b| b.close).collect();
-                    DecodedPage { ts, close, volume: None, bars }
+                    DecodedPage {
+                        ts,
+                        close,
+                        volume: None,
+                        bars,
+                    }
                 });
                 page.bars.clone()
             } else {
@@ -417,7 +468,7 @@ impl Series {
         let cutoff = now_ts - cutoff_secs;
 
         // Collect hot pages older than cutoff
-        let mut to_compact: Vec<(i64, i64, usize)> = Vec::new(); // (ts_min, ts_max, page_idx)
+        let mut to_compact: Vec<PageIndexEntry> = Vec::new(); // (ts_min, ts_max, page_idx)
         for &(ts_min, ts_max, page_idx) in &self.index {
             if ts_max < cutoff {
                 to_compact.push((ts_min, ts_max, page_idx));
@@ -436,13 +487,15 @@ impl Series {
 
         // Write cold file
         ColdTier::create(&self.cold_path, &raw_pages)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| std::io::Error::other(e.to_string()))?;
 
         // Write cold index sidecar
         let cold_idx_path = PathBuf::from(format!("{}.idx", self.cold_path.display()));
         {
             let mut f = std::fs::OpenOptions::new()
-                .write(true).create(true).truncate(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
                 .open(&cold_idx_path)?;
             for (i, &(ts_min, ts_max, _)) in to_compact.iter().enumerate() {
                 writeln!(f, "{} {} {}", ts_min, ts_max, i)?;
@@ -450,12 +503,16 @@ impl Series {
         }
 
         // Remove compacted pages from hot index
-        let compact_set: std::collections::HashSet<usize> = to_compact.iter().map(|&(_, _, idx)| idx).collect();
-        self.index.retain(|&(_, _, idx)| !compact_set.contains(&idx));
+        let compact_set: std::collections::HashSet<usize> =
+            to_compact.iter().map(|&(_, _, idx)| idx).collect();
+        self.index
+            .retain(|&(_, _, idx)| !compact_set.contains(&idx));
         // Rebuild hot idx file
         {
             let mut f = std::fs::OpenOptions::new()
-                .write(true).create(true).truncate(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
                 .open(&self.idx_path)?;
             for &(ts_min, ts_max, page_idx) in &self.index {
                 writeln!(f, "{} {} {}", ts_min, ts_max, page_idx)?;
@@ -463,14 +520,23 @@ impl Series {
         }
 
         // Update cold_index + reload ColdTier
-        self.cold_index = to_compact.iter().enumerate().map(|(i, &(ts_min, ts_max, _))| (ts_min, ts_max, i)).collect();
+        self.cold_index = to_compact
+            .iter()
+            .enumerate()
+            .map(|(i, &(ts_min, ts_max, _))| (ts_min, ts_max, i))
+            .collect();
         self.cold = ColdTier::open(&self.cold_path).ok();
 
         Ok(to_compact.len())
     }
 
     /// Aggregate query — SimdAgg path: reads page columns directly, no Bar materialization.
-    pub fn aggregate_routed(&mut self, range: Range<i64>, kind: AggKind, cache: &mut PlanCache) -> std::io::Result<AggResult> {
+    pub fn aggregate_routed(
+        &mut self,
+        range: Range<i64>,
+        kind: AggKind,
+        cache: &mut PlanCache,
+    ) -> std::io::Result<AggResult> {
         self.flush_pending()?;
         let range_bars = ((range.end - range.start) / 900).max(0) as usize;
         let n_pages = self.index.len();
@@ -507,14 +573,16 @@ impl Series {
 
     /// Feed one labeled sample to the named learner. Returns log-loss.
     pub fn update_learner(&mut self, name: &str, features: &[f32], y: f32) -> anyhow::Result<f32> {
-        self.learners.get_mut(name)
+        self.learners
+            .get_mut(name)
             .map(|l| l.update(features, y))
             .ok_or_else(|| anyhow::anyhow!("learner '{}' not found", name))
     }
 
     /// Predict with the named learner.
     pub fn predict(&self, name: &str, features: &[f32]) -> anyhow::Result<f32> {
-        self.learners.get(name)
+        self.learners
+            .get(name)
             .map(|l| l.predict(features))
             .ok_or_else(|| anyhow::anyhow!("learner '{}' not found", name))
     }
@@ -547,16 +615,22 @@ impl Series {
         };
         let mut pos = 0usize;
         while pos + 8 <= bytes.len() {
-            let name_len = u32::from_le_bytes(bytes[pos..pos+4].try_into()?) as usize;
+            let name_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into()?) as usize;
             pos += 4;
-            if pos + name_len > bytes.len() { break; }
-            let name = std::str::from_utf8(&bytes[pos..pos+name_len])?.to_string();
+            if pos + name_len > bytes.len() {
+                break;
+            }
+            let name = std::str::from_utf8(&bytes[pos..pos + name_len])?.to_string();
             pos += name_len;
-            if pos + 4 > bytes.len() { break; }
-            let state_len = u32::from_le_bytes(bytes[pos..pos+4].try_into()?) as usize;
+            if pos + 4 > bytes.len() {
+                break;
+            }
+            let state_len = u32::from_le_bytes(bytes[pos..pos + 4].try_into()?) as usize;
             pos += 4;
-            if pos + state_len > bytes.len() { break; }
-            let state = &bytes[pos..pos+state_len];
+            if pos + state_len > bytes.len() {
+                break;
+            }
+            let state = &bytes[pos..pos + state_len];
             pos += state_len;
             if let Some(loaded) = FtrlLearner::deserialize_from(state) {
                 self.learners.insert(name, Box::new(loaded));
@@ -568,16 +642,27 @@ impl Series {
     /// Tag a catalyst at timestamp `ts`. Stored in `<base>.cat` sidecar.
     pub fn tag_catalyst(&self, ts: i64, catalyst_id: u64) -> std::io::Result<()> {
         use std::io::Write;
-        let cat_path = PathBuf::from(format!("{}.cat", self.idx_path.with_extension("").display()));
-        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(cat_path)?;
+        let cat_path = PathBuf::from(format!(
+            "{}.cat",
+            self.idx_path.with_extension("").display()
+        ));
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(cat_path)?;
         writeln!(f, "{ts} {catalyst_id}")?;
         Ok(())
     }
 
     /// Return all (ts, catalyst_id) pairs in the given ts range.
     pub fn catalysts_in(&self, ts_range: std::ops::Range<i64>) -> Vec<(i64, u64)> {
-        let cat_path = PathBuf::from(format!("{}.cat", self.idx_path.with_extension("").display()));
-        let Ok(f) = std::fs::File::open(&cat_path) else { return vec![] };
+        let cat_path = PathBuf::from(format!(
+            "{}.cat",
+            self.idx_path.with_extension("").display()
+        ));
+        let Ok(f) = std::fs::File::open(&cat_path) else {
+            return vec![];
+        };
         let reader = std::io::BufReader::new(f);
         let mut out = Vec::new();
         for line in reader.lines() {

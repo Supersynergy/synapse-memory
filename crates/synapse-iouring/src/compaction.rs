@@ -9,9 +9,9 @@
 
 use crate::error::{IoUringError, Result};
 use crate::lsm::{Entry, SSTable};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
@@ -115,7 +115,12 @@ impl Compactor {
     fn compact_level(&mut self, level: usize) -> Result<()> {
         let (src, dst) = match level {
             1 => (&mut self.l1, &mut self.l2),
-            _ => return Err(IoUringError::Compaction(format!("level {} not supported", level))),
+            _ => {
+                return Err(IoUringError::Compaction(format!(
+                    "level {} not supported",
+                    level
+                )));
+            }
         };
 
         let drained: Vec<SSTable> = std::mem::take(src);
@@ -132,9 +137,16 @@ impl Compactor {
 
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
         let out_level = level + 1;
-        let path = self.config.dir.join(format!("L{}-{:016x}.sst", out_level, seq));
+        let path = self
+            .config
+            .dir
+            .join(format!("L{}-{:016x}.sst", out_level, seq));
         let merged = SSTable::write(path, &all)?;
-        info!(entries = merged.entry_count, level = out_level, "compacted SSTable");
+        info!(
+            entries = merged.entry_count,
+            level = out_level,
+            "compacted SSTable"
+        );
 
         dst.push(merged);
 

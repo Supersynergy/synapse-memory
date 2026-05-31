@@ -1,6 +1,6 @@
 /// Bench: xor-filter vs bloom vs no-filter vs sqlite-WAL on 500-page corpus.
 /// Target: xorf ≥3× faster than no-filter on negative lookups.
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use synapse_market::filter::{Bloom, SeriesXorFilter};
 use synapse_market::series::Series;
 use synapse_market::store::page::Bar;
@@ -106,7 +106,8 @@ fn bench_neg_lookup(c: &mut Criterion) {
     let db_path = dir.path().join("bench.db");
     {
         let conn = rusqlite::Connection::open(&db_path).unwrap();
-        conn.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE ts (t INTEGER PRIMARY KEY);").unwrap();
+        conn.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE ts (t INTEGER PRIMARY KEY);")
+            .unwrap();
         let tx = conn.unchecked_transaction().unwrap();
         let mut stmt = conn.prepare("INSERT OR IGNORE INTO ts VALUES (?)").unwrap();
         for &k in &keys {

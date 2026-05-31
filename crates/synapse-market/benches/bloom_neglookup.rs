@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use synapse_market::series::Series;
 use synapse_market::store::page::Bar;
 use tempfile::TempDir;

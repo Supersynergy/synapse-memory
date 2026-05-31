@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use rusqlite::Connection;
 use synapse_vlog::VlogStore;
 use tempfile::tempdir;
@@ -84,9 +84,7 @@ fn bench_vlog_get(c: &mut Criterion) {
             }
             tx.commit().unwrap();
         }
-        let mut stmt = conn
-            .prepare("SELECT v FROM kv WHERE k=?")
-            .unwrap();
+        let mut stmt = conn.prepare("SELECT v FROM kv WHERE k=?").unwrap();
         b.iter(|| {
             for i in 0u64..N {
                 let _: Vec<u8> = stmt

@@ -2,7 +2,7 @@
 
 ## 1. Positioning
 
-Synapse is a single-file agent-memory backend (one `.syn` SQLite file) that ships FTS5 full-text search, sqlite-vec ANN retrieval, MCP server, Ed25519 signing, CRDT merge, sharding, and federation — no separate vector DB, no cloud dependency, no infra overhead. A running agent embeds it as a library or connects via MCP in under 60 seconds.
+Synapse is a single-file agent-memory backend (one `.synx` SQLite file) that ships FTS5 full-text search, sqlite-vec ANN retrieval, MCP server, Ed25519 signing, CRDT merge, sharding, and federation — no separate vector DB, no cloud dependency, no infra overhead. A running agent embeds it as a library or connects via MCP in under 60 seconds.
 
 The competitive gap: mem0 requires a cloud account or self-hosted stack of multiple services; Qdrant requires a separate server process; Pinecone is SaaS-only. Synapse replaces all three with a single Rust binary and a file. For OSS agents, local-first tooling, and regulated/air-gapped environments this is the default choice, not a trade-off.
 
@@ -23,7 +23,7 @@ Drop-in shim that mirrors `mem0.Memory` so existing `from mem0 import Memory` co
 **Key methods:**
 
 ```python
-mem = Memory(provider="synapse", path="./agent.syn")
+mem = Memory(provider="synapse", path="./agent.synx")
 mem.add(messages, user_id=...)       # store episodic memory
 mem.search(query, user_id=..., limit=10)  # FTS5 + vec hybrid
 mem.get_all(user_id=...)             # full recall
@@ -44,7 +44,7 @@ Mastra Memory provider implementing the `MastraMemory` interface.
 **Key methods:**
 
 ```ts
-const mem = new SynapseMemory({ path: "./agent.syn" })
+const mem = new SynapseMemory({ path: "./agent.synx" })
 mem.store(threadId, role, content)
 mem.recall(threadId, query, topK?)
 mem.delete(threadId)
@@ -65,7 +65,7 @@ Implements the `MemoryProvider` interface from `ai` SDK.
 **Key methods:**
 
 ```ts
-const memory = synapseMemory({ path: "./agent.syn" })
+const memory = synapseMemory({ path: "./agent.synx" })
 // passes as: experimental_continueConversation({ memory })
 memory.get(key)
 memory.set(key, value, ttl?)
@@ -82,13 +82,13 @@ memory.flush()
 
 ## 3. Tier-2 — Next 90 Days
 
-**CopilotKit (30k):** `@synapse/copilotkit` — wraps `useCopilotReadable` + `useCopilotAction` to persist and surface agent context from `.syn`. Adapter reads FTS5 hits, injects as readable context.
+**CopilotKit (30k):** `@synapse/copilotkit` — wraps `useCopilotReadable` + `useCopilotAction` to persist and surface agent context from `.synx`. Adapter reads FTS5 hits, injects as readable context.
 
 **browser-use (84k):** `synapse-browser-use` (PyPI) — session memory plugin. Stores page summaries, entity extractions, visited URLs. Hooks into `BrowserSession` lifecycle events.
 
-**e2b (12k):** `synapse-e2b` — sandbox-persistent memory. Mounts `.syn` file into e2b sandbox via their filesystem API; agent reads/writes memory across sandbox restarts.
+**e2b (12k):** `synapse-e2b` — sandbox-persistent memory. Mounts `.synx` file into e2b sandbox via their filesystem API; agent reads/writes memory across sandbox restarts.
 
-**screenpipe (18k):** `synapse-screenpipe` — ingests screenpipe JSONL events into `.syn` episodic store. CLI: `screenpipe-events | synapse ingest --source screenpipe`.
+**screenpipe (18k):** `synapse-screenpipe` — ingests screenpipe JSONL events into `.synx` episodic store. CLI: `screenpipe-events | synapse ingest --source screenpipe`.
 
 ---
 
@@ -103,7 +103,7 @@ Ship `bench/promptfoo.yaml` checked into the repo:
 providers:
   - id: synapse
     config:
-      path: bench/fixtures/test.syn
+      path: bench/fixtures/test.synx
 tests:
   - description: Exact recall after 1 insert
     vars: { query: "user birthday" }
@@ -136,7 +136,7 @@ MLflow: log retrieval latency, MRR@10, recall@5 as metrics per release. Langfuse
 
 **wasp-lang template:** `synapse-wasp-starter` — Wasp full-stack app with Synapse memory wired to AI actions. One-click deploy. Listed in Wasp template registry.
 
-**WrenAI / Canner text-to-SQL:** Point WrenAI at `.syn` files — users query their own agent memory in natural language. Demo: `wren connect --file agent.syn` → "What did the agent do last Tuesday?"
+**WrenAI / Canner text-to-SQL:** Point WrenAI at `.synx` files — users query their own agent memory in natural language. Demo: `wren connect --file agent.synx` → "What did the agent do last Tuesday?"
 
 ---
 

@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use super::Plan;
+use std::collections::HashMap;
 
 /// Welford online mean + variance per plan.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -11,7 +11,11 @@ pub struct OnlineStats {
 
 impl OnlineStats {
     pub fn new() -> Self {
-        Self { count: 0, mean: 0.0, m2: 0.0 }
+        Self {
+            count: 0,
+            mean: 0.0,
+            m2: 0.0,
+        }
     }
 
     pub fn update(&mut self, x: f64) {
@@ -23,12 +27,18 @@ impl OnlineStats {
     }
 
     pub fn variance(&self) -> f64 {
-        if self.count < 2 { 1e9 } else { self.m2 / (self.count - 1) as f64 }
+        if self.count < 2 {
+            1e9
+        } else {
+            self.m2 / (self.count - 1) as f64
+        }
     }
 }
 
 impl Default for OnlineStats {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// ε-greedy bandit with latency-weighted arm selection.
@@ -41,7 +51,10 @@ pub struct ThompsonSampler {
 
 impl ThompsonSampler {
     pub fn new() -> Self {
-        Self { stats: HashMap::new(), rng_state: 0xdeadbeef_cafef00d }
+        Self {
+            stats: HashMap::new(),
+            rng_state: 0xdeadbeef_cafef00d,
+        }
     }
 
     /// Fast xorshift64 — no rand dep needed.
@@ -82,7 +95,10 @@ impl ThompsonSampler {
     }
 
     pub fn record(&mut self, plan: Plan, latency_us: u64) {
-        self.stats.entry(plan).or_default().update(latency_us as f64);
+        self.stats
+            .entry(plan)
+            .or_default()
+            .update(latency_us as f64);
     }
 
     /// Winrate: fraction of recorded executions where this plan was fastest vs all others.
@@ -92,11 +108,17 @@ impl ThompsonSampler {
             Some(s) if s.count > 0 => s.mean,
             _ => return 0.0,
         };
-        let n_better = self.stats.iter().filter(|(&p, s)| p != plan && s.mean < mine).count();
+        let n_better = self
+            .stats
+            .iter()
+            .filter(|(p, s)| **p != plan && s.mean < mine)
+            .count();
         if n_better == 0 { 1.0 } else { 0.0 }
     }
 }
 
 impl Default for ThompsonSampler {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

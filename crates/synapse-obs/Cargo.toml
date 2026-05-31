@@ -21,7 +21,7 @@ tracing-opentelemetry = { version = "0.28", optional = true }
 tracing-subscriber    = { workspace = true, optional = true }
 
 # Prometheus metrics
-prometheus            = { version = "0.13", optional = true, features = ["process"] }
+prometheus            = { version = "0.14", optional = true, features = ["process"] }
 
 # Prometheus HTTP endpoint
 axum                  = { workspace = true, optional = true }

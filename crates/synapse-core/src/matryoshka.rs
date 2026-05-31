@@ -96,7 +96,9 @@ mod tests {
 
     #[test]
     fn binary_matryoshka_respects_k() {
-        let v: Vec<f32> = (0..16).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let v: Vec<f32> = (0..16)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
         assert_eq!(truncate_to_binary(&v, 8).len(), 1);
         assert_eq!(truncate_to_binary(&v, 16).len(), 2);
     }

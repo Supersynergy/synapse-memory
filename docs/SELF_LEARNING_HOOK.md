@@ -16,7 +16,7 @@ commit:<hash> | files:<file1 file2 ...> | msg:<commit message>
 
 ## Fallback Behavior
 
-- If `syn` CLI available: `syn put ... --tag synapse-dev`
+- If `synx` CLI available: `synx put ... --tag synapse-dev`
 - Else: appends JSON line to `~/.synapse/dev-log.jsonl`
 
 ## Reinstall After Clone

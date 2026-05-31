@@ -1,8 +1,8 @@
-use std::time::Duration;
-use tokio_stream::StreamExt;
 use serde_json::json;
-use synapse_stream::{CdcReader, Op};
+use std::time::Duration;
 use synapse_stream::cq::{ContinuousQuery, QueryEngine};
+use synapse_stream::{CdcReader, Op};
+use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn test_1k_inserts_cdc() {
@@ -20,7 +20,9 @@ async fn test_1k_inserts_cdc() {
     let mut stream = reader.tail();
     while let Some(Ok(_ev)) = stream.next().await {
         count += 1;
-        if count == 1000 { break; }
+        if count == 1000 {
+            break;
+        }
     }
     assert_eq!(count, 1000, "expected 1000 CDC events");
 }
@@ -42,7 +44,9 @@ async fn test_window_avg_cq() {
         let mut stream = reader.tail();
         while let Some(Ok(ev)) = stream.next().await {
             events.push(ev);
-            if events.len() == 10 { break; }
+            if events.len() == 10 {
+                break;
+            }
         }
     }
 
@@ -66,7 +70,8 @@ async fn test_trigger_based_cdc() {
     // Create a real table and install triggers
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
-        conn.execute_batch("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);").unwrap();
+        conn.execute_batch("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT);")
+            .unwrap();
     }
 
     let mut reader = CdcReader::new(&db).unwrap();
@@ -76,7 +81,11 @@ async fn test_trigger_based_cdc() {
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
         for i in 0..50 {
-            conn.execute("INSERT INTO items(id,name) VALUES(?1,?2)", rusqlite::params![i, format!("item{}", i)]).unwrap();
+            conn.execute(
+                "INSERT INTO items(id,name) VALUES(?1,?2)",
+                rusqlite::params![i, format!("item{}", i)],
+            )
+            .unwrap();
         }
     }
 
@@ -84,7 +93,9 @@ async fn test_trigger_based_cdc() {
     let mut stream = reader.tail();
     while let Some(Ok(_ev)) = stream.next().await {
         count += 1;
-        if count == 50 { break; }
+        if count == 50 {
+            break;
+        }
     }
     assert_eq!(count, 50);
 }

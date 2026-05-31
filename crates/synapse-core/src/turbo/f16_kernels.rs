@@ -20,6 +20,7 @@
 //! ```
 
 use half::f16;
+#[cfg(not(feature = "simsimd"))]
 use synapse_kernel::kernels::f16_dot::dot_f16;
 
 /// Convert an fp32 slice to packed f16 bytes (little-endian).
@@ -35,7 +36,10 @@ pub fn pack_f16(src: &[f32]) -> Vec<u8> {
 /// Reverse of [`pack_f16`] — packed bytes → f32 vec.
 #[must_use]
 pub fn unpack_f16(src: &[u8]) -> Vec<f32> {
-    assert!(src.len() % 2 == 0, "f16 payload must be even-sized");
+    assert!(
+        src.len().is_multiple_of(2),
+        "f16 payload must be even-sized"
+    );
     src.chunks_exact(2)
         .map(|c| f16::from_le_bytes([c[0], c[1]]).to_f32())
         .collect()
@@ -45,7 +49,9 @@ pub fn unpack_f16(src: &[u8]) -> Vec<f32> {
 /// Rows are assumed equal-length.
 #[must_use]
 pub fn pack_f16_rows(rows: &[Vec<f32>]) -> Vec<u8> {
-    if rows.is_empty() { return Vec::new(); }
+    if rows.is_empty() {
+        return Vec::new();
+    }
     let dim = rows[0].len();
     let mut out = Vec::with_capacity(rows.len() * dim * 2);
     for row in rows {
@@ -65,7 +71,9 @@ pub fn pack_f16_rows(rows: &[Vec<f32>]) -> Vec<u8> {
 /// Without: upcasts row f16→f32 and computes in fp32 (original path).
 #[must_use]
 pub fn cos_f16_row(query_f32: &[f32], row_f16: &[u8]) -> Option<f32> {
-    if query_f32.len() * 2 != row_f16.len() { return None; }
+    if query_f32.len() * 2 != row_f16.len() {
+        return None;
+    }
 
     #[cfg(feature = "simsimd")]
     {
@@ -110,7 +118,10 @@ pub fn cos_f16_row(query_f32: &[f32], row_f16: &[u8]) -> Option<f32> {
 #[cfg(feature = "simsimd")]
 #[must_use]
 pub fn prepare_query_f16(query_f32: &[f32]) -> Vec<simsimd::f16> {
-    query_f32.iter().map(|&x| simsimd::f16::from_f32(x)).collect()
+    query_f32
+        .iter()
+        .map(|&x| simsimd::f16::from_f32(x))
+        .collect()
 }
 
 /// Zero-alloc per-row cosine. `query_f16` from `prepare_query_f16`,
@@ -119,7 +130,9 @@ pub fn prepare_query_f16(query_f32: &[f32]) -> Vec<simsimd::f16> {
 #[must_use]
 pub fn cos_f16_row_prepared(query_f16: &[simsimd::f16], row_f16: &[u8]) -> Option<f32> {
     use simsimd::SpatialSimilarity;
-    if query_f16.len() * 2 != row_f16.len() { return None; }
+    if query_f16.len() * 2 != row_f16.len() {
+        return None;
+    }
     // SAFETY: simsimd::f16 = repr(transparent) u16. Packed bytes are LE u16
     // with the same layout. We only need len == query_f16.len(), which is
     // checked above. Alignment of u8 buffer is 1; simsimd::f16 requires 2.
@@ -141,7 +154,9 @@ pub fn cos_f16_row_prepared(query_f16: &[simsimd::f16], row_f16: &[u8]) -> Optio
         for (q, rc) in query_f16.iter().zip(row_f16.chunks_exact(2)) {
             let qf = q.to_f32();
             let rf = half::f16::from_le_bytes([rc[0], rc[1]]).to_f32();
-            dot += qf * rf; q_norm += qf * qf; r_norm += rf * rf;
+            dot += qf * rf;
+            q_norm += qf * qf;
+            r_norm += rf * rf;
         }
         let denom = (q_norm.sqrt() * r_norm.sqrt()).max(1e-12);
         Some(dot / denom)
@@ -166,7 +181,7 @@ mod tests {
     #[test]
     fn packed_bytes_are_half_the_size() {
         let v = vec![0.0_f32; 384];
-        assert_eq!(pack_f16(&v).len(), 384 * 2);     // 768 bytes
+        assert_eq!(pack_f16(&v).len(), 384 * 2); // 768 bytes
         // compare: f32 would be 384 * 4 = 1536 bytes
     }
 
@@ -174,7 +189,7 @@ mod tests {
     fn pack_rows_stacks_contiguously() {
         let rows = vec![vec![1.0_f32, 2.0], vec![3.0, 4.0]];
         let packed = pack_f16_rows(&rows);
-        assert_eq!(packed.len(), 2 * 2 * 2);  // 2 rows × 2 dim × 2 bytes
+        assert_eq!(packed.len(), 2 * 2 * 2); // 2 rows × 2 dim × 2 bytes
     }
 
     #[test]

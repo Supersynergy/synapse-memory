@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ndarray::Array2;
 use synapse_ultra::binary::{build_binary_matrix, pack_signs};
 use synapse_ultra::cache::{CacheKey, T0Cache};

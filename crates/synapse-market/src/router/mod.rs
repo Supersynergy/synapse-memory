@@ -1,8 +1,6 @@
 pub mod cache;
 pub mod learn;
 
-use std::collections::HashMap;
-
 pub use cache::PlanCache;
 pub use learn::{OnlineStats, ThompsonSampler};
 

@@ -77,7 +77,9 @@ fn dummy_sparse(text: &str, top_k: usize, scale: f32) -> SparseVec {
                 break;
             }
             let mut s = ws.wrapping_add(j.wrapping_mul(0x9e37_79b9_7f4a_7c15));
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let tok = (s % VOCAB_SIZE as u64) as u32;
             // weight: ReLU(log(1+x)) analog — deterministic in (0, scale]
             let w_raw = ((s >> 32) as u32 as f32) / (u32::MAX as f32); // 0..1
@@ -141,7 +143,9 @@ mod onnx {
             let api = Api::new().context("hf-hub Api::new")?;
             let repo = api.model(MODEL_REPO.to_string());
             let model_path = repo.get("model.onnx").context("download model.onnx")?;
-            let tokenizer_path = repo.get("tokenizer.json").context("download tokenizer.json")?;
+            let tokenizer_path = repo
+                .get("tokenizer.json")
+                .context("download tokenizer.json")?;
             Self::from_paths(&model_path, &tokenizer_path)
         }
 
@@ -160,11 +164,7 @@ mod onnx {
                 .iter()
                 .map(|&x| x as i64)
                 .collect();
-            let type_ids: Vec<i64> = encoding
-                .get_type_ids()
-                .iter()
-                .map(|&x| x as i64)
-                .collect();
+            let type_ids: Vec<i64> = encoding.get_type_ids().iter().map(|&x| x as i64).collect();
 
             let seq_len = ids.len();
 
@@ -200,7 +200,11 @@ mod onnx {
             for t in 0..seq {
                 for v in 0..vocab {
                     let x = logits_flat[t * vocab + v];
-                    let activated = if x > 0.0f32 { (1.0f32 + x).ln() } else { 0.0f32 };
+                    let activated = if x > 0.0f32 {
+                        (1.0f32 + x).ln()
+                    } else {
+                        0.0f32
+                    };
                     if activated > pooled[v] {
                         pooled[v] = activated;
                     }

@@ -1,10 +1,10 @@
+pub mod block_max;
 pub mod encoder;
 pub mod index;
-pub mod block_max;
 
-pub use encoder::{SpladeEncoder, SparseVec};
-pub use index::SpladeIndex;
-pub use block_max::{BlockMaxIndex, Block, DocId};
+pub use block_max::{Block, BlockMaxIndex, DocId, Posting, ScoredDoc};
+pub use encoder::{SparseVec, SpladeEncoder};
+pub use index::{SearchHit, SpladeIndex};
 
 #[cfg(feature = "splade-onnx")]
 pub use encoder::OnnxSpladeEncoder;

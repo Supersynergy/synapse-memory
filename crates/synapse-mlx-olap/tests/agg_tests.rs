@@ -4,7 +4,13 @@ fn simple_batch() -> RecordBatch {
     RecordBatch::new(
         vec!["grp".to_string(), "val".to_string()],
         vec![
-            Column::Str(vec!["a".into(), "b".into(), "a".into(), "b".into(), "a".into()]),
+            Column::Str(vec![
+                "a".into(),
+                "b".into(),
+                "a".into(),
+                "b".into(),
+                "a".into(),
+            ]),
             Column::Float(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
         ],
     )
@@ -33,7 +39,9 @@ fn test_avg_scalar() {
 fn test_count_scalar() {
     let engine = MlxOlapEngine::cpu().unwrap();
     let batch = simple_batch();
-    let result = engine.execute_agg(&batch, AggOp::Count, "val", None).unwrap();
+    let result = engine
+        .execute_agg(&batch, AggOp::Count, "val", None)
+        .unwrap();
     assert_eq!(result.columns[0].as_floats().unwrap()[0], 5.0);
 }
 
@@ -51,7 +59,9 @@ fn test_min_max() {
 fn test_group_by_sum() {
     let engine = MlxOlapEngine::cpu().unwrap();
     let batch = simple_batch();
-    let result = engine.execute_agg(&batch, AggOp::Sum, "val", Some("grp")).unwrap();
+    let result = engine
+        .execute_agg(&batch, AggOp::Sum, "val", Some("grp"))
+        .unwrap();
     // sorted keys: a, b
     let keys = result.columns[0].as_strs().unwrap();
     let vals = result.columns[1].as_floats().unwrap();
@@ -64,7 +74,9 @@ fn test_group_by_sum() {
 fn test_group_by_avg() {
     let engine = MlxOlapEngine::cpu().unwrap();
     let batch = simple_batch();
-    let result = engine.execute_agg(&batch, AggOp::Avg, "val", Some("grp")).unwrap();
+    let result = engine
+        .execute_agg(&batch, AggOp::Avg, "val", Some("grp"))
+        .unwrap();
     let vals = result.columns[1].as_floats().unwrap();
     assert!((vals[0] - 3.0).abs() < 1e-9); // (1+3+5)/3
     assert!((vals[1] - 3.0).abs() < 1e-9); // (2+4)/2
@@ -74,7 +86,9 @@ fn test_group_by_avg() {
 fn test_group_by_count() {
     let engine = MlxOlapEngine::cpu().unwrap();
     let batch = simple_batch();
-    let result = engine.execute_agg(&batch, AggOp::Count, "val", Some("grp")).unwrap();
+    let result = engine
+        .execute_agg(&batch, AggOp::Count, "val", Some("grp"))
+        .unwrap();
     let vals = result.columns[1].as_floats().unwrap();
     assert_eq!(vals[0], 3.0); // a: 3 rows
     assert_eq!(vals[1], 2.0); // b: 2 rows
@@ -83,11 +97,8 @@ fn test_group_by_count() {
 #[test]
 fn test_int_column() {
     let engine = MlxOlapEngine::cpu().unwrap();
-    let batch = RecordBatch::new(
-        vec!["val".to_string()],
-        vec![Column::Int(vec![10, 20, 30])],
-    )
-    .unwrap();
+    let batch =
+        RecordBatch::new(vec!["val".to_string()], vec![Column::Int(vec![10, 20, 30])]).unwrap();
     let result = engine.execute_agg(&batch, AggOp::Sum, "val", None).unwrap();
     assert!((result.columns[0].as_floats().unwrap()[0] - 60.0).abs() < 1e-9);
 }

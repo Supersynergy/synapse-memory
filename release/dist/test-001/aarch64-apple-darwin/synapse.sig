@@ -1,4 +1,0 @@
-untrusted comment: signature from minisign secret key
-RUT+MdBaFYnDv7tnFfOJGEwKD+5lEDttYPnIMUWyw2M2rySCa2TGuYfr0CNLA7IsyYmXIFu645h07jMSK6m93cltRRATEePLAQU=
-trusted comment: timestamp:1777139129	file:synapse	hashed
-TazBtaUyyRZWVt/Okzi/BGWBR84U/VuDwpUXLN5AgAdR8wDUu8C4qNWprmvhyfgY9S1o0cNlxAKKYJCX8/PBDA==

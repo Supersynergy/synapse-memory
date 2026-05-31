@@ -1,5 +1,7 @@
-/// Column encoders/decoders — delta-encode timestamps, plain f32 for OHLCV.
-/// No SIMD yet (W3 task). Branchless where easy.
+//! Column encoders/decoders — delta-encode timestamps, plain f32 for OHLCV.
+//! No SIMD yet (W3 task). Branchless where easy.
+
+pub type DictEncodedF32 = (Vec<f32>, Vec<u8>);
 
 /// Delta-encode a slice of i64 timestamps → (base, deltas: Vec<i32>).
 /// Assumes sorted input.
@@ -18,7 +20,7 @@ pub fn delta_decode_ts(base: i64, deltas: &[i32]) -> Vec<i64> {
 
 /// Dict-encode f32 column when cardinality is low (e.g., ≤256 distinct values).
 /// Returns None if not worth it (>256 distinct or n < 16).
-pub fn dict_encode_f32(values: &[f32]) -> Option<(Vec<f32>, Vec<u8>)> {
+pub fn dict_encode_f32(values: &[f32]) -> Option<DictEncodedF32> {
     if values.len() < 16 {
         return None;
     }

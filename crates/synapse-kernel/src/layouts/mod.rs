@@ -1,6 +1,6 @@
 //! Layouts: AoS (vec-major), SoA (dim-major), blocked (cache-line tiled).
 
-use std::alloc::{alloc, dealloc, Layout};
+use std::alloc::{Layout, alloc, dealloc};
 
 /// 64-byte (cache-line) aligned heap buffer of f32.
 /// Required for peak NEON / AVX2 throughput via aligned loads.
@@ -17,7 +17,11 @@ unsafe impl Sync for AlignedF32 {}
 impl AlignedF32 {
     pub fn new(len: usize) -> Self {
         if len == 0 {
-            return Self { ptr: std::ptr::NonNull::dangling().as_ptr(), len: 0, cap: 0 };
+            return Self {
+                ptr: std::ptr::NonNull::dangling().as_ptr(),
+                len: 0,
+                cap: 0,
+            };
         }
         let layout = Layout::from_size_align(len * 4, 64).expect("layout");
         // SAFETY: layout is non-zero, aligned to 64.
@@ -38,7 +42,14 @@ impl AlignedF32 {
     }
 
     #[inline(always)]
-    pub fn len(&self) -> usize { self.len }
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 }
 
 impl Drop for AlignedF32 {

@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use rand::{Rng, RngExt};
 use std::time::Instant;
 use synapse_spann::{SpannConfig, SpannIndex};
@@ -19,7 +19,12 @@ fn bench_spann(c: &mut Criterion) {
     let docs = gen_docs(n, dim);
     let dir = tempfile::tempdir().unwrap();
 
-    let cfg = SpannConfig { n_clusters: 64, dim, n_docs: n, max_iter: 50 };
+    let cfg = SpannConfig {
+        n_clusters: 64,
+        dim,
+        n_docs: n,
+        max_iter: 50,
+    };
     let t0 = Instant::now();
     let index = SpannIndex::build(dir.path(), &docs, cfg).unwrap();
     eprintln!("SPANN build {}k docs: {:?}", n / 1000, t0.elapsed());

@@ -6,16 +6,20 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+type AutoloadMap = HashMap<String, Vec<u8>>;
+
 /// In-memory autoload kv cache. WP loads `wp_options WHERE autoload='yes'`
 /// (200-2000 rows) on every pageload. Caching this in-process turns 1ms
 /// SQLite read into <1µs map lookup.
 pub struct AutoloadCache {
-    inner: RwLock<HashMap<String, Vec<u8>>>,
+    inner: RwLock<AutoloadMap>,
 }
 
 impl AutoloadCache {
     pub fn new() -> Self {
-        Self { inner: RwLock::new(HashMap::with_capacity(1024)) }
+        Self {
+            inner: RwLock::new(HashMap::with_capacity(1024)),
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<Vec<u8>> {
@@ -40,6 +44,10 @@ impl AutoloadCache {
 
     pub fn len(&self) -> usize {
         self.inner.read().map(|g| g.len()).unwrap_or(0)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.read().map(|g| g.is_empty()).unwrap_or(true)
     }
 
     pub fn invalidate(&self, name: &str) {

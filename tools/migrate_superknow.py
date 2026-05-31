@@ -124,20 +124,20 @@ def verify_overlap(rows_sample, synapse_db: Path):
         # Synapse FTS
         try:
             out = synapse_cli(["-f", str(synapse_db), "find", query, "--limit", "3"])
-            syn_ids = set()
+            synapse_ids = set()
             for line in out.splitlines():
                 parts = line.split("\t")
                 if len(parts) >= 3:
-                    syn_ids.add(parts[2][:80])
+                    synapse_ids.add(parts[2][:80])
         except Exception:
-            syn_ids = set()
+            synapse_ids = set()
 
-        overlap = len(sk_ids & syn_ids) if sk_ids else 0
+        overlap = len(sk_ids & synapse_ids) if sk_ids else 0
         if overlap >= 2 or not sk_ids:
             passed += 1
         else:
             failed += 1
-            print(f"  [warn] low overlap for '{query[:40]}': sk={sk_ids} syn={syn_ids}")
+            print(f"  [warn] low overlap for '{query[:40]}': sk={sk_ids} synx={synapse_ids}")
 
     conn.close()
     synapse_conn.close()

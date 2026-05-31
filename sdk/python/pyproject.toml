@@ -21,7 +21,7 @@ Repository = "https://github.com/Supersynergy/synapse"
 Documentation = "https://github.com/Supersynergy/synapse/blob/main/docs/CLAUDE-CODE-MEMORY.md"
 
 [project.scripts]
-syn = "synapse_memory.cli:main"
+synx = "synapse_memory.cli:main"
 
 [build-system]
 requires = ["hatchling"]

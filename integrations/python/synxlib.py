@@ -3,10 +3,12 @@
 Single source of truth for the protocol (little-endian, capitalized ops).
 Drop into bench scripts: `from synxlib import call`.
 """
-import socket, struct, msgpack, os, threading
+import socket, struct, msgpack, os, threading, urllib.parse, urllib.request, json
 from contextlib import contextmanager
 
 SOCK = os.environ.get("SYNAPSE_SOCK", "/tmp/synapse.sock")
+TURBO_URL = os.environ.get("SYNAPSE_TURBO_URL", "http://127.0.0.1:9477").rstrip("/")
+TURBO_FIRST = os.environ.get("SYNX_DISABLE_TURBO", "0") != "1"
 
 class SynxError(Exception): pass
 
@@ -131,9 +133,38 @@ def embed_mlx(text: str):
 def ping(): return call({"op": "Ping"})
 def stats(): return call({"op": "Stats"})
 
+def _turbo_search(q: str, limit: int = 10, mode: str = "Hybrid"):
+    if not TURBO_FIRST:
+        return None
+    path = {"Hybrid": "hybrid", "Vec": "vec", "Lex": "find"}.get(mode)
+    if path is None:
+        return None
+    qs = urllib.parse.urlencode({"q": q, "limit": int(limit)})
+    req = urllib.request.Request(f"{TURBO_URL}/{path}?{qs}")
+    if req.type != "http" or not req.host.startswith("127.0.0.1"):
+        return None
+    with urllib.request.urlopen(req, timeout=2) as resp:  # noqa: S310
+        data = json.loads(resp.read())
+    hits = []
+    for row in data.get("results", []):
+        hits.append({
+            "id": row.get("id"),
+            "uri": row.get("uri"),
+            "title": row.get("title"),
+            "text": row.get("text") or "",
+            "score": row.get("score", row.get("distance", 0.0)),
+        })
+    return {"Hits": hits, "source": "turbo", "elapsed_ms": data.get("elapsed_ms")}
+
 def search(q: str, limit: int = 10, mode: str = "Hybrid", embed_query: bool = True):
     """Auto-route: read-only Lex mode → direct apsw bypass (3.3× concurrent vs daemon).
     Vec/Hybrid stay on daemon (need ANN index in-process)."""
+    try:
+        out = _turbo_search(q, limit, mode)
+        if out is not None:
+            return out
+    except Exception:
+        pass
     if mode == "Lex" and not embed_query:
         # Direct apsw FTS5 — bypasses daemon serialization
         rows = fts_direct(q, limit)

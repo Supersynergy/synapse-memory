@@ -2,8 +2,8 @@ use std::path::Path;
 
 use turbovec::IdMapIndex;
 
-use super::SignalId;
 use crate::error::{Error, Result};
+use crate::{SignalEntry, SignalHit};
 
 /// TurboQuant ANN index wrapping `turbovec::IdMapIndex`.
 ///
@@ -18,16 +18,19 @@ pub struct TurboVecIndex {
 impl TurboVecIndex {
     /// Build from `(id, 768-d f32)` pairs.
     /// `bit_width` 2–4 (4 = best recall, 2 = most compact).
-    pub fn build(entries: &[(SignalId, Vec<f32>)], bit_width: usize) -> Result<Self> {
+    pub fn build(entries: &[SignalEntry], bit_width: usize) -> Result<Self> {
         if entries.is_empty() {
             return Err(Error::Market("empty entries".into()));
         }
         let dim = entries[0].1.len();
-        if dim % 8 != 0 {
+        if !dim.is_multiple_of(8) {
             return Err(Error::Market(format!("dim {dim} not a multiple of 8")));
         }
         let mut inner = IdMapIndex::new(dim, bit_width);
-        let flat: Vec<f32> = entries.iter().flat_map(|(_, v)| v.iter().copied()).collect();
+        let flat: Vec<f32> = entries
+            .iter()
+            .flat_map(|(_, v)| v.iter().copied())
+            .collect();
         let ids: Vec<u64> = entries.iter().map(|(id, _)| *id).collect();
         inner.add_with_ids(&flat, &ids);
         inner.prepare();
@@ -35,7 +38,7 @@ impl TurboVecIndex {
     }
 
     /// Search for top-K nearest by inner-product (cosine on pre-normalised vecs).
-    pub fn search(&self, query: &[f32], top_k: usize) -> Result<Vec<(SignalId, f32)>> {
+    pub fn search(&self, query: &[f32], top_k: usize) -> Result<Vec<SignalHit>> {
         if query.len() != self.dim {
             return Err(Error::Market(format!(
                 "query dim {} != index dim {}",

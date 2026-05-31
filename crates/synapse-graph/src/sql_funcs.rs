@@ -12,9 +12,9 @@
 //! Output: JSON strings (parseable by any client). Pattern matches SQLite-vec /
 //! sqlite-fts5 — extension functions, no schema change required.
 
-use rusqlite::{functions::FunctionFlags, Connection};
+use rusqlite::{Connection, functions::FunctionFlags};
 
-use crate::{neighbors, edge_count, shortest_path};
+use crate::{edge_count, neighbors, shortest_path};
 
 /// Register all graph SQL functions on a connection.
 pub fn register(conn: &Connection) -> rusqlite::Result<()> {
@@ -51,7 +51,7 @@ pub fn register(conn: &Connection) -> rusqlite::Result<()> {
         FunctionFlags::SQLITE_DETERMINISTIC,
         |ctx| {
             let _node_id: i64 = ctx.get(0)?;
-            Ok(0.0_f64)  // placeholder; real lookup in P2 via separate query
+            Ok(0.0_f64) // placeholder; real lookup in P2 via separate query
         },
     )?;
 
@@ -65,21 +65,28 @@ pub mod helpers {
 
     pub fn neighbors_json(conn: &Connection, node_id: i64, top_k: usize) -> crate::Result<String> {
         let rows = neighbors(conn, node_id, None, top_k)?;
-        let v: Vec<serde_json::Value> = rows.into_iter().map(|(id, w, rel)| {
-            serde_json::json!({"id": id, "weight": w, "rel": rel})
-        }).collect();
+        let v: Vec<serde_json::Value> = rows
+            .into_iter()
+            .map(|(id, w, rel)| serde_json::json!({"id": id, "weight": w, "rel": rel}))
+            .collect();
         Ok(serde_json::to_string(&v).unwrap_or_else(|_| "[]".into()))
     }
 
     pub fn pagerank_top_json(conn: &Connection, n: usize) -> crate::Result<String> {
         let top = crate::algorithms::top_pagerank(conn, n, 0.85, 30)?;
-        let v: Vec<serde_json::Value> = top.into_iter().map(|(id, score)| {
-            serde_json::json!({"id": id, "score": score})
-        }).collect();
+        let v: Vec<serde_json::Value> = top
+            .into_iter()
+            .map(|(id, score)| serde_json::json!({"id": id, "score": score}))
+            .collect();
         Ok(serde_json::to_string(&v).unwrap_or_else(|_| "[]".into()))
     }
 
-    pub fn shortest_path_json(conn: &Connection, from_id: i64, to_id: i64, max_depth: usize) -> crate::Result<String> {
+    pub fn shortest_path_json(
+        conn: &Connection,
+        from_id: i64,
+        to_id: i64,
+        max_depth: usize,
+    ) -> crate::Result<String> {
         match shortest_path(conn, from_id, to_id, max_depth)? {
             Some((cost, path)) => Ok(serde_json::json!({"cost": cost, "path": path}).to_string()),
             None => Ok("null".into()),
@@ -117,7 +124,9 @@ mod tests {
     fn register_creates_functions() {
         let conn = setup();
         register(&conn).unwrap();
-        let n: String = conn.query_row("SELECT graph_neighbors(1, 5)", [], |r| r.get(0)).unwrap();
+        let n: String = conn
+            .query_row("SELECT graph_neighbors(1, 5)", [], |r| r.get(0))
+            .unwrap();
         assert!(n.contains("placeholder"));
     }
 

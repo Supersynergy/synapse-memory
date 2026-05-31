@@ -32,6 +32,8 @@
 use std::io::{Read, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::Mutex;
+use std::sync::mpsc;
+use std::time::Duration;
 
 use crate::embedder_trait::TextEmbedder;
 use crate::error::{Error, Result};
@@ -50,10 +52,9 @@ struct Sidecar {
 
 impl Sidecar {
     fn spawn() -> Result<Self> {
-        let py = std::env::var("SYNAPSE_MLX_PYTHON")
-            .unwrap_or_else(|_| "python3".to_string());
-        let script = std::env::var("SYNAPSE_MLX_SCRIPT")
-            .unwrap_or_else(|_| DEFAULT_SCRIPT.to_string());
+        let py = std::env::var("SYNAPSE_MLX_PYTHON").unwrap_or_else(|_| "python3".to_string());
+        let script =
+            std::env::var("SYNAPSE_MLX_SCRIPT").unwrap_or_else(|_| DEFAULT_SCRIPT.to_string());
 
         let mut child = Command::new(&py)
             .arg(&script)
@@ -72,13 +73,38 @@ impl Sidecar {
             .take()
             .ok_or_else(|| Error::Other("mlx sidecar: no stdout".into()))?;
 
-        let mut s = Self { child, stdin, stdout };
+        let timeout_ms = std::env::var("SYNAPSE_MLX_READY_TIMEOUT_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(15_000);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut stdout = stdout;
+            let ready = Self::read_msg_from(&mut stdout);
+            let _ = tx.send((stdout, ready));
+        });
 
-        let ready = s.read_msg()?;
+        let (stdout, ready) = match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
+            Ok(v) => v,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(Error::Other(format!(
+                    "mlx sidecar ready timeout after {timeout_ms}ms"
+                )));
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(Error::Other(format!("mlx sidecar ready channel: {e}")));
+            }
+        };
+
+        let ready = ready?;
         let ready_ok = match &ready {
-            rmpv::Value::Map(m) => m.iter().any(|(k, v)| {
-                k.as_str() == Some("ready") && v.as_bool() == Some(true)
-            }),
+            rmpv::Value::Map(m) => m
+                .iter()
+                .any(|(k, v)| k.as_str() == Some("ready") && v.as_bool() == Some(true)),
             _ => false,
         };
         if !ready_ok {
@@ -86,10 +112,18 @@ impl Sidecar {
                 "mlx sidecar handshake failed: {ready:?}"
             )));
         }
-        Ok(s)
+        Ok(Self {
+            child,
+            stdin,
+            stdout,
+        })
     }
 
     fn read_msg(&mut self) -> Result<rmpv::Value> {
+        Self::read_msg_from(&mut self.stdout)
+    }
+
+    fn read_msg_from(stdout: &mut ChildStdout) -> Result<rmpv::Value> {
         // CRIT-2: bound msgpack frame size — untrusted u32 length prefix
         // could otherwise force a 4 GiB allocation (DoS via crafted sidecar
         // response or compromised script). 256 MiB is far above any
@@ -97,7 +131,7 @@ impl Sidecar {
         const MAX_FRAME: usize = 256 * 1024 * 1024;
 
         let mut hdr = [0u8; 4];
-        self.stdout
+        stdout
             .read_exact(&mut hdr)
             .map_err(|e| Error::Other(format!("mlx read hdr: {e}")))?;
         let n = u32::from_be_bytes(hdr) as usize;
@@ -110,7 +144,7 @@ impl Sidecar {
             )));
         }
         let mut buf = vec![0u8; n];
-        self.stdout
+        stdout
             .read_exact(&mut buf)
             .map_err(|e| Error::Other(format!("mlx read body: {e}")))?;
         rmpv::decode::read_value(&mut &buf[..])
@@ -231,9 +265,9 @@ impl TextEmbedder for MlxMetalEmbedder {
                             };
                             let mut v: Vec<f32> = Vec::with_capacity(row_arr.len());
                             for n in row_arr {
-                                let f = n.as_f64().ok_or_else(|| {
-                                    Error::Other("mlx vec elem not float".into())
-                                })?;
+                                let f = n
+                                    .as_f64()
+                                    .ok_or_else(|| Error::Other("mlx vec elem not float".into()))?;
                                 v.push(f as f32);
                             }
                             out.push(v);
@@ -267,9 +301,8 @@ impl TextEmbedder for MlxMetalEmbedder {
 //   * Pre-existing `embed_batch` path bypasses the coalescer (explicit
 //     batch callers already pay one IPC for many docs).
 
-use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const COALESCE_WINDOW: Duration = Duration::from_millis(1);
 const COALESCE_MAX_BATCH: usize = 32;
@@ -345,7 +378,7 @@ fn coalesce_run(rx: mpsc::Receiver<CoalesceReq>, batch_fn: std::sync::Arc<BatchF
         match batch_fn(&texts) {
             Ok(vecs) => {
                 debug_assert_eq!(vecs.len(), batch.len());
-                for (req, v) in batch.into_iter().zip(vecs.into_iter()) {
+                for (req, v) in batch.into_iter().zip(vecs) {
                     let _ = req.reply.send(Ok(v));
                 }
             }
@@ -413,8 +446,8 @@ mod tests {
     /// behaviour). This proves fan-in works.
     #[test]
     fn coalescer_fans_in_concurrent_singletons() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         let batch_calls = Arc::new(AtomicUsize::new(0));
         let bc = batch_calls.clone();
@@ -468,9 +501,8 @@ mod tests {
     #[test]
     fn coalescer_flushes_lone_request_after_window() {
         use std::sync::Arc;
-        let fake: Arc<BatchFn> = Arc::new(|texts: &[String]| {
-            Ok(texts.iter().map(|_| vec![0.0f32; 384]).collect())
-        });
+        let fake: Arc<BatchFn> =
+            Arc::new(|texts: &[String]| Ok(texts.iter().map(|_| vec![0.0f32; 384]).collect()));
         let (tx, rx) = mpsc::channel::<CoalesceReq>();
         let _w = thread::spawn(move || coalesce_run(rx, fake));
 

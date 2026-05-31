@@ -1,23 +1,27 @@
 use synapse_market::store::compact::{ColdTier, cold_stats};
-use synapse_market::store::page::{encode_page, decode_page, Bar, PAGE_SIZE};
+use synapse_market::store::page::{Bar, decode_page, encode_page};
 use tempfile::TempDir;
 
 fn make_bars(n: usize, base_ts: i64) -> Vec<Bar> {
-    (0..n).map(|i| Bar {
-        ts: base_ts + i as i64 * 900,
-        open: 100.0 + i as f32 * 0.1,
-        high: 101.0 + i as f32 * 0.1,
-        low: 99.0 + i as f32 * 0.1,
-        close: 100.5 + i as f32 * 0.1,
-        volume: 1000.0 + i as f32,
-    }).collect()
+    (0..n)
+        .map(|i| Bar {
+            ts: base_ts + i as i64 * 900,
+            open: 100.0 + i as f32 * 0.1,
+            high: 101.0 + i as f32 * 0.1,
+            low: 99.0 + i as f32 * 0.1,
+            close: 100.5 + i as f32 * 0.1,
+            volume: 1000.0 + i as f32,
+        })
+        .collect()
 }
 
 fn make_raw_pages(n_pages: usize, base_ts: i64) -> Vec<Vec<u8>> {
-    (0..n_pages).map(|p| {
-        let bars = make_bars(100, base_ts + p as i64 * 100 * 900);
-        encode_page(&bars)
-    }).collect()
+    (0..n_pages)
+        .map(|p| {
+            let bars = make_bars(100, base_ts + p as i64 * 100 * 900);
+            encode_page(&bars)
+        })
+        .collect()
 }
 
 #[test]
@@ -27,8 +31,12 @@ fn cold_roundtrip_identity() {
 
     let base = 1_700_000_000i64;
     let raw_pages = make_raw_pages(100, base);
-    let original_bars: Vec<Bar> = raw_pages.iter()
-        .flat_map(|p| { let (_, bars) = decode_page(p); bars })
+    let original_bars: Vec<Bar> = raw_pages
+        .iter()
+        .flat_map(|p| {
+            let (_, bars) = decode_page(p);
+            bars
+        })
         .collect();
 
     ColdTier::create(&csm, &raw_pages).expect("create cold tier");
@@ -45,7 +53,11 @@ fn cold_roundtrip_identity() {
     assert_eq!(recovered.len(), original_bars.len());
     for (a, b) in original_bars.iter().zip(recovered.iter()) {
         assert_eq!(a.ts, b.ts);
-        assert!((a.close - b.close).abs() < 1e-5, "close mismatch at ts={}", a.ts);
+        assert!(
+            (a.close - b.close).abs() < 1e-5,
+            "close mismatch at ts={}",
+            a.ts
+        );
         assert!((a.open - b.open).abs() < 1e-5);
     }
 }
@@ -129,9 +141,15 @@ fn cold_compression_ratio() {
     let ratio = stats.compression_ratio();
     // Financial OHLCV data typically compresses 4-8× with zstd-19
     // Our synthetic test data (arithmetic progression) compresses very well
-    assert!(ratio >= 2.0, "compression ratio {ratio:.2} below 2× (expected 4-8×)");
+    assert!(
+        ratio >= 2.0,
+        "compression ratio {ratio:.2} below 2× (expected 4-8×)"
+    );
     println!("cold compression ratio: {ratio:.2}×");
-    println!("hot bytes: {} cold bytes: {} savings: {:.1}%",
-        stats.hot_bytes, stats.total_compressed_bytes,
-        (1.0 - 1.0/ratio) * 100.0);
+    println!(
+        "hot bytes: {} cold bytes: {} savings: {:.1}%",
+        stats.hot_bytes,
+        stats.total_compressed_bytes,
+        (1.0 - 1.0 / ratio) * 100.0
+    );
 }

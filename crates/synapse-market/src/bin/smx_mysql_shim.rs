@@ -31,6 +31,9 @@ mod inner {
     use synapse_market::Market;
 
     const VERSION: &str = "8.0.32-smx-market-1.0";
+    type CorrQuery = (Vec<String>, i64, i64);
+    type ResultRows = Vec<Vec<String>>;
+    type QueryResult = (Vec<String>, ResultRows);
 
     // -------------------------------------------------------------------------
     // Arg parsing (no extra deps — just env::args)
@@ -49,8 +52,14 @@ mod inner {
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
-                    "--addr" => { i += 1; addr = args[i].clone(); }
-                    "--db"   => { i += 1; db   = args[i].clone(); }
+                    "--addr" => {
+                        i += 1;
+                        addr = args[i].clone();
+                    }
+                    "--db" => {
+                        i += 1;
+                        db = args[i].clone();
+                    }
                     _ => {}
                 }
                 i += 1;
@@ -80,7 +89,9 @@ mod inner {
     /// Parse: SELECT * FROM candles WHERE ticker='X' AND ts BETWEEN N AND M
     fn parse_candles_query(sql: &str) -> Option<(String, i64, i64)> {
         let upper = sql.to_ascii_uppercase();
-        if !upper.contains("FROM CANDLES") { return None; }
+        if !upper.contains("FROM CANDLES") {
+            return None;
+        }
         // ticker=
         let ticker = extract_string_eq(sql, "ticker")?;
         let (ts_start, ts_end) = extract_between(sql, "ts")?;
@@ -101,7 +112,9 @@ mod inner {
             let end = inner.find('"')?;
             Some(inner[..end].to_owned())
         } else {
-            let end = rest.find(|c: char| c.is_whitespace() || c == ';').unwrap_or(rest.len());
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == ';')
+                .unwrap_or(rest.len());
             Some(rest[..end].to_owned())
         }
     }
@@ -119,15 +132,19 @@ mod inner {
     }
 
     /// Parse: SELECT corr_matrix('AAPL,MSFT', 1000000, 9999999)
-    fn parse_corr_query(sql: &str) -> Option<(Vec<String>, i64, i64)> {
+    fn parse_corr_query(sql: &str) -> Option<CorrQuery> {
         let upper = sql.to_ascii_uppercase();
-        if !upper.contains("CORR_MATRIX(") { return None; }
+        if !upper.contains("CORR_MATRIX(") {
+            return None;
+        }
         let start = sql.to_ascii_lowercase().find("corr_matrix(")?;
         let inner_start = start + "corr_matrix(".len();
         let inner_end = sql[inner_start..].find(')')?;
         let args_str = &sql[inner_start..inner_start + inner_end];
         let args: Vec<&str> = args_str.split(',').collect();
-        if args.len() < 3 { return None; }
+        if args.len() < 3 {
+            return None;
+        }
         let tickers_str = args[0].trim().trim_matches('\'').trim_matches('"');
         let ts_start: i64 = args[1].trim().parse().ok()?;
         let ts_end: i64 = args[2].trim().trim_end_matches(')').parse().ok()?;
@@ -135,7 +152,7 @@ mod inner {
         Some((tickers, ts_start, ts_end))
     }
 
-    fn intercept(sql: &str) -> Option<(Vec<String>, Vec<Vec<String>>)> {
+    fn intercept(sql: &str) -> Option<QueryResult> {
         let s = sql.trim().to_ascii_lowercase();
         let s = s.trim_end_matches(';');
         if s == "select 1" || s.starts_with("select 1 ") {
@@ -151,45 +168,58 @@ mod inner {
             return Some((vec!["Database".into()], vec![vec!["synapse_market".into()]]));
         }
         if s.starts_with("show tables") {
-            return Some((vec!["Tables_in_synapse_market".into()], vec![vec!["candles".into()]]));
+            return Some((
+                vec!["Tables_in_synapse_market".into()],
+                vec![vec!["candles".into()]],
+            ));
         }
         None
     }
 
-    fn handle_candles(
-        market: &std::sync::MutexGuard<Market>,
-        ticker: &str, ts_start: i64, ts_end: i64,
-    ) -> (Vec<String>, Vec<Vec<String>>) {
-        let cols = vec!["ts".into(), "open".into(), "high".into(), "low".into(), "close".into(), "volume".into()];
-        let rows = market.fetch_candles(ticker, ts_start, ts_end)
+    fn handle_candles(market: &Market, ticker: &str, ts_start: i64, ts_end: i64) -> QueryResult {
+        let cols = vec![
+            "ts".into(),
+            "open".into(),
+            "high".into(),
+            "low".into(),
+            "close".into(),
+            "volume".into(),
+        ];
+        let rows = market
+            .fetch_candles(ticker, ts_start, ts_end)
             .unwrap_or_default()
             .into_iter()
-            .map(|(ts, o, h, l, c, v)| vec![
-                ts.to_string(), o.to_string(), h.to_string(),
-                l.to_string(), c.to_string(), v.to_string(),
-            ])
+            .map(|(ts, o, h, l, c, v)| {
+                vec![
+                    ts.to_string(),
+                    o.to_string(),
+                    h.to_string(),
+                    l.to_string(),
+                    c.to_string(),
+                    v.to_string(),
+                ]
+            })
             .collect();
         (cols, rows)
     }
 
-    fn handle_corr(
-        market: &std::sync::MutexGuard<Market>,
-        tickers: &[String], ts_start: i64, ts_end: i64,
-    ) -> (Vec<String>, Vec<Vec<String>>) {
+    fn handle_corr(market: &Market, tickers: &[String], ts_start: i64, ts_end: i64) -> QueryResult {
         let ticker_refs: Vec<&str> = tickers.iter().map(|s| s.as_str()).collect();
-        let cols = tickers.clone();
+        let cols = tickers.to_vec();
         let cm = market.correlation_matrix(&ticker_refs, ts_start..ts_end);
         match cm {
             Ok(m) => {
                 let n = m.n;
-                let rows = (0..n).map(|r| {
-                    (0..n).map(|c| format!("{:.4}", m.data[r * n + c])).collect()
-                }).collect();
+                let rows = (0..n)
+                    .map(|r| {
+                        (0..n)
+                            .map(|c| format!("{:.4}", m.data[r * n + c]))
+                            .collect()
+                    })
+                    .collect();
                 (cols, rows)
             }
-            Err(e) => {
-                (vec!["error".into()], vec![vec![e.to_string()]])
-            }
+            Err(e) => (vec!["error".into()], vec![vec![e.to_string()]]),
         }
     }
 
@@ -204,17 +234,30 @@ mod inner {
     {
         type Error = io::Error;
 
-        async fn on_prepare<'a>(&'a mut self, _sql: &'a str, info: StatementMetaWriter<'a, W>) -> io::Result<()> {
+        async fn on_prepare<'a>(
+            &'a mut self,
+            _sql: &'a str,
+            info: StatementMetaWriter<'a, W>,
+        ) -> io::Result<()> {
             info.reply(1, &[], &[]).await
         }
 
-        async fn on_execute<'a>(&'a mut self, _id: u32, _params: ParamParser<'a>, results: QueryResultWriter<'a, W>) -> io::Result<()> {
+        async fn on_execute<'a>(
+            &'a mut self,
+            _id: u32,
+            _params: ParamParser<'a>,
+            results: QueryResultWriter<'a, W>,
+        ) -> io::Result<()> {
             results.completed(OkResponse::default()).await
         }
 
         async fn on_close(&mut self, _id: u32) {}
 
-        async fn on_query<'a>(&'a mut self, sql: &'a str, results: QueryResultWriter<'a, W>) -> io::Result<()> {
+        async fn on_query<'a>(
+            &'a mut self,
+            sql: &'a str,
+            results: QueryResultWriter<'a, W>,
+        ) -> io::Result<()> {
             if let Some((cols, rows)) = intercept(sql) {
                 return write_result(results, cols, rows).await;
             }
@@ -225,14 +268,18 @@ mod inner {
             }
 
             if let Some((ticker, ts_start, ts_end)) = parse_candles_query(sql) {
-                let market = self.market.lock().unwrap();
-                let (cols, rows) = handle_candles(&market, &ticker, ts_start, ts_end);
+                let (cols, rows) = {
+                    let market = self.market.lock().unwrap();
+                    handle_candles(&market, &ticker, ts_start, ts_end)
+                };
                 return write_result(results, cols, rows).await;
             }
 
             if let Some((tickers, ts_start, ts_end)) = parse_corr_query(sql) {
-                let market = self.market.lock().unwrap();
-                let (cols, rows) = handle_corr(&market, &tickers, ts_start, ts_end);
+                let (cols, rows) = {
+                    let market = self.market.lock().unwrap();
+                    handle_corr(&market, &tickers, ts_start, ts_end)
+                };
                 return write_result(results, cols, rows).await;
             }
 
@@ -249,13 +296,16 @@ mod inner {
     where
         W: AsyncWrite + Send + Unpin,
     {
-        let cols: Vec<Column> = col_names.iter().map(|name| Column {
-            table: String::new(),
-            column: name.clone(),
-            collen: 65535,
-            coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
-            colflags: ColumnFlags::empty(),
-        }).collect();
+        let cols: Vec<Column> = col_names
+            .iter()
+            .map(|name| Column {
+                table: String::new(),
+                column: name.clone(),
+                collen: 65535,
+                coltype: ColumnType::MYSQL_TYPE_VAR_STRING,
+                colflags: ColumnFlags::empty(),
+            })
+            .collect();
         let mut rw = results.start(&cols).await?;
         for row in rows {
             for val in &row {

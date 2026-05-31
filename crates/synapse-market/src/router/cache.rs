@@ -1,5 +1,4 @@
 use lru::LruCache;
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::Path;
 
@@ -43,14 +42,15 @@ impl PlanCache {
             bandit: self.bandit.clone(),
             entries: self.cache.iter().map(|(k, &v)| (k.clone(), v)).collect(),
         };
-        let bytes = bincode::serialize(&snapshot)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let bytes = bincode::serialize(&snapshot).map_err(std::io::Error::other)?;
         std::fs::write(path, bytes)
     }
 
     /// Load from bincode file. Returns default cache on any error.
     pub fn load<P: AsRef<Path>>(path: P, capacity: usize) -> Self {
-        let Ok(bytes) = std::fs::read(&path) else { return Self::new(capacity) };
+        let Ok(bytes) = std::fs::read(&path) else {
+            return Self::new(capacity);
+        };
         let Ok(snap): Result<CacheSnapshot, _> = bincode::deserialize(&bytes) else {
             return Self::new(capacity);
         };
@@ -59,7 +59,10 @@ impl PlanCache {
         for (k, v) in snap.entries {
             cache.put(k, v);
         }
-        Self { cache, bandit: snap.bandit }
+        Self {
+            cache,
+            bandit: snap.bandit,
+        }
     }
 }
 

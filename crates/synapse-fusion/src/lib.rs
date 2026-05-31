@@ -1,5 +1,7 @@
 /// DocId mirrors synapse-core's i64 row-id (no hard dep on synapse-core).
 pub type DocId = i64;
+pub type ScoredDoc = (DocId, f32);
+pub type DenseDoc = (DocId, Vec<f32>);
 
 /// Reciprocal-Rank-Fusion over two ranked lists (dense + ColBERT).
 ///
@@ -7,11 +9,7 @@ pub type DocId = i64;
 /// `k_constant` is the RRF smoothing constant (paper default: 60.0).
 ///
 /// Returns a new vec sorted descending by fused RRF score.
-pub fn muvera_rrf(
-    dense: &[(DocId, f32)],
-    colbert: &[(DocId, f32)],
-    k_constant: f32,
-) -> Vec<(DocId, f32)> {
+pub fn muvera_rrf(dense: &[ScoredDoc], colbert: &[ScoredDoc], k_constant: f32) -> Vec<ScoredDoc> {
     use std::collections::HashMap;
     let mut scores: HashMap<DocId, f32> = HashMap::new();
 
@@ -22,7 +20,7 @@ pub fn muvera_rrf(
         *scores.entry(*doc_id).or_insert(0.0) += 1.0 / (k_constant + rank as f32 + 1.0);
     }
 
-    let mut result: Vec<(DocId, f32)> = scores.into_iter().collect();
+    let mut result: Vec<ScoredDoc> = scores.into_iter().collect();
     result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     result
 }
@@ -39,8 +37,8 @@ pub fn muvera_rrf(
 /// * `dense_top`       – how many dense results to consider
 /// * `colbert_rerank_top` – how many ColBERT results to consider
 pub fn full_pipeline(
-    dense_results: &[(DocId, f32)],
-    colbert_results: &[(DocId, f32)],
+    dense_results: &[ScoredDoc],
+    colbert_results: &[ScoredDoc],
     dense_top: usize,
     colbert_rerank_top: usize,
 ) -> Vec<DocId> {
@@ -60,7 +58,7 @@ pub fn full_pipeline(
 /// ANN search is exhaustive (brute-force cosine) — adequate for top-100 from
 /// moderate corpora; replace with usearch/hnsw once wired.
 pub struct DenseStore {
-    docs: Vec<(DocId, Vec<f32>)>,
+    docs: Vec<DenseDoc>,
 }
 
 impl DenseStore {
@@ -74,8 +72,8 @@ impl DenseStore {
     }
 
     /// Brute-force cosine top-k.
-    pub fn search(&self, query: &[f32], k: usize) -> Vec<(DocId, f32)> {
-        let mut scored: Vec<(DocId, f32)> = self
+    pub fn search(&self, query: &[f32], k: usize) -> Vec<ScoredDoc> {
+        let mut scored: Vec<ScoredDoc> = self
             .docs
             .iter()
             .map(|(id, v)| {
@@ -90,7 +88,9 @@ impl DenseStore {
 }
 
 impl Default for DenseStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Full MUVERA pipeline result.
@@ -102,9 +102,9 @@ pub struct MuveraResult {
 }
 
 pub struct MuveraLatency {
-    pub dense_ann_us:    u64,
-    pub splade_bmp_us:   u64,
-    pub rrf_fuse_us:     u64,
+    pub dense_ann_us: u64,
+    pub splade_bmp_us: u64,
+    pub rrf_fuse_us: u64,
     pub colbert_rerank_us: u64,
 }
 
@@ -140,10 +140,8 @@ pub fn search_muvera_full(
     let q_sparse = splade_enc.encode(query)?;
     let splade_raw = bmp.search_topk(&q_sparse, 100);
     // Convert BlockMaxIndex DocId (u64) to i64
-    let sparse_top: Vec<(DocId, f32)> = splade_raw
-        .iter()
-        .map(|&(id, s)| (id as DocId, s))
-        .collect();
+    let sparse_top: Vec<(DocId, f32)> =
+        splade_raw.iter().map(|&(id, s)| (id as DocId, s)).collect();
     let splade_bmp_us = t1.elapsed().as_micros() as u64;
 
     // ── Stage 3: RRF fuse → top-50 ────────────────────────────────────────────
@@ -187,7 +185,10 @@ mod tests {
         let doc3_score = fused.iter().find(|(id, _)| *id == 3).unwrap().1;
         // rank-2 in both: 1/(60+2) + 1/(60+2) = 2/62 ≈ 0.03226
         let expected = 2.0 / 62.0;
-        assert!((doc3_score - expected).abs() < 1e-5, "doc3 score {doc3_score} != {expected}");
+        assert!(
+            (doc3_score - expected).abs() < 1e-5,
+            "doc3 score {doc3_score} != {expected}"
+        );
     }
 
     #[test]
@@ -217,20 +218,29 @@ mod tests {
     #[cfg(feature = "fusion-full")]
     #[test]
     fn muvera_e2e_smoke() -> anyhow::Result<()> {
-        use std::time::Instant;
-        use synapse_splade::{BlockMaxIndex, SpladeEncoder};
-        use synapse_colbert::ColbertStore;
         use rusqlite::Connection;
+        use std::time::Instant;
+        use synapse_colbert::ColbertStore;
+        use synapse_splade::{BlockMaxIndex, SpladeEncoder};
 
         let docs = [
-            (0i64, "ColBERT late interaction retrieval multi vector dense"),
+            (
+                0i64,
+                "ColBERT late interaction retrieval multi vector dense",
+            ),
             (1i64, "neural sparse SPLADE inverted index efficient search"),
             (2i64, "apple banana cherry fruit salad recipe"),
             (3i64, "tokio async runtime rust performance concurrency"),
-            (4i64, "late interaction reranking colbert max sim score neural"),
+            (
+                4i64,
+                "late interaction reranking colbert max sim score neural",
+            ),
             (5i64, "transformer attention mechanism bert embeddings"),
             (6i64, "database btree index scan query optimizer"),
-            (7i64, "dense retrieval embedding similarity cosine dot product"),
+            (
+                7i64,
+                "dense retrieval embedding similarity cosine dot product",
+            ),
             (8i64, "information retrieval SPLADE sparse expansion"),
             (9i64, "deep learning text classification sentiment analysis"),
         ];
@@ -238,8 +248,8 @@ mod tests {
         // Build dense store (random 8-dim stub, make doc 0 and 4 colbert-like)
         let mut dense = DenseStore::new();
         let query_vec: Vec<f32> = vec![0.9, 0.4, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let norm = query_vec.iter().map(|x| x*x).sum::<f32>().sqrt();
-        let query_vec: Vec<f32> = query_vec.iter().map(|x| x/norm).collect();
+        let norm = query_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let query_vec: Vec<f32> = query_vec.iter().map(|x| x / norm).collect();
 
         for &(id, text) in &docs {
             // Simple bag-of-words 8-dim fingerprint
@@ -247,8 +257,8 @@ mod tests {
             for (i, w) in text.split_whitespace().enumerate() {
                 v[i % 8] += (w.len() as f32) / 10.0;
             }
-            let n = v.iter().map(|x| x*x).sum::<f32>().sqrt().max(1e-6);
-            let v: Vec<f32> = v.iter().map(|x| x/n).collect();
+            let n = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-6);
+            let v: Vec<f32> = v.iter().map(|x| x / n).collect();
             dense.add(id, v);
         }
 
@@ -288,7 +298,8 @@ mod tests {
         let top3 = &result.ranked[..result.ranked.len().min(3)];
         assert!(
             top3.contains(&0) || top3.contains(&4),
-            "Expected colbert docs in top-3, got: {:?}", result.ranked
+            "Expected colbert docs in top-3, got: {:?}",
+            result.ranked
         );
 
         eprintln!(

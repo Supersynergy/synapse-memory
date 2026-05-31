@@ -116,7 +116,13 @@ impl VlogStore {
         let val_offset = self.vlog_pos + 4 + k.len() as u64 + 4;
         self.vlog.write_all(v)?;
         self.vlog_pos = val_offset + v.len() as u64;
-        self.keys.insert(k, VlogPtr { offset: val_offset, len: vlen });
+        self.keys.insert(
+            k,
+            VlogPtr {
+                offset: val_offset,
+                len: vlen,
+            },
+        );
         self.mmap = None; // invalidate cache on write
         Ok(())
     }
@@ -184,7 +190,10 @@ mod tests {
         store.put(b"hello".to_vec(), b"world").unwrap();
         store.put(b"foo".to_vec(), b"bar").unwrap();
         store.flush().unwrap();
-        assert_eq!(store.get(&b"hello".to_vec()).unwrap(), Some(b"world".to_vec()));
+        assert_eq!(
+            store.get(&b"hello".to_vec()).unwrap(),
+            Some(b"world".to_vec())
+        );
         assert_eq!(store.get(&b"foo".to_vec()).unwrap(), Some(b"bar".to_vec()));
         assert_eq!(store.get(&b"missing".to_vec()).unwrap(), None);
     }
@@ -222,6 +231,9 @@ mod tests {
         let big = vec![0xabu8; 1_000_000];
         store.put(b"big".to_vec(), &big).unwrap();
         store.flush().unwrap();
-        assert_eq!(store.get(&b"big".to_vec()).unwrap().unwrap().len(), 1_000_000);
+        assert_eq!(
+            store.get(&b"big".to_vec()).unwrap().unwrap().len(),
+            1_000_000
+        );
     }
 }

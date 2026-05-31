@@ -11,7 +11,16 @@ fn reduce_sum(acc: f32x8) -> f32 {
 
 #[inline(always)]
 fn load8(xs: &[f32], i: usize) -> f32x8 {
-    f32x8::from([xs[i], xs[i+1], xs[i+2], xs[i+3], xs[i+4], xs[i+5], xs[i+6], xs[i+7]])
+    f32x8::from([
+        xs[i],
+        xs[i + 1],
+        xs[i + 2],
+        xs[i + 3],
+        xs[i + 4],
+        xs[i + 5],
+        xs[i + 6],
+        xs[i + 7],
+    ])
 }
 
 // ── public kernels ────────────────────────────────────────────────────────────
@@ -24,17 +33,23 @@ pub fn sum_f32(xs: &[f32]) -> f32 {
         acc += load8(xs, i * 8);
     }
     let mut s = reduce_sum(acc);
-    for i in full*8..n { s += xs[i]; }
+    for &x in xs.iter().take(n).skip(full * 8) {
+        s += x;
+    }
     s
 }
 
 pub fn mean_f32(xs: &[f32]) -> f32 {
-    if xs.is_empty() { return 0.0; }
+    if xs.is_empty() {
+        return 0.0;
+    }
     sum_f32(xs) / xs.len() as f32
 }
 
 pub fn max_f32(xs: &[f32]) -> f32 {
-    if xs.is_empty() { return f32::NEG_INFINITY; }
+    if xs.is_empty() {
+        return f32::NEG_INFINITY;
+    }
     let n = xs.len();
     let full = n / 8;
     let mut acc = f32x8::splat(f32::NEG_INFINITY);
@@ -43,12 +58,16 @@ pub fn max_f32(xs: &[f32]) -> f32 {
     }
     let arr: [f32; 8] = acc.into();
     let mut m = arr.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    for i in full*8..n { m = m.max(xs[i]); }
+    for &x in xs.iter().take(n).skip(full * 8) {
+        m = m.max(x);
+    }
     m
 }
 
 pub fn min_f32(xs: &[f32]) -> f32 {
-    if xs.is_empty() { return f32::INFINITY; }
+    if xs.is_empty() {
+        return f32::INFINITY;
+    }
     let n = xs.len();
     let full = n / 8;
     let mut acc = f32x8::splat(f32::INFINITY);
@@ -57,7 +76,9 @@ pub fn min_f32(xs: &[f32]) -> f32 {
     }
     let arr: [f32; 8] = acc.into();
     let mut m = arr.iter().cloned().fold(f32::INFINITY, f32::min);
-    for i in full*8..n { m = m.min(xs[i]); }
+    for &x in xs.iter().take(n).skip(full * 8) {
+        m = m.min(x);
+    }
     m
 }
 
@@ -66,24 +87,28 @@ pub fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
     let full = n / 8;
     let mut acc = f32x8::ZERO;
     for i in 0..full {
-        acc += load8(a, i*8) * load8(b, i*8);
+        acc += load8(a, i * 8) * load8(b, i * 8);
     }
     let mut s = reduce_sum(acc);
-    for i in full*8..n { s += a[i] * b[i]; }
+    for i in full * 8..n {
+        s += a[i] * b[i];
+    }
     s
 }
 
 pub fn correlation_f32(a: &[f32], b: &[f32]) -> f32 {
     let n = a.len().min(b.len());
-    if n < 2 { return 0.0; }
+    if n < 2 {
+        return 0.0;
+    }
     let mean_a = mean_f32(&a[..n]);
     let mean_b = mean_f32(&b[..n]);
     // Single-pass SIMD: no alloc
     let ma = f32x8::splat(mean_a);
     let mb = f32x8::splat(mean_b);
-    let mut num  = f32x8::ZERO;
-    let mut da2  = f32x8::ZERO;
-    let mut db2  = f32x8::ZERO;
+    let mut num = f32x8::ZERO;
+    let mut da2 = f32x8::ZERO;
+    let mut db2 = f32x8::ZERO;
     let full = n / 8;
     for i in 0..full {
         let ai = load8(a, i * 8) - ma;
@@ -95,7 +120,7 @@ pub fn correlation_f32(a: &[f32], b: &[f32]) -> f32 {
     let mut snum = reduce_sum(num);
     let mut sda2 = reduce_sum(da2);
     let mut sdb2 = reduce_sum(db2);
-    for i in full*8..n {
+    for i in full * 8..n {
         let ai = a[i] - mean_a;
         let bi = b[i] - mean_b;
         snum += ai * bi;
@@ -107,7 +132,9 @@ pub fn correlation_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 pub fn ewma_f32(xs: &[f32], alpha: f32) -> Vec<f32> {
-    if xs.is_empty() { return vec![]; }
+    if xs.is_empty() {
+        return vec![];
+    }
     let mut out = Vec::with_capacity(xs.len());
     let mut s = xs[0];
     out.push(s);
@@ -120,7 +147,9 @@ pub fn ewma_f32(xs: &[f32], alpha: f32) -> Vec<f32> {
 
 pub fn rolling_mean_f32(xs: &[f32], window: usize) -> Vec<f32> {
     let n = xs.len();
-    if n < window || window == 0 { return vec![]; }
+    if n < window || window == 0 {
+        return vec![];
+    }
     let mut out = Vec::with_capacity(n - window + 1);
     let inv = 1.0 / window as f32;
     // bootstrap first window
@@ -135,7 +164,9 @@ pub fn rolling_mean_f32(xs: &[f32], window: usize) -> Vec<f32> {
 
 pub fn rolling_std_f32(xs: &[f32], window: usize) -> Vec<f32> {
     let n = xs.len();
-    if n < window || window == 0 { return vec![]; }
+    if n < window || window == 0 {
+        return vec![];
+    }
     let mut out = Vec::with_capacity(n - window + 1);
     let inv = 1.0 / window as f32;
     for i in 0..=(n - window) {
@@ -151,7 +182,9 @@ pub fn rolling_std_f32(xs: &[f32], window: usize) -> Vec<f32> {
 /// `byte_offset` = offset of the f32 field inside T.
 /// SAFETY: caller guarantees T has f32 at byte_offset.
 pub fn mean_strided_f32<T>(slice: &[T], byte_offset: usize) -> f32 {
-    if slice.is_empty() { return 0.0; }
+    if slice.is_empty() {
+        return 0.0;
+    }
     let n = slice.len();
     let stride = std::mem::size_of::<T>();
     let base = slice.as_ptr() as *const u8;
@@ -167,7 +200,9 @@ pub fn mean_strided_f32<T>(slice: &[T], byte_offset: usize) -> f32 {
 pub mod scalar {
     pub fn rolling_mean_f32(xs: &[f32], window: usize) -> Vec<f32> {
         let n = xs.len();
-        if n < window || window == 0 { return vec![]; }
+        if n < window || window == 0 {
+            return vec![];
+        }
         let inv = 1.0 / window as f32;
         let mut out = Vec::with_capacity(n - window + 1);
         let mut sum: f32 = xs[..window].iter().sum();
@@ -180,7 +215,9 @@ pub mod scalar {
     }
 
     pub fn ewma_f32(xs: &[f32], alpha: f32) -> Vec<f32> {
-        if xs.is_empty() { return vec![]; }
+        if xs.is_empty() {
+            return vec![];
+        }
         let mut out = Vec::with_capacity(xs.len());
         let mut s = xs[0];
         out.push(s);
@@ -193,7 +230,9 @@ pub mod scalar {
 
     pub fn correlation_f32(a: &[f32], b: &[f32]) -> f32 {
         let n = a.len().min(b.len());
-        if n < 2 { return 0.0; }
+        if n < 2 {
+            return 0.0;
+        }
         let mean_a = a[..n].iter().sum::<f32>() / n as f32;
         let mean_b = b[..n].iter().sum::<f32>() / n as f32;
         let mut num = 0.0f32;

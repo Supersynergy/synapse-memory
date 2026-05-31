@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use std::collections::HashMap;
 use synapse_tsdb::fallback::{AggOp, Row, TsdbStore};
 use tempfile::TempDir;

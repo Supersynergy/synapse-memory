@@ -16,7 +16,10 @@ use synapsql::Service;
 use synapsql::server::brain_adapter::BrainAdapter;
 
 #[derive(Parser)]
-#[command(name = "synapsql", about = "SynapsQL — MySQL/PG-wire + Vector + FTS. One binary. Zero config.")]
+#[command(
+    name = "synapsql",
+    about = "SynapsQL — MySQL/PG-wire + Vector + FTS. One binary. Zero config."
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
@@ -67,14 +70,18 @@ async fn main() -> std::io::Result<()> {
         _ => {}
     }
 
-    let adapter = BrainAdapter::open(&cli.db)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    let adapter = BrainAdapter::open(&cli.db).map_err(|e| std::io::Error::other(e.to_string()))?;
     let store: Arc<dyn synapse_libsql::Store> = Arc::new(adapter);
 
     // Spawn QPS reporter (logs every 5s)
     tokio::spawn(qps_reporter());
 
-    tracing::info!("SynapsQL starting — mysql={} pg={} http={}", cli.mysql, cli.pg, cli.http);
+    tracing::info!(
+        "SynapsQL starting — mysql={} pg={} http={}",
+        cli.mysql,
+        cli.pg,
+        cli.http
+    );
 
     Service::new(store)
         .with_mysql(&cli.mysql)
@@ -95,4 +102,3 @@ async fn qps_reporter() {
         }
     }
 }
-

@@ -5,7 +5,7 @@
 //! Scalar quantization (i8/bf16) is available post-PR-C1 when synapse-quant
 //! lands; for now we stay f32 to match the ladder fairness assumption.
 
-use crate::{AnnError, AnnIndex};
+use crate::{AnnError, AnnIndex, SearchResults};
 use std::path::{Path, PathBuf};
 use usearch::{Index, IndexOptions, MetricKind, ScalarKind};
 
@@ -36,12 +36,21 @@ pub struct UsearchIndex {
 }
 
 impl UsearchIndex {
+    fn capacity_with_headroom(current_capacity: usize, needed: usize) -> usize {
+        if needed <= current_capacity {
+            return current_capacity;
+        }
+        let growth = (current_capacity / 16).max(1024);
+        needed
+            .max(current_capacity.saturating_add(growth))
+            .max(1024)
+    }
+
     /// Build a new empty HNSW index. `expected_capacity` pre-sizes internal
     /// arrays; under-sizing forces realloc, over-sizing costs RAM.
     pub fn new(dim: usize, expected_capacity: usize) -> Result<Self, AnnError> {
         let opts = Self::default_opts(dim);
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(expected_capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -80,8 +89,7 @@ impl UsearchIndex {
             expansion_search,
             multi: false,
         };
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -98,8 +106,7 @@ impl UsearchIndex {
             expansion_search: 256,
             multi: false,
         };
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(expected_capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -117,8 +124,7 @@ impl UsearchIndex {
             expansion_search: 256,
             multi: false,
         };
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         idx.reserve(expected_capacity.max(1024))
             .map_err(|e| AnnError::Other(format!("usearch reserve: {e:?}")))?;
         Ok(Self { idx, dim, len: 0 })
@@ -148,13 +154,13 @@ impl UsearchIndex {
             return Ok(0);
         }
         // Validate dim on first vector eagerly.
-        if let Some(v) = vecs.first() {
-            if v.len() != self.dim {
-                return Err(AnnError::DimMismatch {
-                    expected: self.dim,
-                    actual: v.len(),
-                });
-            }
+        if let Some(v) = vecs.first()
+            && v.len() != self.dim
+        {
+            return Err(AnnError::DimMismatch {
+                expected: self.dim,
+                actual: v.len(),
+            });
         }
 
         // Reserve capacity for all vectors at once, informing usearch of
@@ -214,11 +220,32 @@ impl UsearchIndex {
         self.idx.expansion_search()
     }
 
+    /// Ensure at least `additional` extra slots are available. Grows internal
+    /// arrays if necessary. Prevents "Reserve capacity ahead of insertions!" crash
+    /// when inserting into a loaded sidecar without pre-sized headroom.
+    pub fn ensure_capacity(&mut self, additional: usize) -> Result<(), AnnError> {
+        let needed = self.len + additional;
+        let current_capacity = self.idx.capacity();
+        if needed <= current_capacity {
+            return Ok(());
+        }
+        let reserve_to = Self::capacity_with_headroom(current_capacity, needed);
+        self.idx.reserve(reserve_to).map_err(|e| {
+            AnnError::Other(format!("usearch ensure_capacity({reserve_to}): {e:?}"))
+        })?;
+        Ok(())
+    }
+
     /// Search with a temporary `ef` boost: save current ef → set boosted →
     /// search → restore. Trades latency for recall on the hot path while
     /// leaving build-time ef untouched. Not thread-safe with concurrent calls
     /// to `search` from other threads.
-    pub fn search_with_ef(&self, query: &[f32], k: usize, ef: usize) -> Result<Vec<(u64, f32)>, AnnError> {
+    pub fn search_with_ef(
+        &self,
+        query: &[f32],
+        k: usize,
+        ef: usize,
+    ) -> Result<SearchResults, AnnError> {
         let prev = self.expansion_search();
         self.idx.change_expansion_search(ef.max(k));
         let r = AnnIndex::search(self, query, k);
@@ -241,8 +268,7 @@ impl UsearchIndex {
             )));
         }
         let opts = Self::default_opts(dim);
-        let idx =
-            Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
+        let idx = Index::new(&opts).map_err(|e| AnnError::Other(format!("usearch new: {e:?}")))?;
         let path_str = path.to_string_lossy();
         idx.load(path_str.as_ref())
             .map_err(|e| AnnError::Corrupt(format!("usearch load {}: {e:?}", path.display())))?;
@@ -271,6 +297,7 @@ impl AnnIndex for UsearchIndex {
                 actual: vector.len(),
             });
         }
+        self.ensure_capacity(1)?;
         self.idx
             .add(id, vector)
             .map_err(|e| AnnError::Other(format!("usearch add: {e:?}")))?;
@@ -289,7 +316,7 @@ impl AnnIndex for UsearchIndex {
         Ok(n)
     }
 
-    fn search(&self, query: &[f32], k: usize) -> Result<Vec<(u64, f32)>, AnnError> {
+    fn search(&self, query: &[f32], k: usize) -> Result<SearchResults, AnnError> {
         if query.len() != self.dim {
             return Err(AnnError::DimMismatch {
                 expected: self.dim,
@@ -300,11 +327,7 @@ impl AnnIndex for UsearchIndex {
             .idx
             .search(query, k)
             .map_err(|e| AnnError::Other(format!("usearch search: {e:?}")))?;
-        Ok(matches
-            .keys
-            .into_iter()
-            .zip(matches.distances)
-            .collect())
+        Ok(matches.keys.into_iter().zip(matches.distances).collect())
     }
 
     /// usearch override: use runtime `change_expansion_search` to actually
@@ -315,7 +338,7 @@ impl AnnIndex for UsearchIndex {
         query: &[f32],
         k: usize,
         mult: usize,
-    ) -> Result<Vec<(u64, f32)>, AnnError> {
+    ) -> Result<SearchResults, AnnError> {
         let m = mult.clamp(2, 100);
         let cur = self.expansion_search();
         // Aggressive boost: multiply current ef by mult so rerank actually
@@ -331,10 +354,10 @@ impl AnnIndex for UsearchIndex {
     /// Persist the index atomically: write to `<path>.tmp`, then rename over
     /// `<path>`. Survives crash mid-save.
     fn save(&self, path: &Path) -> Result<(), AnnError> {
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)?;
         }
         let tmp = {
             let mut p = path.to_path_buf();
@@ -404,6 +427,34 @@ mod tests {
         assert_eq!(hits.len(), 5);
         // id 42 must be in top-1 (distance ≈ 0 vs itself).
         assert_eq!(hits[0].0, 42);
+    }
+
+    #[test]
+    fn insert_grows_beyond_initial_capacity() {
+        let mut idx = UsearchIndex::new(16, 1).unwrap();
+        for i in 0..1100u64 {
+            idx.insert(i, &v(i, 16)).unwrap();
+        }
+        assert_eq!(idx.len(), 1100);
+        let hits = idx.search(&v(1099, 16), 3).unwrap();
+        assert_eq!(hits[0].0, 1099);
+    }
+
+    #[test]
+    fn loaded_sidecar_can_accept_tail_inserts() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("brain.db.usearch");
+        let mut idx = UsearchIndex::new(16, 1).unwrap();
+        for i in 0..1024u64 {
+            idx.insert(i, &v(i, 16)).unwrap();
+        }
+        idx.save(&path).unwrap();
+
+        let mut loaded = UsearchIndex::load(&path, 16).unwrap();
+        loaded.insert(2048, &v(2048, 16)).unwrap();
+        assert_eq!(loaded.len(), 1025);
+        let hits = loaded.search(&v(2048, 16), 3).unwrap();
+        assert_eq!(hits[0].0, 2048);
     }
 
     #[test]

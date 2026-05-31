@@ -5,7 +5,7 @@
 //!
 //! Reports ms/query and build wall-time for each N.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 
 #[cfg(feature = "ann-usearch")]
 fn vector(seed: u64, dim: usize) -> Vec<f32> {

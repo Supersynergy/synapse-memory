@@ -79,17 +79,17 @@ Ship rule-based first (above). Replace inner logic with CatBoost `.cbm` model on
 # On every significant commit:
 git log -1 --format="%H %s" | \
   xargs -I{} sh -c 'echo "commit: {}\nbench_delta: $(cat /tmp/last_bench_delta.txt 2>/dev/null)" | \
-  syn put --tags dev,bench,commit'
+  synx put --tags dev,bench,commit'
 
 # On bench run completion:
-echo "Before: $BEFORE After: $AFTER Op: $OP" | syn put --tags bench_result
+echo "Before: $BEFORE After: $AFTER Op: $OP" | synx put --tags bench_result
 
 # Retrieval during dev session:
-syn search "why is hybrid search slow" --tags bench_result
+synx search "why is hybrid search slow" --tags bench_result
 # → surfaces prior fix: "2026-04-20 RRF denominator was sqrt(rank) not rank+60"
 ```
 
-LaunchAgent hook: `~/.claude/hooks/synapse_commit_ingest.sh` — git post-commit → syn put. 5 LOC.
+LaunchAgent hook: `~/.claude/hooks/synapse_commit_ingest.sh` — git post-commit → synx put. 5 LOC.
 
 ---
 

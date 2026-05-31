@@ -1,14 +1,14 @@
+use criterion::{Criterion, criterion_group, criterion_main};
 /// router_mixed — mixed-workload: 50% range, 30% aggregate, 20% full-scan.
 /// Static path materialises bars for all queries.
 /// Routed path: range→MmapScanSkipped (coverage<40%), agg→SimdAgg (no materialization).
 /// Target: routed ≥1.2× faster on mixed workload.
 use tempfile::TempDir;
-use criterion::{criterion_group, criterion_main, Criterion};
 
-use synapse_market::store::page::Bar;
-use synapse_market::series::Series;
-use synapse_market::router::PlanCache;
 use synapse_market::analytics::AggKind;
+use synapse_market::router::PlanCache;
+use synapse_market::series::Series;
+use synapse_market::store::page::Bar;
 
 const BARS: usize = 28800; // 10 pages worth → page-skip + alloc savings are meaningful
 const BASE_TS: i64 = 1_700_000_000;
@@ -30,9 +30,17 @@ fn make_bars() -> Vec<Bar> {
 /// 50% short-range, 30% aggregate (mean over full series), 20% full-scan
 fn query_kind(i: usize) -> u8 {
     let r = i % 10;
-    if r < 5 { 0 }       // range (short, 100 bars, coverage ~3%)
-    else if r < 8 { 1 }  // aggregate mean over FULL series (all pages)
-    else { 2 }           // full scan
+    if r < 5 {
+        0
+    }
+    // range (short, 100 bars, coverage ~3%)
+    else if r < 8 {
+        1
+    }
+    // aggregate mean over FULL series (all pages)
+    else {
+        2
+    } // full scan
 }
 
 fn query_range(i: usize) -> (i64, i64) {
@@ -65,7 +73,8 @@ fn mixed_workload_static(c: &mut Criterion) {
                 if query_kind(i) == 1 {
                     // simulate aggregate: compute mean manually
                     if !bars.is_empty() {
-                        let _mean: f32 = bars.iter().map(|b| b.close).sum::<f32>() / bars.len() as f32;
+                        let _mean: f32 =
+                            bars.iter().map(|b| b.close).sum::<f32>() / bars.len() as f32;
                     }
                 }
             }
@@ -88,7 +97,9 @@ fn mixed_workload_routed(c: &mut Criterion) {
                 match query_kind(i) {
                     1 => {
                         // SimdAgg path — no Bar materialisation
-                        let _ = s.aggregate_routed(start..end, AggKind::Mean, &mut cache).unwrap();
+                        let _ = s
+                            .aggregate_routed(start..end, AggKind::Mean, &mut cache)
+                            .unwrap();
                     }
                     _ => {
                         // MmapScanSkipped or Full based on coverage

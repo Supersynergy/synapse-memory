@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use super::{Event, Match, Pattern};
+use std::collections::HashMap;
 
 const SECS_PER_DAY: i64 = 86_400;
 
@@ -82,7 +82,10 @@ impl Default for FsmEngine {
 
 impl FsmEngine {
     pub fn new() -> Self {
-        Self { patterns: Vec::new(), states: HashMap::new() }
+        Self {
+            patterns: Vec::new(),
+            states: HashMap::new(),
+        }
     }
 
     pub fn register(&mut self, p: Pattern) -> u64 {
@@ -95,7 +98,10 @@ impl FsmEngine {
 
     fn init_state(p: &Pattern, states: &mut HashMap<u64, FsmState>) -> FsmState {
         match p {
-            Pattern::DroughtBuy { quiet_days, min_value } => FsmState::DroughtBuy {
+            Pattern::DroughtBuy {
+                quiet_days,
+                min_value,
+            } => FsmState::DroughtBuy {
                 quiet_days: *quiet_days,
                 min_value: *min_value,
                 last_buy_ts: None,
@@ -111,7 +117,10 @@ impl FsmEngine {
                 seen_s3: None,
                 seen_phase3: None,
             },
-            Pattern::VolumeSpike { multiplier, window_bars } => {
+            Pattern::VolumeSpike {
+                multiplier,
+                window_bars,
+            } => {
                 let w = *window_bars as usize;
                 FsmState::VolumeSpike {
                     multiplier: *multiplier,
@@ -133,7 +142,10 @@ impl FsmEngine {
             Pattern::SpinoffApproaching { window_days } => FsmState::SpinoffApproaching {
                 window_days: *window_days,
             },
-            Pattern::FloatSqueeze { si_min, ctb_bps_min } => FsmState::FloatSqueeze {
+            Pattern::FloatSqueeze {
+                si_min,
+                ctb_bps_min,
+            } => FsmState::FloatSqueeze {
                 si_min: *si_min,
                 ctb_bps_min: *ctb_bps_min,
             },
@@ -149,7 +161,12 @@ impl FsmEngine {
                 states.insert(lid, ls);
                 let rs = Self::init_state(r, states);
                 states.insert(rid, rs);
-                FsmState::And { left_id: lid, right_id: rid, left_match: None, right_match: None }
+                FsmState::And {
+                    left_id: lid,
+                    right_id: rid,
+                    left_match: None,
+                    right_match: None,
+                }
             }
             Pattern::Or(l, r) => {
                 let lid = l.id();
@@ -158,7 +175,10 @@ impl FsmEngine {
                 states.insert(lid, ls);
                 let rs = Self::init_state(r, states);
                 states.insert(rid, rs);
-                FsmState::Or { left_id: lid, right_id: rid }
+                FsmState::Or {
+                    left_id: lid,
+                    right_id: rid,
+                }
             }
             Pattern::Then(a, b, within) => {
                 let aid = a.id();
@@ -167,7 +187,13 @@ impl FsmEngine {
                 states.insert(aid, a_s);
                 let b_s = Self::init_state(b, states);
                 states.insert(bid, b_s);
-                FsmState::Then { a_id: aid, b_id: bid, within_bars: *within, a_match: None, bars_since_a: 0 }
+                FsmState::Then {
+                    a_id: aid,
+                    b_id: bid,
+                    within_bars: *within,
+                    a_match: None,
+                    bars_since_a: 0,
+                }
             }
         }
     }
@@ -197,7 +223,9 @@ impl FsmEngine {
         states: &mut HashMap<u64, FsmState>,
     ) -> Vec<Match> {
         // Take ownership to avoid borrow conflicts when recursing for child IDs
-        let Some(mut state) = states.remove(&id) else { return vec![] };
+        let Some(mut state) = states.remove(&id) else {
+            return vec![];
+        };
         let result = Self::step_state(id, &mut state, ticker, ts, event, states);
         states.insert(id, state);
         result
@@ -212,11 +240,22 @@ impl FsmEngine {
         states: &mut HashMap<u64, FsmState>,
     ) -> Vec<Match> {
         match state {
-            FsmState::DroughtBuy { quiet_days, min_value, last_buy_ts } => {
+            FsmState::DroughtBuy {
+                quiet_days,
+                min_value,
+                last_buy_ts,
+            } => {
                 let qd = *quiet_days as i64;
                 let mv = *min_value;
-                if let Event::InsiderBuy { value_usd, ts: buy_ts, ticker: t } = event {
-                    if t != ticker { return vec![]; }
+                if let Event::InsiderBuy {
+                    value_usd,
+                    ts: buy_ts,
+                    ticker: t,
+                } = event
+                {
+                    if t != ticker {
+                        return vec![];
+                    }
                     let prev = *last_buy_ts;
                     *last_buy_ts = Some(*buy_ts);
                     if let Some(prev_ts) = prev {
@@ -235,11 +274,20 @@ impl FsmEngine {
                 }
                 vec![]
             }
-            FsmState::InsiderCluster { k, window_days, buy_ts } => {
+            FsmState::InsiderCluster {
+                k,
+                window_days,
+                buy_ts,
+            } => {
                 let k_needed = *k;
                 let window = *window_days as i64 * SECS_PER_DAY;
-                if let Event::InsiderBuy { ts: bt, ticker: t, .. } = event {
-                    if t != ticker { return vec![]; }
+                if let Event::InsiderBuy {
+                    ts: bt, ticker: t, ..
+                } = event
+                {
+                    if t != ticker {
+                        return vec![];
+                    }
                     buy_ts.push(*bt);
                     // prune old
                     buy_ts.retain(|&t| *bt - t <= window);
@@ -258,10 +306,22 @@ impl FsmEngine {
                 }
                 vec![]
             }
-            FsmState::FdaTriple { window_days, seen_8k, seen_s3, seen_phase3 } => {
+            FsmState::FdaTriple {
+                window_days,
+                seen_8k,
+                seen_s3,
+                seen_phase3,
+            } => {
                 let window = *window_days as i64 * SECS_PER_DAY;
-                if let Event::Filing { kind, ticker: t, ts: fts } = event {
-                    if t != ticker { return vec![]; }
+                if let Event::Filing {
+                    kind,
+                    ticker: t,
+                    ts: fts,
+                } = event
+                {
+                    if t != ticker {
+                        return vec![];
+                    }
                     match kind.as_str() {
                         "8-K" => *seen_8k = Some(*fts),
                         "S-3" => *seen_s3 = Some(*fts),
@@ -286,7 +346,13 @@ impl FsmEngine {
                 }
                 vec![]
             }
-            FsmState::VolumeSpike { multiplier, window_bars, ring, ring_pos, filled } => {
+            FsmState::VolumeSpike {
+                multiplier,
+                window_bars,
+                ring,
+                ring_pos,
+                filled,
+            } => {
                 let mult = *multiplier;
                 let w = *window_bars as usize;
                 if let Event::Candle(bar) = event {
@@ -303,24 +369,30 @@ impl FsmEngine {
                     if !*filled && *ring_pos >= w {
                         *filled = true;
                     }
-                    if prev_filled {
-                        if mean > 0.0 && bar.volume > mult * mean {
-                            return vec![Match {
-                                pattern_id: id,
-                                ticker: ticker.to_string(),
-                                ts_start: bar.ts,
-                                ts_end: bar.ts,
-                                confidence: (bar.volume / (mult * mean)).min(1.0),
-                                catalyst_ids: vec![],
-                            }];
-                        }
+                    if prev_filled && mean > 0.0 && bar.volume > mult * mean {
+                        return vec![Match {
+                            pattern_id: id,
+                            ticker: ticker.to_string(),
+                            ts_start: bar.ts,
+                            ts_end: bar.ts,
+                            confidence: (bar.volume / (mult * mean)).min(1.0),
+                            catalyst_ids: vec![],
+                        }];
                     }
                 }
                 vec![]
             }
-            FsmState::Filing13D { window_days, seen_ts } => {
-                if let Event::Filing13D { ticker: t, ts: fts, .. } = event {
-                    if t != ticker { return vec![]; }
+            FsmState::Filing13D {
+                window_days,
+                seen_ts,
+            } => {
+                if let Event::Filing13D {
+                    ticker: t, ts: fts, ..
+                } = event
+                {
+                    if t != ticker {
+                        return vec![];
+                    }
                     let prev = *seen_ts;
                     *seen_ts = Some(*fts);
                     if let Some(prev_ts) = prev {
@@ -339,35 +411,50 @@ impl FsmEngine {
                 }
                 vec![]
             }
-            FsmState::FdaMeetingPlusS3 { window_days, seen_meeting, seen_s3 } => {
+            FsmState::FdaMeetingPlusS3 {
+                window_days,
+                seen_meeting,
+                seen_s3,
+            } => {
                 let window = *window_days as i64 * SECS_PER_DAY;
                 match event {
-                    Event::FdaMeeting { ticker: t, ts: fts, .. } if t == ticker => {
+                    Event::FdaMeeting {
+                        ticker: t, ts: fts, ..
+                    } if t == ticker => {
                         *seen_meeting = Some(*fts);
                     }
-                    Event::S3Filing { ticker: t, ts: fts, .. } if t == ticker => {
+                    Event::S3Filing {
+                        ticker: t, ts: fts, ..
+                    } if t == ticker => {
                         *seen_s3 = Some(*fts);
                     }
                     _ => {}
                 }
-                if let (Some(tm), Some(ts3)) = (*seen_meeting, *seen_s3) {
-                    if (tm - ts3).abs() <= window {
-                        return vec![Match {
-                            pattern_id: id,
-                            ticker: ticker.to_string(),
-                            ts_start: tm.min(ts3),
-                            ts_end: tm.max(ts3),
-                            confidence: 1.0,
-                            catalyst_ids: vec![],
-                        }];
-                    }
+                if let (Some(tm), Some(ts3)) = (*seen_meeting, *seen_s3)
+                    && (tm - ts3).abs() <= window
+                {
+                    return vec![Match {
+                        pattern_id: id,
+                        ticker: ticker.to_string(),
+                        ts_start: tm.min(ts3),
+                        ts_end: tm.max(ts3),
+                        confidence: 1.0,
+                        catalyst_ids: vec![],
+                    }];
                 }
                 vec![]
             }
             FsmState::SpinoffApproaching { window_days } => {
                 let window = *window_days as i64 * SECS_PER_DAY;
-                if let Event::SpinoffAnnouncement { ticker: t, ts: ann_ts, distribution_date } = event {
-                    if t != ticker { return vec![]; }
+                if let Event::SpinoffAnnouncement {
+                    ticker: t,
+                    ts: ann_ts,
+                    distribution_date,
+                } = event
+                {
+                    if t != ticker {
+                        return vec![];
+                    }
                     let days_until = distribution_date - ann_ts;
                     if days_until >= 0 && days_until <= window {
                         return vec![Match {
@@ -382,9 +469,20 @@ impl FsmEngine {
                 }
                 vec![]
             }
-            FsmState::FloatSqueeze { si_min, ctb_bps_min } => {
-                if let Event::Squeeze { ticker: t, ts: sts, si_pct, ctb_bps } = event {
-                    if t != ticker { return vec![]; }
+            FsmState::FloatSqueeze {
+                si_min,
+                ctb_bps_min,
+            } => {
+                if let Event::Squeeze {
+                    ticker: t,
+                    ts: sts,
+                    si_pct,
+                    ctb_bps,
+                } = event
+                {
+                    if t != ticker {
+                        return vec![];
+                    }
                     if *si_pct >= *si_min && *ctb_bps >= *ctb_bps_min {
                         return vec![Match {
                             pattern_id: id,
@@ -398,9 +496,17 @@ impl FsmEngine {
                 }
                 vec![]
             }
-            FsmState::CongressTrade { window_days, seen_ts } => {
-                if let Event::CongressTradeEvent { ticker: t, ts: cts, .. } = event {
-                    if t != ticker { return vec![]; }
+            FsmState::CongressTrade {
+                window_days,
+                seen_ts,
+            } => {
+                if let Event::CongressTradeEvent {
+                    ticker: t, ts: cts, ..
+                } = event
+                {
+                    if t != ticker {
+                        return vec![];
+                    }
                     let prev = *seen_ts;
                     *seen_ts = Some(*cts);
                     if let Some(prev_ts) = prev {
@@ -421,8 +527,10 @@ impl FsmEngine {
             }
             FsmState::SmartExcludeFail => {
                 match event {
-                    Event::ReverseSplit { ticker: t, .. } |
-                    Event::DilutionRaise { ticker: t, .. } if t == ticker => {
+                    Event::ReverseSplit { ticker: t, .. }
+                    | Event::DilutionRaise { ticker: t, .. }
+                        if t == ticker =>
+                    {
                         return vec![Match {
                             pattern_id: id,
                             ticker: ticker.to_string(),
@@ -436,13 +544,22 @@ impl FsmEngine {
                 }
                 vec![]
             }
-            FsmState::And { left_id, right_id, left_match, right_match } => {
+            FsmState::And {
+                left_id,
+                right_id,
+                left_match,
+                right_match,
+            } => {
                 let lid = *left_id;
                 let rid = *right_id;
                 let lm = Self::step(lid, ticker, ts, event, states);
                 let rm = Self::step(rid, ticker, ts, event, states);
-                if let Some(m) = lm.into_iter().next() { *left_match = Some(m); }
-                if let Some(m) = rm.into_iter().next() { *right_match = Some(m); }
+                if let Some(m) = lm.into_iter().next() {
+                    *left_match = Some(m);
+                }
+                if let Some(m) = rm.into_iter().next() {
+                    *right_match = Some(m);
+                }
                 if left_match.is_some() && right_match.is_some() {
                     let lmatch = left_match.take().unwrap();
                     let rmatch = right_match.take().unwrap();
@@ -468,18 +585,22 @@ impl FsmEngine {
                 }
                 lm
             }
-            FsmState::Then { a_id, b_id, within_bars, a_match, bars_since_a } => {
+            FsmState::Then {
+                a_id,
+                b_id,
+                within_bars,
+                a_match,
+                bars_since_a,
+            } => {
                 let aid = *a_id;
                 let bid = *b_id;
                 let wb = *within_bars;
                 // tick bar counter
-                if matches!(event, Event::Candle(_)) {
-                    if a_match.is_some() {
-                        *bars_since_a += 1;
-                        if *bars_since_a > wb {
-                            *a_match = None;
-                            *bars_since_a = 0;
-                        }
+                if matches!(event, Event::Candle(_)) && a_match.is_some() {
+                    *bars_since_a += 1;
+                    if *bars_since_a > wb {
+                        *a_match = None;
+                        *bars_since_a = 0;
                     }
                 }
                 let am = Self::step(aid, ticker, ts, event, states);
@@ -488,18 +609,18 @@ impl FsmEngine {
                     *a_match = Some(m);
                     *bars_since_a = 0;
                 }
-                if let Some(bm) = bm.into_iter().next() {
-                    if let Some(am) = a_match.take() {
-                        *bars_since_a = 0;
-                        return vec![Match {
-                            pattern_id: id,
-                            ticker: ticker.to_string(),
-                            ts_start: am.ts_start,
-                            ts_end: bm.ts_end,
-                            confidence: (am.confidence + bm.confidence) / 2.0,
-                            catalyst_ids: vec![],
-                        }];
-                    }
+                if let Some(bm) = bm.into_iter().next()
+                    && let Some(am) = a_match.take()
+                {
+                    *bars_since_a = 0;
+                    return vec![Match {
+                        pattern_id: id,
+                        ticker: ticker.to_string(),
+                        ts_start: am.ts_start,
+                        ts_end: bm.ts_end,
+                        confidence: (am.confidence + bm.confidence) / 2.0,
+                        catalyst_ids: vec![],
+                    }];
                 }
                 vec![]
             }

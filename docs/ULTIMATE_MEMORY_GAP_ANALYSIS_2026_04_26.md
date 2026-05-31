@@ -15,7 +15,7 @@
 - repo: `~/projects/synapse/`, brain: `~/.synapse/brain.db` (147k docs, 547MB)
 - stack: Rust + SQLite + FTS5 + sqlite-vec + fastembed ONNX (BGE-small-384, MLX 4.6× batch)
 - bench (lib-mode, M4 Max): 0.69ms hybrid query, 17k put/s, 0.023ms/q v1.0 ranked 3rd after FAISS+FTS5
-- features shipped: hybrid FTS5+vec, RRF, MCP server, CLI (`syn`), Ed25519 brainpacks, yrs CRDT, library-mode crate, Thompson+heat self-learning ranker
+- features shipped: hybrid FTS5+vec, RRF, MCP server, CLI (`synx`), Ed25519 brainpacks, yrs CRDT, library-mode crate, Thompson+heat self-learning ranker
 - planned in PIONEER.md (13 features) + ADDONS.md (6 tiers, hindsight-parity)
 - security playbook done: split core(FSL)+engine(closed dylib), per-customer watermark, SQLCipher
 - recent milestone 2026-04-25: WP install Success + 4.5ms Lex + 7153 OPS OLTP + MLX 4.6×/doc batch
@@ -55,7 +55,7 @@ Source: `~/.claude/projects/-Users-master/memory/reference_memory_systems_2026.m
 
 1. **LLM-Extraction-Pipeline (mem0-style ADD-only)**
    why: ohne entity-extraction kann Synapse keine "memory" für agents — nur "search". mem0 v3 LoCoMo 91.6 kommt von single-pass extract+entity-link. Ohne das verlierst du adoption-war.
-   impl: `syn extract --llm <local-mlx>` → entities + facts + relations → store as typed `[memory]` events with entity-refs. Reuse fastembed for entity-embed.
+   impl: `synx extract --llm <local-mlx>` → entities + facts + relations → store as typed `[memory]` events with entity-refs. Reuse fastembed for entity-embed.
    bench-target: LoCoMo ≥ 85, LongMemEval ≥ 88 (within 5pt of mem0 v3).
 
 2. **Quality-Benchmark Suite (LoCoMo + LongMemEval + BEAM)**
@@ -82,7 +82,7 @@ Source: `~/.claude/projects/-Users-master/memory/reference_memory_systems_2026.m
 
 7. **Sleep-time consolidation daemon**
    why: PIONEER P3 + competitor-feature. Decay+compress low-score memories via local LLM (phi-4-mini MLX). cognee/Letta/Zep haben das.
-   impl: `syn daemon` launchd job, jede nacht 03:00, frequency*recency*diversity → score → batch-summarize bottom 10%.
+   impl: `synx daemon` launchd job, jede nacht 03:00, frequency*recency*diversity → score → batch-summarize bottom 10%.
 
 ### P2 — moat-deepening, ship Q3 2026
 
@@ -110,7 +110,7 @@ Source: `~/.claude/projects/-Users-master/memory/reference_memory_systems_2026.m
 1. **mem0 single-pass ADD-only extraction** — github.com/mem0ai/mem0 — eine LLM-call statt agentic loop, +20pt LoCoMo. Steal: prompt + entity-linking-merge.
 2. **Graphiti bi-temporal facts** — github.com/getzep/graphiti — `valid_at`/`invalid_at` + auto-invalidation. Steal: schema + contradiction-detector.
 3. **Letta core/archival/recall blocks** — github.com/letta-ai/letta — 3-tier memory API. Steal: API shape, port to MCP.
-4. **Letta-code skills+subagents** — github.com/letta-ai/letta-code — agent-side memory CLI. Steal: `letta` ergonomics for `syn agent`.
+4. **Letta-code skills+subagents** — github.com/letta-ai/letta-code — agent-side memory CLI. Steal: `letta` ergonomics for `synx agent`.
 5. **Hindsight bank-scoping + MCP streamable** — github.com/vectorize-io/hindsight — header-based multi-tenancy. Steal: `X-Bank-Id` pattern.
 6. **cognee 4-verb API (remember/recall/forget/improve)** — github.com/topoteretes/cognee — minimaler, sehr lesbar. Steal: CLI verb-naming.
 7. **LightRAG reranker as default mode** — github.com/HKUDS/LightRAG — set-default cross-encoder, big quality jump. Steal: default-on for queries with margin<ε.
@@ -122,7 +122,7 @@ Source: `~/.claude/projects/-Users-master/memory/reference_memory_systems_2026.m
 
 **Days 0-14 (P0 sprint)**:
 - D1-3: fork mem0/memory-benchmarks → `eval/quality/`. Wire LoCoMo runner. Baseline-bench Synapse current.
-- D4-9: implement extraction pipeline (`syn extract` + entity-link). Re-bench.
+- D4-9: implement extraction pipeline (`synx extract` + entity-link). Re-bench.
 - D10-14: tiered rerank L3 cross-encoder (phi-4-mini MLX). Re-bench. Target ≥85 LoCoMo.
 - Deliverable: `bench/quality_2026_05_v1.md` + blogpost vs mem0 v3.
 

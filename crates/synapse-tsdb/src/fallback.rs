@@ -7,14 +7,16 @@
 use std::{
     collections::HashMap,
     fs,
-    io::{self, Read, Write},
+    io::{self, Write},
     path::{Path, PathBuf},
     time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+
+type ShardGroups = HashMap<(String, u32), Vec<usize>>;
 
 /// One time-series record.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +98,8 @@ impl TsdbStore {
         assert_eq!(ts.len(), values.len());
         assert_eq!(ts.len(), labels.len());
         self.buf_ts.extend_from_slice(ts);
-        self.buf_metric.extend(metrics.iter().map(|s| s.to_string()));
+        self.buf_metric
+            .extend(metrics.iter().map(|s| s.to_string()));
         self.buf_labels.extend_from_slice(labels);
         self.buf_value.extend_from_slice(values);
         if self.buf_ts.len() >= self.flush_threshold {
@@ -113,7 +116,7 @@ impl TsdbStore {
             .buf_ts
             .iter()
             .enumerate()
-            .filter(|(i, &ts)| ts >= from && ts <= to && self.buf_metric[*i] == metric)
+            .filter(|(i, ts)| **ts >= from && **ts <= to && self.buf_metric[*i] == metric)
             .map(|(i, &ts)| Row {
                 ts,
                 metric: self.buf_metric[i].clone(),
@@ -200,7 +203,7 @@ impl TsdbStore {
             return Ok(());
         }
         // Group rows by (date, hour).
-        let mut groups: HashMap<(String, u32), Vec<usize>> = HashMap::new();
+        let mut groups: ShardGroups = HashMap::new();
         for (i, &ts) in self.buf_ts.iter().enumerate() {
             let dt = Utc.timestamp_millis_opt(ts).single().unwrap_or_default();
             let date = dt.format("%Y-%m-%d").to_string();
@@ -332,12 +335,14 @@ mod tests {
         let (mut store, _dir) = make_store();
         let base_ts = 1_700_000_000_000i64; // ms
         for i in 0..100 {
-            store.append_row(Row {
-                ts: base_ts + i * 1000,
-                metric: "cpu".to_string(),
-                labels: HashMap::new(),
-                value: i as f64,
-            }).unwrap();
+            store
+                .append_row(Row {
+                    ts: base_ts + i * 1000,
+                    metric: "cpu".to_string(),
+                    labels: HashMap::new(),
+                    value: i as f64,
+                })
+                .unwrap();
         }
         let rows = store.query_range("cpu", base_ts, base_ts + 50_000).unwrap();
         assert_eq!(rows.len(), 51);
@@ -350,14 +355,18 @@ mod tests {
         let base_ts = 1_700_000_000_000i64;
         // 4 rows in 2 windows of 5s each
         for (i, v) in [(0i64, 10f64), (1000, 20.0), (6000, 30.0), (7000, 40.0)] {
-            store.append_row(Row {
-                ts: base_ts + i,
-                metric: "lat".to_string(),
-                labels: HashMap::new(),
-                value: v,
-            }).unwrap();
+            store
+                .append_row(Row {
+                    ts: base_ts + i,
+                    metric: "lat".to_string(),
+                    labels: HashMap::new(),
+                    value: v,
+                })
+                .unwrap();
         }
-        let result = store.aggregate("lat", AggOp::Avg, Duration::from_secs(5)).unwrap();
+        let result = store
+            .aggregate("lat", AggOp::Avg, Duration::from_secs(5))
+            .unwrap();
         assert_eq!(result.len(), 2);
         assert!((result[0].value - 15.0).abs() < 1e-9);
         assert!((result[1].value - 35.0).abs() < 1e-9);
@@ -370,17 +379,21 @@ mod tests {
         {
             let mut store = TsdbStore::open(dir.path()).unwrap();
             for i in 0..1000 {
-                store.append_row(Row {
-                    ts: base_ts + i * 1000,
-                    metric: "mem".to_string(),
-                    labels: HashMap::new(),
-                    value: i as f64,
-                }).unwrap();
+                store
+                    .append_row(Row {
+                        ts: base_ts + i * 1000,
+                        metric: "mem".to_string(),
+                        labels: HashMap::new(),
+                        value: i as f64,
+                    })
+                    .unwrap();
             }
             // drop → flush
         }
         let store2 = TsdbStore::open(dir.path()).unwrap();
-        let rows = store2.query_range("mem", base_ts, base_ts + 999_000).unwrap();
+        let rows = store2
+            .query_range("mem", base_ts, base_ts + 999_000)
+            .unwrap();
         assert_eq!(rows.len(), 1000);
     }
 
@@ -391,19 +404,23 @@ mod tests {
         let n = 10_000;
         let start = std::time::Instant::now();
         for i in 0..n {
-            store.append_row(Row {
-                ts: base_ts + i * 100,
-                metric: "tput".to_string(),
-                labels: HashMap::new(),
-                value: i as f64,
-            }).unwrap();
+            store
+                .append_row(Row {
+                    ts: base_ts + i * 100,
+                    metric: "tput".to_string(),
+                    labels: HashMap::new(),
+                    value: i as f64,
+                })
+                .unwrap();
         }
         let elapsed = start.elapsed();
         let per_sec = n as f64 / elapsed.as_secs_f64();
         eprintln!("10k inserts: {:.0} rows/s ({:?} total)", per_sec, elapsed);
         assert!(per_sec > 500_000.0, "expected >500K/s, got {:.0}", per_sec);
 
-        let rows = store.query_range("tput", base_ts, base_ts + n * 100).unwrap();
+        let rows = store
+            .query_range("tput", base_ts, base_ts + n * 100)
+            .unwrap();
         assert_eq!(rows.len() as i64, n);
     }
 }

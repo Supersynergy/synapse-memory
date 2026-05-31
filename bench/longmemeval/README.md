@@ -2,7 +2,25 @@
 
 Evaluates Synapse SOTA pipeline on the LongMemEval-S-50 subset (50 questions).
 
-## Preferred Config (highest R@5)
+## No-Download Release Baseline
+
+```bash
+cargo run -p longmemeval --no-default-features -- --rerank-top 0
+```
+
+Current verified result on 2026-05-25:
+
+- N = 50
+- Errors = 0
+- Recall@5 = 0.640 (32/50)
+- Recall@10 = 0.640 (32/50)
+- Fuzzy-R@5 = 0.600 (30/50)
+- Fuzzy-R@10 = 0.620 (31/50)
+- Latency avg = 0.97 ms recall-only
+
+Report: `docs/LONGMEMEVAL_RESULTS_2026-05-25.md`
+
+## Optional Model Config
 
 ```bash
 cargo run -p longmemeval --features "embed-768,rerank" -- \
@@ -13,7 +31,8 @@ When both `embed-768` **and** `rerank` features are active and `--embed` is set,
 the benchmark automatically defaults to **Snowflake Arctic Embed M** (`arctic-m`,
 768-dim, MTEB 62.5) unless `SYNAPSE_EMBED_MODEL` is set explicitly.
 
-**Confirmed result**: R@5 = 0.64 (+4pp over BGE-small baseline of ~0.60).
+This path may download embedding and reranker models unless they are already
+cached. Do not use it as a release claim until the exact run is recorded.
 
 ## Feature Flags
 

@@ -14,14 +14,15 @@
 //! rebuilds. Data loss is bounded to the last uncommitted SQL batch, same
 //! as baseline Synapse.
 
+#![allow(clippy::type_complexity)]
 #![cfg(feature = "ann-usearch")]
 
 use crate::error::{Error, Result};
 use parking_lot::RwLock;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use synapse_ann::usearch_backend::{default_sidecar_path, UsearchIndex};
 use synapse_ann::AnnIndex;
+use synapse_ann::usearch_backend::{UsearchIndex, default_sidecar_path};
 
 /// Thread-safe wrapper around a usearch index + its sidecar path.
 pub struct Ann {
@@ -74,6 +75,20 @@ impl Ann {
         self.inner.read().len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Pre-reserve capacity for `additional` entries. Call before bulk
+    /// `insert_or_skip` to prevent "Reserve capacity ahead of insertions!" crash
+    /// when the loaded sidecar didn't have headroom for new tail entries.
+    pub fn ensure_capacity_for_tail(&self, additional: usize) -> Result<()> {
+        self.inner
+            .write()
+            .ensure_capacity(additional)
+            .map_err(|e| Error::Other(format!("ann ensure_capacity: {e}")))
+    }
+
     /// Insert `(id, vec)`. Called from `Store::put_inner` / `put_batch` after
     /// the SQL transaction successfully commits.
     pub fn insert(&self, id: i64, vec: &[f32]) -> Result<()> {
@@ -83,17 +98,24 @@ impl Ann {
             .map_err(|e| Error::Other(format!("usearch insert: {e}")))
     }
 
-    /// Insert if not already present. Used during sidecar tail-rebuild after
-    /// load when concurrent puts may have added rows after last persist.
-    /// Errors with "duplicate" or "already exists" are swallowed silently.
-    pub fn insert_or_skip(&self, id: i64, vec: &[f32]) -> Result<()> {
+    /// Insert if not already present. Returns true when a new vector was added.
+    /// Used during sidecar tail-rebuild after load when concurrent puts may
+    /// have added rows after last persist. Duplicate errors are skipped.
+    pub fn insert_or_skip(&self, id: i64, vec: &[f32]) -> Result<bool> {
         let mut g = self.inner.write();
+        // Ensure capacity before insert — prevents "Reserve capacity ahead of insertions!" crash.
+        if let Err(e) = g.ensure_capacity(1) {
+            let msg = format!("{e:?}");
+            if !msg.contains("Duplicate") {
+                tracing::warn!("insert_or_skip reserve failed: {msg}");
+            }
+        }
         match g.insert(id as u64, vec) {
-            Ok(()) => Ok(()),
+            Ok(()) => Ok(true),
             Err(e) => {
                 let msg = format!("{e:?}");
                 if msg.contains("Duplicate") || msg.contains("already exists") {
-                    Ok(())  // already present, safe to skip
+                    Ok(false)
                 } else {
                     Err(Error::Other(format!("usearch insert_or_skip: {e}")))
                 }
@@ -160,12 +182,23 @@ impl Ann {
     where
         I: IntoIterator<Item = (i64, Vec<f32>)>,
     {
+        let rows: Vec<(i64, Vec<f32>)> = rows.into_iter().collect();
         let mut g = self.inner.write();
+        g.ensure_capacity(rows.len())
+            .map_err(|e| Error::Other(format!("usearch rebuild reserve: {e}")))?;
         let mut n = 0usize;
         for (id, v) in rows {
-            g.insert(id as u64, &v)
-                .map_err(|e| Error::Other(format!("usearch rebuild insert: {e}")))?;
-            n += 1;
+            match g.insert(id as u64, &v) {
+                Ok(()) => n += 1,
+                Err(e) => {
+                    let msg = format!("{e:?}");
+                    if msg.contains("Duplicate") || msg.contains("already exists") {
+                        tracing::warn!("usearch rebuild skipped duplicate id={id}");
+                    } else {
+                        return Err(Error::Other(format!("usearch rebuild insert: {e}")));
+                    }
+                }
+            }
         }
         Ok(n)
     }

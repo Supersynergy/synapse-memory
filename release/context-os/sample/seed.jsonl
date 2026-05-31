@@ -1,0 +1,2 @@
+{"title":"decision/context-os-default","text":"Use Synapse as a Context OS: retrieve bounded cited context before agent work, then record useful decisions afterward.","meta":{"kind":"decision","source":"release-sample","status":"public"}}
+{"title":"known-fact: context-os-freshness","text":"For latest/current/pricing/API/model/version tasks, run fresh-context and treat cached memories as stale until verified.","meta":{"kind":"fact","source":"release-sample","status":"public"}}

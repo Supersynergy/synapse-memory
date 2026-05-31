@@ -4,7 +4,7 @@
 //! Merge: real yrs merge on meta. Content conflict = keep both (stored separately, flagged by BLAKE3 diff).
 
 use crate::error::Result;
-use yrs::{updates::decoder::Decode, Doc, Map, ReadTxn, StateVector, Transact, Update};
+use yrs::{Doc, Map, ReadTxn, StateVector, Transact, Update, updates::decoder::Decode};
 
 /// Create a new yrs Doc with initial map entries, returns encoded state.
 pub fn new_meta(entries: &[(&str, &str)]) -> Result<Vec<u8>> {

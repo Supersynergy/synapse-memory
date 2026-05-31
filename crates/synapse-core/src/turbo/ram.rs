@@ -17,7 +17,10 @@ pub fn madvise_willneed(ptr: *mut u8, len: usize) {
     unsafe {
         let ret = libc::madvise(ptr as *mut libc::c_void, len, libc::MADV_WILLNEED);
         if ret != 0 {
-            tracing::debug!("madvise(WILLNEED, {len}) failed: {}", std::io::Error::last_os_error());
+            tracing::debug!(
+                "madvise(WILLNEED, {len}) failed: {}",
+                std::io::Error::last_os_error()
+            );
         }
     }
 }
@@ -113,7 +116,10 @@ pub fn mmap_huge(len: usize) -> Option<*mut u8> {
         tracing::warn!("mmap(MAP_HUGETLB, {aligned} bytes) failed — falling back to normal pages");
         None
     } else {
-        tracing::info!("huge-pages: allocated {} MiB via MAP_HUGETLB", aligned / (1024 * 1024));
+        tracing::info!(
+            "huge-pages: allocated {} MiB via MAP_HUGETLB",
+            aligned / (1024 * 1024)
+        );
         Some(ptr as *mut u8)
     }
 }
@@ -143,7 +149,7 @@ where
     F: FnOnce(&mut Vec<f32>) -> R,
 {
     thread_local! {
-        static QUERY_BUF: std::cell::RefCell<Vec<f32>> = std::cell::RefCell::new(Vec::new());
+        static QUERY_BUF: std::cell::RefCell<Vec<f32>> = const { std::cell::RefCell::new(Vec::new()) };
     }
     QUERY_BUF.with(|cell| {
         let mut buf = cell.borrow_mut();
@@ -170,15 +176,15 @@ pub fn prefetch_dir_bg(dir: std::path::PathBuf) {
             if let Ok(entries) = std::fs::read_dir(&dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.is_file() {
-                        if let Ok(mut f) = std::fs::File::open(&path) {
-                            use std::io::Read;
-                            let mut sink = [0u8; 65536];
-                            loop {
-                                match f.read(&mut sink) {
-                                    Ok(0) | Err(_) => break,
-                                    Ok(n) => total_bytes += n as u64,
-                                }
+                    if path.is_file()
+                        && let Ok(mut f) = std::fs::File::open(&path)
+                    {
+                        use std::io::Read;
+                        let mut sink = [0u8; 65536];
+                        loop {
+                            match f.read(&mut sink) {
+                                Ok(0) | Err(_) => break,
+                                Ok(n) => total_bytes += n as u64,
                             }
                         }
                     }

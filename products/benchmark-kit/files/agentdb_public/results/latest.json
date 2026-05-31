@@ -1,0 +1,326 @@
+{
+  "run_id": "ADB-20260516-122118",
+  "project": "agentdb-public-ADB-20260516-122118",
+  "agent_id": "publicbench",
+  "stored_docs": 104,
+  "target_docs": 8,
+  "filler_docs": 96,
+  "queries": 16,
+  "top_k": 5,
+  "ingest_ms": 1225.151,
+  "search_index": {
+    "r_at_1": 0.9375,
+    "r_at_5": 1.0,
+    "mrr": 0.9531,
+    "p50_ms": 0.737,
+    "p95_ms": 1.633,
+    "max_ms": 2.057
+  },
+  "arms": [
+    {
+      "name": "balanced",
+      "config": {
+        "token_budget": 1100,
+        "index_k": 8,
+        "full_k": 2,
+        "snippet_chars": 220
+      },
+      "r_at_1": 0.9375,
+      "r_at_5": 1.0,
+      "mrr": 0.9531,
+      "p50_ms": 0.758,
+      "p95_ms": 0.858,
+      "max_ms": 0.888,
+      "token_savings_pct": 74.5,
+      "avg_hydrated": 1,
+      "avg_estimated_tokens": 1099,
+      "score": 133.533
+    },
+    {
+      "name": "speed",
+      "config": {
+        "token_budget": 700,
+        "index_k": 5,
+        "full_k": 1,
+        "snippet_chars": 160
+      },
+      "r_at_1": 0.9375,
+      "r_at_5": 1.0,
+      "mrr": 0.9531,
+      "p50_ms": 0.699,
+      "p95_ms": 0.886,
+      "max_ms": 0.902,
+      "token_savings_pct": 74.1,
+      "avg_hydrated": 1,
+      "avg_estimated_tokens": 699,
+      "score": 133.433
+    },
+    {
+      "name": "token_saver",
+      "config": {
+        "token_budget": 900,
+        "index_k": 10,
+        "full_k": 1,
+        "snippet_chars": 180
+      },
+      "r_at_1": 0.9375,
+      "r_at_5": 1.0,
+      "mrr": 0.9531,
+      "p50_ms": 2.121,
+      "p95_ms": 156.983,
+      "max_ms": 175.032,
+      "token_savings_pct": 79.1,
+      "avg_hydrated": 1,
+      "avg_estimated_tokens": 899,
+      "score": 56.39
+    },
+    {
+      "name": "recall",
+      "config": {
+        "token_budget": 2200,
+        "index_k": 12,
+        "full_k": 4,
+        "snippet_chars": 280
+      },
+      "r_at_1": 0.9375,
+      "r_at_5": 1.0,
+      "mrr": 0.9531,
+      "p50_ms": 2.3,
+      "p95_ms": 168.571,
+      "max_ms": 180.7,
+      "token_savings_pct": 48.9,
+      "avg_hydrated": 3,
+      "avg_estimated_tokens": 2199,
+      "score": 44.557
+    }
+  ],
+  "winner": {
+    "name": "balanced",
+    "config": {
+      "token_budget": 1100,
+      "index_k": 8,
+      "full_k": 2,
+      "snippet_chars": 220
+    },
+    "r_at_1": 0.9375,
+    "r_at_5": 1.0,
+    "mrr": 0.9531,
+    "p50_ms": 0.758,
+    "p95_ms": 0.858,
+    "max_ms": 0.888,
+    "token_savings_pct": 74.5,
+    "avg_hydrated": 1,
+    "avg_estimated_tokens": 1099,
+    "score": 133.533
+  },
+  "per_query": [
+    {
+      "query": "ADB-20260516-122118 which recall route should coding agents use",
+      "expected_title": "decision/router",
+      "expected_id": 295587,
+      "rank": 1,
+      "hit_ids": [
+        295587,
+        295594,
+        295593,
+        295592,
+        295591
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 hot path for local agent memory routing",
+      "expected_title": "decision/router",
+      "expected_id": 295587,
+      "rank": 4,
+      "hit_ids": [
+        295593,
+        295589,
+        295590,
+        295587,
+        295594
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 how should agent memory save context tokens",
+      "expected_title": "decision/progressive-disclosure",
+      "expected_id": 295588,
+      "rank": 1,
+      "hit_ids": [
+        295588,
+        295594,
+        295593,
+        295592,
+        295591
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 progressive disclosure index then full observations",
+      "expected_title": "decision/progressive-disclosure",
+      "expected_id": 295588,
+      "rank": 1,
+      "hit_ids": [
+        295588,
+        295594,
+        295593,
+        295592,
+        295591
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 how does the agent avoid version slippage",
+      "expected_title": "decision/freshness",
+      "expected_id": 295589,
+      "rank": 1,
+      "hit_ids": [
+        295589,
+        295593,
+        295591,
+        295594,
+        295592
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 local package versions before training memory",
+      "expected_title": "decision/freshness",
+      "expected_id": 295589,
+      "rank": 1,
+      "hit_ids": [
+        295589,
+        295593,
+        295591,
+        295590,
+        295594
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 what feedback should train memory reranking",
+      "expected_title": "decision/feedback-rerank",
+      "expected_id": 295590,
+      "rank": 1,
+      "hit_ids": [
+        295590,
+        295594,
+        295593,
+        295592,
+        295591
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 accepted rejected hits edits tests reranker",
+      "expected_title": "decision/feedback-rerank",
+      "expected_id": 295590,
+      "rank": 1,
+      "hit_ids": [
+        295590,
+        295594,
+        295593,
+        295592,
+        295591
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 which lifecycle metadata makes memory reliable",
+      "expected_title": "decision/lifecycle",
+      "expected_id": 295591,
+      "rank": 1,
+      "hit_ids": [
+        295591,
+        295594,
+        295593,
+        295592,
+        295590
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 validity confidence source supersession fields",
+      "expected_title": "decision/lifecycle",
+      "expected_id": 295591,
+      "rank": 1,
+      "hit_ids": [
+        295591,
+        295594,
+        295593,
+        295592,
+        295590
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 what fallback works without embeddings",
+      "expected_title": "decision/degrade",
+      "expected_id": 295592,
+      "rank": 1,
+      "hit_ids": [
+        295592,
+        295594,
+        295593,
+        295591,
+        295590
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 degrade lexical scoped search unavailable embedding",
+      "expected_title": "decision/degrade",
+      "expected_id": 295592,
+      "rank": 1,
+      "hit_ids": [
+        295592,
+        295588,
+        295594,
+        295593,
+        295591
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 what deployment shape is best for local agents",
+      "expected_title": "decision/local-first",
+      "expected_id": 295593,
+      "rank": 1,
+      "hit_ids": [
+        295593,
+        295589,
+        295587,
+        295590,
+        295594
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 single file unix socket local agent database",
+      "expected_title": "decision/local-first",
+      "expected_id": 295593,
+      "rank": 1,
+      "hit_ids": [
+        295593,
+        295590,
+        295589,
+        295594,
+        295592
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 where should graph enrichment sit",
+      "expected_title": "decision/graph-behind-hotpath",
+      "expected_id": 295594,
+      "rank": 1,
+      "hit_ids": [
+        295594,
+        295593,
+        295592,
+        295591,
+        295590
+      ]
+    },
+    {
+      "query": "ADB-20260516-122118 temporal graph behind hot recall path",
+      "expected_title": "decision/graph-behind-hotpath",
+      "expected_id": 295594,
+      "rank": 1,
+      "hit_ids": [
+        295594,
+        295593,
+        295592,
+        295591,
+        295590
+      ]
+    }
+  ]
+}

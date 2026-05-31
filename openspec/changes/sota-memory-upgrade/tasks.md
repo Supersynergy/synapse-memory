@@ -30,10 +30,10 @@
 ## Phase 4 — Bench harness
 - [x] LongMemEval-S adapter skeleton (`bench/longmemeval/longmemeval_adapter.rs`, 2 tests)
 - [ ] **T2.9** Download LongMemEval-S data (~2 GB) → `bench/longmemeval/data/`
-- [ ] Run baseline (RuleExtractor + IdentityReranker)
+- [x] Run baseline: Rule hooks + no model reranker (`--no-default-features -- --rerank-top 0`), LongMemEval-S-50, R@5=0.640, R@10=0.640, 0 errors (2026-05-25)
 - [ ] Run with OnnxCrossEncoder
 - [ ] Run with MLX extractor
-- [ ] Publish `docs/LONGMEMEVAL-RESULTS-<date>.md`
+- [x] Publish `docs/LONGMEMEVAL-RESULTS-<date>.md`: `docs/LONGMEMEVAL_RESULTS_2026-05-25.md`
 
 ## Phase 4.5 — 99 % push (2026-04-29 session, latest-Rust port-from-analog)
 - [x] Multi-hop entity graph traversal (BFS depth=2 default, 0.6^hop attenuation) — `sota::multi_hop_neighbors` + recall path. spec: `specs/multi-hop-graph/spec.md`. Source mining: petgraph::visit::Bfs pattern.
@@ -49,7 +49,7 @@
 - [ ] Wire `synapse-learn::calibrate` Platt/isotonic into final RecallHit score (~0.5 d, primitives already exist)
 - [ ] Promote `pipeline_recall` to `Store::pipeline_recall(hooks, params, …)` (currently free fn)
 - [ ] MlxExtractor real subprocess (smollm2-1.7B JSON) — gating quality jump from ~95 → 98+
-- [ ] Run LongMemEval-S — gating actual numeric SOTA score
+- [x] Run LongMemEval-S baseline — no-download subset score published in `docs/LONGMEMEVAL_RESULTS_2026-05-25.md`
 
 ## Phase 5 — Release
 - [ ] All Phase 2 + Phase 4 done

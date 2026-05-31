@@ -16,6 +16,7 @@ rmp-serde.workspace = true
 tokio.workspace = true
 clap.workspace = true
 synapse-market = { path = "../synapse-market" }
+synapse-pack = { path = "../synapse-pack" }
 rusqlite.workspace = true
 
 [dev-dependencies]

@@ -9,14 +9,15 @@ use synapse_market::series::Series;
 use synapse_market::store::page::{Bar, MAX_ROWS};
 
 const TICKERS: &[&str] = &[
-    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA",
-    "NVDA", "META", "BRK", "JPM", "V",
+    "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "BRK", "JPM", "V",
 ];
 const PAGES_PER_TICKER: usize = 1_000;
 const BARS_PER_TICKER: usize = PAGES_PER_TICKER * MAX_ROWS; // 2_728_000
 
 fn lcg_next(state: &mut u64) -> u64 {
-    *state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+    *state = state
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
     *state >> 33
 }
 

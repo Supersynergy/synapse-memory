@@ -5,11 +5,14 @@
 //!   market_news_fts: FTS5 virtual table on headline+body
 //!   news_ticker_edges(news_id INTEGER, ticker TEXT)
 
-use rusqlite::{Connection, params};
 use crate::error::Result;
+use rusqlite::{Connection, params};
+
+type NewsSearchRow = (i64, i64, String, f64);
 
 pub fn init_schema(conn: &Connection) -> Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS market_news (
             id       INTEGER PRIMARY KEY AUTOINCREMENT,
             ts       INTEGER NOT NULL,
@@ -27,11 +30,18 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS idx_news_ts ON market_news(ts);
         CREATE INDEX IF NOT EXISTS idx_edge_ticker ON news_ticker_edges(ticker);
-    ")?;
+    ",
+    )?;
     Ok(())
 }
 
-pub fn ingest(conn: &Connection, ts: i64, headline: &str, body: &str, tickers: &[&str]) -> Result<i64> {
+pub fn ingest(
+    conn: &Connection,
+    ts: i64,
+    headline: &str,
+    body: &str,
+    tickers: &[&str],
+) -> Result<i64> {
     conn.execute_batch("BEGIN;")?;
     conn.execute(
         "INSERT INTO market_news (ts, headline, body) VALUES (?1, ?2, ?3)",
@@ -54,18 +64,26 @@ pub fn ingest(conn: &Connection, ts: i64, headline: &str, body: &str, tickers: &
 }
 
 /// FTS5 search over news; returns (id, ts, headline, score).
-pub fn search(conn: &Connection, query: &str, limit: usize) -> Result<Vec<(i64, i64, String, f64)>> {
+#[allow(dead_code)]
+pub fn search(conn: &Connection, query: &str, limit: usize) -> Result<Vec<NewsSearchRow>> {
     let mut stmt = conn.prepare(
         "SELECT n.id, n.ts, n.headline, bm25(market_news_fts) AS score
          FROM market_news_fts f
          JOIN market_news n ON n.id = f.rowid
          WHERE market_news_fts MATCH ?1
          ORDER BY score
-         LIMIT ?2"
+         LIMIT ?2",
     )?;
-    let rows = stmt.query_map(params![query, limit as i64], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, f64>(3).unwrap_or(0.0)))
-    })?.collect::<rusqlite::Result<Vec<_>>>()?;
+    let rows = stmt
+        .query_map(params![query, limit as i64], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get::<_, f64>(3).unwrap_or(0.0),
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(rows)
 }
 

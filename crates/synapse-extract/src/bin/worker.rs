@@ -2,9 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use rusqlite::Connection;
 use std::time::Duration;
-use synapse_extract::{run_once, RuleExtractor};
-#[allow(unused_imports)]
-use tracing_subscriber;
+use synapse_extract::{RuleExtractor, run_once};
 
 #[cfg(feature = "minimax")]
 use synapse_extract::minimax::MinimaxExtractor;
@@ -49,7 +47,10 @@ fn resolve_extractor(arg: &str) -> &'static str {
         "mlx" => "mlx",
         "minimax" => "minimax",
         _ => {
-            if std::env::var("MINIMAX_API_KEY").map(|v| !v.is_empty()).unwrap_or(false) {
+            if std::env::var("MINIMAX_API_KEY")
+                .map(|v| !v.is_empty())
+                .unwrap_or(false)
+            {
                 "minimax"
             } else {
                 "rule"

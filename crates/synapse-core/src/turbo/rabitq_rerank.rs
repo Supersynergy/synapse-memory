@@ -25,7 +25,9 @@ mod tests {
 
     fn norm(v: &mut [f32]) {
         let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-9);
-        for x in v.iter_mut() { *x /= n; }
+        for x in v.iter_mut() {
+            *x /= n;
+        }
     }
 
     #[test]
@@ -34,7 +36,9 @@ mod tests {
         let mut v1: Vec<f32> = (0..32_i32).map(|i| (i - 16) as f32 * 0.1).collect();
         let mut v2: Vec<f32> = (0..32_i32).map(|i| (32 - i) as f32 * 0.05).collect();
         let mut q: Vec<f32> = (0..32_i32).map(|i| (i - 8) as f32 * 0.07).collect();
-        norm(&mut v1); norm(&mut v2); norm(&mut q);
+        norm(&mut v1);
+        norm(&mut v2);
+        norm(&mut q);
 
         let c1 = enc.encode(&v1).unwrap();
         let c2 = enc.encode(&v2).unwrap();

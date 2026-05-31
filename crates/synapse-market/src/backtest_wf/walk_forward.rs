@@ -3,7 +3,6 @@
 //! Bailey & Lopez de Prado 2014 — Deflated Sharpe Ratio.
 
 use std::ops::Range;
-use std::f64::consts::PI;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -105,14 +104,22 @@ impl WalkForward {
 
         for fold_id in 0..self.folds {
             let start = (fold_id as usize) * fold_size;
-            let end = if fold_id == self.folds - 1 { n } else { (fold_id as usize + 1) * fold_size };
-            if end <= start { continue; }
+            let end = if fold_id == self.folds - 1 {
+                n
+            } else {
+                (fold_id as usize + 1) * fold_size
+            };
+            if end <= start {
+                continue;
+            }
             let fold_bars = &bars[start..end];
             let train_end = (fold_bars.len() as f32 * self.train_ratio) as usize;
-            if train_end < self.min_train_bars as usize { continue; }
+            if train_end < self.min_train_bars as usize {
+                continue;
+            }
 
             let train = &fold_bars[..train_end];
-            let test  = &fold_bars[train_end..];
+            let test = &fold_bars[train_end..];
 
             let is_trades = strategy(train);
             let oos_trades = strategy(test);
@@ -143,8 +150,8 @@ impl WalkForward {
         let psr_p_value = probabilistic_sharpe_p(oos_sr, n_obs, skew, kurt, 0.0);
         let pbo = prob_backtest_overfitting(&is_sharpes, &oos_sharpes);
 
-        let avg_hit_rate = fold_results.iter().map(|f| f.hit_rate).sum::<f64>()
-            / fold_results.len().max(1) as f64;
+        let avg_hit_rate =
+            fold_results.iter().map(|f| f.hit_rate).sum::<f64>() / fold_results.len().max(1) as f64;
 
         let verdict = if dsr > 0.95 && pbo < 0.5 && avg_hit_rate > 0.55 {
             Verdict::Robust
@@ -169,53 +176,77 @@ impl WalkForward {
 // ---------------------------------------------------------------------------
 
 fn mean_f64(xs: &[f64]) -> f64 {
-    if xs.is_empty() { return 0.0; }
+    if xs.is_empty() {
+        return 0.0;
+    }
     xs.iter().sum::<f64>() / xs.len() as f64
 }
 
 fn variance_f64(xs: &[f64]) -> f64 {
-    if xs.len() < 2 { return 0.0; }
+    if xs.len() < 2 {
+        return 0.0;
+    }
     let m = mean_f64(xs);
     xs.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (xs.len() - 1) as f64
 }
 
-fn std_f64(xs: &[f64]) -> f64 { variance_f64(xs).sqrt() }
+fn std_f64(xs: &[f64]) -> f64 {
+    variance_f64(xs).sqrt()
+}
 
 fn skewness(xs: &[f64]) -> f64 {
-    if xs.len() < 3 { return 0.0; }
+    if xs.len() < 3 {
+        return 0.0;
+    }
     let m = mean_f64(xs);
     let s = std_f64(xs);
-    if s == 0.0 { return 0.0; }
+    if s == 0.0 {
+        return 0.0;
+    }
     let n = xs.len() as f64;
     xs.iter().map(|x| ((x - m) / s).powi(3)).sum::<f64>() / n
 }
 
 fn kurtosis(xs: &[f64]) -> f64 {
-    if xs.len() < 4 { return 3.0; }
+    if xs.len() < 4 {
+        return 3.0;
+    }
     let m = mean_f64(xs);
     let s = std_f64(xs);
-    if s == 0.0 { return 3.0; }
+    if s == 0.0 {
+        return 3.0;
+    }
     let n = xs.len() as f64;
     xs.iter().map(|x| ((x - m) / s).powi(4)).sum::<f64>() / n
 }
 
 fn compute_sharpe(trades: &[TradeResult]) -> f64 {
-    if trades.len() < 2 { return 0.0; }
+    if trades.len() < 2 {
+        return 0.0;
+    }
     let rets: Vec<f64> = trades.iter().map(|t| t.ret).collect();
     let m = mean_f64(&rets);
     let s = std_f64(&rets);
-    if s == 0.0 { return 0.0; }
+    if s == 0.0 {
+        return 0.0;
+    }
     m / s * (252.0f64).sqrt()
 }
 
 fn compute_sortino(trades: &[TradeResult]) -> f64 {
-    if trades.len() < 2 { return 0.0; }
+    if trades.len() < 2 {
+        return 0.0;
+    }
     let rets: Vec<f64> = trades.iter().map(|t| t.ret).collect();
     let m = mean_f64(&rets);
     let neg: Vec<f64> = rets.iter().filter(|&&r| r < 0.0).map(|&r| r * r).collect();
-    if neg.is_empty() { return f64::INFINITY; }
+    if neg.is_empty() {
+        return f64::INFINITY;
+    }
     let downside = (neg.iter().sum::<f64>() / neg.len() as f64).sqrt();
-    if downside == 0.0 { return f64::INFINITY; }
+    if downside == 0.0 {
+        return f64::INFINITY;
+    }
     m / downside * (252.0f64).sqrt()
 }
 
@@ -225,15 +256,21 @@ fn compute_max_drawdown(trades: &[TradeResult]) -> f64 {
     let mut cum = 0.0_f64;
     for t in trades {
         cum += t.ret;
-        if cum > peak { peak = cum; }
+        if cum > peak {
+            peak = cum;
+        }
         let d = peak - cum;
-        if d > dd { dd = d; }
+        if d > dd {
+            dd = d;
+        }
     }
     dd
 }
 
 fn compute_hit_rate(trades: &[TradeResult]) -> f64 {
-    if trades.is_empty() { return 0.0; }
+    if trades.is_empty() {
+        return 0.0;
+    }
     let wins = trades.iter().filter(|t| t.ret > 0.0).count();
     wins as f64 / trades.len() as f64
 }
@@ -257,9 +294,9 @@ pub fn norm_cdf(x: f64) -> f64 {
 fn erfc(x: f64) -> f64 {
     // Horner-form rational approximation, max error ~1.5e-7
     let t = 1.0 / (1.0 + 0.3275911 * x.abs());
-    let poly = t * (0.254829592
-        + t * (-0.284496736
-            + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+    let poly = t
+        * (0.254829592
+            + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
     let approx = poly * (-x * x).exp();
     if x >= 0.0 { approx } else { 2.0 - approx }
 }
@@ -292,20 +329,28 @@ fn e_sr_max(n_trials: usize) -> f64 {
 /// kurt   : return excess kurtosis (so 0 = normal)
 /// n_trials: number of strategies tested (for E[SR_max])
 pub fn deflated_sharpe_ratio(sr: f64, t_obs: f64, skew: f64, kurt: f64, n_trials: usize) -> f64 {
-    if t_obs < 2.0 { return 0.0; }
+    if t_obs < 2.0 {
+        return 0.0;
+    }
     let sr_star = e_sr_max(n_trials);
     // Denominator: sqrt(1 - skew*SR + (kurt-1)/4 * SR^2)
     let denom_sq = 1.0 - skew * sr + (kurt - 1.0) / 4.0 * sr * sr;
-    if denom_sq <= 0.0 { return 0.0; }
+    if denom_sq <= 0.0 {
+        return 0.0;
+    }
     let z = (sr - sr_star) * (t_obs - 1.0).sqrt() / denom_sq.sqrt();
     norm_cdf(z)
 }
 
 /// Probabilistic Sharpe p-value (prob that SR > sr_benchmark).
 pub fn probabilistic_sharpe_p(sr: f64, t_obs: f64, skew: f64, kurt: f64, sr_bench: f64) -> f64 {
-    if t_obs < 2.0 { return 0.5; }
+    if t_obs < 2.0 {
+        return 0.5;
+    }
     let denom_sq = (1.0 - skew * sr + (kurt - 1.0) / 4.0 * sr * sr) / (t_obs - 1.0);
-    if denom_sq <= 0.0 { return 1.0; }
+    if denom_sq <= 0.0 {
+        return 1.0;
+    }
     let z = (sr - sr_bench) / denom_sq.sqrt();
     norm_cdf(z)
 }
@@ -314,7 +359,9 @@ pub fn probabilistic_sharpe_p(sr: f64, t_obs: f64, skew: f64, kurt: f64, sr_benc
 /// OOS rank < IS rank (deflated by median).
 pub fn prob_backtest_overfitting(is_sharpes: &[f64], oos_sharpes: &[f64]) -> f64 {
     let n = is_sharpes.len().min(oos_sharpes.len());
-    if n == 0 { return 0.5; }
+    if n == 0 {
+        return 0.5;
+    }
     // Rank IS sharpes.
     let mut is_idx: Vec<usize> = (0..n).collect();
     is_idx.sort_by(|&a, &b| is_sharpes[b].partial_cmp(&is_sharpes[a]).unwrap());

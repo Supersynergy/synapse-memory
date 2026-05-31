@@ -13,10 +13,13 @@
 //!   - Single port :9091 (separate from metrics :9090)
 
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, State},
+    Router,
+    extract::{
+        State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
     response::IntoResponse,
     routing::get,
-    Router,
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -26,7 +29,7 @@ use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LiveEvent {
-    pub op: String,         // "Put" | "PutBatch" | "Merge"
+    pub op: String, // "Put" | "PutBatch" | "Merge"
     pub id: i64,
     pub title: Option<String>,
     pub uri: Option<String>,
@@ -62,6 +65,7 @@ impl LiveBroker {
         self.tx.subscribe()
     }
 
+    #[allow(dead_code)]
     pub fn n_subs(&self) -> usize {
         self.tx.receiver_count()
     }
@@ -74,7 +78,10 @@ pub async fn serve(broker: LiveBroker, addr: SocketAddr) {
         .with_state(state);
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,
-        Err(e) => { tracing::error!("livequery bind {addr}: {e}"); return; }
+        Err(e) => {
+            tracing::error!("livequery bind {addr}: {e}");
+            return;
+        }
     };
     info!("livequery on ws://{addr}/live");
     if let Err(e) = axum::serve(listener, app).await {
@@ -92,8 +99,14 @@ async fn ws_handler(
 async fn handle_socket(mut socket: WebSocket, broker: Arc<LiveBroker>) {
     // First message = subscription filter (JSON).
     let filter: SubscribeFilter = match socket.recv().await {
-        Some(Ok(Message::Text(t))) => serde_json::from_str(t.as_str()).unwrap_or(SubscribeFilter { contains: None, uri_prefix: None }),
-        _ => SubscribeFilter { contains: None, uri_prefix: None },
+        Some(Ok(Message::Text(t))) => serde_json::from_str(t.as_str()).unwrap_or(SubscribeFilter {
+            contains: None,
+            uri_prefix: None,
+        }),
+        _ => SubscribeFilter {
+            contains: None,
+            uri_prefix: None,
+        },
     };
     let mut rx = broker.subscribe();
     info!("ws subscriber attached, filter={:?}", filter);
@@ -132,12 +145,20 @@ async fn handle_socket(mut socket: WebSocket, broker: Arc<LiveBroker>) {
 fn matches_filter(ev: &LiveEvent, f: &SubscribeFilter) -> bool {
     if let Some(c) = &f.contains {
         let cl = c.to_lowercase();
-        let title_match = ev.title.as_deref().map(|t| t.to_lowercase().contains(&cl)).unwrap_or(false);
-        if !title_match { return false; }
+        let title_match = ev
+            .title
+            .as_deref()
+            .map(|t| t.to_lowercase().contains(&cl))
+            .unwrap_or(false);
+        if !title_match {
+            return false;
+        }
     }
     if let Some(p) = &f.uri_prefix {
         let prefix_match = ev.uri.as_deref().map(|u| u.starts_with(p)).unwrap_or(false);
-        if !prefix_match { return false; }
+        if !prefix_match {
+            return false;
+        }
     }
     true
 }
@@ -148,22 +169,49 @@ mod tests {
 
     #[test]
     fn filter_passes_all_when_empty() {
-        let ev = LiveEvent { op: "Put".into(), id: 1, title: Some("hello".into()), uri: None, ts: 0 };
-        let f = SubscribeFilter { contains: None, uri_prefix: None };
+        let ev = LiveEvent {
+            op: "Put".into(),
+            id: 1,
+            title: Some("hello".into()),
+            uri: None,
+            ts: 0,
+        };
+        let f = SubscribeFilter {
+            contains: None,
+            uri_prefix: None,
+        };
         assert!(matches_filter(&ev, &f));
     }
 
     #[test]
     fn filter_contains_matches_substring() {
-        let ev = LiveEvent { op: "Put".into(), id: 1, title: Some("Hello World".into()), uri: None, ts: 0 };
-        let f = SubscribeFilter { contains: Some("WORLD".into()), uri_prefix: None };
+        let ev = LiveEvent {
+            op: "Put".into(),
+            id: 1,
+            title: Some("Hello World".into()),
+            uri: None,
+            ts: 0,
+        };
+        let f = SubscribeFilter {
+            contains: Some("WORLD".into()),
+            uri_prefix: None,
+        };
         assert!(matches_filter(&ev, &f));
     }
 
     #[test]
     fn filter_rejects_mismatch() {
-        let ev = LiveEvent { op: "Put".into(), id: 1, title: Some("hello".into()), uri: None, ts: 0 };
-        let f = SubscribeFilter { contains: Some("xyz".into()), uri_prefix: None };
+        let ev = LiveEvent {
+            op: "Put".into(),
+            id: 1,
+            title: Some("hello".into()),
+            uri: None,
+            ts: 0,
+        };
+        let f = SubscribeFilter {
+            contains: Some("xyz".into()),
+            uri_prefix: None,
+        };
         assert!(!matches_filter(&ev, &f));
     }
 
@@ -172,7 +220,13 @@ mod tests {
         let b = LiveBroker::new(16);
         let mut r1 = b.subscribe();
         let mut r2 = b.subscribe();
-        b.emit(LiveEvent { op: "Put".into(), id: 7, title: None, uri: None, ts: 0 });
+        b.emit(LiveEvent {
+            op: "Put".into(),
+            id: 7,
+            title: None,
+            uri: None,
+            ts: 0,
+        });
         let e1 = r1.recv().await.unwrap();
         let e2 = r2.recv().await.unwrap();
         assert_eq!(e1.id, 7);

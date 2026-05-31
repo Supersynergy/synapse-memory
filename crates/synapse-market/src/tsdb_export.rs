@@ -11,20 +11,20 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use arrow::array::{Float64Builder, Int64Builder};
 use arrow::datatypes::{DataType, Field, Schema};
-pub use arrow::record_batch::RecordBatch;
-use arrow::ipc::writer::StreamWriter;
 use arrow::ipc::reader::StreamReader;
+use arrow::ipc::writer::StreamWriter;
+pub use arrow::record_batch::RecordBatch;
 
 use crate::Market;
 
 /// Arrow schema for OHLCV export.
 pub fn ohlcv_schema() -> Arc<Schema> {
     Arc::new(Schema::new(vec![
-        Field::new("ts",     DataType::Int64,   false),
-        Field::new("open",   DataType::Float64, false),
-        Field::new("high",   DataType::Float64, false),
-        Field::new("low",    DataType::Float64, false),
-        Field::new("close",  DataType::Float64, false),
+        Field::new("ts", DataType::Int64, false),
+        Field::new("open", DataType::Float64, false),
+        Field::new("high", DataType::Float64, false),
+        Field::new("low", DataType::Float64, false),
+        Field::new("close", DataType::Float64, false),
         Field::new("volume", DataType::Float64, false),
     ]))
 }
@@ -41,11 +41,11 @@ impl Market {
         let schema = ohlcv_schema();
         let n = rows.len();
 
-        let mut ts_b     = Int64Builder::with_capacity(n);
-        let mut open_b   = Float64Builder::with_capacity(n);
-        let mut high_b   = Float64Builder::with_capacity(n);
-        let mut low_b    = Float64Builder::with_capacity(n);
-        let mut close_b  = Float64Builder::with_capacity(n);
+        let mut ts_b = Int64Builder::with_capacity(n);
+        let mut open_b = Float64Builder::with_capacity(n);
+        let mut high_b = Float64Builder::with_capacity(n);
+        let mut low_b = Float64Builder::with_capacity(n);
+        let mut close_b = Float64Builder::with_capacity(n);
         let mut volume_b = Float64Builder::with_capacity(n);
 
         for (ts, o, h, l, c, v) in rows {
@@ -87,7 +87,8 @@ impl Market {
     pub fn ipc_to_arrow(bytes: &[u8]) -> Result<RecordBatch> {
         let mut reader = StreamReader::try_new(std::io::Cursor::new(bytes), None)
             .context("StreamReader::try_new")?;
-        let batch = reader.next()
+        let batch = reader
+            .next()
             .context("no batch in IPC stream")?
             .context("IPC read error")?;
         Ok(batch)
@@ -100,9 +101,9 @@ mod tests {
     use arrow::array::{Float64Array, Int64Array};
     use tempfile::NamedTempFile;
 
-    fn sample_rows() -> Vec<(i64, f64, f64, f64, f64, f64)> {
+    fn sample_rows() -> Vec<crate::OhlcvRow> {
         vec![
-            (1_000, 100.0, 105.0, 99.0,  103.0, 1000.0),
+            (1_000, 100.0, 105.0, 99.0, 103.0, 1000.0),
             (2_000, 103.0, 108.0, 102.0, 107.0, 1500.0),
             (3_000, 107.0, 110.0, 106.0, 109.0, 2000.0),
         ]
@@ -120,11 +121,19 @@ mod tests {
         assert_eq!(batch.num_rows(), 3);
         assert_eq!(batch.num_columns(), 6);
 
-        let ts_col = batch.column(0).as_any().downcast_ref::<Int64Array>().unwrap();
+        let ts_col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
         assert_eq!(ts_col.value(0), 1_000);
         assert_eq!(ts_col.value(2), 3_000);
 
-        let close_col = batch.column(4).as_any().downcast_ref::<Float64Array>().unwrap();
+        let close_col = batch
+            .column(4)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
         assert!((close_col.value(0) - 103.0).abs() < 1e-9);
 
         // IPC roundtrip
@@ -133,9 +142,17 @@ mod tests {
         let batch2 = Market::ipc_to_arrow(&ipc).unwrap();
         assert_eq!(batch2.num_rows(), 3);
 
-        let close2 = batch2.column(4).as_any().downcast_ref::<Float64Array>().unwrap();
+        let close2 = batch2
+            .column(4)
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .unwrap();
         for i in 0..3 {
-            let orig = batch.column(4).as_any().downcast_ref::<Float64Array>().unwrap();
+            let orig = batch
+                .column(4)
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .unwrap();
             assert!((close2.value(i) - orig.value(i)).abs() < 1e-12);
         }
     }

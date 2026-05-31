@@ -11,7 +11,7 @@
 //! (ef = K_rough), which approximates "search over subset" on dense HNSW graphs.
 //! True subset-search requires a custom usearch patch or IVF-PQ backend (PR-A2).
 
-use crate::{AnnError, AnnIndex};
+use crate::{AnnError, AnnIndex, SearchResults};
 
 /// Configuration for the Hamming→HNSW cascade.
 #[derive(Clone, Debug)]
@@ -26,7 +26,10 @@ pub struct CascadeConfig {
 
 impl Default for CascadeConfig {
     fn default() -> Self {
-        Self { rough_mult: 100, hnsw_ef: None }
+        Self {
+            rough_mult: 100,
+            hnsw_ef: None,
+        }
     }
 }
 
@@ -94,7 +97,7 @@ pub fn cascade_search<I: AnnIndex>(
     corpus_bits: &[u8],
     bpr: usize,
     cfg: &CascadeConfig,
-) -> Result<Vec<(u64, f32)>, AnnError> {
+) -> Result<SearchResults, AnnError> {
     let k_rough = k.saturating_mul(cfg.rough_mult).max(k * 2);
     // Phase A — Hamming candidate generation.
     let query_bits = binarize(query);
@@ -104,7 +107,7 @@ pub fn cascade_search<I: AnnIndex>(
     }
     // Phase B — HNSW with boosted ef (approximates restricted subset search).
     let ef = cfg.hnsw_ef.unwrap_or(k_rough).max(k_rough);
-    let mult = (ef / index.len().max(1)).max(2).min(100);
+    let mult = (ef / index.len().max(1)).clamp(2, 100);
     let mut hits = index.search_with_rerank(query, k, mult)?;
 
     // Phase C — keep only candidates that appeared in Phase A allowlist.
@@ -117,7 +120,9 @@ pub fn cascade_search<I: AnnIndex>(
         for item in full {
             if !hits.iter().any(|&(id, _)| id == item.0) {
                 hits.push(item);
-                if hits.len() >= k { break; }
+                if hits.len() >= k {
+                    break;
+                }
             }
         }
         hits.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -149,10 +154,12 @@ mod tests {
         let n = 200usize;
         let bpr = 8usize; // 64-bit signatures
         let ids: Vec<u64> = (0..n as u64).collect();
-        let bits: Vec<u8> = (0..n).flat_map(|i| {
-            let v = i as u64;
-            v.to_le_bytes().to_vec()
-        }).collect();
+        let bits: Vec<u8> = (0..n)
+            .flat_map(|i| {
+                let v = i as u64;
+                v.to_le_bytes().to_vec()
+            })
+            .collect();
         let query_bits = 42u64.to_le_bytes().to_vec();
         let top = hamming_topk(&query_bits, &ids, &bits, bpr, 10);
         assert_eq!(top.len(), 10);

@@ -29,7 +29,10 @@ impl MlxOlapEngine {
         {
             match candle_core::Device::new_metal(0) {
                 Ok(device) => {
-                    return Ok(Self { backend: Backend::Metal, device });
+                    return Ok(Self {
+                        backend: Backend::Metal,
+                        device,
+                    });
                 }
                 Err(e) => {
                     tracing::warn!("Metal init failed ({e}), falling back to CPU");
@@ -94,9 +97,7 @@ impl MlxOlapEngine {
                     // candle min_all not available → fallback scalar
                     values.iter().cloned().fold(f64::INFINITY, f64::min)
                 }
-                AggOp::Max => {
-                    values.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
-                }
+                AggOp::Max => values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
             };
             return RecordBatch::new(
                 vec![format!("{agg:?}({value_col})")],
@@ -132,7 +133,10 @@ impl MlxOlapEngine {
         }
 
         RecordBatch::new(
-            vec![group_by.unwrap().to_string(), format!("{agg:?}({value_col})")],
+            vec![
+                group_by.unwrap().to_string(),
+                format!("{agg:?}({value_col})"),
+            ],
             vec![Column::Str(group_keys), Column::Float(results)],
         )
     }
@@ -173,7 +177,10 @@ impl MlxOlapEngine {
         }
 
         RecordBatch::new(
-            vec![group_by.unwrap().to_string(), format!("{agg:?}({value_col})")],
+            vec![
+                group_by.unwrap().to_string(),
+                format!("{agg:?}({value_col})"),
+            ],
             vec![Column::Str(group_keys), Column::Float(results)],
         )
     }

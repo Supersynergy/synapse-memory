@@ -40,8 +40,8 @@ Theme: own the CRDT + signing + federate axis no competitor has.
 
 | # | Item | Effort | Impact | Notes |
 |---|------|:------:|:------:|-------|
-| 13 | Surface CRDT merge ops in CLI + MCP + Python (syn merge, synapse_merge) | M | F++ | crdt.rs (101) + federate.rs (462) impls exist; need user-facing API |
-| 14 | ed25519 author-signing per-Drawer + verification in syn find | M | F++ | sign.rs (84 LOC) ready; wire into write/read paths |
+| 13 | Surface CRDT merge ops in CLI + MCP + Python (synx merge, synapse_merge) | M | F++ | crdt.rs (101) + federate.rs (462) impls exist; need user-facing API |
+| 14 | ed25519 author-signing per-Drawer + verification in synx find | M | F++ | sign.rs (84 LOC) ready; wire into write/read paths |
 | 15 | Audit-trail export (signed-chain JSON + replay tool) | M | F+ compliance | Differentiates from Pinecone/Qdrant/Weaviate |
 | 16 | Multi-device sync demo: laptop + phone (via synapse-py mobile wheel) | L | F+ | Showcase use case |
 | 17 | LongMemEval R@5 -> 0.85 (close gap with KG entity extract + space_evolve) | M | R+0.05–0.10 | SPEC P3 step |

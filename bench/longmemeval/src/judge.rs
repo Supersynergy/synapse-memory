@@ -7,7 +7,7 @@
 //! 18/50 gold answers are paraphrases that never appear literally
 //! in the conversation. LLM-judge mirrors the LongMemEval paper.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -15,8 +15,11 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub struct Judge {
+    #[allow(dead_code)]
     pub model: String,
+    #[allow(dead_code)]
     pub timeout_ms: u64,
+    #[allow(dead_code)]
     pub max_passage_chars: usize,
     inner: Mutex<Option<Inner>>,
     available: bool,
@@ -30,8 +33,7 @@ struct Inner {
 
 impl Judge {
     pub fn new(model: String, timeout_ms: u64) -> Self {
-        let python = std::env::var("LME_PYTHON")
-            .unwrap_or_else(|_| "/Users/master/.venvs/agents/bin/python".to_string());
+        let python = std::env::var("LME_PYTHON").unwrap_or_else(|_| "python3".to_string());
         let server = std::env::var("LME_JUDGE_SERVER").unwrap_or_else(|_| {
             let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             p.push("judge_server.py");
@@ -81,7 +83,11 @@ impl Judge {
         };
         let stdin = child.stdin.take().expect("stdin");
         let stdout = BufReader::new(child.stdout.take().expect("stdout"));
-        let mut inner = Inner { child, stdin, stdout };
+        let mut inner = Inner {
+            child,
+            stdin,
+            stdout,
+        };
         // Wait for ready handshake (model load can take 5-15s cold).
         let mut line = String::new();
         let read_deadline = Instant::now() + Duration::from_secs(60);
@@ -167,11 +173,11 @@ impl Judge {
 
 impl Drop for Judge {
     fn drop(&mut self) {
-        if let Ok(mut g) = self.inner.lock() {
-            if let Some(mut inner) = g.take() {
-                let _ = inner.child.kill();
-                let _ = inner.child.wait();
-            }
+        if let Ok(mut g) = self.inner.lock()
+            && let Some(mut inner) = g.take()
+        {
+            let _ = inner.child.kill();
+            let _ = inner.child.wait();
         }
     }
 }

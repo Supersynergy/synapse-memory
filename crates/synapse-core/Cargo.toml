@@ -88,12 +88,15 @@ hf-hub = { version = "0.4", optional = true, features = ["tokio"] }
 # Optional .synx helpers (off by default).
 automerge = { version = "0.6", optional = true }
 hex = { version = "0.4", optional = true }
+tantivy = { version = "0.22", optional = true }
 memmap2 = { version = "0.9", optional = true }
 instant-distance = { version = "0.6", optional = true }
 
 [dependencies.libsql]
 version = "0.9"
 optional = true
+default-features = false
+features = ["core"]
 
 [features]
 # 2026-05-10: simsimd enabled by default — 1.5× NEON cosine on M4 Max,
@@ -143,7 +146,7 @@ spann-tier = ["dep:synapse-spann"]
 automerge-crdt = ["dep:automerge", "dep:hex"]
 synx-mmap = ["dep:memmap2"]
 synx-sign = []
-synx-tantivy = []
+synx-tantivy = ["dep:tantivy"]
 # Compatibility alias for older docs/patches.
 vec-hnsw = ["ann-usearch"]
 # Embedding dimension compile-time selection. Default = 384 (BGE-small / Arctic-XS/S).

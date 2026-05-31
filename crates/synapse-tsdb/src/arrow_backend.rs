@@ -17,10 +17,9 @@ use std::{
 use anyhow::{Context, Result};
 use arrow::{
     array::{
-        Array, Float64Array, Float64Builder, Int64Array, Int64Builder, StringArray,
-        StringBuilder,
+        Array, Float64Array, Float64Builder, Int64Array, Int64Builder, StringArray, StringBuilder,
     },
-    datatypes::{DataType, Field, Schema, SchemaRef, TimeUnit},
+    datatypes::{DataType, Field, Schema, SchemaRef},
     record_batch::RecordBatch,
 };
 use chrono::{TimeZone, Utc};
@@ -31,6 +30,8 @@ use parquet::{
 };
 
 pub use crate::fallback::AggOp;
+
+type ShardGroups = HashMap<(String, u32), Vec<usize>>;
 
 fn tsdb_schema() -> SchemaRef {
     Arc::new(Schema::new(vec![
@@ -100,10 +101,16 @@ impl TsdbStore {
         for i in 0..rows {
             self.buf_ts.push(ts_col.value(i));
             self.buf_metric.push(metric_col.value(i).to_string());
-            self.buf_labels.push(
-                if labels_col.is_null(i) { "{}".to_string() } else { labels_col.value(i).to_string() },
-            );
-            self.buf_value.push(if value_col.is_null(i) { f64::NAN } else { value_col.value(i) });
+            self.buf_labels.push(if labels_col.is_null(i) {
+                "{}".to_string()
+            } else {
+                labels_col.value(i).to_string()
+            });
+            self.buf_value.push(if value_col.is_null(i) {
+                f64::NAN
+            } else {
+                value_col.value(i)
+            });
         }
         if self.buf_ts.len() >= self.flush_threshold {
             self.flush()?;
@@ -172,17 +179,41 @@ impl TsdbStore {
             let reader = builder.build()?;
             for batch in reader {
                 let batch = batch?;
-                let ts_col = batch.column(0).as_any().downcast_ref::<Int64Array>().unwrap();
-                let m_col = batch.column(1).as_any().downcast_ref::<StringArray>().unwrap();
-                let l_col = batch.column(2).as_any().downcast_ref::<StringArray>().unwrap();
-                let v_col = batch.column(3).as_any().downcast_ref::<Float64Array>().unwrap();
+                let ts_col = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap();
+                let m_col = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .unwrap();
+                let l_col = batch
+                    .column(2)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .unwrap();
+                let v_col = batch
+                    .column(3)
+                    .as_any()
+                    .downcast_ref::<Float64Array>()
+                    .unwrap();
                 for i in 0..batch.num_rows() {
                     let ts = ts_col.value(i);
                     if ts >= from && ts <= to && m_col.value(i) == metric {
                         ts_b.append_value(ts);
                         m_b.append_value(m_col.value(i));
-                        l_b.append_value(if l_col.is_null(i) { "{}" } else { l_col.value(i) });
-                        v_b.append_value(if v_col.is_null(i) { f64::NAN } else { v_col.value(i) });
+                        l_b.append_value(if l_col.is_null(i) {
+                            "{}"
+                        } else {
+                            l_col.value(i)
+                        });
+                        v_b.append_value(if v_col.is_null(i) {
+                            f64::NAN
+                        } else {
+                            v_col.value(i)
+                        });
                     }
                 }
             }
@@ -216,9 +247,21 @@ impl TsdbStore {
             let reader = builder.build()?;
             for batch in reader {
                 let batch = batch?;
-                let ts_col = batch.column(0).as_any().downcast_ref::<Int64Array>().unwrap();
-                let m_col = batch.column(1).as_any().downcast_ref::<StringArray>().unwrap();
-                let v_col = batch.column(3).as_any().downcast_ref::<Float64Array>().unwrap();
+                let ts_col = batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap();
+                let m_col = batch
+                    .column(1)
+                    .as_any()
+                    .downcast_ref::<StringArray>()
+                    .unwrap();
+                let v_col = batch
+                    .column(3)
+                    .as_any()
+                    .downcast_ref::<Float64Array>()
+                    .unwrap();
                 for i in 0..batch.num_rows() {
                     if m_col.value(i) == metric {
                         pairs.push((ts_col.value(i), v_col.value(i)));
@@ -274,7 +317,7 @@ impl TsdbStore {
         }
         use chrono::Timelike;
 
-        let mut groups: HashMap<(String, u32), Vec<usize>> = HashMap::new();
+        let mut groups: ShardGroups = HashMap::new();
         for (i, &ts) in self.buf_ts.iter().enumerate() {
             let dt = Utc.timestamp_millis_opt(ts).single().unwrap_or_default();
             let date = dt.format("%Y-%m-%d").to_string();
@@ -299,14 +342,34 @@ impl TsdbStore {
                 let reader = builder.build()?;
                 for batch in reader {
                     let batch = batch?;
-                    let tc = batch.column(0).as_any().downcast_ref::<Int64Array>().unwrap();
-                    let mc = batch.column(1).as_any().downcast_ref::<StringArray>().unwrap();
-                    let lc = batch.column(2).as_any().downcast_ref::<StringArray>().unwrap();
-                    let vc = batch.column(3).as_any().downcast_ref::<Float64Array>().unwrap();
+                    let tc = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Int64Array>()
+                        .unwrap();
+                    let mc = batch
+                        .column(1)
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                        .unwrap();
+                    let lc = batch
+                        .column(2)
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                        .unwrap();
+                    let vc = batch
+                        .column(3)
+                        .as_any()
+                        .downcast_ref::<Float64Array>()
+                        .unwrap();
                     for i in 0..batch.num_rows() {
                         existing_ts.push(tc.value(i));
                         existing_m.push(mc.value(i).to_string());
-                        existing_l.push(if lc.is_null(i) { "{}".to_string() } else { lc.value(i).to_string() });
+                        existing_l.push(if lc.is_null(i) {
+                            "{}".to_string()
+                        } else {
+                            lc.value(i).to_string()
+                        });
                         existing_v.push(if vc.is_null(i) { f64::NAN } else { vc.value(i) });
                     }
                 }
@@ -358,18 +421,27 @@ impl TsdbStore {
     }
 
     fn shards_in_range(&self, from: i64, to: i64) -> Result<Vec<PathBuf>> {
-        use chrono::Timelike;
         let from_dt = Utc.timestamp_millis_opt(from).single().unwrap_or_default();
         let to_dt = Utc.timestamp_millis_opt(to).single().unwrap_or_default();
         let from_date = from_dt.format("%Y-%m-%d").to_string();
         let to_date = to_dt.format("%Y-%m-%d").to_string();
         let mut paths = vec![];
-        if !self.dir.exists() { return Ok(paths); }
+        if !self.dir.exists() {
+            return Ok(paths);
+        }
         for entry in fs::read_dir(&self.dir)?.flatten() {
             let p = entry.path();
-            if !p.is_dir() { continue; }
-            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
-            if name < from_date || name > to_date { continue; }
+            if !p.is_dir() {
+                continue;
+            }
+            let name = p
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+            if name < from_date || name > to_date {
+                continue;
+            }
             for h in fs::read_dir(&p)?.flatten() {
                 let hp = h.path();
                 if hp.extension().and_then(|e| e.to_str()) == Some("parquet") {
@@ -382,7 +454,9 @@ impl TsdbStore {
 
     fn all_shards(&self) -> Result<Vec<PathBuf>> {
         let mut paths = vec![];
-        if !self.dir.exists() { return Ok(paths); }
+        if !self.dir.exists() {
+            return Ok(paths);
+        }
         for entry in fs::read_dir(&self.dir)?.flatten() {
             let p = entry.path();
             if p.is_dir() {

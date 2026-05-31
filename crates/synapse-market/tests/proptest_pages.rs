@@ -1,6 +1,6 @@
 /// Property-based tests for page encode/decode, range-filter, delta-encoding.
 use proptest::prelude::*;
-use synapse_market::store::page::{Bar, encode_page, decode_page};
+use synapse_market::store::page::{Bar, decode_page, encode_page};
 
 // ── Strategies ────────────────────────────────────────────────────────────────
 fn arb_bar() -> impl Strategy<Value = Bar> {
@@ -11,13 +11,30 @@ fn arb_bar() -> impl Strategy<Value = Bar> {
         0.01f32..=10_000.0f32,
         0.01f32..=10_000.0f32,
         0.0f32..=1_000_000_000.0f32,
-    ).prop_map(|(ts, open, high, low, close, volume)| Bar {
-        ts, open, high, low, close, volume,
-    })
+    )
+        .prop_map(|(ts, open, high, low, close, volume)| Bar {
+            ts,
+            open,
+            high,
+            low,
+            close,
+            volume,
+        })
 }
 
 fn arb_bars(max: usize) -> impl Strategy<Value = Vec<Bar>> {
     proptest::collection::vec(arb_bar(), 1..=max)
+}
+
+fn bar_sort_key(b: &Bar) -> (i64, u32, u32, u32, u32, u32) {
+    (
+        b.ts,
+        b.open.to_bits(),
+        b.high.to_bits(),
+        b.low.to_bits(),
+        b.close.to_bits(),
+        b.volume.to_bits(),
+    )
 }
 
 proptest! {
@@ -30,8 +47,8 @@ proptest! {
         prop_assert_eq!(decoded.len(), bars.len());
         let mut sorted_in = bars.clone();
         let mut sorted_out = decoded.clone();
-        sorted_in.sort_by_key(|b| b.ts);
-        sorted_out.sort_by_key(|b| b.ts);
+        sorted_in.sort_by_key(bar_sort_key);
+        sorted_out.sort_by_key(bar_sort_key);
         for (a, b) in sorted_in.iter().zip(sorted_out.iter()) {
             prop_assert_eq!(a.ts, b.ts);
             prop_assert!((a.open   - b.open  ).abs() < 1e-6, "open   mismatch: {} vs {}", a.open,   b.open);

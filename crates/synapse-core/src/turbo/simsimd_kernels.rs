@@ -87,7 +87,11 @@ mod tests {
         let a: Vec<i8> = (0..32).map(|i| i as i8).collect();
         let b: Vec<i8> = (0..32).map(|i| (i + 1) as i8).collect();
         let got = dot_i8(&a, &b).unwrap();
-        let expected: i64 = a.iter().zip(&b).map(|(x, y)| i64::from(*x) * i64::from(*y)).sum();
+        let expected: i64 = a
+            .iter()
+            .zip(&b)
+            .map(|(x, y)| i64::from(*x) * i64::from(*y))
+            .sum();
         assert_eq!(got, expected);
     }
 

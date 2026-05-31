@@ -1,5 +1,5 @@
 use synapse_market::backtest_wf::{
-    deflated_sharpe_ratio, norm_cdf, WalkForward, Verdict, Bar, TradeResult,
+    Bar, TradeResult, Verdict, WalkForward, deflated_sharpe_ratio, norm_cdf,
 };
 
 /// Deterministic strategy: always return +1% trade per bar.
@@ -23,14 +23,20 @@ fn test_dsr_paper_formula_sanity() {
     let dsr = deflated_sharpe_ratio(sr, t, skew, kurt, 1);
     // For N=1, E[SR_max] ~ 0, denom_sq = 1 - 0*1 + (3-1)/4*1 = 1.5
     // z = (1.0 - 0) * sqrt(249) / sqrt(1.5) ≈ 15.76 / 1.225 ≈ 12.9 → Phi ≈ 1.0
-    assert!(dsr > 0.99, "DSR for sharp clean signal should approach 1.0, got {dsr}");
+    assert!(
+        dsr > 0.99,
+        "DSR for sharp clean signal should approach 1.0, got {dsr}"
+    );
 }
 
 #[test]
 fn test_dsr_weak_signal() {
     // Very low SR, many trials → DSR < 0.5 (below chance)
     let dsr = deflated_sharpe_ratio(0.1, 100.0, 0.0, 3.0, 20);
-    assert!(dsr < 0.5, "Weak SR with 20 trials should deflate below 0.5, got {dsr}");
+    assert!(
+        dsr < 0.5,
+        "Weak SR with 20 trials should deflate below 0.5, got {dsr}"
+    );
 }
 
 #[test]
@@ -52,8 +58,15 @@ fn test_walk_forward_winning_strategy() {
     assert_eq!(report.folds.len(), 5);
     for fold in &report.folds {
         assert!(fold.n_trades > 0);
-        assert!(fold.hit_rate > 0.9, "always_win hit_rate should be ~1.0, got {}", fold.hit_rate);
-        assert!(fold.sharpe > 0.0, "sharpe should be positive for always-win");
+        assert!(
+            fold.hit_rate > 0.9,
+            "always_win hit_rate should be ~1.0, got {}",
+            fold.hit_rate
+        );
+        assert!(
+            fold.sharpe > 0.0,
+            "sharpe should be positive for always-win"
+        );
     }
 }
 
@@ -62,14 +75,21 @@ fn test_walk_forward_losing_strategy_overfit_or_fragile() {
     let wf = WalkForward::new(5);
     let report = wf.run(0..5000, always_lose);
     // Losing strategy should NOT be ROBUST.
-    assert_ne!(report.verdict, Verdict::Robust, "losing strategy must not be ROBUST");
+    assert_ne!(
+        report.verdict,
+        Verdict::Robust,
+        "losing strategy must not be ROBUST"
+    );
 }
 
 #[test]
 fn test_pbo_range() {
     let wf = WalkForward::new(5);
     let report = wf.run(0..5000, always_win);
-    assert!(report.pbo >= 0.0 && report.pbo <= 1.0, "PBO must be in [0,1]");
+    assert!(
+        report.pbo >= 0.0 && report.pbo <= 1.0,
+        "PBO must be in [0,1]"
+    );
 }
 
 #[test]

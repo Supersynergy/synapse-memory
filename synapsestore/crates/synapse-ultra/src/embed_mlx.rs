@@ -190,7 +190,7 @@ fn coalesce_run(rx: mpsc::Receiver<CoalesceReq>, mut sidecar: Sidecar) {
         match sidecar.embed(&texts) {
             Ok(vecs) => {
                 debug_assert_eq!(vecs.len(), batch.len());
-                for (req, v) in batch.into_iter().zip(vecs.into_iter()) {
+                for (req, v) in batch.into_iter().zip(vecs) {
                     let _ = req.reply.send(Ok(v));
                 }
             }
@@ -285,35 +285,37 @@ mod tests {
     /// 16 concurrent senders should merge into ≤2 batch calls.
     #[test]
     fn coalescer_fans_in_concurrent_singletons() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
 
         let call_count = Arc::new(AtomicUsize::new(0));
         let cc = call_count.clone();
 
         // Build a fake Sidecar-equivalent via the internal channel directly.
         let (tx, rx) = mpsc::sync_channel::<CoalesceReq>(64);
-        let _worker = thread::spawn(move || loop {
-            let first = match rx.recv() {
-                Ok(r) => r,
-                Err(_) => return,
-            };
-            let mut batch = vec![first];
-            let deadline = Instant::now() + COALESCE_WINDOW;
-            while batch.len() < COALESCE_MAX_BATCH {
-                let now = Instant::now();
-                if now >= deadline {
-                    break;
+        let _worker = thread::spawn(move || {
+            loop {
+                let first = match rx.recv() {
+                    Ok(r) => r,
+                    Err(_) => return,
+                };
+                let mut batch = vec![first];
+                let deadline = Instant::now() + COALESCE_WINDOW;
+                while batch.len() < COALESCE_MAX_BATCH {
+                    let now = Instant::now();
+                    if now >= deadline {
+                        break;
+                    }
+                    match rx.recv_timeout(deadline - now) {
+                        Ok(r) => batch.push(r),
+                        _ => break,
+                    }
                 }
-                match rx.recv_timeout(deadline - now) {
-                    Ok(r) => batch.push(r),
-                    _ => break,
+                cc.fetch_add(1, Ordering::SeqCst);
+                thread::sleep(Duration::from_millis(5));
+                for req in batch {
+                    let _ = req.reply.send(Ok(vec![0.1f32; 384]));
                 }
-            }
-            cc.fetch_add(1, Ordering::SeqCst);
-            thread::sleep(Duration::from_millis(5));
-            for req in batch {
-                let _ = req.reply.send(Ok(vec![0.1f32; 384]));
             }
         });
 

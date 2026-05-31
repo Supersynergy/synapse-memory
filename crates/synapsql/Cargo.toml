@@ -37,6 +37,7 @@ bytes          = "1"
 # (no extra dep — use std::sync::atomic)
 
 [features]
+embed = []
 rusqlite-udf = []
 
 [dev-dependencies]

@@ -9,7 +9,7 @@ use crate::error::Result;
 #[cfg(feature = "rabitq")]
 use crate::rabitq;
 use crate::search;
-use crate::snapshot::{self, Snapshot, EMBED_DIM};
+use crate::snapshot::{self, EMBED_DIM, Snapshot};
 
 pub struct UltraIndex {
     pub ids: Vec<i64>,

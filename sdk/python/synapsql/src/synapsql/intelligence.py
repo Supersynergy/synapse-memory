@@ -10,11 +10,12 @@ Ships 5 features:
 Synapse daemon optional — falls back to local SQLite FTS5 when offline.
 """
 from __future__ import annotations
-import os, sqlite3, json, math, socket, struct, statistics, re
+import os, sqlite3, json, math, socket, struct, statistics, re, urllib.parse, urllib.request
 from collections import Counter, defaultdict
 from typing import Optional, Any
 
 SOCK = os.environ.get("SYNAPSE_SOCK", "/tmp/synapse.sock")
+TURBO_URL = os.environ.get("SYNAPSE_TURBO_URL", "http://127.0.0.1:9477").rstrip("/")
 
 
 # -------------------- 1. VectorSearch via Synapse --------------------
@@ -55,6 +56,18 @@ class VectorSearch:
         return self._msgpack.unpackb(buf, raw=False)
 
     def find_similar(self, query: str, limit: int = 10, mode: str = "Hybrid") -> list[dict]:
+        try:
+            path = {"Hybrid": "hybrid", "Vec": "vec", "Lex": "find"}.get(mode, "hybrid")
+            qs = urllib.parse.urlencode({"q": query, "limit": int(limit)})
+            req = urllib.request.Request(f"{TURBO_URL}/{path}?{qs}")
+            if req.type == "http" and req.host.startswith("127.0.0.1"):
+                with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310
+                    data = json.loads(resp.read())
+                return [{"score": h.get("score", h.get("distance", 0)),
+                         "title": h.get("title", ""), "text": (h.get("text", "") or "")[:200],
+                         "id": h.get("id")} for h in data.get("results", [])]
+        except Exception:
+            pass
         try:
             r = self._call({"op": "Search",
                           "args": {"mode": mode, "q": query, "limit": int(limit), "embed_query": True}})

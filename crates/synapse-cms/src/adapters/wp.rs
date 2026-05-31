@@ -6,7 +6,6 @@
 
 // AutoloadCache lives in adapters::wp_optimizer
 
-
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -38,34 +37,43 @@ static RE_AUTOLOAD: Lazy<Regex> = Lazy::new(|| {
 static RE_SINGLE_OPT: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)SELECT\s+option_value\s+FROM\s+\w*options\s+WHERE\s+option_name\s*=").unwrap()
 });
-static RE_FOUND_ROWS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)SELECT\s+FOUND_ROWS\(\)").unwrap()
-});
-static RE_POSTS_LISTING: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)SQL_CALC_FOUND_ROWS.*FROM\s+\w*posts\b").unwrap()
-});
-static RE_POSTMETA: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)FROM\s+\w*postmeta\b.*post_id\s+IN").unwrap()
-});
-static RE_USERS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)FROM\s+\w*users\s+WHERE\s+user_login\s*=").unwrap()
-});
-static RE_TERMS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)FROM\s+\w*terms\b").unwrap()
-});
-static RE_COMMENTS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)FROM\s+\w*comments\s+WHERE\s+comment_post_ID").unwrap()
-});
+static RE_FOUND_ROWS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)SELECT\s+FOUND_ROWS\(\)").unwrap());
+static RE_POSTS_LISTING: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)SQL_CALC_FOUND_ROWS.*FROM\s+\w*posts\b").unwrap());
+static RE_POSTMETA: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)FROM\s+\w*postmeta\b.*post_id\s+IN").unwrap());
+static RE_USERS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)FROM\s+\w*users\s+WHERE\s+user_login\s*=").unwrap());
+static RE_TERMS: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)FROM\s+\w*terms\b").unwrap());
+static RE_COMMENTS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)FROM\s+\w*comments\s+WHERE\s+comment_post_ID").unwrap());
 
 pub fn classify(sql: &str) -> WpPattern {
-    if RE_AUTOLOAD.is_match(sql) { return WpPattern::AutoloadAll; }
-    if RE_SINGLE_OPT.is_match(sql) { return WpPattern::SingleOption; }
-    if RE_FOUND_ROWS.is_match(sql) { return WpPattern::FoundRows; }
-    if RE_POSTS_LISTING.is_match(sql) { return WpPattern::PostsListing; }
-    if RE_POSTMETA.is_match(sql) { return WpPattern::PostmetaJoin; }
-    if RE_USERS.is_match(sql) { return WpPattern::UserLookup; }
-    if RE_TERMS.is_match(sql) { return WpPattern::TermLookup; }
-    if RE_COMMENTS.is_match(sql) { return WpPattern::CommentsForPost; }
+    if RE_AUTOLOAD.is_match(sql) {
+        return WpPattern::AutoloadAll;
+    }
+    if RE_SINGLE_OPT.is_match(sql) {
+        return WpPattern::SingleOption;
+    }
+    if RE_FOUND_ROWS.is_match(sql) {
+        return WpPattern::FoundRows;
+    }
+    if RE_POSTS_LISTING.is_match(sql) {
+        return WpPattern::PostsListing;
+    }
+    if RE_POSTMETA.is_match(sql) {
+        return WpPattern::PostmetaJoin;
+    }
+    if RE_USERS.is_match(sql) {
+        return WpPattern::UserLookup;
+    }
+    if RE_TERMS.is_match(sql) {
+        return WpPattern::TermLookup;
+    }
+    if RE_COMMENTS.is_match(sql) {
+        return WpPattern::CommentsForPost;
+    }
     WpPattern::Other
 }
 
@@ -94,14 +102,18 @@ mod tests {
     #[test]
     fn classifies_posts_listing() {
         assert_eq!(
-            classify("SELECT SQL_CALC_FOUND_ROWS wp_posts.* FROM wp_posts WHERE post_status='publish' ORDER BY post_date DESC LIMIT 0,10"),
+            classify(
+                "SELECT SQL_CALC_FOUND_ROWS wp_posts.* FROM wp_posts WHERE post_status='publish' ORDER BY post_date DESC LIMIT 0,10"
+            ),
             WpPattern::PostsListing
         );
     }
     #[test]
     fn classifies_postmeta() {
         assert_eq!(
-            classify("SELECT post_id, meta_key, meta_value FROM wp_postmeta WHERE post_id IN (1,2,3) AND meta_key = '_thumbnail_id'"),
+            classify(
+                "SELECT post_id, meta_key, meta_value FROM wp_postmeta WHERE post_id IN (1,2,3) AND meta_key = '_thumbnail_id'"
+            ),
             WpPattern::PostmetaJoin
         );
     }
@@ -111,9 +123,6 @@ mod tests {
     }
     #[test]
     fn case_insensitive() {
-        assert_eq!(
-            classify("select FOUND_ROWS()"),
-            WpPattern::FoundRows
-        );
+        assert_eq!(classify("select FOUND_ROWS()"), WpPattern::FoundRows);
     }
 }

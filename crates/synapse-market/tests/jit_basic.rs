@@ -1,4 +1,4 @@
-use synapse_market::jit::{Col, Op, Predicate, FilterCache};
+use synapse_market::jit::{Col, FilterCache, Op, Predicate};
 
 fn run(p: &Predicate, closes: &[f32], volumes: &[f32]) -> (Vec<u8>, usize) {
     let n = closes.len();
@@ -38,7 +38,7 @@ fn cmp_close_gt_100() {
 #[test]
 fn and_close_gt_100_volume_gt_500() {
     let closes = vec![150f32, 150.0, 50.0, 200.0];
-    let vols   = vec![600f32, 400.0, 600.0, 600.0];
+    let vols = vec![600f32, 400.0, 600.0, 600.0];
     let p = Predicate::And(
         Box::new(Predicate::Cmp(Col::Close, Op::Gt, 100.0)),
         Box::new(Predicate::Cmp(Col::Volume, Op::Gt, 500.0)),
@@ -52,7 +52,7 @@ fn and_close_gt_100_volume_gt_500() {
 #[test]
 fn or_predicate() {
     let closes = vec![50f32, 150.0, 75.0, 200.0];
-    let vols   = vec![600f32, 400.0, 400.0, 400.0];
+    let vols = vec![600f32, 400.0, 400.0, 400.0];
     let p = Predicate::Or(
         Box::new(Predicate::Cmp(Col::Close, Op::Gt, 100.0)),
         Box::new(Predicate::Cmp(Col::Volume, Op::Gt, 500.0)),

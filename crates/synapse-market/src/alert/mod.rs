@@ -20,11 +20,11 @@ pub enum Op {
 impl Op {
     fn eval(&self, lhs: f32, rhs: f32) -> bool {
         match self {
-            Op::Gt  => lhs > rhs,
-            Op::Lt  => lhs < rhs,
+            Op::Gt => lhs > rhs,
+            Op::Lt => lhs < rhs,
             Op::Gte => lhs >= rhs,
             Op::Lte => lhs <= rhs,
-            Op::Eq  => (lhs - rhs).abs() < f32::EPSILON,
+            Op::Eq => (lhs - rhs).abs() < f32::EPSILON,
         }
     }
 }
@@ -45,9 +45,15 @@ pub enum AlertCondition {
 
 #[derive(Debug, Clone)]
 pub enum AlertAction {
-    Webhook { url: String, method: String },
+    Webhook {
+        url: String,
+        method: String,
+    },
     /// MQTT publish via rumqttc (feature = "mqtt"). Best-effort, errors tolerated.
-    Mqtt { broker: String, topic: String },
+    Mqtt {
+        broker: String,
+        topic: String,
+    },
     Log,
 }
 
@@ -124,7 +130,9 @@ impl AlertEngine {
 }
 
 impl Default for AlertEngine {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -133,15 +141,13 @@ impl Default for AlertEngine {
 
 fn eval_condition(cond: &AlertCondition, ctx: &AlertCtx) -> bool {
     match cond {
-        AlertCondition::PatternMatch { pattern_id } => {
-            ctx.matched_patterns.contains(pattern_id)
-        }
-        AlertCondition::ThresholdCross { col, op, value } => {
-            ctx.fields.get(col).map(|&v| op.eval(v, *value)).unwrap_or(false)
-        }
-        AlertCondition::AndAll(conditions) => {
-            conditions.iter().all(|c| eval_condition(c, ctx))
-        }
+        AlertCondition::PatternMatch { pattern_id } => ctx.matched_patterns.contains(pattern_id),
+        AlertCondition::ThresholdCross { col, op, value } => ctx
+            .fields
+            .get(col)
+            .map(|&v| op.eval(v, *value))
+            .unwrap_or(false),
+        AlertCondition::AndAll(conditions) => conditions.iter().all(|c| eval_condition(c, ctx)),
     }
 }
 
@@ -162,13 +168,19 @@ async fn dispatch(action: &AlertAction, rule_id: &str, ctx: &AlertCtx, http: &re
                 format!(r#"{{"rule":"{}","fields":{:?}}}"#, rule_id, ctx.fields)
             });
             let req = match method.to_uppercase().as_str() {
-                "POST" => http.post(url).body(body).header("Content-Type", "application/json"),
-                "PUT"  => http.put(url).body(body).header("Content-Type", "application/json"),
-                _      => http.get(url),
+                "POST" => http
+                    .post(url)
+                    .body(body)
+                    .header("Content-Type", "application/json"),
+                "PUT" => http
+                    .put(url)
+                    .body(body)
+                    .header("Content-Type", "application/json"),
+                _ => http.get(url),
             };
             match req.send().await {
                 Ok(resp) => tracing::info!(rule_id, status = %resp.status(), "webhook ok"),
-                Err(e)   => tracing::warn!(rule_id, error = %e, "webhook failed"),
+                Err(e) => tracing::warn!(rule_id, error = %e, "webhook failed"),
             }
         }
         AlertAction::Mqtt { broker, topic } => {
@@ -188,7 +200,7 @@ async fn dispatch_mqtt(rule_id: &str, broker: &str, topic: &str, ctx: &AlertCtx)
     // Parse "host:port" or default to port 1883
     let (host, port) = if let Some(pos) = broker.rfind(':') {
         let h = &broker[..pos];
-        let p = broker[pos+1..].parse::<u16>().unwrap_or(1883);
+        let p = broker[pos + 1..].parse::<u16>().unwrap_or(1883);
         (h.to_owned(), p)
     } else {
         (broker.to_owned(), 1883u16)
@@ -200,9 +212,10 @@ async fn dispatch_mqtt(rule_id: &str, broker: &str, topic: &str, ctx: &AlertCtx)
 
     let (client, mut eventloop) = AsyncClient::new(opts, 4);
 
-    let payload = ctx.payload.clone().unwrap_or_else(|| {
-        format!(r#"{{"rule":"{rule_id}"}}"#)
-    });
+    let payload = ctx
+        .payload
+        .clone()
+        .unwrap_or_else(|| format!(r#"{{"rule":"{rule_id}"}}"#));
 
     // Spawn eventloop driver so the publish actually flushes
     tokio::spawn(async move {
@@ -214,7 +227,10 @@ async fn dispatch_mqtt(rule_id: &str, broker: &str, topic: &str, ctx: &AlertCtx)
         }
     });
 
-    match client.publish(topic, QoS::AtMostOnce, false, payload.as_bytes()).await {
+    match client
+        .publish(topic, QoS::AtMostOnce, false, payload.as_bytes())
+        .await
+    {
         Ok(()) => tracing::info!(rule_id, topic, "MQTT publish queued"),
         Err(e) => tracing::warn!(rule_id, topic, error = %e, "MQTT publish failed (best-effort)"),
     }
@@ -224,5 +240,10 @@ async fn dispatch_mqtt(rule_id: &str, broker: &str, topic: &str, ctx: &AlertCtx)
 
 #[cfg(not(feature = "mqtt"))]
 async fn dispatch_mqtt(rule_id: &str, broker: &str, topic: &str, _ctx: &AlertCtx) {
-    tracing::warn!(rule_id, broker, topic, "MQTT feature not enabled; rebuild with --features mqtt");
+    tracing::warn!(
+        rule_id,
+        broker,
+        topic,
+        "MQTT feature not enabled; rebuild with --features mqtt"
+    );
 }

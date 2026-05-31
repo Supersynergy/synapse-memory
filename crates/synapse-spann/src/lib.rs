@@ -15,4 +15,10 @@ pub mod index;
 pub mod posting;
 pub mod search;
 
-pub use index::{SpannIndex, SpannConfig};
+pub type DocId = u64;
+pub type Embedding = Vec<f32>;
+pub type DocumentEmbedding = (DocId, Embedding);
+pub type SearchHit = (DocId, f32);
+pub type SearchResults = Vec<SearchHit>;
+
+pub use index::{SpannConfig, SpannIndex};

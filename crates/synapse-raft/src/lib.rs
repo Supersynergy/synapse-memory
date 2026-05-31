@@ -66,13 +66,18 @@ mod tests {
         let n = StubNode { id: 1 };
         assert_eq!(n.node_id(), 1);
         assert!(!n.is_leader().await);
-        let e = LogEntry::Put { key: "k".into(), value: vec![1, 2, 3] };
+        let e = LogEntry::Put {
+            key: "k".into(),
+            value: vec![1, 2, 3],
+        };
         assert!(matches!(n.submit(e).await, Err(RaftError::NotEnabled)));
     }
 
     #[test]
     fn log_entry_serde_roundtrip() {
-        let e = LogEntry::Sql { stmt: "SELECT 1".into() };
+        let e = LogEntry::Sql {
+            stmt: "SELECT 1".into(),
+        };
         let bytes = serde_json::to_vec(&e).unwrap();
         let back: LogEntry = serde_json::from_slice(&bytes).unwrap();
         match back {

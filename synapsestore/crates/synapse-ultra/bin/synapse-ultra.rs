@@ -6,7 +6,7 @@ use tracing_subscriber::EnvFilter;
 
 use synapse_ultra::cache::T0Cache;
 use synapse_ultra::embed::Embedder;
-use synapse_ultra::http::{serve, AppState};
+use synapse_ultra::http::{AppState, serve};
 use synapse_ultra::index::load_or_rebuild;
 
 #[derive(Parser)]
@@ -49,9 +49,9 @@ struct Args {
 }
 
 fn expand_tilde(s: &str) -> PathBuf {
-    if s.starts_with("~/") {
+    if let Some(stripped) = s.strip_prefix("~/") {
         let home = std::env::var("HOME").unwrap_or_default();
-        PathBuf::from(format!("{}/{}", home, &s[2..]))
+        PathBuf::from(format!("{home}/{stripped}"))
     } else {
         PathBuf::from(s)
     }

@@ -66,7 +66,12 @@ impl Drop for AlignedBuf {
         let ptr = std::mem::replace(&mut self.ptr, std::ptr::null_mut());
         // Safety: pool capacity == POOL_CAP, we always pop before push,
         // so push never fails. Use ManuallyDrop to hand off ownership.
-        let buf = AlignedBuf { ptr, layout: self.layout, len: 0, pool: self.pool.clone() };
+        let buf = AlignedBuf {
+            ptr,
+            layout: self.layout,
+            len: 0,
+            pool: self.pool.clone(),
+        };
         if let Err(mut rejected) = self.pool.push(buf) {
             // Pool full (shouldn't happen). Null out ptr so recursive Drop is a no-op.
             let rptr = std::mem::replace(&mut rejected.ptr, std::ptr::null_mut());
@@ -82,8 +87,14 @@ fn make_pool() -> Arc<ArrayQueue<AlignedBuf>> {
     for _ in 0..POOL_CAP {
         let ptr = unsafe { alloc(layout) };
         assert!(!ptr.is_null(), "memalign alloc failed");
-        let buf = AlignedBuf { ptr, layout, len: 0, pool: pool.clone() };
-        pool.push(buf).unwrap_or_else(|_| panic!("pool push failed"));
+        let buf = AlignedBuf {
+            ptr,
+            layout,
+            len: 0,
+            pool: pool.clone(),
+        };
+        pool.push(buf)
+            .unwrap_or_else(|_| panic!("pool push failed"));
     }
     pool
 }
@@ -118,7 +129,13 @@ impl UringWal {
 
         let pool = make_pool();
 
-        Ok(Self { ring, fd, offset: 0, batch_sz, pool })
+        Ok(Self {
+            ring,
+            fd,
+            offset: 0,
+            batch_sz,
+            pool,
+        })
     }
 
     /// Borrow a buffer from pool, copy data in (padded to SECTOR boundary).
@@ -137,7 +154,8 @@ impl UringWal {
 
     /// Write entries in batches of `batch_sz` SQEs (no fsync — legacy fast path).
     pub async fn write_batch(&mut self, entries: &[Entry]) -> Result<()> {
-        self.batched_append(entries.to_vec(), Durability::Fast).await
+        self.batched_append(entries.to_vec(), Durability::Fast)
+            .await
     }
 
     /// Batched append with configurable durability.
@@ -146,7 +164,11 @@ impl UringWal {
     /// - `Batched`: submit N writes linked to 1 fsync via SQE_LINK (TigerBeetle).
     ///   Single `io_uring_enter` syscall. One fsync per batch = durable at batch granularity.
     /// - `Strict`: per-entry write+fsync pair. Maximum durability.
-    pub async fn batched_append(&mut self, entries: Vec<Entry>, durability: Durability) -> Result<()> {
+    pub async fn batched_append(
+        &mut self,
+        entries: Vec<Entry>,
+        durability: Durability,
+    ) -> Result<()> {
         if entries.is_empty() {
             return Ok(());
         }
@@ -244,10 +266,9 @@ impl UringWal {
         {
             let mut sq = self.ring.submission();
             // Write linked to fsync.
-            let mut write_e =
-                opcode::Write::new(types::Fd(self.fd), buf.ptr, buf.len as u32)
-                    .offset(self.offset)
-                    .build();
+            let mut write_e = opcode::Write::new(types::Fd(self.fd), buf.ptr, buf.len as u32)
+                .offset(self.offset)
+                .build();
             write_e.flags |= squeue::Flags::IO_LINK;
             unsafe { sq.push(&write_e) }
                 .map_err(|_| IoUringError::AppendFailed("SQ full".into()))?;

@@ -8,22 +8,28 @@
 //! - Optional --autolearn (Thompson TTL bandit + workload classifier)
 //! - Optional --admin-key for RBAC
 
-use std::sync::Arc;
-use std::time::Duration;
 use clap::Parser;
-use synapse_libsql::Store;
-use synapse_libsql::{BatchedLibsqlStore, TurboLibsqlStore, RealPoolStore};
-use synapse_ops::SlowQueryLog;
-use synapse_auth::{AuthStore, Role};
-use synapse_tune::{TuneProfile, BotClassifier, DriftDetector, IndexAdvisor, TtlBandit, HeuristicTuner};
-use std::sync::atomic::{AtomicU64, Ordering};
 use parking_lot::Mutex;
 use rusqlite::Connection;
-use synapse_graph::LiveRelate;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use synapse_auth::{AuthStore, Role};
 use synapse_graph::live::EventOp;
+use synapse_graph::LiveRelate;
+use synapse_libsql::Store;
+use synapse_libsql::{BatchedLibsqlStore, RealPoolStore, TurboLibsqlStore};
+use synapse_ops::SlowQueryLog;
+use synapse_tune::{
+    BotClassifier, DriftDetector, HeuristicTuner, IndexAdvisor, TtlBandit, TuneProfile,
+};
 
 #[derive(Parser)]
-#[command(name = "synapse-server", version, about = "Generic MySQL+PG drop-in daemon")]
+#[command(
+    name = "synapse-server",
+    version,
+    about = "Generic MySQL+PG drop-in daemon"
+)]
 struct Cli {
     /// MySQL wire bind. Empty disables.
     #[arg(long, default_value = "127.0.0.1:3306")]
@@ -75,10 +81,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let slowlog: Option<Arc<SlowQueryLog>> = if cli.slow_threshold_ms > 0 {
-        let l = Arc::new(SlowQueryLog::new(Duration::from_millis(cli.slow_threshold_ms), 10_000));
+        let l = Arc::new(SlowQueryLog::new(
+            Duration::from_millis(cli.slow_threshold_ms),
+            10_000,
+        ));
         eprintln!("slowlog: threshold={}ms cap=10000", cli.slow_threshold_ms);
         Some(l)
-    } else { None };
+    } else {
+        None
+    };
 
     if cli.turbo {
         let _profile = TuneProfile::turbo_cache();
@@ -96,7 +107,9 @@ async fn main() -> anyhow::Result<()> {
         });
         eprintln!("autolearn: TtlBandit + BotClassifier + DriftDetector + IndexAdvisor + HeuristicTuner LIVE");
         Some(s)
-    } else { None };
+    } else {
+        None
+    };
 
     let inner: Arc<dyn Store> = match cli.backend.as_str() {
         "batched" => {
@@ -115,16 +128,24 @@ async fn main() -> anyhow::Result<()> {
 
     // Wrap store with drift detection + advisor observation if autolearn enabled
     let inner = if let Some(al) = autolearn_state.clone() {
-        struct AutoWrap { inner: Arc<dyn Store>, al: Arc<AutolearnState> }
+        struct AutoWrap {
+            inner: Arc<dyn Store>,
+            al: Arc<AutolearnState>,
+        }
         #[async_trait::async_trait]
         impl Store for AutoWrap {
-            async fn query(&self, sql: &str) -> Result<synapse_libsql::QueryResult, synapse_libsql::Error> {
+            async fn query(
+                &self,
+                sql: &str,
+            ) -> Result<synapse_libsql::QueryResult, synapse_libsql::Error> {
                 let t = std::time::Instant::now();
                 let r = self.inner.query(sql).await;
                 let elapsed_us = t.elapsed().as_micros() as f64;
                 self.al.drift.check(elapsed_us);
                 self.al.reads.fetch_add(1, Ordering::Relaxed);
-                if let Ok(mut a) = self.al.advisor.try_write() { a.observe(sql); }
+                if let Ok(mut a) = self.al.advisor.try_write() {
+                    a.observe(sql);
+                }
                 r
             }
             async fn exec(&self, sql: &str) -> Result<u64, synapse_libsql::Error> {
@@ -137,13 +158,21 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Arc::new(AutoWrap { inner, al }) as Arc<dyn Store>
-    } else { inner };
+    } else {
+        inner
+    };
 
     let store: Arc<dyn Store> = if let Some(l) = slowlog.clone() {
-        struct Wrap { inner: Arc<dyn Store>, log: Arc<SlowQueryLog> }
+        struct Wrap {
+            inner: Arc<dyn Store>,
+            log: Arc<SlowQueryLog>,
+        }
         #[async_trait::async_trait]
         impl Store for Wrap {
-            async fn query(&self, sql: &str) -> Result<synapse_libsql::QueryResult, synapse_libsql::Error> {
+            async fn query(
+                &self,
+                sql: &str,
+            ) -> Result<synapse_libsql::QueryResult, synapse_libsql::Error> {
                 let t = std::time::Instant::now();
                 let r = self.inner.query(sql).await;
                 self.log.record(sql, t.elapsed());
@@ -184,14 +213,18 @@ async fn main() -> anyhow::Result<()> {
     let graph_state: Option<Arc<GraphState>> = if !cli.graph_db.is_empty() {
         let conn = Connection::open(&cli.graph_db).expect("open graph db");
         synapse_graph::ensure_schema(&conn).expect("graph schema");
-        eprintln!("graph: loaded at {} ({} edges)",
-                  cli.graph_db,
-                  synapse_graph::edge_count(&conn).unwrap_or(0));
+        eprintln!(
+            "graph: loaded at {} ({} edges)",
+            cli.graph_db,
+            synapse_graph::edge_count(&conn).unwrap_or(0)
+        );
         Some(Arc::new(GraphState {
             conn: Mutex::new(conn),
             live: Arc::new(LiveRelate::default()),
         }))
-    } else { None };
+    } else {
+        None
+    };
 
     if !cli.ops_http.is_empty() {
         let l = slowlog.clone();
@@ -207,10 +240,18 @@ async fn main() -> anyhow::Result<()> {
     eprintln!(
         "synapse-server v{}: mysql={} pg={} ops={} db={} backend={} turbo={} autolearn={}",
         env!("CARGO_PKG_VERSION"),
-        cli.mysql, cli.pg, cli.ops_http, cli.db, cli.backend, cli.turbo, cli.autolearn,
+        cli.mysql,
+        cli.pg,
+        cli.ops_http,
+        cli.db,
+        cli.backend,
+        cli.turbo,
+        cli.autolearn,
     );
     let _ = auth;
-    for h in handles { let _ = h.await; }
+    for h in handles {
+        let _ = h.await;
+    }
     Ok(())
 }
 
@@ -220,10 +261,13 @@ struct GraphState {
 }
 
 struct AutolearnState {
+    #[allow(dead_code)]
     bandit: TtlBandit,
+    #[allow(dead_code)]
     bot_classifier: BotClassifier,
     drift: DriftDetector,
     advisor: tokio::sync::RwLock<IndexAdvisor>,
+    #[allow(dead_code)]
     tuner: HeuristicTuner,
     reads: AtomicU64,
     writes: AtomicU64,
@@ -240,22 +284,37 @@ async fn serve_ops(
     slowlog: Option<Arc<SlowQueryLog>>,
     graph: Option<Arc<GraphState>>,
 ) -> std::io::Result<()> {
-    use axum::{routing::{get, post}, Router, extract::{State, Query}, Json, response::IntoResponse};
+    use axum::{
+        extract::{Query, State},
+        response::IntoResponse,
+        routing::{get, post},
+        Json, Router,
+    };
     use serde::Deserialize;
 
     #[derive(Deserialize)]
-    struct TopParams { #[serde(default = "default_n")] n: usize }
-    fn default_n() -> usize { 20 }
+    struct TopParams {
+        #[serde(default = "default_n")]
+        n: usize,
+    }
+    fn default_n() -> usize {
+        20
+    }
 
     #[derive(Deserialize)]
-    struct CypherBody { query: String }
+    struct CypherBody {
+        query: String,
+    }
 
     let state = OpsState { slowlog, graph };
 
     async fn health(State(_): State<OpsState>) -> impl IntoResponse {
         Json(serde_json::json!({"status":"ok","version":env!("CARGO_PKG_VERSION")}))
     }
-    async fn slowlog_top(State(s): State<OpsState>, Query(p): Query<TopParams>) -> impl IntoResponse {
+    async fn slowlog_top(
+        State(s): State<OpsState>,
+        Query(p): Query<TopParams>,
+    ) -> impl IntoResponse {
         match &s.slowlog {
             Some(l) => Json(serde_json::json!({"entries":l.top_n(p.n),"total":l.len()})),
             None => Json(serde_json::json!({"error":"slowlog disabled"})),
@@ -265,21 +324,36 @@ async fn serve_ops(
         Json(serde_json::json!({"total":s.slowlog.as_ref().map(|l|l.len()).unwrap_or(0)}))
     }
     async fn metrics(State(s): State<OpsState>) -> impl IntoResponse {
-        let n = s.slowlog.as_ref().map(|l|l.len()).unwrap_or(0);
-        let top = s.slowlog.as_ref().and_then(|l|l.top_n(1).into_iter().next().map(|e|e.duration_us)).unwrap_or(0);
+        let n = s.slowlog.as_ref().map(|l| l.len()).unwrap_or(0);
+        let top = s
+            .slowlog
+            .as_ref()
+            .and_then(|l| l.top_n(1).into_iter().next().map(|e| e.duration_us))
+            .unwrap_or(0);
         let body = format!(
             "# HELP synapse_slowlog_total Total slow queries\n# TYPE synapse_slowlog_total counter\nsynapse_slowlog_total {n}\n# HELP synapse_slowlog_top_us Top-1 duration µs\n# TYPE synapse_slowlog_top_us gauge\nsynapse_slowlog_top_us {top}\n"
         );
-        ([(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")], body)
+        (
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/plain; version=0.0.4",
+            )],
+            body,
+        )
     }
 
     // -------- Graph endpoints --------
     async fn graph_health(State(s): State<OpsState>) -> impl IntoResponse {
         match &s.graph {
             Some(g) => {
-                let count = g.conn.lock().query_row::<i64, _, _>(
-                    "SELECT COUNT(*) FROM edges", [], |r| r.get(0)).unwrap_or(0);
-                Json(serde_json::json!({"enabled":true,"edges":count,"subscribers":g.live.subscriber_count()}))
+                let count = g
+                    .conn
+                    .lock()
+                    .query_row::<i64, _, _>("SELECT COUNT(*) FROM edges", [], |r| r.get(0))
+                    .unwrap_or(0);
+                Json(
+                    serde_json::json!({"enabled":true,"edges":count,"subscribers":g.live.subscriber_count()}),
+                )
             }
             None => Json(serde_json::json!({"enabled":false})),
         }
@@ -292,7 +366,9 @@ async fn serve_ops(
             Some(g) => {
                 let conn = g.conn.lock();
                 match synapse_graph::graph_helpers::neighbors_json(&conn, id, k) {
-                    Ok(j) => Json(serde_json::from_str::<serde_json::Value>(&j).unwrap_or_default()),
+                    Ok(j) => {
+                        Json(serde_json::from_str::<serde_json::Value>(&j).unwrap_or_default())
+                    }
                     Err(e) => Json(serde_json::json!({"error":e.to_string()})),
                 }
             }
@@ -307,7 +383,9 @@ async fn serve_ops(
             Some(g) => {
                 let conn = g.conn.lock();
                 match synapse_graph::graph_helpers::pagerank_top_json(&conn, p.n) {
-                    Ok(j) => Json(serde_json::from_str::<serde_json::Value>(&j).unwrap_or_default()),
+                    Ok(j) => {
+                        Json(serde_json::from_str::<serde_json::Value>(&j).unwrap_or_default())
+                    }
                     Err(e) => Json(serde_json::json!({"error":e.to_string()})),
                 }
             }
@@ -319,7 +397,9 @@ async fn serve_ops(
             Some(g) => {
                 let conn = g.conn.lock();
                 match synapse_graph::graph_helpers::communities_json(&conn, 20) {
-                    Ok(j) => Json(serde_json::from_str::<serde_json::Value>(&j).unwrap_or_default()),
+                    Ok(j) => {
+                        Json(serde_json::from_str::<serde_json::Value>(&j).unwrap_or_default())
+                    }
                     Err(e) => Json(serde_json::json!({"error":e.to_string()})),
                 }
             }
@@ -334,7 +414,10 @@ async fn serve_ops(
             Some(g) => {
                 let conn = g.conn.lock();
                 match synapse_graph::graph_helpers::shortest_path_json(&conn, from, to, depth) {
-                    Ok(j) => Json(serde_json::from_str::<serde_json::Value>(&j).unwrap_or(serde_json::Value::Null)),
+                    Ok(j) => Json(
+                        serde_json::from_str::<serde_json::Value>(&j)
+                            .unwrap_or(serde_json::Value::Null),
+                    ),
                     Err(e) => Json(serde_json::json!({"error":e.to_string()})),
                 }
             }
@@ -351,30 +434,50 @@ async fn serve_ops(
         };
         let parsed = match synapse_graph::parse_cypher(&body.query) {
             Ok(q) => q,
-            Err(e) => return Json(serde_json::json!({"error":format!("parse: {e}"),"query":body.query})),
+            Err(e) => {
+                return Json(serde_json::json!({"error":format!("parse: {e}"),"query":body.query}))
+            }
         };
         use synapse_graph::CypherOp;
         let conn = g.conn.lock();
         match parsed.op {
-            CypherOp::Neighbors { node_id, top_k, rel_filter } => {
-                match synapse_graph::neighbors(&conn, node_id, rel_filter.as_deref(), top_k) {
-                    Ok(rows) => Json(serde_json::json!({"op":"neighbors","rows":rows})),
-                    Err(e) => Json(serde_json::json!({"error":e.to_string()})),
-                }
-            }
-            CypherOp::Traverse { start_id, max_depth, rel_filter, limit } => {
-                match synapse_graph::traverse(&conn, start_id, max_depth, limit, 0.7, rel_filter.as_deref()) {
+            CypherOp::Neighbors {
+                node_id,
+                top_k,
+                rel_filter,
+            } => match synapse_graph::neighbors(&conn, node_id, rel_filter.as_deref(), top_k) {
+                Ok(rows) => Json(serde_json::json!({"op":"neighbors","rows":rows})),
+                Err(e) => Json(serde_json::json!({"error":e.to_string()})),
+            },
+            CypherOp::Traverse {
+                start_id,
+                max_depth,
+                rel_filter,
+                limit,
+            } => {
+                match synapse_graph::traverse(
+                    &conn,
+                    start_id,
+                    max_depth,
+                    limit,
+                    0.7,
+                    rel_filter.as_deref(),
+                ) {
                     Ok(rows) => Json(serde_json::json!({"op":"traverse","rows":rows})),
                     Err(e) => Json(serde_json::json!({"error":e.to_string()})),
                 }
             }
-            CypherOp::ShortestPath { from_id, to_id, max_depth } => {
-                match synapse_graph::shortest_path(&conn, from_id, to_id, max_depth) {
-                    Ok(Some((cost, path))) => Json(serde_json::json!({"op":"path","cost":cost,"path":path})),
-                    Ok(None) => Json(serde_json::json!({"op":"path","result":null})),
-                    Err(e) => Json(serde_json::json!({"error":e.to_string()})),
+            CypherOp::ShortestPath {
+                from_id,
+                to_id,
+                max_depth,
+            } => match synapse_graph::shortest_path(&conn, from_id, to_id, max_depth) {
+                Ok(Some((cost, path))) => {
+                    Json(serde_json::json!({"op":"path","cost":cost,"path":path}))
                 }
-            }
+                Ok(None) => Json(serde_json::json!({"op":"path","result":null})),
+                Err(e) => Json(serde_json::json!({"error":e.to_string()})),
+            },
             CypherOp::PageRank { top_n, damping } => {
                 match synapse_graph::top_pagerank(&conn, top_n, damping, 30) {
                     Ok(rows) => Json(serde_json::json!({"op":"pagerank","rows":rows})),
@@ -392,7 +495,12 @@ async fn serve_ops(
                     Err(e) => Json(serde_json::json!({"error":e.to_string()})),
                 }
             }
-            CypherOp::Create { from_id, to_id, ref rel, weight } => {
+            CypherOp::Create {
+                from_id,
+                to_id,
+                ref rel,
+                weight,
+            } => {
                 let res = synapse_graph::relate(&conn, from_id, to_id, rel, weight, None);
                 if res.is_ok() {
                     g.live.emit(EventOp::Insert, from_id, to_id, rel, weight);
@@ -402,13 +510,16 @@ async fn serve_ops(
         }
     }
     async fn graph_live_sse(State(s): State<OpsState>) -> axum::response::Response {
-        use axum::response::sse::{Event, Sse, KeepAlive};
-        
+        use axum::response::sse::{Event, KeepAlive, Sse};
+
         use std::convert::Infallible;
         let g = match &s.graph {
             Some(g) => g.clone(),
-            None => return axum::response::IntoResponse::into_response(
-                Json(serde_json::json!({"error":"graph disabled"}))),
+            None => {
+                return axum::response::IntoResponse::into_response(Json(
+                    serde_json::json!({"error":"graph disabled"}),
+                ))
+            }
         };
         let mut rx = g.live.subscribe();
         let stream = async_stream::stream! {
@@ -417,7 +528,9 @@ async fn serve_ops(
                 yield Ok::<_, Infallible>(Event::default().data(json));
             }
         };
-        Sse::new(Box::pin(stream)).keep_alive(KeepAlive::default()).into_response()
+        Sse::new(Box::pin(stream))
+            .keep_alive(KeepAlive::default())
+            .into_response()
     }
 
     let app = Router::new()

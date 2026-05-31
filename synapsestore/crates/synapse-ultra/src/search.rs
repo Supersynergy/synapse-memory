@@ -1,7 +1,9 @@
+#![allow(clippy::type_complexity)]
+
 use std::cell::RefCell;
 
 use ndarray::ArrayView2;
-use simsimd::{f16 as ssimd_f16, SpatialSimilarity};
+use simsimd::{SpatialSimilarity, f16 as ssimd_f16};
 
 use crate::binary;
 
@@ -12,11 +14,13 @@ pub const DEFAULT_BINARY_RERANK: usize = 500;
 
 // ── thread-local scratch ────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 struct SearchScratch {
     scores: Vec<(usize, f32)>,
     ham_scores: Vec<(usize, u32)>,
 }
 
+#[allow(dead_code)]
 impl SearchScratch {
     fn new() -> Self {
         SearchScratch {
@@ -130,7 +134,7 @@ pub fn top_k_binary_first(
 #[cfg(target_os = "macos")]
 mod accel {
     #[link(name = "Accelerate", kind = "framework")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn cblas_sgemm(
             order: i32,
             transa: i32,
@@ -218,10 +222,7 @@ pub fn top_k_batch_gemm(
     // Top-k per row using a min-heap.
     scores
         .chunks_exact(n)
-        .map(|row| {
-            let out = partial_top_k(row.iter().enumerate().map(|(i, &s)| (i, s)).collect(), k);
-            out
-        })
+        .map(|row| partial_top_k(row.iter().enumerate().map(|(i, &s)| (i, s)).collect(), k))
         .collect()
 }
 

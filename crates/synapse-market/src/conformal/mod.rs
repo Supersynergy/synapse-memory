@@ -53,7 +53,9 @@ impl Conformal {
     /// Empirical coverage: fraction of y_test[i] inside interval(pred_test[i]).
     pub fn coverage(&self, y_test: &[f32], pred_test: &[f32]) -> f64 {
         let n = y_test.len().min(pred_test.len());
-        if n == 0 { return 0.0; }
+        if n == 0 {
+            return 0.0;
+        }
         let covered = (0..n)
             .filter(|&i| {
                 let (lo, hi) = self.interval(pred_test[i]);
@@ -68,7 +70,9 @@ impl Conformal {
 ///
 /// Returns q such that at least ceil((n+1)*(1-alpha))/n fraction covered.
 fn quantile_upper(scores: &[f32], level: f32) -> f32 {
-    if scores.is_empty() { return f32::INFINITY; }
+    if scores.is_empty() {
+        return f32::INFINITY;
+    }
     let mut sorted = scores.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let n = sorted.len();

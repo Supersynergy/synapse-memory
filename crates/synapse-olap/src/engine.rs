@@ -1,7 +1,7 @@
-use std::path::Path;
 use anyhow::{Context, Result};
-use duckdb::{Connection, Arrow};
 use duckdb::arrow::array::RecordBatch;
+use duckdb::{Arrow, Connection};
+use std::path::Path;
 
 /// Embedded DuckDB OLAP engine with optional SQLite ATTACH.
 pub struct OlapEngine {
@@ -11,15 +11,13 @@ pub struct OlapEngine {
 impl OlapEngine {
     /// Open an in-memory DuckDB instance.
     pub fn open_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()
-            .context("duckdb open_in_memory")?;
+        let conn = Connection::open_in_memory().context("duckdb open_in_memory")?;
         Ok(Self { conn })
     }
 
     /// Open a persistent DuckDB database file.
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open(path)
-            .context("duckdb open")?;
+        let conn = Connection::open(path).context("duckdb open")?;
         Ok(Self { conn })
     }
 
@@ -38,8 +36,7 @@ impl OlapEngine {
 
     /// Execute an OLAP SQL query and return Arrow RecordBatches.
     pub fn query(&self, sql: &str) -> Result<Vec<RecordBatch>> {
-        let mut stmt = self.conn.prepare(sql)
-            .context("duckdb prepare")?;
+        let mut stmt = self.conn.prepare(sql).context("duckdb prepare")?;
         let batches: Vec<RecordBatch> = stmt
             .query_arrow([])
             .context("duckdb query_arrow")?

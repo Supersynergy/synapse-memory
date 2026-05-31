@@ -19,7 +19,7 @@
 
 use std::time::Instant;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use rayon::prelude::*;
 
 const N: usize = 100_000;
@@ -193,27 +193,42 @@ fn run_and_dump_markdown() {
 
     macro_rules! time {
         ($label:expr, $block:block) => {{
-            for _ in 0..3 { let _ = { $block }; }
+            for _ in 0..3 {
+                let _ = { $block };
+            }
             let t = Instant::now();
-            for _ in 0..iters { let _ = { $block }; }
+            for _ in 0..iters {
+                let _ = { $block };
+            }
             let us = t.elapsed().as_secs_f64() * 1e6 / iters as f64;
             rows.push(($label, us));
         }};
     }
 
-    time!("S0 scalar cos f32",  { s0_scalar_cos(&q_f32, &db_f32, DIM) });
-    time!("S1 rayon cos f32",   { s1_rayon_cos(&q_f32, &db_f32, DIM) });
+    time!("S0 scalar cos f32", { s0_scalar_cos(&q_f32, &db_f32, DIM) });
+    time!("S1 rayon cos f32", { s1_rayon_cos(&q_f32, &db_f32, DIM) });
 
     #[cfg(feature = "simsimd")]
     {
-        time!("S2 simsimd cos f32",   { s2_simsimd_cos(&q_f32, &db_f32, DIM) });
-        time!("S3 simsimd dot i8",    { s3_simsimd_dot_i8(&q_codes, &codes, &scales, DIM) });
-        time!("S4 simsimd hamming b8",{ s4_simsimd_hamming(&q_bits_flat, &bits, bpr) });
+        time!("S2 simsimd cos f32", {
+            s2_simsimd_cos(&q_f32, &db_f32, DIM)
+        });
+        time!("S3 simsimd dot i8", {
+            s3_simsimd_dot_i8(&q_codes, &codes, &scales, DIM)
+        });
+        time!("S4 simsimd hamming b8", {
+            s4_simsimd_hamming(&q_bits_flat, &bits, bpr)
+        });
 
         use synapse_core::matryoshka::truncate_row;
-        let db_mrl: Vec<f32> = db_f32.chunks(DIM).flat_map(|r| truncate_row(r, MRL_K)).collect();
+        let db_mrl: Vec<f32> = db_f32
+            .chunks(DIM)
+            .flat_map(|r| truncate_row(r, MRL_K))
+            .collect();
         let q_mrl = truncate_row(&q_f32, MRL_K);
-        time!("S5 MRL128 simsimd cos", { s2_simsimd_cos(&q_mrl, &db_mrl, MRL_K) });
+        time!("S5 MRL128 simsimd cos", {
+            s2_simsimd_cos(&q_mrl, &db_mrl, MRL_K)
+        });
     }
 
     eprintln!("\n## Progression chart (M4 Max, 100 k × {DIM}, 20 iters)\n");
@@ -223,8 +238,14 @@ fn run_and_dump_markdown() {
     for (label, us) in &rows {
         let qps = 1e6 / us;
         let sx = base / us;
-        eprintln!("| {:<4} | {:<22} | {:>8.0} | {:>8.0} | {:>7.2}× |",
-                  label.chars().take(4).collect::<String>(), label, us, qps, sx);
+        eprintln!(
+            "| {:<4} | {:<22} | {:>8.0} | {:>8.0} | {:>7.2}× |",
+            label.chars().take(4).collect::<String>(),
+            label,
+            us,
+            qps,
+            sx
+        );
     }
     eprintln!();
     // ASCII bar
@@ -243,5 +264,8 @@ criterion_main!(benches);
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn smoke() { run_and_dump_markdown(); }
+    #[test]
+    fn smoke() {
+        run_and_dump_markdown();
+    }
 }

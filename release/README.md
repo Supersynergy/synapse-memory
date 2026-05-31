@@ -1,3 +1,12 @@
+# Synapse Release Area
+
+For the clean Context OS release requested for new Mac/Linux users, use:
+
+- [`context-os/`](context-os/) — install, verify, and onboard a user without bundling maintainer data.
+
+The older secure-customer runbook below remains for licensed/customer-specific
+builds and is not the default Context OS first-run path.
+
 # Synapse Secure Release — Operator Runbook
 
 One-page checklist. Each artifact in this directory is self-contained and cross-linked here.

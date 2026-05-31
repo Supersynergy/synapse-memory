@@ -13,7 +13,9 @@ pub struct RemotionRenderer {
 
 impl RemotionRenderer {
     pub fn new(project_dir: &str) -> Self {
-        Self { project_dir: project_dir.to_string() }
+        Self {
+            project_dir: project_dir.to_string(),
+        }
     }
 
     /// Check if `remotion` CLI is available.
@@ -38,10 +40,12 @@ impl RemotionRenderer {
 
         let out = Command::new("npx")
             .args([
-                "remotion", "render",
+                "remotion",
+                "render",
                 composition,
                 output,
-                "--props", props_path.to_str().unwrap(),
+                "--props",
+                props_path.to_str().unwrap(),
             ])
             .current_dir(&self.project_dir)
             .output()

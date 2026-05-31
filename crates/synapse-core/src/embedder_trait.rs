@@ -21,9 +21,9 @@
 
 use crate::error::{Error, Result};
 
+use crate::turbo::candle_metal_embedder;
 #[cfg(feature = "ollama")]
 use crate::turbo::ollama_embedder;
-use crate::turbo::candle_metal_embedder;
 
 /// Backend selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,13 +42,13 @@ pub enum EmbedderKind {
 impl EmbedderKind {
     /// Parse from lowercase string; `None` falls back to default.
     #[must_use]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_ascii_lowercase().as_str() {
             "fastembed" | "" => Some(Self::Fastembed),
-            "ollama"          => Some(Self::Ollama),
+            "ollama" => Some(Self::Ollama),
             "candle-metal" | "candle" | "metal" => Some(Self::CandleMetal),
             "mlx" | "mlx-metal" => Some(Self::Mlx),
-            _                 => None,
+            _ => None,
         }
     }
 
@@ -57,8 +57,16 @@ impl EmbedderKind {
     pub fn from_env() -> Self {
         std::env::var("SYNAPSE_EMBEDDER")
             .ok()
-            .and_then(|v| Self::from_str(&v))
+            .and_then(|v| Self::parse(&v))
             .unwrap_or(Self::Fastembed)
+    }
+}
+
+impl std::str::FromStr for EmbedderKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Self::parse(s).ok_or(())
     }
 }
 
@@ -85,8 +93,12 @@ pub trait TextEmbedder: Send + Sync {
 
 #[cfg(any(feature = "embed", feature = "embed-dynamic"))]
 impl TextEmbedder for crate::embed::Embedder {
-    fn name(&self) -> &str { "fastembed:bge-small-en-v1.5" }
-    fn dim(&self) -> usize { 384 }
+    fn name(&self) -> &str {
+        "fastembed:bge-small-en-v1.5"
+    }
+    fn dim(&self) -> usize {
+        384
+    }
     fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         crate::embed::Embedder::embed_batch(self, texts)
     }
@@ -95,8 +107,12 @@ impl TextEmbedder for crate::embed::Embedder {
 // --- ollama adapter ------------------------------------------------------
 
 impl TextEmbedder for candle_metal_embedder::CandleMetalEmbedder {
-    fn name(&self) -> &str { candle_metal_embedder::CandleMetalEmbedder::name(self) }
-    fn dim(&self) -> usize { candle_metal_embedder::CandleMetalEmbedder::dim(self) }
+    fn name(&self) -> &str {
+        candle_metal_embedder::CandleMetalEmbedder::name(self)
+    }
+    fn dim(&self) -> usize {
+        candle_metal_embedder::CandleMetalEmbedder::dim(self)
+    }
     fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         candle_metal_embedder::CandleMetalEmbedder::embed_batch(self, texts)
     }
@@ -104,8 +120,12 @@ impl TextEmbedder for candle_metal_embedder::CandleMetalEmbedder {
 
 #[cfg(feature = "ollama")]
 impl TextEmbedder for ollama_embedder::OllamaEmbedder {
-    fn name(&self) -> &str { "ollama:all-minilm" }
-    fn dim(&self) -> usize { 384 }
+    fn name(&self) -> &str {
+        "ollama:all-minilm"
+    }
+    fn dim(&self) -> usize {
+        384
+    }
     fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         ollama_embedder::OllamaEmbedder::embed_batch(self, texts)
     }
@@ -171,14 +191,18 @@ mod tests {
 
     #[test]
     fn kind_from_str_parses_known_variants() {
-        assert_eq!(EmbedderKind::from_str("fastembed"), Some(EmbedderKind::Fastembed));
-        assert_eq!(EmbedderKind::from_str("OLLAMA"),    Some(EmbedderKind::Ollama));
-        assert_eq!(EmbedderKind::from_str("bogus"),     None);
+        assert_eq!(
+            EmbedderKind::parse("fastembed"),
+            Some(EmbedderKind::Fastembed)
+        );
+        assert_eq!(EmbedderKind::parse("OLLAMA"), Some(EmbedderKind::Ollama));
+        assert_eq!(EmbedderKind::parse("bogus"), None);
+        assert_eq!("mlx".parse::<EmbedderKind>(), Ok(EmbedderKind::Mlx));
     }
 
     #[test]
     fn kind_from_env_defaults_to_fastembed() {
         // Don't depend on ambient env; exercise the parse path directly.
-        assert_eq!(EmbedderKind::from_str(""),  Some(EmbedderKind::Fastembed));
+        assert_eq!(EmbedderKind::parse(""), Some(EmbedderKind::Fastembed));
     }
 }

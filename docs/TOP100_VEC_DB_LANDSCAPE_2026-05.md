@@ -825,7 +825,7 @@ Legend: 🟢 active (commit < 90d) · 🟡 maintenance (90-365d) · 🔴 archive
 **#1 unambiguous**:
 - Local hybrid (vec+FTS5+graph) on a single Mac/Linux box: nothing matches FTS5 (44k ops/s) + sqlite-vec + 256MB mmap + 17×/7×/20× kernel speedups
 - DSGVO-aligned local-first retrieval (with dsgvo-shield)
-- Sub-10ms socket-recall daemon (`syn hybrid 8` = 8ms) on 113k+ docs
+- Sub-10ms socket-recall daemon (`synx hybrid 8` = 8ms) on 113k+ docs
 
 **#3-5 contender**:
 - Embedded RAG: LanceDB has bigger community, multimodal lead, S3-native; Synapse wins on FTS5 + raw latency

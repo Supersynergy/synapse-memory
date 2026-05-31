@@ -163,7 +163,7 @@ pub enum UdsRequest {
     Stats, Ping,
 }
 ```
-Saves 40-80 µs vs HTTP. Used by `syn` CLI.
+Saves 40-80 µs vs HTTP. Used by `synx` CLI.
 
 ## 7. Throughput Targets (M4 Max)
 
@@ -244,10 +244,10 @@ python3 scripts/report.py out/*.json > docs/synapse-ultra-bench-$(date +%F).md
 
 ## 11. Migration Plan
 
-- **Week 1 — Shadow:** ultra on `:9478`. `syn-hybrid` dual-calls, logs diffs.
+- **Week 1 — Shadow:** ultra on `:9478`. `synx-hybrid` dual-calls, logs diffs.
 - **Week 2 — Swap:** launchd `com.supersynergy.synapse-ultra.plist` binds `:9477`. Python plist disabled (kept 30d for rollback).
-- **Week 3 — UDS:** `syn` CLI prefers `/tmp/synapse-ultra.sock`, HTTP fallback. `synapse-core::UltraClient` auto-detects.
-- **Week 5 — Decommission:** delete `synapse-turbo.py` after 14d zero-error. Update `~/.claude/CLAUDE.md`. `syn put --title "synapse-turbo deprecated"`.
+- **Week 3 — UDS:** `synx` CLI prefers `/tmp/synapse-ultra.sock`, HTTP fallback. `synapse-core::UltraClient` auto-detects.
+- **Week 5 — Decommission:** delete `synapse-turbo.py` after 14d zero-error. Update `~/.claude/CLAUDE.md`. `synx put --title "synapse-turbo deprecated"`.
 - **Rollback:** re-enable Python plist; ports separable. Snapshot is rebuildable artifact.
 
 ## 12. Risks
@@ -290,5 +290,5 @@ python3 scripts/report.py out/*.json > docs/synapse-ultra-bench-$(date +%F).md
 - [ ] launchd plist + man page + `--help`
 - [ ] ≤ 250 MB resident @ sustained 10k QPS
 - [ ] Cold-start ≤ 3s (valid snapshot) / ≤ 5s (rebuild)
-- [ ] `syn-hybrid` shadow parity ≥ 7d, score-delta ≤ 0.001
+- [ ] `synx-hybrid` shadow parity ≥ 7d, score-delta ≤ 0.001
 - [ ] README + spec + bench report committed

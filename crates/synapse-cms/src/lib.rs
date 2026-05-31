@@ -15,7 +15,7 @@ pub mod adapters {
     pub mod wp_optimizer;
 }
 
-pub use adapters::wp::{classify, WpPattern};
+pub use adapters::wp::{WpPattern, classify};
 pub use adapters::wp_optimizer::AutoloadCache;
 
 /// Generic adapter trait — every platform impls this.
@@ -28,6 +28,10 @@ pub trait PlatformAdapter: Send + Sync + 'static {
 pub struct Wp;
 impl PlatformAdapter for Wp {
     type Pattern = WpPattern;
-    fn name(&self) -> &'static str { "wordpress" }
-    fn classify(&self, sql: &str) -> WpPattern { classify(sql) }
+    fn name(&self) -> &'static str {
+        "wordpress"
+    }
+    fn classify(&self, sql: &str) -> WpPattern {
+        classify(sql)
+    }
 }

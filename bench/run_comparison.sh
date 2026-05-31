@@ -291,8 +291,8 @@ REMOTE_CIPHER=$(grep -r "sqlcipher\|cipher\|encrypt" /tmp/synapse-v1/crates/ --i
 [[ "$LOCAL_CIPHER" -gt 0 ]] && LOCAL_CIPHER_F="YES" || LOCAL_CIPHER_F="NO"
 [[ "$REMOTE_CIPHER" -gt 0 ]] && REMOTE_CIPHER_F="YES" || REMOTE_CIPHER_F="NO"
 
-LOCAL_MULTI=$("$LOCAL" help 2>&1 | grep -q "brainpack\|\.syn\|\.synapse" && echo "YES" || echo "NO")
-REMOTE_MULTI=$("$REMOTE" help 2>&1 | grep -q "brainpack\|\.syn\|\.synapse" && echo "YES" || echo "NO")
+LOCAL_MULTI=$("$LOCAL" help 2>&1 | grep -q "brainpack\|\.synx\|\.synapse" && echo "YES" || echo "NO")
+REMOTE_MULTI=$("$REMOTE" help 2>&1 | grep -q "brainpack\|\.synx\|\.synapse" && echo "YES" || echo "NO")
 
 # ---- build markdown report ----
 log "Building report..."

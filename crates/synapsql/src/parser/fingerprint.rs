@@ -22,14 +22,18 @@ pub fn fingerprint(sql: &str) -> String {
 
         // Strip `--` line comments
         if b == b'-' && i + 1 < len && bytes[i + 1] == b'-' {
-            while i < len && bytes[i] != b'\n' { i += 1; }
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
             continue;
         }
 
         // Strip `/* */` block comments
         if b == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
             i += 2;
-            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') { i += 1; }
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
             i += 2;
             continue;
         }
@@ -39,10 +43,15 @@ pub fn fingerprint(sql: &str) -> String {
             i += 1;
             while i < len {
                 if bytes[i] == b'\'' {
-                    if i + 1 < len && bytes[i + 1] == b'\'' { i += 2; continue; }
+                    if i + 1 < len && bytes[i + 1] == b'\'' {
+                        i += 2;
+                        continue;
+                    }
                     break;
                 }
-                if bytes[i] == b'\\' { i += 1; }
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
                 i += 1;
             }
             i += 1; // consume closing '
@@ -54,11 +63,15 @@ pub fn fingerprint(sql: &str) -> String {
         // Replace numeric literals → ?
         if b.is_ascii_digit() {
             // Check that previous char was not alphanumeric (avoid column name digits)
-            let prev_ok = out.as_bytes().last()
+            let prev_ok = out
+                .as_bytes()
+                .last()
                 .map(|&c| !c.is_ascii_alphanumeric() && c != b'_')
                 .unwrap_or(true);
             if prev_ok {
-                while i < len && (bytes[i].is_ascii_digit() || bytes[i] == b'.') { i += 1; }
+                while i < len && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
+                    i += 1;
+                }
                 out.push('?');
                 last_was_space = false;
                 continue;
@@ -98,9 +111,17 @@ pub fn classify(fp: &str) -> QueryKind {
     let lead = fp.trim_start();
     if lead.starts_with("select") || lead.starts_with("show") || lead.starts_with("explain") {
         QueryKind::Read
-    } else if lead.starts_with("insert") || lead.starts_with("update") || lead.starts_with("delete") || lead.starts_with("replace") {
+    } else if lead.starts_with("insert")
+        || lead.starts_with("update")
+        || lead.starts_with("delete")
+        || lead.starts_with("replace")
+    {
         QueryKind::Write
-    } else if lead.starts_with("create") || lead.starts_with("drop") || lead.starts_with("alter") || lead.starts_with("truncate") {
+    } else if lead.starts_with("create")
+        || lead.starts_with("drop")
+        || lead.starts_with("alter")
+        || lead.starts_with("truncate")
+    {
         QueryKind::Ddl
     } else {
         QueryKind::Other

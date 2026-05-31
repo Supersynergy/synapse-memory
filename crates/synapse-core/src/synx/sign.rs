@@ -1,23 +1,23 @@
 //! Ed25519 signing and verification for `.synx` footers.
 //!
 //! v0.3 surface. Keys are 32-byte seeds; signatures are 64 bytes over the
-//! manifest hash. Uses `ed25519-dalek` when the `sign` feature is on;
+//! manifest hash. Uses `ed25519-dalek` when the `synx-sign` feature is on;
 //! otherwise degrades to a stub that refuses to sign and always fails
 //! verification so callers fail closed.
 
-#[cfg(feature = "sign")]
+#[cfg(feature = "synx-sign")]
 pub use imp::*;
-#[cfg(not(feature = "sign"))]
+#[cfg(not(feature = "synx-sign"))]
 pub use stub::*;
 
-#[cfg(feature = "sign")]
+#[cfg(feature = "synx-sign")]
 mod imp {
     use crate::error::{Error, Result};
+    use crate::sign::random_signing_key;
     use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 
     pub fn generate_key() -> ([u8; 32], [u8; 32]) {
-        use rand::rngs::OsRng;
-        let sk = SigningKey::generate(&mut OsRng);
+        let sk = random_signing_key();
         let vk = sk.verifying_key();
         (sk.to_bytes(), vk.to_bytes())
     }
@@ -55,7 +55,7 @@ mod imp {
     }
 }
 
-#[cfg(not(feature = "sign"))]
+#[cfg(not(feature = "synx-sign"))]
 mod stub {
     use crate::error::{Error, Result};
 
@@ -65,11 +65,11 @@ mod stub {
 
     pub fn sign_manifest(_h: &[u8; 32], _sk: &[u8; 32]) -> Result<[u8; 64]> {
         Err(Error::Format(
-            "sign feature disabled — rebuild with --features sign".into(),
+            "synx-sign feature disabled — rebuild with --features synx-sign".into(),
         ))
     }
 
     pub fn verify_manifest(_h: &[u8; 32], _sig: &[u8; 64], _pk: &[u8; 32]) -> Result<()> {
-        Err(Error::Format("sign feature disabled".into()))
+        Err(Error::Format("synx-sign feature disabled".into()))
     }
 }

@@ -6,10 +6,10 @@
 #[cfg(feature = "tsdb")]
 mod arrow_backend;
 #[cfg(feature = "tsdb")]
-pub use arrow_backend::{TsdbStore, AggOp};
+pub use arrow_backend::{AggOp, TsdbStore};
 
 pub mod fallback;
 #[cfg(not(feature = "tsdb"))]
-pub use fallback::{TsdbStore, AggOp};
+pub use fallback::{AggOp, TsdbStore};
 
 pub use fallback::Row;

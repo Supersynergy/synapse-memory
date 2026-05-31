@@ -8,47 +8,51 @@
 //!  - JIT filter: Cranelift-compiled predicates (`jit::FilterCache`) —
 //!    compile Cmp/And/Or/Not trees to native code, cached by predicate hash.
 
-pub mod pattern;
-pub mod filter;
-pub mod backtest_wf;
-pub mod conformal;
 pub mod alert;
+pub mod analytics;
+pub mod backtest_wf;
+pub mod book;
+pub mod cache;
+pub mod conformal;
+pub mod ffi;
+pub mod filter;
 pub mod jit;
 pub mod learn;
-pub mod book;
-pub mod store;
-pub mod series;
-pub mod cache;
-pub mod analytics;
-pub mod signal;
+pub mod pattern;
 pub mod router;
-pub mod ffi;
+pub mod series;
+pub mod signal;
+pub mod store;
 pub mod stream;
 #[cfg(feature = "tsdb-export")]
 pub mod tsdb_export;
 
-mod ohlcv;
-pub mod regime;
-mod news;
 mod backtest;
 mod error;
+mod news;
+mod ohlcv;
+pub mod regime;
 
+pub use backtest::{BacktestReport, Order, OrderSide, Strategy, Tick};
 pub use error::{Error, Result};
-pub use ohlcv::Ohlcv;
-pub use regime::RegimeVec;
 pub use news::NewsStore;
-pub use backtest::{Strategy, Tick, Order, OrderSide, BacktestReport};
-pub use signal::turbovec_index::TurboVecIndex;
-pub use pattern::{Pattern, Match as PatternMatch, Event as PatternEvent};
-pub use pattern::fsm::FsmEngine;
+pub use ohlcv::Ohlcv;
 pub use pattern::dsl::parse as parse_pattern;
+pub use pattern::fsm::FsmEngine;
+pub use pattern::{Event as PatternEvent, Match as PatternMatch, Pattern};
+pub use regime::RegimeVec;
+pub use signal::{SignalId, turbovec_index::TurboVecIndex};
 
+use analytics::{CorrMatrix, correlation_matrix_amx};
 use rusqlite::Connection;
-use std::path::Path;
-use std::ops::Range;
 use signal::similar::RabitqSignalIndex;
-use signal::SignalId;
-use analytics::{correlation_matrix_amx, CorrMatrix};
+use std::ops::Range;
+use std::path::Path;
+
+pub type OhlcvRow = (i64, f64, f64, f64, f64, f64);
+pub type RegimeHit = (i64, f32);
+pub type SignalEntry = (SignalId, Vec<f32>);
+pub type SignalHit = (SignalId, f32);
 
 /// Main entry point — wraps a rusqlite Connection + Synapse Store.
 pub struct Market {
@@ -59,7 +63,9 @@ impl Market {
     /// Open (or create) a market database at `path`.
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let conn = Connection::open(path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-65536;")?;
+        conn.execute_batch(
+            "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-65536;",
+        )?;
         news::init_schema(&conn)?;
         Ok(Self { conn })
     }
@@ -74,13 +80,19 @@ impl Market {
 
     /// Bulk-insert OHLCV rows for `symbol`. Runs inside a single WAL transaction.
     /// Each row: (unix_ts_secs, open, high, low, close, volume).
-    pub fn ingest_ohlcv(&self, symbol: &str, rows: &[(i64, f64, f64, f64, f64, f64)]) -> Result<()> {
+    pub fn ingest_ohlcv(&self, symbol: &str, rows: &[OhlcvRow]) -> Result<()> {
         ohlcv::ingest(&self.conn, symbol, rows)
     }
 
     /// Insert a news item and link it to tickers via graph edges.
     /// Returns the rowid of the inserted document.
-    pub fn ingest_news(&self, ts: i64, headline: &str, body: &str, tickers: &[&str]) -> Result<i64> {
+    pub fn ingest_news(
+        &self,
+        ts: i64,
+        headline: &str,
+        body: &str,
+        tickers: &[&str],
+    ) -> Result<i64> {
         news::ingest(&self.conn, ts, headline, body, tickers)
     }
 
@@ -89,7 +101,12 @@ impl Market {
     ///
     /// Feature vec: [ret_1d, ret_5d, vol_20d, range_norm, vol_ratio].
     /// Similarity via dot-product over stored f32 blobs (brute-force, <1ms @ 10k days).
-    pub fn regime_search(&self, symbol: &str, date_ts: i64, top_n: usize) -> Result<Vec<(i64, f32)>> {
+    pub fn regime_search(
+        &self,
+        symbol: &str,
+        date_ts: i64,
+        top_n: usize,
+    ) -> Result<Vec<RegimeHit>> {
         regime::search(&self.conn, symbol, date_ts, top_n)
     }
 
@@ -97,10 +114,7 @@ impl Market {
     ///
     /// 4-bit quantisation, no training required, ~8× memory vs f32.
     /// Prefer over `signal_index` for new workloads.
-    pub fn signal_index_v2(
-        &self,
-        signals: &[(SignalId, Vec<f32>)],
-    ) -> Result<TurboVecIndex> {
+    pub fn signal_index_v2(&self, signals: &[SignalEntry]) -> Result<TurboVecIndex> {
         TurboVecIndex::build(signals, 4)
     }
 
@@ -108,7 +122,7 @@ impl Market {
     /// `n_clusters` ~ sqrt(N). Returns shared index; persist with `index.save(path)`.
     pub fn signal_index(
         &self,
-        signals: &[(SignalId, Vec<f32>)],
+        signals: &[SignalEntry],
         n_clusters: usize,
     ) -> Result<RabitqSignalIndex> {
         RabitqSignalIndex::build(signals, n_clusters)
@@ -142,7 +156,7 @@ impl Market {
 
     /// Fetch raw OHLCV rows for `symbol` in `[start, end)` unix-seconds range.
     /// Returns `(ts, open, high, low, close, volume)` tuples.
-    pub fn fetch_candles(&self, symbol: &str, start: i64, end: i64) -> Result<Vec<(i64, f64, f64, f64, f64, f64)>> {
+    pub fn fetch_candles(&self, symbol: &str, start: i64, end: i64) -> Result<Vec<OhlcvRow>> {
         ohlcv::fetch_range(&self.conn, symbol, start, end)
     }
 
@@ -161,13 +175,17 @@ impl Market {
         S: stream::TickStream<Item = stream::LiveTick>,
     {
         const BATCH: usize = 1000;
-        let mut buf: Vec<(i64, f64, f64, f64, f64, f64)> = Vec::with_capacity(BATCH);
+        let mut buf: Vec<OhlcvRow> = Vec::with_capacity(BATCH);
         let mut total = 0usize;
         let limit = max_ticks.unwrap_or(usize::MAX);
 
         while total < limit {
-            let Some(tick) = stream.next_tick().await else { break };
-            buf.push((tick.ts, tick.price, tick.price, tick.price, tick.price, tick.qty));
+            let Some(tick) = stream.next_tick().await else {
+                break;
+            };
+            buf.push((
+                tick.ts, tick.price, tick.price, tick.price, tick.price, tick.qty,
+            ));
             total += 1;
             if buf.len() >= BATCH {
                 self.ingest_ohlcv(ticker, &buf)?;

@@ -1,7 +1,7 @@
+use serde_json::json;
 use std::time::Instant;
 use synapse_stream::pubsub::Hub;
 use synapse_stream::{CdcReader, Op};
-use serde_json::json;
 use tempfile::TempDir;
 
 fn main() {
@@ -54,6 +54,9 @@ fn main() {
         }
         let cdc_ms = t1.elapsed().as_millis();
         println!("cdc_emit_100k_ms={}", cdc_ms);
-        println!("cdc_emit_per_s={}", (100_000u64 * 1000) / cdc_ms.max(1) as u64);
+        println!(
+            "cdc_emit_per_s={}",
+            (100_000u64 * 1000) / cdc_ms.max(1) as u64
+        );
     });
 }

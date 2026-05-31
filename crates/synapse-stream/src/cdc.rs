@@ -26,6 +26,9 @@ pub struct ChangeEvent {
     pub row: Value,
 }
 
+type ChangeStream<'a> = Pin<Box<dyn Stream<Item = Result<ChangeEvent>> + Send + 'a>>;
+type RawChangeRow = (i64, i64, String, String, String);
+
 struct QueuedEvent {
     ts: i64,
     op: &'static str,
@@ -84,7 +87,11 @@ impl CdcReader {
             flush_loop(flush_path, rx).await;
         });
 
-        Ok(Self { db_path, last_position: 0, writer })
+        Ok(Self {
+            db_path,
+            last_position: 0,
+            writer,
+        })
     }
 
     fn ensure_schema(conn: &Connection) -> Result<()> {
@@ -155,7 +162,7 @@ impl CdcReader {
         Ok(())
     }
 
-    pub fn tail(&mut self) -> Pin<Box<dyn Stream<Item = Result<ChangeEvent>> + Send + '_>> {
+    pub fn tail(&mut self) -> ChangeStream<'_> {
         let db_path = self.db_path.clone();
         Box::pin(try_stream! {
             loop {
@@ -179,10 +186,7 @@ impl CdcReader {
         })
     }
 
-    fn poll_rows(
-        db_path: &PathBuf,
-        last_position: i64,
-    ) -> Result<Vec<(i64, i64, String, String, String)>> {
+    fn poll_rows(db_path: &PathBuf, last_position: i64) -> Result<Vec<RawChangeRow>> {
         let conn = Connection::open(db_path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL;")?;
 
@@ -287,9 +291,8 @@ fn flush_batch(db_path: &PathBuf, events: &[QueuedEvent]) -> Result<()> {
     // Cached prepared statement lives for the duration of this batch
     conn.execute_batch("BEGIN;")?;
     {
-        let mut stmt = conn.prepare_cached(
-            "INSERT INTO _cdc_log(ts,op,tbl,row_json) VALUES(?1,?2,?3,?4)",
-        )?;
+        let mut stmt =
+            conn.prepare_cached("INSERT INTO _cdc_log(ts,op,tbl,row_json) VALUES(?1,?2,?3,?4)")?;
         for ev in events {
             stmt.execute(rusqlite::params![ev.ts, ev.op, ev.table, ev.row_json])?;
         }

@@ -60,11 +60,7 @@ mod bench {
             for i in chunk_start..end {
                 tx.execute(
                     "INSERT OR REPLACE INTO kv VALUES (?1, ?2, ?3)",
-                    rusqlite::params![
-                        format!("key{:08}", i),
-                        format!("value_{}", i),
-                        i as i64
-                    ],
+                    rusqlite::params![format!("key{:08}", i), format!("value_{}", i), i as i64],
                 )
                 .unwrap();
             }
@@ -91,11 +87,7 @@ mod bench {
         for i in 0..n_strict {
             conn.execute(
                 "INSERT OR REPLACE INTO kv VALUES (?1, ?2, ?3)",
-                rusqlite::params![
-                    format!("key{:08}", i),
-                    format!("value_{}", i),
-                    i as i64
-                ],
+                rusqlite::params![format!("key{:08}", i), format!("value_{}", i), i as i64],
             )
             .unwrap();
         }
@@ -105,7 +97,9 @@ mod bench {
     }
 
     pub async fn run() {
-        println!("=== synapse-iouring FAIR BENCH — 3 durability levels ({N} inserts, batch={BATCH}) ===\n");
+        println!(
+            "=== synapse-iouring FAIR BENCH — 3 durability levels ({N} inserts, batch={BATCH}) ===\n"
+        );
 
         // ── Fast ──────────────────────────────────────────────────────────────
         println!("[1/3] Fast (no fsync) — iouring ...");
@@ -167,7 +161,10 @@ mod bench {
         println!("\nSpeedup (io_uring / SQLite):");
         println!("  Fast:    {:.2}×", speedup_fast);
         println!("  Batched: {:.2}×", speedup_bat);
-        println!("  Strict:  {:.2}×  ← KEY FEATURE (per-row durable)", speedup_strict);
+        println!(
+            "  Strict:  {:.2}×  ← KEY FEATURE (per-row durable)",
+            speedup_strict
+        );
 
         let md = format!(
             r#"# io_uring Fair Bench — 2026-05-13

@@ -1,8 +1,8 @@
 //! Prometheus metric definitions — shared global registry.
 
 use prometheus::{
-    exponential_buckets, Counter, Gauge, Histogram, HistogramOpts, HistogramVec,
-    IntCounter, IntGauge, Opts, Registry,
+    Histogram, HistogramOpts, HistogramVec, IntCounter, IntGauge, Opts, Registry,
+    exponential_buckets,
 };
 use std::sync::OnceLock;
 
@@ -14,10 +14,7 @@ pub fn registry() -> &'static Registry {
 }
 
 pub fn get() -> &'static Metrics {
-    METRICS.get_or_init(|| {
-        let m = Metrics::new(registry()).expect("metric registration failed");
-        m
-    })
+    METRICS.get_or_init(|| Metrics::new(registry()).expect("metric registration failed"))
 }
 
 pub struct Metrics {

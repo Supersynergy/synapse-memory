@@ -33,8 +33,8 @@
 //! then wire `ort::Session` here.  Same mean-pool strategy applies.
 
 use anyhow::{Context, Result};
-use image::imageops::FilterType;
 use image::DynamicImage;
+use image::imageops::FilterType;
 use std::process::Command;
 
 /// Output dimensionality of the clip-level embedding.
@@ -57,7 +57,10 @@ pub struct VjepaEmbedder {
 
 impl VjepaEmbedder {
     pub fn new(sample_fps: f32) -> Self {
-        Self { sample_fps, frame_size: 224 }
+        Self {
+            sample_fps,
+            frame_size: 224,
+        }
     }
 
     /// Embed an entire video clip into a single `EMBED_DIM`-dimensional vector.
@@ -84,19 +87,22 @@ impl VjepaEmbedder {
 
     fn extract_frames(&self, path: &str) -> Result<Vec<DynamicImage>> {
         // Use a unique dir per call to avoid parallel-test collisions.
-        static COUNTER: std::sync::atomic::AtomicU64 =
-            std::sync::atomic::AtomicU64::new(0);
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let tmp_dir = std::env::temp_dir()
-            .join(format!("synapse-vjepa-{}-{seq}", std::process::id()));
+        let tmp_dir =
+            std::env::temp_dir().join(format!("synapse-vjepa-{}-{seq}", std::process::id()));
         std::fs::create_dir_all(&tmp_dir)?;
         let pattern = tmp_dir.join("frame_%05d.jpg");
 
         let out = Command::new("ffmpeg")
             .args([
-                "-y", "-i", path,
-                "-vf", &format!("fps={}", self.sample_fps),
-                "-q:v", "5",
+                "-y",
+                "-i",
+                path,
+                "-vf",
+                &format!("fps={}", self.sample_fps),
+                "-q:v",
+                "5",
                 pattern.to_str().unwrap(),
             ])
             .output()
@@ -152,9 +158,15 @@ fn frame_descriptor(img: &DynamicImage, size: u32) -> Vec<f32> {
     }
     let n = pixels.len() as f32;
     let mut rgb_part: Vec<f32> = Vec::with_capacity(192);
-    for i in 0..64 { rgb_part.push(hist_r[i] as f32 / n); }
-    for i in 0..64 { rgb_part.push(hist_g[i] as f32 / n); }
-    for i in 0..64 { rgb_part.push(hist_b[i] as f32 / n); }
+    for count in hist_r {
+        rgb_part.push(count as f32 / n);
+    }
+    for count in hist_g {
+        rgb_part.push(count as f32 / n);
+    }
+    for count in hist_b {
+        rgb_part.push(count as f32 / n);
+    }
 
     // --- Part 2: YCbCr luminance histogram (256 bins) ---
     let mut luma_hist = [0u32; 256];
@@ -182,14 +194,16 @@ fn frame_descriptor(img: &DynamicImage, size: u32) -> Vec<f32> {
                         let [r, g, b] = pixels[py * w + px];
                         let y = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
                         // Distribute into 5 frequency bins based on position parity
-                        let freq_bin = ((dx + dy) % 5) as usize;
+                        let freq_bin = (dx + dy) % 5;
                         energies[freq_bin] += y;
                         count += 1;
                     }
                 }
             }
             let c = count.max(1) as f32;
-            for e in energies { freq_part.push(e / (c * 255.0)); }
+            for e in energies {
+                freq_part.push(e / (c * 255.0));
+            }
         }
     }
 
@@ -234,9 +248,13 @@ mod tests {
     fn make_solid_video(path: &std::path::Path, color: &str, duration: u32) {
         Command::new("ffmpeg")
             .args([
-                "-y", "-f", "lavfi",
-                "-i", &format!("color={color}:size=64x64:rate=10:duration={duration}"),
-                "-c:v", "libx264",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                &format!("color={color}:size=64x64:rate=10:duration={duration}"),
+                "-c:v",
+                "libx264",
                 path.to_str().unwrap(),
             ])
             .output()
@@ -305,8 +323,10 @@ mod tests {
             "cross-sim {cross} should be < cat self-sim {cat_self}"
         );
 
-        eprintln!("cat_self={cat_self:.4}  dog_self={:.4}  cross={cross:.4}",
-            cosine_sim(&dog_emb, &dog_emb));
+        eprintln!(
+            "cat_self={cat_self:.4}  dog_self={:.4}  cross={cross:.4}",
+            cosine_sim(&dog_emb, &dog_emb)
+        );
     }
 
     #[test]
@@ -324,6 +344,9 @@ mod tests {
         let a = embedder.embed_video(path.to_str().unwrap()).unwrap();
         let b = embedder.embed_video(path.to_str().unwrap()).unwrap();
         let sim = cosine_sim(&a, &b);
-        assert!((sim - 1.0).abs() < 1e-4, "non-deterministic embed: sim={sim}");
+        assert!(
+            (sim - 1.0).abs() < 1e-4,
+            "non-deterministic embed: sim={sim}"
+        );
     }
 }

@@ -25,24 +25,26 @@
 //! ```
 
 pub mod algorithms;
-pub mod sql_funcs;
-pub mod cypher;
-pub mod live;
 pub mod csr;
-#[cfg(feature = "hippo")]
-pub mod hippo;
+pub mod cypher;
 #[cfg(feature = "graph-datalog")]
 pub mod datalog;
+#[cfg(feature = "hippo")]
+pub mod hippo;
+pub mod live;
+pub mod sql_funcs;
 
-pub use algorithms::{pagerank, top_pagerank, label_propagation, communities, materialize_pagerank};
-pub use sql_funcs::helpers as graph_helpers;
-pub use cypher::{parse_cypher, CypherQuery, CypherOp};
+pub use algorithms::{
+    communities, label_propagation, materialize_pagerank, pagerank, top_pagerank,
+};
+pub use csr::{CsrCache, CsrGraph};
+pub use cypher::{CypherOp, CypherQuery, parse_cypher};
 pub use live::{LiveRelate, RelateEvent};
-pub use csr::{CsrGraph, CsrCache};
+pub use sql_funcs::helpers as graph_helpers;
 
-use rusqlite::{params, Connection, Result as SqlResult};
-use std::collections::{BinaryHeap, HashSet};
+use rusqlite::{Connection, Result as SqlResult, params};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashSet};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GraphError {
@@ -55,6 +57,9 @@ pub enum GraphError {
 }
 
 pub type Result<T> = std::result::Result<T, GraphError>;
+pub type Neighbor = (i64, f64, String);
+pub type TraversalHit = (i64, f64, usize, String);
+pub type ShortestPath = (f64, Vec<i64>);
 
 pub const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS edges (
@@ -76,7 +81,14 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
 
 /// Insert or replace edge.
 /// SurrealDB equivalent: `RELATE x:from->rel->y:to SET weight=w`
-pub fn relate(conn: &Connection, from_id: i64, to_id: i64, rel: &str, weight: f64, props: Option<&str>) -> Result<()> {
+pub fn relate(
+    conn: &Connection,
+    from_id: i64,
+    to_id: i64,
+    rel: &str,
+    weight: f64,
+    props: Option<&str>,
+) -> Result<()> {
     conn.execute(
         "INSERT OR REPLACE INTO edges VALUES (?1, ?2, ?3, ?4, ?5)",
         params![from_id, to_id, rel, weight, props],
@@ -85,46 +97,70 @@ pub fn relate(conn: &Connection, from_id: i64, to_id: i64, rel: &str, weight: f6
 }
 
 /// Direct neighbors of node (1-hop), sorted by edge weight desc.
-pub fn neighbors(conn: &Connection, node_id: i64, rel: Option<&str>, top_k: usize) -> Result<Vec<(i64, f64, String)>> {
+pub fn neighbors(
+    conn: &Connection,
+    node_id: i64,
+    rel: Option<&str>,
+    top_k: usize,
+) -> Result<Vec<Neighbor>> {
     let q = if rel.is_some() {
         "SELECT to_id, weight, rel FROM edges WHERE from_id=?1 AND rel=?2 ORDER BY weight DESC LIMIT ?3"
     } else {
         "SELECT to_id, weight, rel FROM edges WHERE from_id=?1 ORDER BY weight DESC LIMIT ?2"
     };
     let mut stmt = conn.prepare_cached(q)?;
-    let rows: Vec<(i64, f64, String)> = if let Some(r) = rel {
-        stmt.query_map(params![node_id, r, top_k as i64], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-            .collect::<SqlResult<Vec<_>>>()?
+    let rows: Vec<Neighbor> = if let Some(r) = rel {
+        stmt.query_map(params![node_id, r, top_k as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
+        .collect::<SqlResult<Vec<_>>>()?
     } else {
-        stmt.query_map(params![node_id, top_k as i64], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-            .collect::<SqlResult<Vec<_>>>()?
+        stmt.query_map(params![node_id, top_k as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
+        .collect::<SqlResult<Vec<_>>>()?
     };
     Ok(rows)
 }
 
 /// Multi-hop traversal with score-decay + visited-set.
 /// Returns (node_id, score, depth, rel_chain) tuples sorted by score desc.
-pub fn traverse(conn: &Connection, start_id: i64, max_depth: usize, top_k_per_hop: usize, score_decay: f64, rel_filter: Option<&str>) -> Result<Vec<(i64, f64, usize, String)>> {
+pub fn traverse(
+    conn: &Connection,
+    start_id: i64,
+    max_depth: usize,
+    top_k_per_hop: usize,
+    score_decay: f64,
+    rel_filter: Option<&str>,
+) -> Result<Vec<TraversalHit>> {
     let mut visited: HashSet<i64> = HashSet::with_capacity(1024);
     visited.insert(start_id);
-    let mut frontier: Vec<(i64, f64, usize, String)> = vec![(start_id, 1.0, 0, String::new())];
-    let mut out: Vec<(i64, f64, usize, String)> = Vec::with_capacity(top_k_per_hop * max_depth);
+    let mut frontier: Vec<TraversalHit> = vec![(start_id, 1.0, 0, String::new())];
+    let mut out: Vec<TraversalHit> = Vec::with_capacity(top_k_per_hop * max_depth);
 
     for depth in 1..=max_depth {
-        let mut next_frontier: Vec<(i64, f64, usize, String)> = Vec::new();
+        let mut next_frontier: Vec<TraversalHit> = Vec::new();
         for (node, score, _d, chain) in &frontier {
             let neigh = neighbors(conn, *node, rel_filter, top_k_per_hop)?;
             for (to_id, w, rel) in neigh {
-                if visited.contains(&to_id) { continue; }
+                if visited.contains(&to_id) {
+                    continue;
+                }
                 visited.insert(to_id);
                 let new_score = score * w * score_decay.powi(depth as i32);
-                let new_chain = if chain.is_empty() { rel.clone() } else { format!("{chain}->{rel}") };
+                let new_chain = if chain.is_empty() {
+                    rel.clone()
+                } else {
+                    format!("{chain}->{rel}")
+                };
                 next_frontier.push((to_id, new_score, depth, new_chain.clone()));
                 out.push((to_id, new_score, depth, new_chain));
             }
         }
         frontier = next_frontier;
-        if frontier.is_empty() { break; }
+        if frontier.is_empty() {
+            break;
+        }
     }
 
     out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
@@ -132,11 +168,17 @@ pub fn traverse(conn: &Connection, start_id: i64, max_depth: usize, top_k_per_ho
 }
 
 #[derive(PartialEq)]
-struct DjState { cost: f64, node: i64, path: Vec<i64> }
+struct DjState {
+    cost: f64,
+    node: i64,
+    path: Vec<i64>,
+}
 
 impl Eq for DjState {}
 impl PartialOrd for DjState {
-    fn partial_cmp(&self, o: &Self) -> Option<Ordering> { Some(self.cmp(o)) }
+    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+        Some(self.cmp(o))
+    }
 }
 impl Ord for DjState {
     fn cmp(&self, o: &Self) -> Ordering {
@@ -146,25 +188,47 @@ impl Ord for DjState {
 }
 
 /// Dijkstra shortest weighted path from→to. weight=1−edge_weight (lower=stronger).
-pub fn shortest_path(conn: &Connection, from_id: i64, to_id: i64, max_depth: usize) -> Result<Option<(f64, Vec<i64>)>> {
+pub fn shortest_path(
+    conn: &Connection,
+    from_id: i64,
+    to_id: i64,
+    max_depth: usize,
+) -> Result<Option<ShortestPath>> {
     let mut visited: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
     let mut heap = BinaryHeap::new();
-    heap.push(DjState { cost: 0.0, node: from_id, path: vec![] });
+    heap.push(DjState {
+        cost: 0.0,
+        node: from_id,
+        path: vec![],
+    });
     let mut stmt = conn.prepare_cached("SELECT to_id, weight FROM edges WHERE from_id=?1")?;
     while let Some(DjState { cost, node, path }) = heap.pop() {
         if node == to_id {
-            let mut full = path; full.push(node);
+            let mut full = path;
+            full.push(node);
             return Ok(Some((cost, full)));
         }
-        if let Some(&prev) = visited.get(&node) { if prev <= cost { continue; } }
-        if path.len() >= max_depth { continue; }
+        if let Some(&prev) = visited.get(&node)
+            && prev <= cost
+        {
+            continue;
+        }
+        if path.len() >= max_depth {
+            continue;
+        }
         visited.insert(node, cost);
-        let rows: Vec<(i64, f64)> = stmt.query_map(params![node], |r| Ok((r.get(0)?, r.get(1)?)))?
+        let rows: Vec<(i64, f64)> = stmt
+            .query_map(params![node], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<SqlResult<Vec<_>>>()?;
         for (nxt, w) in rows {
             if !visited.contains_key(&nxt) {
-                let mut new_path = path.clone(); new_path.push(node);
-                heap.push(DjState { cost: cost + (1.0 - w).max(0.0), node: nxt, path: new_path });
+                let mut new_path = path.clone();
+                new_path.push(node);
+                heap.push(DjState {
+                    cost: cost + (1.0 - w).max(0.0),
+                    node: nxt,
+                    path: new_path,
+                });
             }
         }
     }
@@ -180,7 +244,8 @@ mod tests {
     use super::*;
     fn open() -> Connection {
         let c = Connection::open_in_memory().unwrap();
-        ensure_schema(&c).unwrap(); c
+        ensure_schema(&c).unwrap();
+        c
     }
 
     #[test]
@@ -210,7 +275,7 @@ mod tests {
         let c = open();
         relate(&c, 1, 2, "k", 0.9, None).unwrap();
         relate(&c, 2, 3, "k", 0.8, None).unwrap();
-        relate(&c, 1, 3, "k", 0.5, None).unwrap();  // direct but weaker
+        relate(&c, 1, 3, "k", 0.5, None).unwrap(); // direct but weaker
         let p = shortest_path(&c, 1, 3, 5).unwrap();
         assert!(p.is_some());
         let (cost, _path) = p.unwrap();

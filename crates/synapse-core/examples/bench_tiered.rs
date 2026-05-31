@@ -14,7 +14,9 @@ fn rand_vec(seed: u64, dim: usize) -> Vec<f32> {
     let mut s = seed.wrapping_add(1);
     let mut v: Vec<f32> = (0..dim)
         .map(|_| {
-            s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
             (s as f32) / (u64::MAX as f32) * 2.0 - 1.0
         })
         .collect();
@@ -36,14 +38,20 @@ fn main() {
     let build_mem = t0.elapsed();
     let t1 = Instant::now();
     for _ in 0..100 {
-        let _ = mem_idx.search(&query, SearchHints { k: K, ..Default::default() });
+        let _ = mem_idx.search(
+            &query,
+            SearchHints {
+                k: K,
+                ..Default::default()
+            },
+        );
     }
     let search_mem = t1.elapsed() / 100;
     eprintln!("all-mem  build={build_mem:.2?}  search(k={K})={search_mem:.2?}");
 
     // --- TieredIndex (threshold=100k, spills 100k to SPANN) ---
     let dir = tempfile::tempdir().unwrap();
-    std::env::set_var("SYNAPSE_RAM_THRESHOLD_DOCS", "100000");
+    unsafe { std::env::set_var("SYNAPSE_RAM_THRESHOLD_DOCS", "100000") };
     let t2 = Instant::now();
     let mut tiered = TieredIndex::new(DIM, dir.path()).unwrap();
     for (id, v) in &rows {
@@ -57,7 +65,9 @@ fn main() {
         let _ = tiered.search(&query, K);
     }
     let search_tiered = t3.elapsed() / 100;
-    eprintln!("tiered   build={build_tiered:.2?}  search(k={K})={search_tiered:.2?}  (100k mem + 100k SPANN)");
+    eprintln!(
+        "tiered   build={build_tiered:.2?}  search(k={K})={search_tiered:.2?}  (100k mem + 100k SPANN)"
+    );
     eprintln!(
         "search latency Δ: tiered is {:.1}× vs all-mem",
         search_tiered.as_secs_f64() / search_mem.as_secs_f64()

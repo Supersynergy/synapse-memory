@@ -1,6 +1,6 @@
 # Synapse v1.2 — Top-10 Real-World Use Cases 2026
 
-> Anchored on bench results: 19k QPS HNSW 12-core, LongMemEval R@5=0.64 vs Chroma 0.30, hybrid vec+FTS+filter+entity in ONE query, single `.syn` file, Apple Silicon MLX Metal embedder.
+> Anchored on bench results: 19k QPS HNSW 12-core, LongMemEval R@5=0.64 vs Chroma 0.30, hybrid vec+FTS+filter+entity in ONE query, single `.synx` file, Apple Silicon MLX Metal embedder.
 
 ---
 
@@ -11,7 +11,7 @@
 | **User persona** | Power developer running 10+ coding-agent sessions/day |
 | **Data shape** | Tool calls, diffs, decisions, snippets — 50k–500k tokens rolling window |
 | **Current pain** | Cursor/Aider forget cross-session context; Mem0 requires Python daemon + Qdrant; LangChain memory leaks cross-conversation facts |
-| **Synapse win** | Typed taxonomy (Decision / Lesson / Fact / Episodic) + CRDT = persistent agent brain in one `.syn` file, no daemon; R@5=0.64 vs Chroma 0.30; EdDSA-signed facts survive agent crashes |
+| **Synapse win** | Typed taxonomy (Decision / Lesson / Fact / Episodic) + CRDT = persistent agent brain in one `.synx` file, no daemon; R@5=0.64 vs Chroma 0.30; EdDSA-signed facts survive agent crashes |
 | **Example query** | `"how did we resolve the SQLite WAL locking bug last Tuesday?"` → returns Episodic+Decision nodes in <8ms |
 | **Revenue model** | Pro tier embeds Synapse as Cursor extension, $29/mo per seat |
 
@@ -23,7 +23,7 @@
 **Workflow:**
 ```
 agent session start
-  → synapse load ./project.syn
+  → synapse load ./project.synx
 agent tool call → synapse.store(type=Episodic, content=..., tags=[file, fn])
 agent session end → auto-flush, EdDSA sign
 next session → synapse.query("what did I try for the auth bug?") → top-5 chunks, 8ms
@@ -63,7 +63,7 @@ synapse query "my thinking on second-brain systems" --type Fact --since 2024-01-
 | **User persona** | Privacy-conscious developer / researcher running local LLMs (Ollama, MLX) |
 | **Data shape** | PDFs, web clips, local docs — 1k–100k chunks |
 | **Current pain** | Chroma needs Python; Qdrant needs Docker + network; pgvector needs Postgres; all send embeddings to cloud by default |
-| **Synapse win** | MLX Metal embedder native Apple Silicon; SimSIMD NEON f16; single `.syn` file; 19k QPS; zero cloud, zero daemon |
+| **Synapse win** | MLX Metal embedder native Apple Silicon; SimSIMD NEON f16; single `.synx` file; 19k QPS; zero cloud, zero daemon |
 | **Example query** | Natural language over 50k PDF chunks, <10ms, 0 network requests |
 | **Revenue model** | Free OSS; Pro adds auto-sync to Mac mini home server |
 
@@ -75,7 +75,7 @@ synapse query "my thinking on second-brain systems" --type Fact --since 2024-01-
 **Workflow:**
 ```
 synapse ingest --adapter pdf ~/Documents/research/
-# MLX Metal embeds locally, stores f16 in .syn
+# MLX Metal embeds locally, stores f16 in .synx
 ollama run llama3.2 --system "$(synapse query '$USER_QUESTION' --top 5 --format context)"
 ```
 
@@ -88,7 +88,7 @@ ollama run llama3.2 --system "$(synapse query '$USER_QUESTION' --top 5 --format 
 | **User persona** | macOS/iOS indie app developer adding AI search to their product |
 | **Data shape** | App-specific structured data: recipes, notes, contacts, history — 1k–500k rows |
 | **Current pain** | All existing solutions (Chroma, Qdrant, Weaviate, Pinecone) are Python/Docker/network — impossible to ship in a Mac App Store binary |
-| **Synapse win** | Pure Rust library, Tauri plugin, single `.syn` file, MAS-distributable, no Python, no daemon |
+| **Synapse win** | Pure Rust library, Tauri plugin, single `.synx` file, MAS-distributable, no Python, no daemon |
 | **Example query** | In-app: "find recipes with chicken I saved last summer" → 12ms cold, 2ms warm |
 | **Revenue model** | $29/mo Pro SDK license per app; Enterprise $500/mo multi-app |
 
@@ -100,7 +100,7 @@ ollama run llama3.2 --system "$(synapse query '$USER_QUESTION' --top 5 --format 
 **Workflow:**
 ```rust
 // Tauri plugin
-let engine = Synapse::open("app.syn")?;
+let engine = Synapse::open("app.synx")?;
 engine.ingest_csv("user_data.csv")?;
 let results = engine.query("chicken recipes summer", QueryOpts::default())?;
 ```
@@ -114,7 +114,7 @@ let results = engine.query("chicken recipes summer", QueryOpts::default())?;
 | **User persona** | AI agent platform developer / autonomous agent orchestrator |
 | **Data shape** | Concurrent writes from N agents: facts, decisions, tool outputs — high write contention |
 | **Current pain** | Shared vector stores (Qdrant, Weaviate) require network round-trips; no conflict resolution; no merge semantics; Mem0 no CRDT |
-| **Synapse win** | CRDT sync built-in: agents on different machines merge `.syn` files without conflict; EdDSA signatures on each memory node |
+| **Synapse win** | CRDT sync built-in: agents on different machines merge `.synx` files without conflict; EdDSA signatures on each memory node |
 | **Example query** | Agent A and Agent B both wrote facts simultaneously → merge produces deterministic unified store, no data loss |
 | **Revenue model** | Enterprise: $500/mo per team (org-level sync server + audit dashboard) |
 
@@ -126,13 +126,13 @@ let results = engine.query("chicken recipes summer", QueryOpts::default())?;
 **Workflow:**
 ```
 # Agent A (machine 1)
-synapse push agent-a.syn → sync server
+synapse push agent-a.synx → sync server
 
 # Agent B (machine 2)  
-synapse push agent-b.syn → sync server
+synapse push agent-b.synx → sync server
 
 # Coordinator
-synapse merge agent-a.syn agent-b.syn → unified.syn  # CRDT, no conflicts
+synapse merge agent-a.synx agent-b.synx → unified.synx  # CRDT, no conflicts
 ```
 
 ---
@@ -144,8 +144,8 @@ synapse merge agent-a.syn agent-b.syn → unified.syn  # CRDT, no conflicts
 | **User persona** | Legal tech, compliance, medical AI, regulated enterprise |
 | **Data shape** | AI-generated summaries, agent decisions, document classifications — must be tamper-evident |
 | **Current pain** | All vector DB outputs are mutable, unverifiable; no standard for "who wrote this memory, when, with what model" |
-| **Synapse win** | Ed25519 per-node signatures; `.syn` file is append-only with hash chain; verifiable without network call; exportable to audit log |
-| **Example query** | `synapse verify decision-2024-11-03.syn` → cryptographic proof each node unchanged since signing |
+| **Synapse win** | Ed25519 per-node signatures; `.synx` file is append-only with hash chain; verifiable without network call; exportable to audit log |
+| **Example query** | `synapse verify decision-2024-11-03.synx` → cryptographic proof each node unchanged since signing |
 | **Revenue model** | Enterprise $500/mo + per-audit-export fee for compliance packages |
 
 **Why Synapse beats alternatives:**
@@ -196,7 +196,7 @@ synapse query "house contract Sarah 2023" --source imessage --type Episodic
 | **User persona** | Developer navigating large Rust/TypeScript monorepo (100k–2M LOC) |
 | **Data shape** | Code files, docstrings, git commit messages, PR descriptions — chunked by function/module |
 | **Current pain** | `rg` = keyword; GitHub Copilot = cloud; Sourcegraph = expensive SaaS; local vector solutions require Docker |
-| **Synapse win** | Single binary `synapse ingest --adapter code ./src`; per-repo `.syn` file; hybrid FTS+vec handles both keyword and semantic; entity extraction for function/class names |
+| **Synapse win** | Single binary `synapse ingest --adapter code ./src`; per-repo `.synx` file; hybrid FTS+vec handles both keyword and semantic; entity extraction for function/class names |
 | **Example query** | `"how does the WAL checkpoint work?"` → returns relevant Rust functions, not just string matches |
 | **Revenue model** | Free OSS; Pro $29/mo adds IDE plugin (VS Code / Cursor extension) |
 
@@ -224,7 +224,7 @@ synapse query "WAL checkpoint implementation" --type Raw --top 10
 | **Current pain** | Slack search = keyword, 90-day paid limit; Gmail = no semantic; self-hosted solutions (Elasticsearch) = ops burden |
 | **Synapse win** | Native Slack-export JSONL adapter; MBOX adapter planned; hybrid FTS+vec with date/user filters; R@5=0.64 on long-tail retrieval |
 | **Example query** | `"what was the consensus on the Redis vs Valkey decision in #infra?"` → Decision nodes from Slack thread |
-| **Revenue model** | Pro $29/mo; Team plan $99/mo (shared `.syn` with CRDT sync) |
+| **Revenue model** | Pro $29/mo; Team plan $99/mo (shared `.synx` with CRDT sync) |
 
 **Why Synapse beats alternatives:**
 - **Elasticsearch**: ops burden, 4GB+ RAM, complex schema.
@@ -258,7 +258,7 @@ synapse query "Redis vs Valkey decision" --filter user=infra-team --type Decisio
 **Workflow:**
 ```
 # Mac mini edge server
-synapse daemon --port 7400 --file edge.syn --cascade-threshold 0.85
+synapse daemon --port 7400 --file edge.synx --cascade-threshold 0.85
 # local LLM outputs → synapse.store(type=Raw, ...)
 # anomaly query → synapse.query("temperature spike pattern july") → 5ms
 ```
@@ -276,7 +276,7 @@ synapse daemon --port 7400 --file edge.syn --cascade-threshold 0.85
 | Multi-agent CRDT | CRDT merge | Qdrant | Offline merge, no coordinator |
 | Compliance | Ed25519 per-node | None (category-exclusive) | Tamper-evident audit |
 | Mac/iOS search | iMessage/Notes loader | Rewind | 100% on-device |
-| Code search | Per-repo .syn | Sourcegraph | Free, no Docker, 8ms |
+| Code search | Per-repo .synx | Sourcegraph | Free, no Docker, 8ms |
 | Chat archive | Slack JSONL + CRDT | Elasticsearch | Zero ops, 2.1× recall |
 | Edge AI | 8k QPS f16 cascade | Qdrant | 4× smaller RAM, single binary |
 
@@ -285,7 +285,7 @@ synapse daemon --port 7400 --file edge.syn --cascade-threshold 0.85
 ## Product Roadmap
 
 ### SKU 1 — Personal (Free, OSS, Apache-2.0)
-- Single-user, local `.syn` files
+- Single-user, local `.synx` files
 - All 11 loaders, all 9 format adapters
 - CLI + Rust crate
 - Cap: 500k nodes, single machine
@@ -333,7 +333,7 @@ synapse daemon --port 7400 --file edge.syn --cascade-threshold 0.85
 **Revenue signal**: Every ChatGPT user who exports data is a prospect  
 
 ### Demo 2: Cursor/Claude Code Agent Memory Plugin
-**What**: `.syn` file per-project, persists agent decisions/lessons across sessions, zero config  
+**What**: `.synx` file per-project, persists agent decisions/lessons across sessions, zero config  
 **Proves**: Use case 1 (Agent Memory), typed taxonomy advantage over Mem0  
 **Build time**: 2 weeks (MCP adapter + Cursor extension)  
 **Revenue signal**: 1M+ Cursor users, $29/mo conversion target  

@@ -12,9 +12,9 @@
 //! ```
 
 pub mod proto;
-pub mod transport;
 #[cfg(feature = "cluster-raft")]
 pub mod raft;
+pub mod transport;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -27,7 +27,7 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use synapse_core::sync::{merge_lww, Op, OpId};
+use synapse_core::sync::{Op, OpId, merge_lww};
 
 pub type NodeId = String;
 
@@ -43,7 +43,9 @@ pub enum ConsensusMode {
     /// CP: Raft consensus, linearisable writes, requires majority quorum.
     /// `peers` — list of `(node_id, addr)` for all cluster members.
     #[cfg(feature = "cluster-raft")]
-    Raft { peers: Vec<(u64, std::net::SocketAddr)> },
+    Raft {
+        peers: Vec<(u64, std::net::SocketAddr)>,
+    },
 }
 
 /// Information about a remote peer.
@@ -58,7 +60,7 @@ pub type Clock = u64;
 
 /// Shared state protected by RwLock so gossip loop + server can both access.
 struct NodeState {
-    id: NodeId,
+    _id: NodeId,
     /// Local op log: (clock, op_id, op).
     ops: Vec<(Clock, OpId, Op)>,
     /// Last clock we pulled from each peer.
@@ -81,7 +83,7 @@ impl Node {
     pub fn new(id: impl Into<String>, listen_addr: SocketAddr) -> Self {
         let id = id.into();
         let state = Arc::new(RwLock::new(NodeState {
-            id: id.clone(),
+            _id: id.clone(),
             ops: Vec::new(),
             peer_clocks: HashMap::new(),
             clock: 0,
@@ -157,9 +159,7 @@ impl Node {
 
     /// Start the TCP server that responds to gossip pull/push requests.
     /// Returns a JoinHandle — caller must `.await` or abort on shutdown.
-    pub async fn start_server(
-        node: Arc<Self>,
-    ) -> Result<tokio::task::JoinHandle<()>> {
+    pub async fn start_server(node: Arc<Self>) -> Result<tokio::task::JoinHandle<()>> {
         let listener = TcpListener::bind(node.listen_addr).await?;
         info!(id = %node.id, addr = %node.listen_addr, "cluster server listening");
         let handle = tokio::spawn(async move {
@@ -209,8 +209,7 @@ impl Node {
 
 fn op_id_for(op: &Op) -> OpId {
     let bytes = serde_json::to_vec(op).unwrap_or_default();
-    let h = blake3_hash(&bytes);
-    h
+    blake3_hash(&bytes)
 }
 
 #[cfg(test)]
@@ -229,7 +228,10 @@ mod tests {
         let node2 = Arc::new(Node::new("node2", addr2));
 
         // node1 knows about node2
-        node1.add_peer(PeerInfo { id: "node2".into(), addr: addr2 });
+        node1.add_peer(PeerInfo {
+            id: "node2".into(),
+            addr: addr2,
+        });
         let node1 = Arc::new(node1);
 
         // Start servers
@@ -251,9 +253,14 @@ mod tests {
         // Single gossip tick: node1 pushes to node2
         let ops = node1.local_ops().await;
         transport::push_to_peer(
-            &PeerInfo { id: "node2".into(), addr: addr2 },
+            &PeerInfo {
+                id: "node2".into(),
+                addr: addr2,
+            },
             ops,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let elapsed = t0.elapsed();
 
@@ -261,7 +268,9 @@ mod tests {
         let n2_ops = node2.local_ops().await;
         assert_eq!(n2_ops.len(), 1, "node2 must have the propagated op");
         match &n2_ops[0].1 {
-            Op::Put { doc_id, blob_hash, .. } => {
+            Op::Put {
+                doc_id, blob_hash, ..
+            } => {
                 assert_eq!(doc_id, "hello-world");
                 assert_eq!(blob_hash, &[42u8; 32]);
             }
@@ -269,14 +278,21 @@ mod tests {
         }
 
         // Latency assertion: push should complete in <200ms on loopback
-        assert!(elapsed < Duration::from_millis(200),
-            "gossip push took {:?}, expected <200ms", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(200),
+            "gossip push took {:?}, expected <200ms",
+            elapsed
+        );
     }
 
     #[tokio::test]
     async fn crdt_merge_idempotent() {
         let node = Node::new("solo", "127.0.0.1:0".parse().unwrap());
-        let op = Op::Put { doc_id: "x".into(), blob_hash: [1; 32], ts: 100 };
+        let op = Op::Put {
+            doc_id: "x".into(),
+            blob_hash: [1; 32],
+            ts: 100,
+        };
         node.put_op(op.clone()).await.unwrap();
 
         // Merging same op twice must not duplicate
@@ -351,7 +367,9 @@ mod raft_tests {
                     break;
                 }
             }
-            if let Some(l) = found { break l; }
+            if let Some(l) = found {
+                break l;
+            }
             tokio::time::sleep(Duration::from_millis(20)).await;
         };
 
@@ -370,7 +388,9 @@ mod raft_tests {
             let ops = n.applied_ops().await;
             assert!(!ops.is_empty(), "node {} must have applied ops", n.id);
             match &ops[0] {
-                Op::Put { doc_id, blob_hash, .. } => {
+                Op::Put {
+                    doc_id, blob_hash, ..
+                } => {
                     assert_eq!(doc_id, "raft-smoke");
                     assert_eq!(blob_hash, &[7u8; 32]);
                 }

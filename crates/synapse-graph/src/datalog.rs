@@ -42,7 +42,9 @@ pub enum Term {
 }
 
 impl Term {
-    pub fn is_var(&self) -> bool { matches!(self, Term::Var(_)) }
+    pub fn is_var(&self) -> bool {
+        matches!(self, Term::Var(_))
+    }
 }
 
 /// A predicate with a name and argument list.
@@ -70,16 +72,26 @@ pub struct AggRow {
 
 type Tuple = Vec<String>;
 type Binding = HashMap<String, String>;
+pub type Rule = (Predicate, Vec<Predicate>);
+type DeltaRelation<'a> = (&'a str, &'a HashSet<Tuple>);
 
 fn match_args(args: &[Term], tuple: &[String]) -> Option<Binding> {
-    if args.len() != tuple.len() { return None; }
+    if args.len() != tuple.len() {
+        return None;
+    }
     let mut b: Binding = HashMap::new();
     for (t, v) in args.iter().zip(tuple.iter()) {
         match t {
-            Term::Const(c) => if c != v { return None; },
+            Term::Const(c) => {
+                if c != v {
+                    return None;
+                }
+            }
             Term::Var(x) => {
                 if let Some(prev) = b.get(x) {
-                    if prev != v { return None; }
+                    if prev != v {
+                        return None;
+                    }
                 } else {
                     b.insert(x.clone(), v.clone());
                 }
@@ -93,7 +105,9 @@ fn merge_bindings(a: &Binding, b: &Binding) -> Option<Binding> {
     let mut out = a.clone();
     for (k, v) in b {
         if let Some(existing) = out.get(k) {
-            if existing != v { return None; }
+            if existing != v {
+                return None;
+            }
         } else {
             out.insert(k.clone(), v.clone());
         }
@@ -102,10 +116,12 @@ fn merge_bindings(a: &Binding, b: &Binding) -> Option<Binding> {
 }
 
 fn apply_binding(args: &[Term], b: &Binding) -> Option<Tuple> {
-    args.iter().map(|t| match t {
-        Term::Const(c) => Some(c.clone()),
-        Term::Var(x) => b.get(x).cloned(),
-    }).collect()
+    args.iter()
+        .map(|t| match t {
+            Term::Const(c) => Some(c.clone()),
+            Term::Var(x) => b.get(x).cloned(),
+        })
+        .collect()
 }
 
 /// Core Datalog engine with semi-naive evaluation.
@@ -113,12 +129,15 @@ pub struct DatalogEngine {
     /// EDB (extensional): predicate → set of tuples
     pub facts: HashMap<String, HashSet<Tuple>>,
     /// IDB (intensional): rules
-    pub rules: Vec<(Predicate, Vec<Predicate>)>,
+    pub rules: Vec<Rule>,
 }
 
 impl DatalogEngine {
     pub fn new() -> Self {
-        Self { facts: HashMap::new(), rules: Vec::new() }
+        Self {
+            facts: HashMap::new(),
+            rules: Vec::new(),
+        }
     }
 
     /// Add a base fact.
@@ -137,14 +156,21 @@ impl DatalogEngine {
     /// Parse S-expression `(pred ?x y)` into Predicate.
     pub fn parse_predicate(s: &str) -> Result<Predicate, String> {
         let s = s.trim();
-        let s = s.strip_prefix('(').and_then(|s| s.strip_suffix(')'))
+        let s = s
+            .strip_prefix('(')
+            .and_then(|s| s.strip_suffix(')'))
             .ok_or_else(|| format!("expected (...): {s}"))?;
         let mut parts = s.split_whitespace();
         let name = parts.next().ok_or("empty predicate")?.to_string();
-        let args = parts.map(|p| {
-            if p.starts_with('?') { Term::Var(p[1..].to_string()) }
-            else { Term::Const(p.to_string()) }
-        }).collect();
+        let args = parts
+            .map(|p| {
+                if let Some(name) = p.strip_prefix('?') {
+                    Term::Var(name.to_string())
+                } else {
+                    Term::Const(p.to_string())
+                }
+            })
+            .collect();
         Ok(Predicate { name, args })
     }
 
@@ -164,7 +190,9 @@ impl DatalogEngine {
 
             for (head, body) in &self.rules {
                 // Determine which body literals are IDB (can participate as delta).
-                let idb_positions: Vec<usize> = body.iter().enumerate()
+                let idb_positions: Vec<usize> = body
+                    .iter()
+                    .enumerate()
                     .filter(|(_, p)| idb_preds.contains(&p.name))
                     .map(|(i, _)| i)
                     .collect();
@@ -178,7 +206,9 @@ impl DatalogEngine {
                     for pos in &idb_positions {
                         let dp = &body[*pos].name;
                         if let Some(dt) = delta.get(dp.as_str()) {
-                            if dt.is_empty() { continue; }
+                            if dt.is_empty() {
+                                continue;
+                            }
                             // Build a body where this literal uses delta, rest full.
                             let new_tuples = self.derive_rule_delta_at(head, body, *pos, dt);
                             all.extend(new_tuples);
@@ -195,7 +225,9 @@ impl DatalogEngine {
                 }
             }
 
-            if new_delta.values().all(|s| s.is_empty()) { break; }
+            if new_delta.values().all(|s| s.is_empty()) {
+                break;
+            }
             delta = new_delta;
         }
     }
@@ -219,16 +251,17 @@ impl DatalogEngine {
             let mut next: Vec<Binding> = Vec::new();
             for b in &bindings {
                 for t in tuples {
-                    if let Some(nb) = match_args(&pred.args, t) {
-                        if let Some(merged) = merge_bindings(b, &nb) {
-                            next.push(merged);
-                        }
+                    if let Some(nb) = match_args(&pred.args, t)
+                        && let Some(merged) = merge_bindings(b, &nb)
+                    {
+                        next.push(merged);
                     }
                 }
             }
             bindings = next;
         }
-        bindings.iter()
+        bindings
+            .iter()
             .filter_map(|b| apply_binding(&head.args, b))
             .collect()
     }
@@ -244,36 +277,42 @@ impl DatalogEngine {
         &'a self,
         head: &Predicate,
         body: &[Predicate],
-        delta: Option<(&'a str, &'a HashSet<Tuple>)>,
+        delta: Option<DeltaRelation<'a>>,
     ) -> Vec<Tuple> {
         let empty: HashSet<Tuple> = HashSet::new();
         let mut bindings: Vec<Binding> = vec![HashMap::new()];
         for pred in body {
             let tuples: &HashSet<Tuple> = if let Some((dp, dt)) = delta {
-                if pred.name == dp { dt } else { self.facts.get(&pred.name).unwrap_or(&empty) }
+                if pred.name == dp {
+                    dt
+                } else {
+                    self.facts.get(&pred.name).unwrap_or(&empty)
+                }
             } else {
                 self.facts.get(&pred.name).unwrap_or(&empty)
             };
             let mut next: Vec<Binding> = Vec::new();
             for b in &bindings {
                 for t in tuples {
-                    if let Some(nb) = match_args(&pred.args, t) {
-                        if let Some(merged) = merge_bindings(b, &nb) {
-                            next.push(merged);
-                        }
+                    if let Some(nb) = match_args(&pred.args, t)
+                        && let Some(merged) = merge_bindings(b, &nb)
+                    {
+                        next.push(merged);
                     }
                 }
             }
             bindings = next;
         }
-        bindings.iter()
+        bindings
+            .iter()
             .filter_map(|b| apply_binding(&head.args, b))
             .collect()
     }
 
     /// Query all tuples for a predicate with arity check.
     pub fn query(&self, pred: &str, arity: usize) -> Vec<Tuple> {
-        self.facts.get(pred)
+        self.facts
+            .get(pred)
             .map(|s| s.iter().filter(|t| t.len() == arity).cloned().collect())
             .unwrap_or_default()
     }
@@ -281,29 +320,45 @@ impl DatalogEngine {
     /// Aggregate over a predicate.
     /// `predicate`: relation name, `group_by`: 0-based column index as string,
     /// `value_col`: 0-based column index to aggregate, `op`: aggregation op.
-    pub fn aggregate(&self, predicate: &str, group_by_col: usize, value_col: usize, op: Op) -> Vec<AggRow> {
-        let tuples = match self.facts.get(predicate) { Some(s) => s, None => return vec![] };
+    pub fn aggregate(
+        &self,
+        predicate: &str,
+        group_by_col: usize,
+        value_col: usize,
+        op: Op,
+    ) -> Vec<AggRow> {
+        let tuples = match self.facts.get(predicate) {
+            Some(s) => s,
+            None => return vec![],
+        };
         let mut groups: HashMap<String, Vec<f64>> = HashMap::new();
         for t in tuples {
             let key = t.get(group_by_col).cloned().unwrap_or_default();
             let val: f64 = t.get(value_col).and_then(|v| v.parse().ok()).unwrap_or(0.0);
             groups.entry(key).or_default().push(val);
         }
-        let mut out: Vec<AggRow> = groups.into_iter().map(|(group_key, vals)| {
-            let value = match op {
-                Op::Count => vals.len() as f64,
-                Op::Sum   => vals.iter().sum(),
-                Op::Min   => vals.iter().cloned().fold(f64::INFINITY, f64::min),
-                Op::Max   => vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-            };
-            AggRow { group_key, value }
-        }).collect();
+        let mut out: Vec<AggRow> = groups
+            .into_iter()
+            .map(|(group_key, vals)| {
+                let value = match op {
+                    Op::Count => vals.len() as f64,
+                    Op::Sum => vals.iter().sum(),
+                    Op::Min => vals.iter().cloned().fold(f64::INFINITY, f64::min),
+                    Op::Max => vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                };
+                AggRow { group_key, value }
+            })
+            .collect();
         out.sort_by(|a, b| a.group_key.cmp(&b.group_key));
         out
     }
 }
 
-impl Default for DatalogEngine { fn default() -> Self { Self::new() } }
+impl Default for DatalogEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -314,19 +369,34 @@ mod tests {
         // gen1 → gen2 → gen3
         eng.fact("parent", &["alice", "bob"]);
         eng.fact("parent", &["alice", "carol"]);
-        eng.fact("parent", &["bob",   "dave"]);
+        eng.fact("parent", &["bob", "dave"]);
         eng.fact("parent", &["carol", "eve"]);
         // ancestor(X,Y) :- parent(X,Y)
         eng.add_rule(
-            Predicate { name: "ancestor".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] },
-            vec![Predicate { name: "parent".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] }],
+            Predicate {
+                name: "ancestor".into(),
+                args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+            },
+            vec![Predicate {
+                name: "parent".into(),
+                args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+            }],
         );
         // ancestor(X,Y) :- parent(X,Z), ancestor(Z,Y)
         eng.add_rule(
-            Predicate { name: "ancestor".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] },
+            Predicate {
+                name: "ancestor".into(),
+                args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+            },
             vec![
-                Predicate { name: "parent".into(),   args: vec![Term::Var("X".into()), Term::Var("Z".into())] },
-                Predicate { name: "ancestor".into(), args: vec![Term::Var("Z".into()), Term::Var("Y".into())] },
+                Predicate {
+                    name: "parent".into(),
+                    args: vec![Term::Var("X".into()), Term::Var("Z".into())],
+                },
+                Predicate {
+                    name: "ancestor".into(),
+                    args: vec![Term::Var("Z".into()), Term::Var("Y".into())],
+                },
             ],
         );
         eng
@@ -338,10 +408,19 @@ mod tests {
         eng.semi_naive();
         let results = eng.query("ancestor", 2);
         // alice is ancestor of dave and eve (gen3)
-        assert!(results.iter().any(|r| r[0] == "alice" && r[1] == "dave"), "alice->dave missing");
-        assert!(results.iter().any(|r| r[0] == "alice" && r[1] == "eve"),  "alice->eve missing");
+        assert!(
+            results.iter().any(|r| r[0] == "alice" && r[1] == "dave"),
+            "alice->dave missing"
+        );
+        assert!(
+            results.iter().any(|r| r[0] == "alice" && r[1] == "eve"),
+            "alice->eve missing"
+        );
         // direct parent facts also in ancestor
-        assert!(results.iter().any(|r| r[0] == "alice" && r[1] == "bob"),  "alice->bob missing");
+        assert!(
+            results.iter().any(|r| r[0] == "alice" && r[1] == "bob"),
+            "alice->bob missing"
+        );
         // total: alice→{bob,carol,dave,eve}=4, bob→{dave}=1, carol→{eve}=1 = 6
         assert_eq!(results.len(), 6);
     }
@@ -359,7 +438,7 @@ mod tests {
         // score(person, value)
         eng.fact("score", &["alice", "10"]);
         eng.fact("score", &["alice", "20"]);
-        eng.fact("score", &["bob",   "5"]);
+        eng.fact("score", &["bob", "5"]);
         let rows = eng.aggregate("score", 0, 1, Op::Count);
         let alice = rows.iter().find(|r| r.group_key == "alice").unwrap();
         assert_eq!(alice.value as usize, 2);
@@ -385,14 +464,29 @@ mod tests {
             eng.fact("parent", &[a.as_str(), b.as_str()]);
         }
         eng.add_rule(
-            Predicate { name: "ancestor".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] },
-            vec![Predicate { name: "parent".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] }],
+            Predicate {
+                name: "ancestor".into(),
+                args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+            },
+            vec![Predicate {
+                name: "parent".into(),
+                args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+            }],
         );
         eng.add_rule(
-            Predicate { name: "ancestor".into(), args: vec![Term::Var("X".into()), Term::Var("Y".into())] },
+            Predicate {
+                name: "ancestor".into(),
+                args: vec![Term::Var("X".into()), Term::Var("Y".into())],
+            },
             vec![
-                Predicate { name: "parent".into(),   args: vec![Term::Var("X".into()), Term::Var("Z".into())] },
-                Predicate { name: "ancestor".into(), args: vec![Term::Var("Z".into()), Term::Var("Y".into())] },
+                Predicate {
+                    name: "parent".into(),
+                    args: vec![Term::Var("X".into()), Term::Var("Z".into())],
+                },
+                Predicate {
+                    name: "ancestor".into(),
+                    args: vec![Term::Var("Z".into()), Term::Var("Y".into())],
+                },
             ],
         );
         let t0 = std::time::Instant::now();
@@ -402,7 +496,15 @@ mod tests {
         let expected = n * (n - 1) / 2;
         assert_eq!(results.len(), expected, "wrong ancestor count");
         // Must complete well under 1s (old code took 7131ms for this case)
-        assert!(elapsed.as_millis() < 1000, "too slow: {}ms", elapsed.as_millis());
-        eprintln!("ancestor_100_chain: {}ms, {} tuples", elapsed.as_millis(), results.len());
+        assert!(
+            elapsed.as_millis() < 1000,
+            "too slow: {}ms",
+            elapsed.as_millis()
+        );
+        eprintln!(
+            "ancestor_100_chain: {}ms, {} tuples",
+            elapsed.as_millis(),
+            results.len()
+        );
     }
 }

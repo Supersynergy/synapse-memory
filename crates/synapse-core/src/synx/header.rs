@@ -52,7 +52,7 @@ impl SynxHeader {
         buf[4..6].copy_from_slice(&self.version.to_le_bytes());
         buf[6..8].copy_from_slice(&self.flags.bits().to_le_bytes());
         buf[8] = 0; // endian: little
-                    // 9..16 reserved (zero)
+        // 9..16 reserved (zero)
         buf[16..24].copy_from_slice(&self.manifest_offset.to_le_bytes());
         buf[24..32].copy_from_slice(&self.footer_offset.to_le_bytes());
         buf[32..40].copy_from_slice(&self.created_unix.to_le_bytes());

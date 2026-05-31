@@ -157,8 +157,7 @@ fn main() {
                 let res = idx.search(qv, 100).expect("search");
                 lats.push(t.elapsed().as_secs_f64() * 1000.0);
 
-                let hits: Vec<(u64, f32)> =
-                    res.keys.into_iter().zip(res.distances).collect();
+                let hits: Vec<(u64, f32)> = res.keys.into_iter().zip(res.distances).collect();
                 r10s.push(recall_at_k(&hits, gt_row, 10));
                 r100s.push(recall_at_k(&hits, gt_row, 100));
             }
@@ -199,9 +198,7 @@ fn main() {
 
     if let Some((m, ef_s, qps, r10)) = best_qps_at_98recall {
         println!();
-        println!(
-            "# Best in-proc ≥ R@10=0.98: M={m} ef_s={ef_s} → {qps:.0} QPS @ R@10={r10:.4}"
-        );
+        println!("# Best in-proc ≥ R@10=0.98: M={m} ef_s={ef_s} → {qps:.0} QPS @ R@10={r10:.4}");
         println!("# HTTP overhead removed → this is the true HNSW graph performance");
     } else {
         println!();

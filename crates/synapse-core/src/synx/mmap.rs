@@ -6,16 +6,16 @@
 //!
 //! The JSON manifest is decoded once on open; rkyv archival is Phase-3.2.
 
-#[cfg(feature = "mmap")]
+#[cfg(feature = "synx-mmap")]
 pub use imp::*;
-#[cfg(not(feature = "mmap"))]
+#[cfg(not(feature = "synx-mmap"))]
 pub use stub::*;
 
-#[cfg(feature = "mmap")]
+#[cfg(feature = "synx-mmap")]
 mod imp {
     use crate::error::{Error, Result};
     use crate::synx::chunk::{Chunk, ChunkKind, Codec};
-    use crate::synx::header::{SynxFlags, SynxFooter, SynxHeader, FOOTER_SIZE, HEADER_SIZE, MAGIC};
+    use crate::synx::header::{FOOTER_SIZE, HEADER_SIZE, MAGIC, SynxFlags, SynxFooter, SynxHeader};
     use crate::synx::manifest::{ChunkRef, Manifest};
     use memmap2::Mmap;
     use std::fs::File;
@@ -137,7 +137,7 @@ mod imp {
     }
 }
 
-#[cfg(not(feature = "mmap"))]
+#[cfg(not(feature = "synx-mmap"))]
 mod stub {
     use crate::error::{Error, Result};
     use std::path::Path;
@@ -146,7 +146,7 @@ mod stub {
     impl MmapReader {
         pub fn open<P: AsRef<Path>>(_p: P) -> Result<Self> {
             Err(Error::Format(
-                "mmap feature disabled — rebuild with --features mmap".into(),
+                "synx-mmap feature disabled — rebuild with --features synx-mmap".into(),
             ))
         }
     }

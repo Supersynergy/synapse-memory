@@ -1,18 +1,17 @@
 #[cfg(feature = "olap")]
 mod olap_tests {
-    use synapse_olap::OlapEngine;
     use rusqlite::Connection as SqliteConn;
+    use synapse_olap::OlapEngine;
     use tempfile::NamedTempFile;
 
     fn make_sqlite_db(n: usize) -> NamedTempFile {
         let f = NamedTempFile::new().unwrap();
         let conn = SqliteConn::open(f.path()).unwrap();
         conn.execute_batch(
-            "CREATE TABLE events (id INTEGER PRIMARY KEY, category TEXT, value REAL);"
-        ).unwrap();
-        let mut stmt = conn
-            .prepare("INSERT INTO events VALUES (?,?,?)")
-            .unwrap();
+            "CREATE TABLE events (id INTEGER PRIMARY KEY, category TEXT, value REAL);",
+        )
+        .unwrap();
+        let mut stmt = conn.prepare("INSERT INTO events VALUES (?,?,?)").unwrap();
         for i in 0..n {
             let id = i as i64;
             let cat = format!("cat{}", i % 50);
@@ -26,7 +25,8 @@ mod olap_tests {
     fn test_memory_basic() {
         let mut eng = OlapEngine::open_memory().unwrap();
         eng.execute("CREATE TABLE t (x INTEGER)").unwrap();
-        eng.execute("INSERT INTO t SELECT range FROM range(100)").unwrap();
+        eng.execute("INSERT INTO t SELECT range FROM range(100)")
+            .unwrap();
         let batches = eng.query("SELECT COUNT(*) as cnt FROM t").unwrap();
         assert!(!batches.is_empty());
     }
@@ -37,8 +37,10 @@ mod olap_tests {
         let mut eng = OlapEngine::open_memory().unwrap();
         eng.attach_synapse_db(db.path(), "synx").unwrap();
         let batches = eng
-            .query("SELECT category, COUNT(*) as cnt, AVG(value) as avg_val \
-                    FROM synx.events GROUP BY category ORDER BY category")
+            .query(
+                "SELECT category, COUNT(*) as cnt, AVG(value) as avg_val \
+                    FROM synx.events GROUP BY category ORDER BY category",
+            )
             .unwrap();
         assert!(!batches.is_empty());
         // 50 distinct categories
@@ -63,7 +65,7 @@ mod olap_tests {
 
 // Router tests always available (no feature gate)
 mod router_tests {
-    use synapse_olap::{is_olap, auto_route, Engine};
+    use synapse_olap::{Engine, auto_route, is_olap};
 
     #[test]
     fn oltp_point_lookup() {
@@ -78,13 +80,20 @@ mod router_tests {
 
     #[test]
     fn olap_group_by() {
-        assert!(is_olap("SELECT category, SUM(value) FROM events GROUP BY category"));
-        assert_eq!(auto_route("SELECT category, SUM(value) FROM events GROUP BY category"), Engine::Olap);
+        assert!(is_olap(
+            "SELECT category, SUM(value) FROM events GROUP BY category"
+        ));
+        assert_eq!(
+            auto_route("SELECT category, SUM(value) FROM events GROUP BY category"),
+            Engine::Olap
+        );
     }
 
     #[test]
     fn olap_window() {
-        assert!(is_olap("SELECT id, ROW_NUMBER() OVER (PARTITION BY cat ORDER BY ts) FROM t"));
+        assert!(is_olap(
+            "SELECT id, ROW_NUMBER() OVER (PARTITION BY cat ORDER BY ts) FROM t"
+        ));
     }
 
     #[test]

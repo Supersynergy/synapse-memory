@@ -13,8 +13,7 @@
 
 use std::time::Instant;
 use synapse_core::{
-    embedder_trait::TextEmbedder,
-    turbo::candle_metal_embedder::CandleMetalEmbedder,
+    embedder_trait::TextEmbedder, turbo::candle_metal_embedder::CandleMetalEmbedder,
 };
 
 #[cfg(any(feature = "embed", feature = "embed-dynamic"))]
@@ -41,9 +40,7 @@ fn bench_embedder(label: &str, e: &dyn TextEmbedder, texts: &[String], iters: us
     let p50 = percentile(singles.clone(), 0.50);
     let p95 = percentile(singles.clone(), 0.95);
     let mean = singles.iter().sum::<f64>() / singles.len() as f64;
-    println!(
-        "{label:28}  single  p50={p50:6.2}ms  p95={p95:6.2}ms  mean={mean:6.2}ms"
-    );
+    println!("{label:28}  single  p50={p50:6.2}ms  p95={p95:6.2}ms  mean={mean:6.2}ms");
 
     // Batched
     for &bs in &[1usize, 4, 8, 16, 32, 64, 100] {
@@ -124,7 +121,9 @@ fn main() {
                         for (i, (mv, ov)) in metal_vecs.iter().zip(&onnx_vecs).enumerate() {
                             let cos = cosine(mv, ov);
                             println!("  doc[{i}] cosine(metal, onnx) = {cos:.4}");
-                            if cos < min_cos { min_cos = cos; }
+                            if cos < min_cos {
+                                min_cos = cos;
+                            }
                         }
                         println!("  min cosine = {min_cos:.4}  (≥0.98 = parity OK)");
                         if min_cos >= 0.98 {

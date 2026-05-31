@@ -4,14 +4,14 @@
 //! flat sqlite-vec scan used in v0.1. Implementation: `instant-distance` HNSW
 //! with cosine distance + simple per-dim min/max scalar quantization.
 //!
-//! Feature-gated on `vec-hnsw`. Stub is safe to call but returns empty results.
+//! Feature-gated on `ann-usearch`. Stub is safe to call but returns empty results.
 
-#[cfg(feature = "vec-hnsw")]
+#[cfg(feature = "ann-usearch")]
 pub use imp::*;
-#[cfg(not(feature = "vec-hnsw"))]
+#[cfg(not(feature = "ann-usearch"))]
 pub use stub::*;
 
-#[cfg(feature = "vec-hnsw")]
+#[cfg(feature = "ann-usearch")]
 mod imp {
     use crate::error::{Error, Result};
     use instant_distance::{Builder, HnswMap, Point, Search};
@@ -185,7 +185,7 @@ mod imp {
     }
 }
 
-#[cfg(not(feature = "vec-hnsw"))]
+#[cfg(not(feature = "ann-usearch"))]
 mod stub {
     use crate::error::Result;
     pub struct ScalarCodebook;

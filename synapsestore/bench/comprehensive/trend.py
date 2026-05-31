@@ -19,40 +19,40 @@ from pathlib import Path
 
 DIR = Path(__file__).parent
 RESULTS_DIR = DIR / "results"
-SYN_BIN = Path.home() / ".local/bin/syn"
+SYNX_BIN = Path.home() / ".local/bin/synx"
 SYNAPSE_BIN = Path.home() / "projects/synapse/target/release/synapse"
 
-# ── syn CLI helpers ───────────────────────────────────────────────────────────
+# ── synx CLI helpers ───────────────────────────────────────────────────────────
 
-def syn_cmd() -> str:
-    if SYN_BIN.exists():
-        return str(SYN_BIN)
+def synx_cmd() -> str:
+    if SYNX_BIN.exists():
+        return str(SYNX_BIN)
     if SYNAPSE_BIN.exists():
         return str(SYNAPSE_BIN)
-    raise FileNotFoundError("syn/synapse binary not found. Checked: ~/.local/bin/syn and ~/projects/synapse/target/release/synapse")
+    raise FileNotFoundError("synx/synapse binary not found. Checked: ~/.local/bin/synx and ~/projects/synapse/target/release/synapse")
 
 
-def syn_put(title: str, body: str) -> bool:
-    """Push a document to brain.db via `syn put`."""
+def synx_put(title: str, body: str) -> bool:
+    """Push a document to brain.db via `synx put`."""
     try:
-        bin_ = syn_cmd()
+        bin_ = synx_cmd()
         result = subprocess.run(
             [bin_, "put", "--title", title],
             input=body, text=True, capture_output=True, timeout=10
         )
         if result.returncode != 0:
-            print(f"[trend] syn put failed: {result.stderr.strip()}", file=sys.stderr)
+            print(f"[trend] synx put failed: {result.stderr.strip()}", file=sys.stderr)
             return False
         return True
     except Exception as e:
-        print(f"[trend] syn put error: {e}", file=sys.stderr)
+        print(f"[trend] synx put error: {e}", file=sys.stderr)
         return False
 
 
-def syn_search(query: str, limit: int = 20) -> list[dict]:
-    """Search brain.db via `syn hybrid`."""
+def synx_search(query: str, limit: int = 20) -> list[dict]:
+    """Search brain.db via `synx hybrid`."""
     try:
-        bin_ = syn_cmd()
+        bin_ = synx_cmd()
         result = subprocess.run(
             [bin_, "hybrid", query, str(limit)],
             capture_output=True, text=True, timeout=10
@@ -74,7 +74,7 @@ def syn_search(query: str, limit: int = 20) -> list[dict]:
             docs.append({"raw": line})
         return docs
     except Exception as e:
-        print(f"[trend] syn search error: {e}", file=sys.stderr)
+        print(f"[trend] synx search error: {e}", file=sys.stderr)
         return []
 
 
@@ -141,7 +141,7 @@ def seed_brain(rows: list[dict]) -> int:
             "summary": summary,
             "raw": row,
         }, indent=2)
-        if syn_put(title, body):
+        if synx_put(title, body):
             print(f"[trend] Seeded: {title}")
             pushed += 1
         else:
@@ -183,7 +183,7 @@ def compare_last_n(n: int):
     KEY_METRICS = ["phase_a_ops_sec", "phase_b_ops_sec", "recall_at_10", "p50_ms", "rss_mb"]
 
     for eng in engines:
-        docs = syn_search(f"bench_{eng}", limit=n * 2)
+        docs = synx_search(f"bench_{eng}", limit=n * 2)
         bench_docs = []
         for d in docs:
             parsed = parse_bench_doc(d)
@@ -234,7 +234,7 @@ def regression_check(threshold_pct: float = 10.0) -> int:
     regressions = []
 
     for eng in engines:
-        docs = syn_search(f"bench_{eng}", limit=4)
+        docs = synx_search(f"bench_{eng}", limit=4)
         bench_docs = [parse_bench_doc(d) for d in docs]
         bench_docs = [d for d in bench_docs if d and d.get("summary", {}).get("engine") == eng]
         if not bench_docs:

@@ -13,7 +13,7 @@
 - Ingest: 5,183 docs via `PutBatch` at 50 docs/batch, `embed=True`
 - Query: `SearchMode::Hybrid`, top-10, `embed_query=True`
 - Ingest time: 222s (~3.7min) on M4 Max, CPU-only embedding
-- Protocol: Unix socket msgpack (same as production `syn` CLI)
+- Protocol: Unix socket msgpack (same as production `synx` CLI)
 
 **Prior run** (reference): FTS5 Lex-only (`beir-or-retrieval-quality.md`)
 - nDCG@10 = 0.6477, Recall@10 = 0.80, avg latency 7.7ms
@@ -79,7 +79,7 @@ This is an **honest result** on real BEIR qrels using real Synapse hybrid search
   --lazy-embed &
 
 # Run harness (ingest + eval, ~5min first run)
-~/.local/bin/syn-venv-python /tmp/beir_hybrid_harness.py
+~/.local/bin/synx-venv-python /tmp/beir_hybrid_harness.py
 ```
 
 ## Raw JSON

@@ -7,7 +7,7 @@
 - 1,000 synthetic posts (id, title, 200-word content), seeded keywords including "rust", "web", "framework"
 - SQLite `/tmp/wp-bench.db` (RAM-resident — mirrors shared-host InnoDB buffer-pool-warmed behavior)
 - 100 iterations × each cell, p50 latency reported
-- Synapse: `syn hybrid` against live daemon (153k+ real docs), 10 iterations, wall-clock
+- Synapse: `synx hybrid` against live daemon (153k+ real docs), 10 iterations, wall-clock
 
 ## 4-Cell Results
 
@@ -16,7 +16,7 @@
 | **A** | Vanilla `LIKE` (no index) | **1.287 ms** | 1× baseline |
 | **B** | FTS5 index (cold) | **0.035 ms** | **37× faster** |
 | **C** | FTS5 index (warmed) | **0.035 ms** | **37× faster** |
-| **D** | Synapse `syn hybrid` (IPC+search) | **1,400 ms wall** / ~4 ms pure-search | — |
+| **D** | Synapse `synx hybrid` (IPC+search) | **1,400 ms wall** / ~4 ms pure-search | — |
 
 > SQLite page cache already warm after first iteration — B≈C (no measurable cache bonus at 1k posts).  
 > Cell D wall-clock includes Unix socket IPC spawn overhead (~1.4s); internal search engine latency is ~4ms (documented in PIONEER.md at 153k docs).
@@ -34,7 +34,7 @@
 
 ## Honest Revised Claims
 
-> **"Synapse beats vanilla WordPress LIKE search by roughly 30–100× — but ~37× of that comes from FTS5 alone. The Synapse semantic layer adds approximately 3–5× on top of a warmed FTS5+cache baseline when called in-process (not via CLI IPC). The CLI `syn hybrid` tool carries ~1.4s socket overhead; embed the library or use the HTTP API for fair comparison."**
+> **"Synapse beats vanilla WordPress LIKE search by roughly 30–100× — but ~37× of that comes from FTS5 alone. The Synapse semantic layer adds approximately 3–5× on top of a warmed FTS5+cache baseline when called in-process (not via CLI IPC). The CLI `synx hybrid` tool carries ~1.4s socket overhead; embed the library or use the HTTP API for fair comparison."**
 
 ## What the 187× figure was
 

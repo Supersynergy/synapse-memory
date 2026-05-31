@@ -135,28 +135,28 @@ USE_CASES = [
 ]
 
 def load_synapse():
-    syn = sqlite3.connect(BRAIN_DB)
-    syn.enable_load_extension(True)
-    sqlite_vec.load(syn)
-    syn.execute("PRAGMA mmap_size=268435456")
+    synapse_conn = sqlite3.connect(BRAIN_DB)
+    synapse_conn.enable_load_extension(True)
+    sqlite_vec.load(synapse_conn)
+    synapse_conn.execute("PRAGMA mmap_size=268435456")
     
-    rows = syn.execute("SELECT id, embedding FROM docs_vec").fetchall()
+    rows = synapse_conn.execute("SELECT id, embedding FROM docs_vec").fetchall()
     vectors = np.array([np.frombuffer(r[1], dtype=np.float32) for r in rows])
     ids = [r[0] for r in rows]
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
     norms[norms == 0] = 1
     matrix = vectors / norms
     
-    return syn, matrix, ids
+    return synapse_conn, matrix, ids
 
-def bench_fts(syn, queries, iterations=100):
+def bench_fts(synapse_conn, queries, iterations=100):
     """Benchmark FTS5 search."""
     times = []
     for _ in range(iterations):
         t0 = time.perf_counter()
         for q in queries:
             try:
-                syn.execute("SELECT * FROM docs_fts WHERE docs_fts MATCH ? LIMIT 10", (q,)).fetchall()
+                synapse_conn.execute("SELECT * FROM docs_fts WHERE docs_fts MATCH ? LIMIT 10", (q,)).fetchall()
             except:
                 pass
         times.append((time.perf_counter() - t0) * 1000)
@@ -217,7 +217,7 @@ Config:
     
     # Load Synapse
     print("Loading Synapse...")
-    syn, matrix, ids = load_synapse()
+    synapse_conn, matrix, ids = load_synapse()
     doc_count = len(ids)
     print(f"  Loaded {doc_count:,} documents")
     
@@ -245,7 +245,7 @@ Config:
         categories[cat].append(q)
     
     for cat, cat_queries in categories.items():
-        fts_time = bench_fts(syn, cat_queries, args.iterations) / len(cat_queries)
+        fts_time = bench_fts(synapse_conn, cat_queries, args.iterations) / len(cat_queries)
         vec_time = bench_vector(matrix, query_emb, args.iterations) / 1000
         print(f"  {cat.upper():15} | FTS: {fts_time*1000:5.1f}μs | Vec: {vec_time*1000:5.1f}μs")
     
@@ -262,7 +262,7 @@ Config:
     t0 = time.perf_counter()
     for q in batch_queries:
         try:
-            syn.execute("SELECT * FROM docs_fts WHERE docs_fts MATCH ? LIMIT 5", (q,)).fetchall()
+            synapse_conn.execute("SELECT * FROM docs_fts WHERE docs_fts MATCH ? LIMIT 5", (q,)).fetchall()
         except:
             pass
     fts_time = (time.perf_counter() - t0) * 1000
@@ -317,7 +317,7 @@ Config:
      - For ML optimization: Pre-compute embeddings, use NumPy
 """)
     
-    syn.close()
+    synapse_conn.close()
 
 if __name__ == "__main__":
     main()

@@ -50,7 +50,7 @@ JSON_SUFFIXES = {".json"}
 JSONL_SUFFIXES = {".jsonl", ".ndjson"}
 CSV_SUFFIXES = {".csv", ".tsv"}
 SQLITE_SUFFIXES = {".db", ".sqlite", ".sqlite3"}
-SYNAPSE_SUFFIXES = {".syn", ".synx", ".synapse", ".brainpack"}
+SYNAPSE_SUFFIXES = {".synx", ".synx", ".synapse", ".brainpack"}
 
 def _load_text(p: Path) -> list[str]:
     return [p.read_text(encoding="utf-8", errors="ignore")]
@@ -123,7 +123,7 @@ def _load_sqlite(p: Path) -> list[str]:
     return out
 
 def _load_synapse(p: Path) -> list[str]:
-    """`.synx / .brainpack / .syn / .synapse` — native Synapse formats.
+    """`.synx / .brainpack / .synx / .synapse` — native Synapse formats.
 
     Preferred path: `synapse.brainpack_unpack` (Rust backend) for `.brainpack`
     archives; then extract text via utf-8 scan on the resulting `.synx` body
@@ -175,7 +175,7 @@ def load_corpus(src: Path, max_docs: int | None = None) -> List[Tuple[str, str]]
     """Return list of (doc_id, text) from a file OR a dir of files.
 
     Supported extensions: .md/.txt/.rst/.markdown/.org (plain text),
-    .json/.jsonl/.ndjson, .csv/.tsv, .db/.sqlite, .synx/.brainpack/.syn/.synapse.
+    .json/.jsonl/.ndjson, .csv/.tsv, .db/.sqlite, .synx/.brainpack/.synx/.synapse.
 
     When `src` is a single file, that one file is loaded (possibly returning
     many docs).  When it's a dir, we walk recursively.

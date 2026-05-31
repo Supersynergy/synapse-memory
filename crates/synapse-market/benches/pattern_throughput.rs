@@ -1,6 +1,6 @@
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use synapse_market::pattern::{Pattern, Event};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use synapse_market::pattern::fsm::FsmEngine;
+use synapse_market::pattern::{Event, Pattern};
 use synapse_market::store::page::Bar;
 
 fn bench_pattern_throughput(c: &mut Criterion) {
@@ -25,7 +25,10 @@ fn bench_pattern_throughput(c: &mut Criterion) {
     group.bench_function("volume_spike_1M", |b| {
         b.iter(|| {
             let mut engine = FsmEngine::new();
-            engine.register(Pattern::VolumeSpike { multiplier: 2.0, window_bars: 20 });
+            engine.register(Pattern::VolumeSpike {
+                multiplier: 2.0,
+                window_bars: 20,
+            });
             let mut total = 0usize;
             for ev in &events {
                 total += engine.on_event("SPY", ev).len();
@@ -37,10 +40,18 @@ fn bench_pattern_throughput(c: &mut Criterion) {
     group.bench_function("cluster_1M", |b| {
         b.iter(|| {
             let mut engine = FsmEngine::new();
-            engine.register(Pattern::InsiderCluster { k: 3, window_days: 7 });
-            let buys: Vec<Event> = (0..N as i64).filter(|i| i % 50 == 0).map(|i| {
-                Event::InsiderBuy { value_usd: 100_000.0, ts: i * 60, ticker: "SPY".into() }
-            }).collect();
+            engine.register(Pattern::InsiderCluster {
+                k: 3,
+                window_days: 7,
+            });
+            let buys: Vec<Event> = (0..N as i64)
+                .filter(|i| i % 50 == 0)
+                .map(|i| Event::InsiderBuy {
+                    value_usd: 100_000.0,
+                    ts: i * 60,
+                    ticker: "SPY".into(),
+                })
+                .collect();
             let mut total = 0usize;
             for ev in &buys {
                 total += engine.on_event("SPY", ev).len();

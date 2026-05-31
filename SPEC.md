@@ -1,14 +1,43 @@
 # Synapse — Canonical Spec v1.0
 
-**Date**: 2026-05-03  
-**Branch**: `turbo-ndarray-fastpath`  
+**Date**: 2026-05-25  
+**Branch**: `main` / Context OS release slice  
 **Replaces**: `synapsestore/docs/legacy-specs/SPEC_V2_M4_MAX_2026-04-24.md` (kernel/phase tracker) and `synapsestore/docs/legacy-specs/SPEC_AGENTMD.md` (AgentMD ingestion spec, out-of-scope)
 
 ---
 
 ## Mission
 
-Fastest reliable embedded vector+FTS+KG database on M4 Max — single Rust binary, no external services.
+Local-first Context OS for AI agents: every prompt should start with the best
+available context, bounded to budget, cited, freshness-aware, and improved by
+feedback. The vector/FTS/graph/database work is substrate, not the default
+first-run product promise.
+
+## Current Release Scope
+
+The current clean-user release lives in `release/context-os/`.
+
+Verified release commands:
+
+```bash
+release/context-os/verify.sh
+SYNAPSE_VERIFY_INSTALL=1 SYNAPSE_VERIFY_BUILD_PROFILE=dev release/context-os/verify.sh
+SYNAPSE_PACKAGE_DRY_RUN=1 release/context-os/package.sh
+SYNAPSE_SERVICE_OS=Darwin SYNAPSE_SERVICE_DRY_RUN=1 release/context-os/service.sh install
+SYNAPSE_SERVICE_OS=Linux SYNAPSE_SERVICE_DRY_RUN=1 release/context-os/service.sh install
+```
+
+Release invariants:
+
+- No maintainer `brain.db`, embedding cache, Claude/Codex session logs, or
+  private memories are shipped.
+- Source package is buildable from an extracted tarball.
+- `synx prime`, `context`, `remember`, `feedback`, `fresh-context`, and
+  `doctor --fix` are the default user workflow.
+- Graph/OLAP/TSDB/SQL-wire/multimodal surfaces are not default release claims.
+
+The historical hard targets below remain engine targets unless explicitly
+covered by `release/context-os/VERIFICATION.md`.
 
 ---
 
@@ -38,7 +67,7 @@ All numbers verified from bench runs in this repo.
 | `synapse-engine` | ABI bridge + RRF fusion: wires FTS+vec results into ranked output |
 | `synapse-space` | Agent-memory layer: Space→Wing→Room→Drawer hierarchy, sweep/compact/evolve ops |
 | `synapsed` | Unix-socket RPC daemon; multiplexes core across callers without re-opening DB |
-| `synapse-cli` (`syn`) | CLI: `syn put`, `syn hybrid`, `syn find`, `syn stats`, `syn merge`, `syn sign`, `syn verify` |
+| `synapse-cli` (`synx`) | CLI: `synx put`, `synx hybrid`, `synx find`, `synx stats`, `synx merge`, `synx sign`, `synx verify` |
 | `synapse-mcp` | MCP server: `synapse_search`, `synapse_put`, `synapse_find`, `synapse_stats`, `synapse_merge`, `synapse_verify` |
 | `synapse-learn` | Bandit router (Thompson sampling), per-query calibration, EWMA feedback |
 | `synapse-rerank` | Cross-encoder rerank; `IdentityReranker` default, `OnnxCrossEncoder` with `--features onnx` |
@@ -70,7 +99,7 @@ All numbers verified from bench runs in this repo.
 |---------|-------|-------|
 | Memory layer | `crates/synapse-space` | Space::add, search, search_reranked, sweep, evolve |
 | Daemon | `crates/synapsed` | `/tmp/synapse.sock` by default |
-| CLI | `crates/synapse-cli` | `syn` binary |
+| CLI | `crates/synapse-cli` | `synx` binary |
 | MCP | `crates/synapse-mcp` | Port 3000 default |
 | Python wheel | `crates/synapse-py` | `maturin develop` |
 

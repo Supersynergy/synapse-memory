@@ -5,13 +5,18 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
 use synapse_market::Market;
 use synapse_market::ffi::smx_query_range;
+use synapse_pack::{Candidate, Kind, PackOptions, pack, render};
+
+type AgentScope = (String, Option<String>, String);
+type MarketSeries = Vec<(String, Vec<f64>)>;
 
 #[derive(Parser)]
 #[command(name = "synapse-mcp", about = "MCP server (stdio) for synapsed")]
@@ -26,7 +31,8 @@ struct Cli {
 #[derive(Debug, Deserialize)]
 struct JsonRpc {
     #[serde(default)]
-    jsonrpc: String,
+    #[serde(rename = "jsonrpc")]
+    _jsonrpc: String,
     id: Option<Value>,
     method: String,
     #[serde(default)]
@@ -97,9 +103,10 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
                 "text": {"type": "string"}, "title": {"type": "string"},
                 "tags": {"type": "array", "items": {"type": "string"}}
             }, "required": ["text"]}},
-            {"name": "memory_search", "description": "Semantic + keyword search over memories. Returns top-k results.", "inputSchema": {"type": "object", "properties": {
+            {"name": "memory_search", "description": "Hybrid semantic + keyword search over memories. Returns top-k results.", "inputSchema": {"type": "object", "properties": {
                 "query": {"type": "string"}, "k": {"type": "integer", "default": 10},
-                "mode": {"type": "string", "enum": ["Lex", "Vec", "Hybrid"], "default": "Hybrid"}
+                "mode": {"type": "string", "enum": ["Lex", "Vec", "Hybrid"], "default": "Hybrid"},
+                "embed_query": {"type": "boolean", "default": true}
             }, "required": ["query"]}},
             {"name": "memory_recent", "description": "Return the n most recently saved memories.", "inputSchema": {"type": "object", "properties": {
                 "n": {"type": "integer", "default": 20}
@@ -107,6 +114,34 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
             {"name": "memory_delete", "description": "Delete a memory by id.", "inputSchema": {"type": "object", "properties": {
                 "id": {"type": "integer"}
             }, "required": ["id"]}},
+            {"name": "agent_observe", "description": "Store a typed scoped agent observation with freshness metadata.", "inputSchema": {"type": "object", "properties": {
+                "agent_id": {"type": "string"}, "project": {"type": "string"},
+                "text": {"type": "string"}, "title": {"type": "string"},
+                "kind": {"type": "string", "default": "observation"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "source_uri": {"type": "string"}, "confidence": {"type": "number"},
+                "valid_from": {}, "valid_until": {}, "embed": {"type": "boolean", "default": true}
+            }, "required": ["agent_id", "text"]}},
+            {"name": "agent_search_index", "description": "Return compact scoped hits for first-pass agent recall.", "inputSchema": {"type": "object", "properties": {
+                "agent_id": {"type": "string"}, "project": {"type": "string"},
+                "query": {"type": "string"}, "limit": {"type": "integer", "default": 8},
+                "snippet_chars": {"type": "integer", "default": 240}
+            }, "required": ["agent_id", "query"]}},
+            {"name": "agent_get_observations", "description": "Hydrate full scoped agent observations by id.", "inputSchema": {"type": "object", "properties": {
+                "agent_id": {"type": "string"}, "project": {"type": "string"},
+                "ids": {"type": "array", "items": {"type": "integer"}},
+                "max_chars": {"type": "integer"}
+            }, "required": ["agent_id", "ids"]}},
+            {"name": "agent_context", "description": "Build a token-budgeted XML context pack for an agent query.", "inputSchema": {"type": "object", "properties": {
+                "agent_id": {"type": "string"}, "project": {"type": "string"},
+                "query": {"type": "string"}, "token_budget": {"type": "integer", "default": 800},
+                "index_k": {"type": "integer", "default": 8}, "full_k": {"type": "integer", "default": 3}
+            }, "required": ["agent_id", "query"]}},
+            {"name": "agent_feedback", "description": "Log accepted/rejected recall outcomes for learned reranking.", "inputSchema": {"type": "object", "properties": {
+                "agent_id": {"type": "string"}, "project": {"type": "string"},
+                "query": {"type": "string"}, "hit_ids": {"type": "array", "items": {"type": "integer"}},
+                "outcome": {"type": "string"}, "accepted": {"type": "boolean", "default": true}
+            }, "required": ["agent_id", "query", "outcome"]}},
             // ── Low-level tools ───────────────────────────────────────────────
             {"name": "put", "description": "Append a memory.", "inputSchema": {"type": "object", "properties": {
                 "text": {"type": "string"}, "title": {"type": "string"}, "uri": {"type": "string"}, "embed": {"type": "boolean"}
@@ -170,16 +205,34 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
 }
 
 async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
+    match name {
+        "agent_observe" => return agent_observe(sock, &args).await,
+        "agent_search_index" => return agent_search_index(sock, &args).await,
+        "agent_get_observations" => return agent_get_observations(sock, &args).await,
+        "agent_context" => return agent_context(sock, &args).await,
+        "agent_feedback" => return agent_feedback(sock, &args).await,
+        _ => {}
+    }
+
     let req = match name {
         // ── Coding-agent aliases ──────────────────────────────────────────────
         "memory_save" => {
             let tags = args
                 .get("tags")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(","))
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
                 .unwrap_or_default();
             let title = args.get("title").and_then(|v| v.as_str());
-            let uri_str = if tags.is_empty() { String::new() } else { format!("tags:{tags}") };
+            let uri_str = if tags.is_empty() {
+                String::new()
+            } else {
+                format!("tags:{tags}")
+            };
             json!({"op": "Put", "args": {
                 "title": title,
                 "uri": if uri_str.is_empty() { Value::Null } else { Value::String(uri_str) },
@@ -189,10 +242,10 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
             }})
         }
         "memory_search" => json!({"op": "Search", "args": {
-            "mode": args.get("mode").and_then(|v| v.as_str()).unwrap_or("Lex"),
+            "mode": args.get("mode").and_then(|v| v.as_str()).unwrap_or("Hybrid"),
             "q": args.get("query").and_then(|v| v.as_str()).unwrap_or_default(),
             "limit": args.get("k").and_then(|v| v.as_u64()).unwrap_or(10),
-            "embed_query": false,
+            "embed_query": args.get("embed_query").and_then(|v| v.as_bool()).unwrap_or(true),
         }}),
         "memory_recent" => json!({"op": "Timeline", "args": {
             "limit": args.get("n").and_then(|v| v.as_u64()).unwrap_or(20),
@@ -203,7 +256,7 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
                 .get("id")
                 .and_then(|v| v.as_i64())
                 .context("memory_delete requires id")?;
-            json!({"op": "Merge", "args": {"id": id, "state": []}})
+            json!({"op": "Delete", "args": {"id": id}})
         }
         // ── Low-level pass-throughs ───────────────────────────────────────────
         "put" => json!({"op": "Put", "args": {
@@ -260,9 +313,26 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
         }
         _ => anyhow::bail!("unknown tool: {name}"),
     };
+    daemon_call(sock, req).await
+}
+
+async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
     let mut stream = UnixStream::connect(sock)
         .await
         .context("connect synapsed")?;
+    if let Ok(token) = std::env::var("SYNAPSE_API_KEY")
+        && !token.is_empty()
+    {
+        let auth =
+            daemon_roundtrip(&mut stream, json!({"op": "Auth", "args": {"token": token}})).await?;
+        if let Some(err) = auth.get("Err").and_then(|v| v.as_str()) {
+            anyhow::bail!("{err}");
+        }
+    }
+    daemon_roundtrip(&mut stream, req).await
+}
+
+async fn daemon_roundtrip(stream: &mut UnixStream, req: Value) -> Result<Value> {
     let body = rmp_serde::to_vec_named(&req)?;
     use tokio::io::AsyncReadExt;
     stream.write_all(&(body.len() as u32).to_le_bytes()).await?;
@@ -277,15 +347,635 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
     Ok(v)
 }
 
+const AGENT_SCHEMA: &str = "synapse.agentdb.v1";
+
+fn agent_scope(args: &Value) -> Result<AgentScope> {
+    let agent_id = args
+        .get("agent_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .context("agent_id")?
+        .to_string();
+    let project = args
+        .get("project")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let scope = match &project {
+        Some(project) => format!(
+            "agent/{}/{}",
+            scope_component(project),
+            scope_component(&agent_id)
+        ),
+        None => format!("agent/{}", scope_component(&agent_id)),
+    };
+    Ok((agent_id, project, scope))
+}
+
+fn scope_component(value: &str) -> String {
+    value.replace('%', "%25").replace('/', "%2F")
+}
+
+fn estimate_tokens(text: &str) -> usize {
+    if text.is_empty() {
+        0
+    } else {
+        text.len().div_ceil(4).max(1)
+    }
+}
+
+fn compact_text(text: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() <= max_chars {
+        return collapsed;
+    }
+    let trimmed = collapsed
+        .chars()
+        .take(max_chars)
+        .collect::<String>()
+        .trim_end()
+        .to_string();
+    format!("{trimmed}...")
+}
+
+fn truncate_chars(text: &str, max_chars: usize) -> Option<String> {
+    if text.chars().count() <= max_chars {
+        return None;
+    }
+    let truncated = text.chars().take(max_chars).collect::<String>();
+    Some(format!("{}\n[truncated]", truncated.trim_end()))
+}
+
+fn query_terms(query: &str) -> Vec<String> {
+    let mut terms: Vec<String> = query
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|term| term.len() > 2 && !term.chars().all(|c| c.is_ascii_digit()))
+        .map(str::to_string)
+        .collect();
+    let mut expanded = terms.clone();
+    for term in terms.drain(..) {
+        for extra in agent_recall_expansions(&term) {
+            if !expanded.iter().any(|existing| existing == extra) {
+                expanded.push(extra.to_string());
+            }
+        }
+    }
+    expanded
+}
+
+fn agent_recall_expansions(term: &str) -> &'static [&'static str] {
+    match term {
+        "context" | "token" | "tokens" | "save" => &[
+            "compact",
+            "hydrate",
+            "index",
+            "observations",
+            "progressive",
+            "disclosure",
+        ],
+        "slippage" | "version" | "versions" => &[
+            "freshness",
+            "source",
+            "source_uri",
+            "package",
+            "versions",
+            "local",
+        ],
+        "feedback" | "rerank" => &[
+            "accepted",
+            "rejected",
+            "edits",
+            "tests",
+            "feedback",
+            "reranking",
+        ],
+        "fallback" | "embeddings" => &["lexical", "scoped", "embedding", "fallback", "degrade"],
+        "deployment" | "local" => &["single", "file", "unix", "socket", "deployment"],
+        "graph" | "temporal" => &["graph", "temporal", "enrichment", "behind", "hot", "path"],
+        _ => &[],
+    }
+}
+
+fn xml_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+fn parse_meta(value: &Value) -> Value {
+    match value {
+        Value::String(s) if !s.is_empty() => serde_json::from_str(s).unwrap_or(Value::Null),
+        Value::Object(_) => value.clone(),
+        _ => Value::Null,
+    }
+}
+
+fn freshness(meta: &Value) -> &'static str {
+    let valid_until = meta.get("valid_until").and_then(|v| v.as_f64());
+    if let Some(valid_until) = valid_until {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs_f64();
+        if valid_until < now {
+            return "stale";
+        }
+        return "current";
+    }
+    if meta.get("source_uri").is_some() {
+        "current"
+    } else {
+        "unknown"
+    }
+}
+
+async fn sql_rows(sock: &PathBuf, query: String, params: Vec<Value>) -> Result<Vec<Value>> {
+    let resp = daemon_call(
+        sock,
+        json!({"op": "Sql", "args": {"query": query, "params": params}}),
+    )
+    .await?;
+    let rows_payload = resp.get("Rows").context("SQL response missing Rows")?;
+    let cols = rows_payload
+        .get("cols")
+        .and_then(|v| v.as_array())
+        .context("SQL response missing cols")?;
+    let rows = rows_payload
+        .get("rows")
+        .and_then(|v| v.as_array())
+        .context("SQL response missing rows")?;
+    let col_names: Vec<String> = cols
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let arr = row.as_array().context("SQL row must be array")?;
+        let mut map = serde_json::Map::new();
+        for (idx, col) in col_names.iter().enumerate() {
+            let mut value = arr.get(idx).cloned().unwrap_or(Value::Null);
+            if col == "meta" {
+                value = parse_meta(&value);
+            }
+            map.insert(col.clone(), value);
+        }
+        out.push(Value::Object(map));
+    }
+    Ok(out)
+}
+
+fn doc_id(doc: &Value) -> i64 {
+    doc.get("id").and_then(|v| v.as_i64()).unwrap_or_default()
+}
+
+fn doc_text(doc: &Value) -> &str {
+    doc.get("text").and_then(|v| v.as_str()).unwrap_or_default()
+}
+
+fn rank_docs(query: &str, mut docs: Vec<Value>) -> Vec<Value> {
+    let q = query.to_ascii_lowercase();
+    let terms = query_terms(query);
+    docs.sort_by(|a, b| {
+        let score = |doc: &Value| {
+            let text = doc_text(doc).to_ascii_lowercase();
+            let exact = if text.contains(&q) { 1_i64 } else { 0 };
+            let overlap = terms
+                .iter()
+                .filter(|term| text.contains(term.as_str()))
+                .count() as i64;
+            exact * 1_000_000 + overlap * 10_000 + doc_id(doc)
+        };
+        score(b).cmp(&score(a))
+    });
+    docs
+}
+
+fn compact_hit(rank: usize, doc: &Value, snippet_chars: usize) -> Value {
+    let meta = doc.get("meta").cloned().unwrap_or(Value::Null);
+    let text = doc_text(doc);
+    json!({
+        "rank": rank,
+        "id": doc.get("id").cloned().unwrap_or(Value::Null),
+        "score": 0.0,
+        "title": doc.get("title").cloned().unwrap_or(Value::Null),
+        "uri": doc.get("uri").cloned().unwrap_or(Value::Null),
+        "kind": meta.get("kind").or_else(|| meta.get("type")).cloned().unwrap_or(json!("memory")),
+        "tags": meta.get("tags").cloned().unwrap_or(json!([])),
+        "freshness": freshness(&meta),
+        "confidence": meta.get("confidence").cloned().unwrap_or(Value::Null),
+        "token_estimate": estimate_tokens(text),
+        "snippet": compact_text(text, snippet_chars),
+        "meta": meta,
+    })
+}
+
+async fn agent_observe(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let (agent_id, project, scope) = agent_scope(args)?;
+    let text = args.get("text").and_then(|v| v.as_str()).context("text")?;
+    let kind = args
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("observation");
+    let mut meta = json!({
+        "schema": AGENT_SCHEMA,
+        "scope": scope,
+        "agent_id": agent_id,
+        "kind": kind,
+    });
+    if let Some(project) = project {
+        meta["project"] = json!(project);
+    }
+    for key in [
+        "tags",
+        "source_uri",
+        "confidence",
+        "valid_from",
+        "valid_until",
+    ] {
+        if let Some(value) = args.get(key) {
+            meta[key] = value.clone();
+        }
+    }
+    daemon_call(
+        sock,
+        json!({"op": "Put", "args": {
+            "title": args.get("title"),
+            "uri": args.get("source_uri"),
+            "text": text,
+            "meta": meta,
+            "embed": args.get("embed").and_then(|v| v.as_bool()).unwrap_or(true),
+        }}),
+    )
+    .await
+}
+
+async fn agent_search_index(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let (_, _, scope) = agent_scope(args)?;
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .context("query")?;
+    let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
+    let snippet_chars = args
+        .get("snippet_chars")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(240) as usize;
+    let fetch_k = (limit * 12).max(80);
+    let terms = query_terms(query);
+    let mut query_rows = Vec::new();
+    if !terms.is_empty() {
+        let mut filters = Vec::new();
+        let mut params = vec![json!(scope.clone())];
+        for term in terms.iter().take(16) {
+            filters.push("(lower(coalesce(title,'')) LIKE ? OR lower(coalesce(text,'')) LIKE ?)");
+            let needle = format!("%{}%", term.to_ascii_lowercase());
+            params.push(json!(needle));
+            params.push(json!(needle));
+        }
+        params.push(json!(fetch_k));
+        query_rows = sql_rows(
+            sock,
+            format!(
+                "SELECT id, uri, title, substr(text,1,4000) AS text, meta, ts FROM docs \
+                 WHERE meta IS NOT NULL AND json_valid(meta) AND json_extract(meta, '$.scope') = ? \
+                 AND ({}) ORDER BY id DESC LIMIT ?",
+                filters.join(" OR ")
+            ),
+            params,
+        )
+        .await?;
+    }
+    let recent_rows = sql_rows(
+        sock,
+        "SELECT id, uri, title, substr(text,1,4000) AS text, meta, ts FROM docs \
+         WHERE meta IS NOT NULL AND json_valid(meta) AND json_extract(meta, '$.scope') = ? \
+         ORDER BY id DESC LIMIT ?"
+            .to_string(),
+        vec![json!(scope), json!(fetch_k)],
+    )
+    .await?;
+    let mut seen = HashSet::new();
+    let mut rows = Vec::new();
+    for doc in query_rows.into_iter().chain(recent_rows) {
+        if seen.insert(doc_id(&doc)) {
+            rows.push(doc);
+        }
+    }
+    let ranked = rank_docs(query, rows);
+    let index: Vec<Value> = ranked
+        .iter()
+        .take(limit)
+        .enumerate()
+        .map(|(idx, doc)| compact_hit(idx + 1, doc, snippet_chars))
+        .collect();
+    Ok(json!({"schema": AGENT_SCHEMA, "scope": scope, "index": index}))
+}
+
+async fn agent_get_observations(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let (_, _, scope) = agent_scope(args)?;
+    let ids: Vec<i64> = args
+        .get("ids")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_i64()).collect())
+        .unwrap_or_default();
+    if ids.is_empty() {
+        return Ok(json!({"schema": AGENT_SCHEMA, "scope": scope, "observations": []}));
+    }
+    let placeholders = std::iter::repeat_n("?", ids.len())
+        .collect::<Vec<_>>()
+        .join(",");
+    let rows = sql_rows(
+        sock,
+        format!("SELECT id, uri, title, text, meta, ts FROM docs WHERE id IN ({placeholders})"),
+        ids.iter().map(|id| json!(id)).collect(),
+    )
+    .await?;
+    let max_chars = args
+        .get("max_chars")
+        .and_then(|v| v.as_u64())
+        .map(|n| n as usize);
+    let mut by_id = HashMap::new();
+    for mut doc in rows {
+        let meta = doc.get("meta").cloned().unwrap_or(Value::Null);
+        if meta.get("scope").and_then(|v| v.as_str()) != Some(scope.as_str()) {
+            continue;
+        }
+        if let Some(max_chars) = max_chars
+            && let Some(text) = doc.get("text").and_then(|v| v.as_str())
+            && let Some(truncated) = truncate_chars(text, max_chars)
+        {
+            doc["text"] = json!(truncated);
+            doc["truncated"] = json!(true);
+        }
+        doc["kind"] = meta
+            .get("kind")
+            .or_else(|| meta.get("type"))
+            .cloned()
+            .unwrap_or(json!("memory"));
+        doc["freshness"] = json!(freshness(&meta));
+        doc["token_estimate"] = json!(estimate_tokens(doc_text(&doc)));
+        by_id.insert(doc_id(&doc), doc);
+    }
+    let observations: Vec<Value> = ids.into_iter().filter_map(|id| by_id.remove(&id)).collect();
+    Ok(json!({"schema": AGENT_SCHEMA, "scope": scope, "observations": observations}))
+}
+
+async fn agent_context(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let (_, _, scope) = agent_scope(args)?;
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .context("query")?;
+    let token_budget = args
+        .get("token_budget")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(800) as usize;
+    let index_k = args.get("index_k").and_then(|v| v.as_u64()).unwrap_or(8) as usize;
+    let full_k = args.get("full_k").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
+    let index_resp = agent_search_index(
+        sock,
+        &json!({
+            "agent_id": args.get("agent_id").cloned().unwrap_or(Value::Null),
+            "project": args.get("project").cloned().unwrap_or(Value::Null),
+            "query": query,
+            "limit": index_k,
+            "snippet_chars": 220,
+        }),
+    )
+    .await?;
+    let raw_index = index_resp
+        .get("index")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut used_tokens = estimate_tokens(query) + 64;
+    let mut index = Vec::new();
+    for hit in raw_index {
+        let snippet = hit
+            .get("snippet")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        let hit_tokens = estimate_tokens(snippet) + 18;
+        if !index.is_empty() && used_tokens + hit_tokens > token_budget {
+            break;
+        }
+        if used_tokens + hit_tokens > token_budget {
+            continue;
+        }
+        used_tokens += hit_tokens;
+        index.push(hit);
+    }
+    let ids: Vec<Value> = index
+        .iter()
+        .filter_map(|hit| hit.get("id").and_then(|v| v.as_i64()).map(|id| json!(id)))
+        .collect();
+    let obs_resp = agent_get_observations(
+        sock,
+        &json!({
+            "agent_id": args.get("agent_id").cloned().unwrap_or(Value::Null),
+            "project": args.get("project").cloned().unwrap_or(Value::Null),
+            "ids": ids,
+        }),
+    )
+    .await?;
+    let all_docs = obs_resp
+        .get("observations")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut by_id = HashMap::new();
+    for doc in all_docs.iter() {
+        by_id.insert(doc_id(doc), doc.clone());
+    }
+    let mut selected = Vec::new();
+    for hit in index.iter().take(full_k) {
+        let Some(id) = hit.get("id").and_then(|v| v.as_i64()) else {
+            continue;
+        };
+        let Some(doc) = by_id.get(&id) else {
+            continue;
+        };
+        let doc_tokens = estimate_tokens(doc_text(doc));
+        if used_tokens + doc_tokens > token_budget {
+            let remaining = token_budget.saturating_sub(used_tokens);
+            if remaining <= 8 {
+                continue;
+            }
+            let max_chars = remaining.saturating_sub(4) * 4;
+            let Some(text) = truncate_chars(doc_text(doc), max_chars) else {
+                continue;
+            };
+            let mut clipped = doc.clone();
+            clipped["text"] = json!(text);
+            clipped["truncated"] = json!(true);
+            let clipped_tokens = estimate_tokens(doc_text(&clipped));
+            if used_tokens + clipped_tokens > token_budget {
+                continue;
+            }
+            selected.push(clipped);
+            used_tokens += clipped_tokens;
+            continue;
+        }
+        selected.push(doc.clone());
+        used_tokens += doc_tokens;
+    }
+    let naive_tokens: usize = all_docs
+        .iter()
+        .map(|doc| estimate_tokens(doc_text(doc)))
+        .sum();
+    let saved = naive_tokens.saturating_sub(used_tokens);
+    let savings_pct = if naive_tokens == 0 {
+        0.0
+    } else {
+        ((saved as f64 / naive_tokens as f64) * 1000.0).round() / 10.0
+    };
+    let context = render_agent_context(query, &scope, token_budget, used_tokens, &index, &selected);
+    Ok(json!({
+        "schema": AGENT_SCHEMA,
+        "scope": scope,
+        "query": query,
+        "token_budget": token_budget,
+        "estimated_tokens": used_tokens,
+        "naive_full_recall_tokens": naive_tokens,
+        "token_savings_pct": savings_pct,
+        "index": index,
+        "observations": selected,
+        "context": context,
+    }))
+}
+
+fn render_agent_context(
+    query: &str,
+    scope: &str,
+    token_budget: usize,
+    estimated_tokens: usize,
+    index: &[Value],
+    observations: &[Value],
+) -> String {
+    let mut lines = vec![
+        format!(
+            "<synapse_agent_context schema=\"{}\" scope=\"{}\" token_budget=\"{}\" estimated_tokens=\"{}\">",
+            xml_escape(AGENT_SCHEMA),
+            xml_escape(scope),
+            token_budget,
+            estimated_tokens
+        ),
+        format!("  <query>{}</query>", xml_escape(query)),
+        "  <search_index>".to_string(),
+    ];
+    for hit in index {
+        lines.push(format!(
+            "    <hit id=\"{}\" rank=\"{}\" kind=\"{}\" freshness=\"{}\" score=\"{}\"><title>{}</title><snippet>{}</snippet></hit>",
+            hit.get("id").and_then(|v| v.as_i64()).unwrap_or_default(),
+            hit.get("rank").and_then(|v| v.as_u64()).unwrap_or_default(),
+            xml_escape(hit.get("kind").and_then(|v| v.as_str()).unwrap_or("memory")),
+            xml_escape(hit.get("freshness").and_then(|v| v.as_str()).unwrap_or("unknown")),
+            hit.get("score").and_then(|v| v.as_f64()).unwrap_or_default(),
+            xml_escape(hit.get("title").and_then(|v| v.as_str()).unwrap_or_default()),
+            xml_escape(hit.get("snippet").and_then(|v| v.as_str()).unwrap_or_default())
+        ));
+    }
+    lines.push("  </search_index>".to_string());
+    lines.push("  <observations>".to_string());
+    for doc in observations {
+        lines.push(format!(
+            "    <observation id=\"{}\" kind=\"{}\" freshness=\"{}\">",
+            doc_id(doc),
+            xml_escape(doc.get("kind").and_then(|v| v.as_str()).unwrap_or("memory")),
+            xml_escape(
+                doc.get("freshness")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+            )
+        ));
+        lines.push(format!(
+            "      <title>{}</title>",
+            xml_escape(
+                doc.get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+            )
+        ));
+        lines.push(format!("      <text>{}</text>", xml_escape(doc_text(doc))));
+        lines.push("    </observation>".to_string());
+    }
+    lines.push("  </observations>".to_string());
+    lines.push("</synapse_agent_context>".to_string());
+    lines.join("\n")
+}
+
+async fn agent_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let (agent_id, project, scope) = agent_scope(args)?;
+    let query = args
+        .get("query")
+        .and_then(|v| v.as_str())
+        .context("query")?;
+    let outcome = args
+        .get("outcome")
+        .and_then(|v| v.as_str())
+        .context("outcome")?;
+    let hit_ids = args.get("hit_ids").cloned().unwrap_or(json!([]));
+    let accepted = args
+        .get("accepted")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let mut meta = json!({
+        "schema": AGENT_SCHEMA,
+        "scope": scope,
+        "agent_id": agent_id,
+        "kind": "feedback",
+    });
+    if let Some(project) = project {
+        meta["project"] = json!(project);
+    }
+    let payload = json!({
+        "query": query,
+        "hit_ids": hit_ids,
+        "outcome": outcome,
+        "accepted": accepted,
+        "ts": ts,
+    });
+    daemon_call(
+        sock,
+        json!({"op": "Put", "args": {
+            "title": format!("agent-feedback/{outcome}"),
+            "uri": Value::Null,
+            "text": payload.to_string(),
+            "meta": meta,
+            "embed": false,
+        }}),
+    )
+    .await
+}
+
 /// Handle smx_* market tools locally (no synapsed socket needed).
 fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Value> {
     let m = Market::open(market_db).context("open market db")?;
     match name {
         "smx_candles" => {
-            let ticker = args.get("ticker").and_then(|v| v.as_str()).context("ticker")?;
-            let start = args.get("start").and_then(|v| v.as_i64()).context("start")?;
+            let ticker = args
+                .get("ticker")
+                .and_then(|v| v.as_str())
+                .context("ticker")?;
+            let start = args
+                .get("start")
+                .and_then(|v| v.as_i64())
+                .context("start")?;
             let end = args.get("end").and_then(|v| v.as_i64()).context("end")?;
-            let limit = args.get("limit").and_then(|v| v.as_u64().map(|n| n as usize)).unwrap_or(500);
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64().map(|n| n as usize))
+                .unwrap_or(500);
             let rows = smx_query_range(&m, ticker, start, end).unwrap_or_default();
             let candles: Vec<Value> = rows
                 .into_iter()
@@ -297,9 +987,18 @@ fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Val
             Ok(json!({"ticker": ticker, "candles": candles}))
         }
         "smx_signal_similar" => {
-            let ticker = args.get("ticker").and_then(|v| v.as_str()).context("ticker")?;
-            let date_ts = args.get("date_ts").and_then(|v| v.as_i64()).context("date_ts")?;
-            let n = args.get("n").and_then(|v| v.as_u64().map(|n| n as usize)).unwrap_or(10);
+            let ticker = args
+                .get("ticker")
+                .and_then(|v| v.as_str())
+                .context("ticker")?;
+            let date_ts = args
+                .get("date_ts")
+                .and_then(|v| v.as_i64())
+                .context("date_ts")?;
+            let n = args
+                .get("n")
+                .and_then(|v| v.as_u64().map(|n| n as usize))
+                .unwrap_or(10);
             let similar = m.regime_search(ticker, date_ts, n)?;
             let out: Vec<Value> = similar
                 .into_iter()
@@ -308,7 +1007,10 @@ fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Val
             Ok(json!({"ticker": ticker, "similar": out}))
         }
         "smx_pattern_stats" => {
-            let pattern = args.get("pattern").and_then(|v| v.as_str()).context("pattern")?;
+            let pattern = args
+                .get("pattern")
+                .and_then(|v| v.as_str())
+                .context("pattern")?;
             // Query signal_patterns table if it exists, else return stub
             let count: i64 = m
                 .conn
@@ -335,7 +1037,7 @@ fn market_tool_call(market_db: &PathBuf, name: &str, args: &Value) -> Result<Val
                 .unwrap_or_default()
                 .as_secs() as i64;
             let since = now - days * 86_400;
-            let mut series: Vec<(String, Vec<f64>)> = Vec::new();
+            let mut series: MarketSeries = Vec::new();
             for t in tickers {
                 let sym = t.as_str().unwrap_or_default();
                 let closes: Vec<f64> = smx_query_range(&m, sym, since, now)
@@ -372,7 +1074,11 @@ fn pearson(a: &[f64], b: &[f64]) -> f64 {
     let (a, b) = (&a[..n], &b[..n]);
     let mean_a = a.iter().sum::<f64>() / n as f64;
     let mean_b = b.iter().sum::<f64>() / n as f64;
-    let num: f64 = a.iter().zip(b).map(|(x, y)| (x - mean_a) * (y - mean_b)).sum();
+    let num: f64 = a
+        .iter()
+        .zip(b)
+        .map(|(x, y)| (x - mean_a) * (y - mean_b))
+        .sum();
     let da: f64 = a.iter().map(|x| (x - mean_a).powi(2)).sum::<f64>().sqrt();
     let db: f64 = b.iter().map(|y| (y - mean_b).powi(2)).sum::<f64>().sqrt();
     if da * db == 0.0 { 0.0 } else { num / (da * db) }
@@ -385,4 +1091,28 @@ fn json_array_to_bytes(v: Option<&Value>) -> Result<Vec<u8>> {
     arr.iter()
         .map(|b| b.as_u64().map(|n| n as u8).context("byte value"))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_scope_escapes_separator_chars() {
+        let (_, _, a) = agent_scope(&json!({"agent_id": "a/b", "project": "p"})).unwrap();
+        let (_, _, b) = agent_scope(&json!({"agent_id": "b", "project": "p/a"})).unwrap();
+
+        assert_eq!(a, "agent/p/a%2Fb");
+        assert_eq!(b, "agent/p%2Fa/b");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn compact_and_truncate_are_unicode_safe() {
+        assert_eq!(compact_text("äöüß alpha", 3), "äöü...");
+        assert_eq!(
+            truncate_chars("äöüß alpha", 4).unwrap(),
+            "äöüß\n[truncated]"
+        );
+    }
 }

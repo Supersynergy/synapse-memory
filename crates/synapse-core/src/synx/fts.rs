@@ -3,23 +3,25 @@
 //! Strategy: build an in-memory Tantivy index, snapshot its segment files into
 //! a zstd-compressed `FtsSegment` chunk, and mount it read-only on open.
 //!
-//! This file compiles behind the `fts-tantivy` feature. When the feature is off
+//! This file compiles behind the `synx-tantivy` feature. When the feature is off
 //! the public API degrades to a no-op wrapper so the rest of the crate still
 //! builds.
 
-#[cfg(feature = "fts-tantivy")]
+#![allow(clippy::type_complexity)]
+
+#[cfg(feature = "synx-tantivy")]
 pub use imp::*;
-#[cfg(not(feature = "fts-tantivy"))]
+#[cfg(not(feature = "synx-tantivy"))]
 pub use stub::*;
 
-#[cfg(feature = "fts-tantivy")]
+#[cfg(feature = "synx-tantivy")]
 mod imp {
     use crate::error::{Error, Result};
     use tantivy::collector::TopDocs;
     use tantivy::query::QueryParser;
     use tantivy::schema::Value as SchemaValue;
-    use tantivy::schema::{Schema, STORED, TEXT};
-    use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy};
+    use tantivy::schema::{STORED, Schema, TEXT};
+    use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, doc};
 
     pub struct FtsIndex {
         index: Index,
@@ -109,7 +111,7 @@ mod imp {
     }
 }
 
-#[cfg(not(feature = "fts-tantivy"))]
+#[cfg(not(feature = "synx-tantivy"))]
 mod stub {
     use crate::error::Result;
     pub struct FtsIndex;
@@ -126,7 +128,7 @@ mod stub {
     }
 }
 
-#[cfg(all(test, feature = "fts-tantivy"))]
+#[cfg(all(test, feature = "synx-tantivy"))]
 mod tests {
     use super::imp::*;
 

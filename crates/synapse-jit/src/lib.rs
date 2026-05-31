@@ -25,7 +25,6 @@ pub use jit::{GroupByJitEngine, HashJoinJitEngine, JitEngine};
 
 mod tests;
 
-
 // ── Value type shared by IR + runtime ──────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]

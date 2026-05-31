@@ -21,7 +21,16 @@ pub enum Engine {
 pub fn is_olap(sql: &str) -> bool {
     let up = sql.to_uppercase();
     // aggregate functions
-    let agg_fns = ["COUNT(", "SUM(", "AVG(", "MIN(", "MAX(", "STDDEV(", "VARIANCE(", "PERCENTILE_"];
+    let agg_fns = [
+        "COUNT(",
+        "SUM(",
+        "AVG(",
+        "MIN(",
+        "MAX(",
+        "STDDEV(",
+        "VARIANCE(",
+        "PERCENTILE_",
+    ];
     if agg_fns.iter().any(|f| up.contains(f)) {
         return true;
     }
@@ -36,5 +45,9 @@ pub fn is_olap(sql: &str) -> bool {
 }
 
 pub fn auto_route(sql: &str) -> Engine {
-    if is_olap(sql) { Engine::Olap } else { Engine::Oltp }
+    if is_olap(sql) {
+        Engine::Olap
+    } else {
+        Engine::Oltp
+    }
 }

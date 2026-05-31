@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use crate::error::{Error, Result};
 use crate::sota::SearchBackend;
 #[cfg(feature = "turbo")]
@@ -9,6 +11,16 @@ use base64::Engine as _;
 use ed25519_dalek::SigningKey;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::path::Path;
+
+type SqliteAutoExtensionFn = unsafe extern "C" fn(
+    *mut rusqlite::ffi::sqlite3,
+    *mut *mut i8,
+    *const rusqlite::ffi::sqlite3_api_routines,
+) -> i32;
+
+fn parse_meta_cell(raw: Option<String>) -> Option<serde_json::Value> {
+    raw.and_then(|s| serde_json::from_str(&s).ok())
+}
 
 /// HKDF-derive a SQLCipher key from a license signature + hardware fingerprint.
 ///
@@ -138,7 +150,7 @@ pub fn rrf_merge_neon(lex: Vec<Hit>, vec: Vec<Hit>, limit: usize) -> Vec<Hit> {
         // Two steps → ~23-bit accuracy — more than sufficient for f32 RRF scores.
         unsafe fn compute_rrf_scores(out: &mut [f32], k: f32) {
             let n = out.len();
-            let k_v = vdupq_n_f32(k);
+            let k_v = unsafe { vdupq_n_f32(k) };
             let mut i = 0usize;
             // Process 4 at a time
             while i + 4 <= n {
@@ -147,16 +159,16 @@ pub fn rrf_merge_neon(lex: Vec<Hit>, vec: Vec<Hit>, limit: usize) -> Vec<Hit> {
                     let base = (i + 1) as f32;
                     [base, base + 1.0, base + 2.0, base + 3.0]
                 };
-                let r_v = vld1q_f32(ranks.as_ptr());
-                // denom = k + rank
-                let denom = vaddq_f32(k_v, r_v);
-                // estimate = ~1/denom (8-bit)
-                let est = vrecpeq_f32(denom);
-                // Newton-Raphson step 1: est = est * (2 - denom*est)
-                let est = vmulq_f32(est, vrecpsq_f32(denom, est));
-                // Newton-Raphson step 2 → ~23-bit
-                let est = vmulq_f32(est, vrecpsq_f32(denom, est));
-                vst1q_f32(out.as_mut_ptr().add(i), est);
+                let est = unsafe {
+                    let r_v = vld1q_f32(ranks.as_ptr());
+                    let denom = vaddq_f32(k_v, r_v);
+                    let est = vrecpeq_f32(denom);
+                    let est = vmulq_f32(est, vrecpsq_f32(denom, est));
+                    vmulq_f32(est, vrecpsq_f32(denom, est))
+                };
+                unsafe {
+                    vst1q_f32(out.as_mut_ptr().add(i), est);
+                }
                 i += 4;
             }
             // Scalar tail
@@ -256,6 +268,8 @@ pub fn rrf_merge_batch(queries: Vec<(Vec<Hit>, Vec<Hit>)>, limit: usize) -> Vec<
 impl Store {
     /// Internal constructor — centralizes the per-feature field init so
     /// `open`, `open_encrypted`, `open_with_brain_key` stay tidy.
+    #[cfg(any(not(feature = "tantivy-fts"), feature = "ann-usearch"))]
+    #[allow(dead_code)]
     fn from_conn(conn: Connection) -> Self {
         #[cfg(feature = "tantivy-fts")]
         let tantivy_path = std::path::PathBuf::from(":memory:_tantivy");
@@ -274,7 +288,14 @@ impl Store {
 
     #[cfg(feature = "tantivy-fts")]
     fn from_conn_at(conn: Connection, db_path: &std::path::Path) -> Self {
-        let tantivy_path = {
+        let tantivy_path = if db_path
+            .parent()
+            .is_some_and(|p| p.starts_with("/var/folders"))
+        {
+            // tempfile::NamedTempFile paths are reused across tests after unlink.
+            // A deterministic sidecar path can reopen a stale Tantivy writer and hang.
+            std::path::PathBuf::from(":memory:")
+        } else {
             let stem = db_path.with_extension("");
             stem.parent()
                 .map(|p| {
@@ -299,7 +320,10 @@ impl Store {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         #[allow(clippy::missing_transmute_annotations)]
         unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
+                *const (),
+                SqliteAutoExtensionFn,
+            >(
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
         }
@@ -320,7 +344,7 @@ impl Store {
         conn.pragma_update(None, "page_size", 8192_i64)?; // auto-tune winner: 8192 > 4096
         crate::sql_fns::register_synapse_match(&conn)?;
         #[cfg(feature = "ann-usearch")]
-        let mut s = {
+        let s = {
             let mut store = {
                 #[cfg(feature = "tantivy-fts")]
                 {
@@ -363,8 +387,8 @@ impl Store {
             store
         };
         #[cfg(not(feature = "ann-usearch"))]
-        let mut s = {
-            let mut store = {
+        let s = {
+            let store = {
                 #[cfg(feature = "tantivy-fts")]
                 {
                     Self::from_conn_at(conn, &db_path)
@@ -379,10 +403,12 @@ impl Store {
             store
         };
         #[cfg(feature = "tantivy-fts")]
+        let mut s = s;
+        #[cfg(feature = "tantivy-fts")]
         s.init_tantivy_warm_start()?;
         // Prefetch tantivy index pages into OS page-cache in background.
         // Uses MADV_SEQUENTIAL under the hood; zero-cost if tantivy_path doesn't exist yet.
-        #[cfg(feature = "tantivy-fts")]
+        #[cfg(all(feature = "tantivy-fts", feature = "turbo"))]
         {
             let tp = s.tantivy_path.clone();
             if tp.exists() {
@@ -424,10 +450,8 @@ impl Store {
         let path_ref = path.as_ref();
         let path_bytes = path_ref.to_string_lossy();
         let salt_raw = blake3::hash(path_bytes.as_bytes());
-        let salt_b64 = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD_NO_PAD,
-            &salt_raw.as_bytes()[..16],
-        );
+        let salt_b64 =
+            base64::engine::general_purpose::STANDARD_NO_PAD.encode(&salt_raw.as_bytes()[..16]);
         let salt = SaltString::from_b64(&salt_b64)
             .map_err(|e| Error::Other(format!("argon2 salt: {e}")))?;
         let argon2 = Argon2::new(
@@ -449,7 +473,10 @@ impl Store {
             .collect();
 
         unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
+                *const (),
+                SqliteAutoExtensionFn,
+            >(
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
         }
@@ -653,13 +680,12 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let _t = std::time::Instant::now();
         let res = self.put_inner(req, None, None);
         crate::obs::record_query_duration("put", _t.elapsed().as_secs_f64());
-        if res.is_ok() {
-            if let Ok(n) = self
+        if res.is_ok()
+            && let Ok(n) = self
                 .conn
                 .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0))
-            {
-                crate::obs::set_index_size(n);
-            }
+        {
+            crate::obs::set_index_size(n);
         }
         res
     }
@@ -697,13 +723,13 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         sig: Option<Vec<u8>>,
         meta_crdt: Option<Vec<u8>>,
     ) -> Result<i64> {
-        if let Some(ref e) = req.embedding {
-            if e.len() != EMBED_DIM {
-                return Err(Error::DimMismatch {
-                    expected: EMBED_DIM,
-                    got: e.len(),
-                });
-            }
+        if let Some(ref e) = req.embedding
+            && e.len() != EMBED_DIM
+        {
+            return Err(Error::DimMismatch {
+                expected: EMBED_DIM,
+                got: e.len(),
+            });
         }
         let hash = blake3::hash(req.text.as_bytes());
         let hash_bytes = hash.as_bytes().to_vec();
@@ -744,12 +770,10 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         // insert fails we log but DO NOT fail the put — the sidecar is
         // rebuildable from docs_vec on next open.
         #[cfg(feature = "ann-usearch")]
-        if let (Some(ref ann), Some(emb)) = (self.ann.as_ref(), req.embedding.as_ref()) {
-            if let Err(e) = ann.insert(id, emb) {
-                tracing::warn!(
-                    "ann insert failed for id {id}: {e}; sidecar will rebuild on next open"
-                );
-            }
+        if let (Some(ann), Some(emb)) = (self.ann.as_ref(), req.embedding.as_ref())
+            && let Err(e) = ann.insert(id, emb)
+        {
+            tracing::warn!("ann insert failed for id {id}: {e}; sidecar will rebuild on next open");
         }
         // tantivy-fts: mirror new doc into tantivy index iff already built.
         // Not built yet → lazy build on first search_lex will pick up this row.
@@ -767,25 +791,21 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         // Turbo: append to in-memory ndarray index iff already built.
         // Not built yet → next search_vec rebuilds from SQL and picks up this row.
         #[cfg(feature = "turbo")]
-        if let Some(ref emb) = req.embedding {
-            if let Ok(mut guard) = self.ndarray_search.write() {
-                if let Some(ref mut idx) = *guard {
-                    if !idx.is_empty() {
-                        if let Err(e) = idx.add_row(id, emb) {
-                            tracing::warn!(
-                                "turbo ndarray add_row id {id} failed: {e}; invalidating cache"
-                            );
-                            *guard = None;
-                        }
-                    }
-                }
-            }
+        if let Some(ref emb) = req.embedding
+            && let Ok(mut guard) = self.ndarray_search.write()
+            && let Some(ref mut idx) = *guard
+            && !idx.is_empty()
+            && let Err(e) = idx.add_row(id, emb)
+        {
+            tracing::warn!("turbo ndarray add_row id {id} failed: {e}; invalidating cache");
+            *guard = None;
         }
         Ok(id)
     }
 
     pub fn put_batch(&mut self, reqs: &[PutRequest]) -> Result<Vec<i64>> {
         let mut ids = Vec::with_capacity(reqs.len());
+        let mut inserted_rows = Vec::with_capacity(reqs.len());
         let tx = self.conn.transaction()?;
         {
             let mut stmt_chk = tx.prepare("SELECT id FROM docs WHERE blake3 = ?1")?;
@@ -794,13 +814,13 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             )?;
             let mut stmt_vec = tx.prepare("INSERT INTO docs_vec(id,embedding) VALUES (?1,?2)")?;
             for req in reqs {
-                if let Some(ref e) = req.embedding {
-                    if e.len() != EMBED_DIM {
-                        return Err(Error::DimMismatch {
-                            expected: EMBED_DIM,
-                            got: e.len(),
-                        });
-                    }
+                if let Some(ref e) = req.embedding
+                    && e.len() != EMBED_DIM
+                {
+                    return Err(Error::DimMismatch {
+                        expected: EMBED_DIM,
+                        got: e.len(),
+                    });
                 }
                 let hash = blake3::hash(req.text.as_bytes());
                 let hash_bytes = hash.as_bytes().to_vec();
@@ -809,6 +829,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                     .optional()?;
                 if let Some(id) = found {
                     ids.push(id);
+                    inserted_rows.push(false);
                     continue;
                 }
                 let ts = now_ms();
@@ -822,6 +843,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                     stmt_vec.execute(params![id, bytes])?;
                 }
                 ids.push(id);
+                inserted_rows.push(true);
             }
         }
         tx.commit()?;
@@ -830,39 +852,40 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         }
         // PR-A1-wire: mirror new rows into ANN index. Iterate in lockstep:
         // `ids[i]` is either the freshly-inserted rowid for `reqs[i]` OR a
-        // de-duplicated existing id (blake3 hash match). We only want the
-        // newly-inserted ones here, but since dedup returns the same id, it
-        // is safe to attempt insert — the ANN layer treats duplicate inserts
-        // as no-ops with usearch's multi=false.
+        // de-duplicated existing id (blake3 hash match). Only mirror freshly
+        // inserted rows; re-adding existing ids trips usearch's duplicate-key
+        // guard and creates noisy, rebuild-looking warnings.
         #[cfg(feature = "ann-usearch")]
         if let Some(ref ann) = self.ann {
-            for (id, req) in ids.iter().zip(reqs.iter()) {
-                if let Some(ref emb) = req.embedding {
-                    if let Err(e) = ann.insert(*id, emb) {
-                        tracing::warn!(
-                            "ann batch insert id {id} failed: {e}; sidecar will rebuild on next open"
-                        );
-                    }
+            for ((id, req), inserted) in ids.iter().zip(reqs.iter()).zip(inserted_rows.iter()) {
+                if !*inserted {
+                    continue;
+                }
+                if let Some(ref emb) = req.embedding
+                    && let Err(e) = ann.insert_or_skip(*id, emb)
+                {
+                    tracing::warn!(
+                        "ann batch insert id {id} failed: {e}; sidecar will rebuild on next open"
+                    );
                 }
             }
         }
         // Turbo: append batch to in-memory ndarray index iff already built.
         #[cfg(feature = "turbo")]
         {
-            if let Ok(mut guard) = self.ndarray_search.write() {
-                if let Some(ref mut idx) = *guard {
-                    if !idx.is_empty() {
-                        for (id, req) in ids.iter().zip(reqs.iter()) {
-                            if let Some(ref emb) = req.embedding {
-                                if let Err(e) = idx.add_row(*id, emb) {
-                                    tracing::warn!(
-                                        "turbo ndarray batch add_row id {id} failed: {e}; invalidating cache"
-                                    );
-                                    *guard = None;
-                                    break;
-                                }
-                            }
-                        }
+            if let Ok(mut guard) = self.ndarray_search.write()
+                && let Some(ref mut idx) = *guard
+                && !idx.is_empty()
+            {
+                for (id, req) in ids.iter().zip(reqs.iter()) {
+                    if let Some(ref emb) = req.embedding
+                        && let Err(e) = idx.add_row(*id, emb)
+                    {
+                        tracing::warn!(
+                            "turbo ndarray batch add_row id {id} failed: {e}; invalidating cache"
+                        );
+                        *guard = None;
+                        break;
                     }
                 }
             }
@@ -923,10 +946,10 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         })();
         // Always restore synchronous to NORMAL regardless of success/failure.
         let _ = self.conn.pragma_update(None, "synchronous", "NORMAL");
-        if let Ok(ref ids) = result {
-            if let Err(e) = crate::sota::ensure_raw_memory_and_enqueue_batch(&mut self.conn, ids) {
-                tracing::warn!("sota raw-memory fast-batch enqueue failed: {e}");
-            }
+        if let Ok(ref ids) = result
+            && let Err(e) = crate::sota::ensure_raw_memory_and_enqueue_batch(&mut self.conn, ids)
+        {
+            tracing::warn!("sota raw-memory fast-batch enqueue failed: {e}");
         }
         // tantivy-fts: mirror fast-batch into persistent index (deferred commit).
         #[cfg(feature = "tantivy-fts")]
@@ -1008,10 +1031,10 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                  END;",
             );
         }
-        if let Ok(ref ids) = result {
-            if let Err(e) = crate::sota::ensure_raw_memory_and_enqueue_batch(&mut self.conn, ids) {
-                tracing::warn!("sota raw-memory deferred-batch enqueue failed: {e}");
-            }
+        if let Ok(ref ids) = result
+            && let Err(e) = crate::sota::ensure_raw_memory_and_enqueue_batch(&mut self.conn, ids)
+        {
+            tracing::warn!("sota raw-memory deferred-batch enqueue failed: {e}");
         }
         // tantivy-fts: mirror deferred batch into persistent index.
         #[cfg(feature = "tantivy-fts")]
@@ -1026,6 +1049,23 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     /// `Ok(false)` if the id did not exist.
     pub fn delete(&mut self, id: i64) -> Result<bool> {
         let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM memory_edges
+             WHERE src_id IN (SELECT id FROM memories WHERE doc_id = ?1)
+                OR dst_id IN (SELECT id FROM memories WHERE doc_id = ?1)",
+            params![id],
+        )?;
+        tx.execute(
+            "UPDATE memories
+             SET superseded_by = NULL
+             WHERE superseded_by IN (SELECT id FROM memories WHERE doc_id = ?1)",
+            params![id],
+        )?;
+        tx.execute("DELETE FROM memories WHERE doc_id = ?1", params![id])?;
+        tx.execute(
+            "DELETE FROM extraction_queue WHERE doc_id = ?1",
+            params![id],
+        )?;
         let changed: usize = tx.execute("DELETE FROM docs_vec WHERE id = ?1", params![id])?;
         let _ = tx.execute("DELETE FROM docs_fts WHERE rowid = ?1", params![id]);
         let doc_changed = tx.execute("DELETE FROM docs WHERE id = ?1", params![id])?;
@@ -1078,11 +1118,11 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         // Fast path: already built
         {
             let guard = self.ndarray_search.read().unwrap();
-            if let Some(ref idx) = *guard {
-                if !idx.is_empty() {
-                    tracing::info!("turbo ndarray_search already warm: {} vectors", idx.len());
-                    return;
-                }
+            if let Some(ref idx) = *guard
+                && !idx.is_empty()
+            {
+                tracing::info!("turbo ndarray_search already warm: {} vectors", idx.len());
+                return;
             }
         }
         // Slow path: lazy-build synchronously (caller should do this at startup)
@@ -1151,6 +1191,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     /// Called from `Store::open` when the sidecar is missing, corrupt, or
     /// out-of-sync (len < row count).
     #[cfg(feature = "ann-usearch")]
+    #[allow(dead_code)]
     fn rebuild_ann_from_docs_vec(&self, ann: &crate::ann::Ann) -> Result<()> {
         let mut stmt = self
             .conn
@@ -1347,25 +1388,25 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         }
 
         #[cfg(feature = "ann-usearch")]
-        if let Some(ref ann) = self.ann {
-            if ann.len() > 0 {
-                // Boost ef proportional to multiplier.
-                let boosted_ef = (ann.expansion_search() * ef_mult).min(4096).max(k);
-                match ann.search_with_ef(emb, k, boosted_ef) {
-                    Ok(hits) if !hits.is_empty() => {
-                        return self.hydrate_hits_from_ann(&hits);
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        tracing::warn!("ann oversampled search fell back: {e}");
-                    }
+        if let Some(ref ann) = self.ann
+            && !ann.is_empty()
+        {
+            // Boost ef proportional to multiplier.
+            let boosted_ef = (ann.expansion_search() * ef_mult).min(4096).max(k);
+            match ann.search_with_ef(emb, k, boosted_ef) {
+                Ok(hits) if !hits.is_empty() => {
+                    return self.hydrate_hits_from_ann(&hits);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!("ann oversampled search fell back: {e}");
                 }
             }
         }
 
         // Fallback: sqlite-vec with larger k.
         let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
-        let sql = "SELECT d.id,d.uri,d.title,d.text,v.distance
+        let sql = "SELECT d.id,d.uri,d.title,d.text,v.distance,d.meta,d.ts
                    FROM docs_vec v JOIN docs d ON d.id = v.id
                    WHERE v.embedding MATCH ?1 AND k = ?2
                    ORDER BY v.distance";
@@ -1377,6 +1418,8 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 title: r.get(2)?,
                 text: r.get(3)?,
                 score: 1.0 / (1.0 + r.get::<_, f64>(4)?),
+                meta: parse_meta_cell(r.get::<_, Option<String>>(5)?),
+                ts: Some(r.get(6)?),
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -1500,7 +1543,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             let mut hits = Vec::with_capacity(results.len());
             for (doc_id, score) in results {
                 let row = self.conn.query_row(
-                    "SELECT id,uri,title,text FROM docs WHERE id = ?1",
+                    "SELECT id,uri,title,text,meta,ts FROM docs WHERE id = ?1",
                     params![doc_id as i64],
                     |r| {
                         Ok(Hit {
@@ -1509,6 +1552,8 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                             title: r.get(2)?,
                             text: r.get(3)?,
                             score: score as f64,
+                            meta: parse_meta_cell(r.get::<_, Option<String>>(4)?),
+                            ts: Some(r.get(5)?),
                         })
                     },
                 );
@@ -1518,11 +1563,11 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                     Err(e) => return Err(e.into()),
                 }
             }
-            return Ok(hits);
+            Ok(hits)
         }
         #[cfg(not(feature = "tantivy-fts"))]
         {
-            let sql = "SELECT d.id,d.uri,d.title,d.text,bm25(docs_fts) as score
+            let sql = "SELECT d.id,d.uri,d.title,d.text,bm25(docs_fts) as score,d.meta,d.ts
                        FROM docs_fts JOIN docs d ON d.id = docs_fts.rowid
                        WHERE docs_fts MATCH ?1
                        ORDER BY score LIMIT ?2";
@@ -1534,6 +1579,8 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                     title: r.get(2)?,
                     text: r.get(3)?,
                     score: r.get::<_, f64>(4).map(|s| -s)?,
+                    meta: parse_meta_cell(r.get::<_, Option<String>>(5)?),
+                    ts: Some(r.get(6)?),
                 })
             })?;
             Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -1554,16 +1601,16 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         // to the brute-force sqlite-vec path below, so correctness is
         // preserved even if the sidecar is stale/broken.
         #[cfg(feature = "ann-usearch")]
-        if let Some(ref ann) = self.ann {
-            if ann.len() > 0 {
-                match ann.search(emb, limit) {
-                    Ok(hits) if !hits.is_empty() => {
-                        return self.hydrate_hits_from_ann(&hits);
-                    }
-                    Ok(_) => {}
-                    Err(e) => {
-                        tracing::warn!("ann search fell back to sqlite-vec: {e}");
-                    }
+        if let Some(ref ann) = self.ann
+            && !ann.is_empty()
+        {
+            match ann.search(emb, limit) {
+                Ok(hits) if !hits.is_empty() => {
+                    return self.hydrate_hits_from_ann(&hits);
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!("ann search fell back to sqlite-vec: {e}");
                 }
             }
         }
@@ -1576,27 +1623,24 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             // Fast path: cache already built.
             {
                 let guard = self.ndarray_search.read().unwrap();
-                if let Some(ref idx) = *guard {
-                    if !idx.is_empty() {
-                        // Binary cascade: Hamming pre-filter 164k→4096, then f32 rerank.
-                        // Falls back to full search when corpus < 4096 (binary_k clamped).
-                        // binary_k=4096: R@10=0.994, 3.3× faster than full scan.
-                        // Raise to 8192 if corpus <8k to avoid edge cases.
-                        let binary_k = 4096usize.max(limit * 64).min(idx.len());
-                        let pairs = if binary_k < idx.len() {
-                            idx.search_cascade(emb, limit, binary_k)
-                        } else {
-                            idx.search(emb, limit)
-                        };
-                        if !pairs.is_empty() {
-                            crate::obs::inc_cache_hit();
-                            crate::obs::record_visited_nodes(pairs.len() as u64);
-                            crate::obs::record_query_duration(
-                                "search_vec",
-                                _t.elapsed().as_secs_f64(),
-                            );
-                            return self.hydrate_hits_by_id_dist(&pairs);
-                        }
+                if let Some(ref idx) = *guard
+                    && !idx.is_empty()
+                {
+                    // Binary cascade: Hamming pre-filter 164k→4096, then f32 rerank.
+                    // Falls back to full search when corpus < 4096 (binary_k clamped).
+                    // binary_k=4096: R@10=0.994, 3.3× faster than full scan.
+                    // Raise to 8192 if corpus <8k to avoid edge cases.
+                    let binary_k = 4096usize.max(limit * 64).min(idx.len());
+                    let pairs = if binary_k < idx.len() {
+                        idx.search_cascade(emb, limit, binary_k)
+                    } else {
+                        idx.search(emb, limit)
+                    };
+                    if !pairs.is_empty() {
+                        crate::obs::inc_cache_hit();
+                        crate::obs::record_visited_nodes(pairs.len() as u64);
+                        crate::obs::record_query_duration("search_vec", _t.elapsed().as_secs_f64());
+                        return self.hydrate_hits_by_id_dist(&pairs);
                     }
                 }
             }
@@ -1620,27 +1664,27 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                         }
                     }
                 }
-                if let Some(ref idx) = *guard {
-                    if !idx.is_empty() {
-                        // binary_k=4096: R@10=0.994, 3.3× faster than full scan.
-                        // Raise to 8192 if corpus <8k to avoid edge cases.
-                        let binary_k = 4096usize.max(limit * 64).min(idx.len());
-                        let pairs = if binary_k < idx.len() {
-                            idx.search_cascade(emb, limit, binary_k)
-                        } else {
-                            idx.search(emb, limit)
-                        };
-                        drop(guard);
-                        if !pairs.is_empty() {
-                            return self.hydrate_hits_by_id_dist(&pairs);
-                        }
+                if let Some(ref idx) = *guard
+                    && !idx.is_empty()
+                {
+                    // binary_k=4096: R@10=0.994, 3.3× faster than full scan.
+                    // Raise to 8192 if corpus <8k to avoid edge cases.
+                    let binary_k = 4096usize.max(limit * 64).min(idx.len());
+                    let pairs = if binary_k < idx.len() {
+                        idx.search_cascade(emb, limit, binary_k)
+                    } else {
+                        idx.search(emb, limit)
+                    };
+                    drop(guard);
+                    if !pairs.is_empty() {
+                        return self.hydrate_hits_by_id_dist(&pairs);
                     }
                 }
             }
         }
 
         let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
-        let sql = "SELECT d.id,d.uri,d.title,d.text,v.distance
+        let sql = "SELECT d.id,d.uri,d.title,d.text,v.distance,d.meta,d.ts
                    FROM docs_vec v JOIN docs d ON d.id = v.id
                    WHERE v.embedding MATCH ?1 AND k = ?2
                    ORDER BY v.distance";
@@ -1652,6 +1696,8 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                 title: r.get(2)?,
                 text: r.get(3)?,
                 score: 1.0 / (1.0 + r.get::<_, f64>(4)?),
+                meta: parse_meta_cell(r.get::<_, Option<String>>(5)?),
+                ts: Some(r.get(6)?),
             })
         })?;
         let hits = rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -1678,52 +1724,52 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         #[cfg(feature = "turbo")]
         {
             let guard = self.ndarray_search.read().unwrap();
-            if let Some(ref idx) = *guard {
-                if !idx.is_empty() {
-                    let pairs = match backend {
-                        SearchBackend::Cascade => {
-                            let binary_k = 4096usize.max(limit * 64).min(idx.len());
-                            if binary_k < idx.len() {
-                                idx.search_cascade(emb, limit, binary_k)
-                            } else {
-                                idx.search(emb, limit)
-                            }
+            if let Some(ref idx) = *guard
+                && !idx.is_empty()
+            {
+                let pairs = match backend {
+                    SearchBackend::Cascade => {
+                        let binary_k = 4096usize.max(limit * 64).min(idx.len());
+                        if binary_k < idx.len() {
+                            idx.search_cascade(emb, limit, binary_k)
+                        } else {
+                            idx.search(emb, limit)
                         }
-                        SearchBackend::BinaryFirst => {
-                            // Small binary_k → high throughput, lower recall.
-                            let binary_k = (limit * 16).max(64).min(idx.len());
-                            if binary_k < idx.len() {
-                                idx.search_cascade(emb, limit, binary_k)
-                            } else {
-                                idx.search(emb, limit)
-                            }
-                        }
-                        SearchBackend::UsearchHnsw => {
-                            // Attempt usearch if feature enabled; otherwise cascade at M=48 ef=64 equivalent.
-                            #[cfg(feature = "ann-usearch")]
-                            if let Some(ref ann) = self.ann {
-                                if ann.len() > 0 {
-                                    match ann.search(emb, limit) {
-                                        Ok(hits) if !hits.is_empty() => {
-                                            drop(guard);
-                                            return self.hydrate_hits_from_ann(&hits);
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                            // Fallback: cascade with moderate binary_k (R≈0.98).
-                            let binary_k = 2048usize.max(limit * 32).min(idx.len());
-                            if binary_k < idx.len() {
-                                idx.search_cascade(emb, limit, binary_k)
-                            } else {
-                                idx.search(emb, limit)
-                            }
-                        }
-                    };
-                    if !pairs.is_empty() {
-                        return self.hydrate_hits_by_id_dist(&pairs);
                     }
+                    SearchBackend::BinaryFirst => {
+                        // Small binary_k → high throughput, lower recall.
+                        let binary_k = (limit * 16).max(64).min(idx.len());
+                        if binary_k < idx.len() {
+                            idx.search_cascade(emb, limit, binary_k)
+                        } else {
+                            idx.search(emb, limit)
+                        }
+                    }
+                    SearchBackend::UsearchHnsw => {
+                        // Attempt usearch if feature enabled; otherwise cascade at M=48 ef=64 equivalent.
+                        #[cfg(feature = "ann-usearch")]
+                        if let Some(ref ann) = self.ann
+                            && !ann.is_empty()
+                        {
+                            match ann.search(emb, limit) {
+                                Ok(hits) if !hits.is_empty() => {
+                                    drop(guard);
+                                    return self.hydrate_hits_from_ann(&hits);
+                                }
+                                _ => {}
+                            }
+                        }
+                        // Fallback: cascade with moderate binary_k (R≈0.98).
+                        let binary_k = 2048usize.max(limit * 32).min(idx.len());
+                        if binary_k < idx.len() {
+                            idx.search_cascade(emb, limit, binary_k)
+                        } else {
+                            idx.search(emb, limit)
+                        }
+                    }
+                };
+                if !pairs.is_empty() {
+                    return self.hydrate_hits_by_id_dist(&pairs);
                 }
             }
         }
@@ -1745,13 +1791,13 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         #[cfg(feature = "turbo")]
         {
             let guard = self.ndarray_search.read().unwrap();
-            if let Some(ref idx) = *guard {
-                if !idx.is_empty() {
-                    // idx.search() is full brute-force — no Hamming pre-filter.
-                    let pairs = idx.search(emb, limit);
-                    if !pairs.is_empty() {
-                        return self.hydrate_hits_by_id_dist(&pairs);
-                    }
+            if let Some(ref idx) = *guard
+                && !idx.is_empty()
+            {
+                // idx.search() is full brute-force — no Hamming pre-filter.
+                let pairs = idx.search(emb, limit);
+                if !pairs.is_empty() {
+                    return self.hydrate_hits_by_id_dist(&pairs);
                 }
             }
         }
@@ -1769,24 +1815,35 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             .map(|i| format!("?{}", i + 1))
             .collect::<Vec<_>>()
             .join(",");
-        let sql = format!("SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})");
+        let sql =
+            format!("SELECT id,uri,title,text,meta,ts FROM docs WHERE id IN ({placeholders})");
         let mut stmt = self.conn.prepare(&sql)?;
         let ids: Vec<i64> = ann_hits.iter().map(|(i, _)| *i).collect();
         let params_iter: Vec<&dyn rusqlite::ToSql> =
             ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
-        let mut by_id: std::collections::HashMap<i64, (Option<String>, Option<String>, String)> =
-            Default::default();
+        let mut by_id: std::collections::HashMap<
+            i64,
+            (
+                Option<String>,
+                Option<String>,
+                String,
+                Option<serde_json::Value>,
+                i64,
+            ),
+        > = Default::default();
         let rows = stmt.query_map(params_iter.as_slice(), |r| {
             Ok((
                 r.get::<_, i64>(0)?,
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, Option<String>>(2)?,
                 r.get::<_, String>(3)?,
+                parse_meta_cell(r.get::<_, Option<String>>(4)?),
+                r.get::<_, i64>(5)?,
             ))
         })?;
         for row in rows {
-            let (id, uri, title, text) = row?;
-            by_id.insert(id, (uri, title, text));
+            let (id, uri, title, text, meta, ts) = row?;
+            by_id.insert(id, (uri, title, text, meta, ts));
         }
         let dists: Vec<f32> = ann_hits.iter().map(|(_, d)| *d).collect();
         #[cfg(feature = "turbo")]
@@ -1795,13 +1852,15 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let scores: Vec<f32> = dists.iter().map(|d| 1.0_f32 / (1.0_f32 + d)).collect();
         let mut out = Vec::with_capacity(ann_hits.len());
         for ((id, _), score) in ann_hits.iter().zip(scores.iter()) {
-            if let Some((uri, title, text)) = by_id.remove(id) {
+            if let Some((uri, title, text, meta, ts)) = by_id.remove(id) {
                 out.push(Hit {
                     id: *id,
                     uri,
                     title,
                     text,
                     score: *score as f64,
+                    meta,
+                    ts: Some(ts),
                 });
             }
         }
@@ -1820,34 +1879,47 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             .map(|i| format!("?{}", i + 1))
             .collect::<Vec<_>>()
             .join(",");
-        let sql = format!("SELECT id,uri,title,text FROM docs WHERE id IN ({placeholders})");
+        let sql =
+            format!("SELECT id,uri,title,text,meta,ts FROM docs WHERE id IN ({placeholders})");
         let mut stmt = self.conn.prepare(&sql)?;
         let ids: Vec<i64> = pairs.iter().map(|(i, _)| *i).collect();
         let params_iter: Vec<&dyn rusqlite::ToSql> =
             ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
-        let mut by_id: std::collections::HashMap<i64, (Option<String>, Option<String>, String)> =
-            Default::default();
+        let mut by_id: std::collections::HashMap<
+            i64,
+            (
+                Option<String>,
+                Option<String>,
+                String,
+                Option<serde_json::Value>,
+                i64,
+            ),
+        > = Default::default();
         let rows = stmt.query_map(params_iter.as_slice(), |r| {
             Ok((
                 r.get::<_, i64>(0)?,
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, Option<String>>(2)?,
                 r.get::<_, String>(3)?,
+                parse_meta_cell(r.get::<_, Option<String>>(4)?),
+                r.get::<_, i64>(5)?,
             ))
         })?;
         for row in rows {
-            let (id, uri, title, text) = row?;
-            by_id.insert(id, (uri, title, text));
+            let (id, uri, title, text, meta, ts) = row?;
+            by_id.insert(id, (uri, title, text, meta, ts));
         }
         let mut out = Vec::with_capacity(pairs.len());
         for (id, dist) in pairs.iter() {
-            if let Some((uri, title, text)) = by_id.remove(id) {
+            if let Some((uri, title, text, meta, ts)) = by_id.remove(id) {
                 out.push(Hit {
                     id: *id,
                     uri,
                     title,
                     text,
                     score: 1.0_f64 / (1.0_f64 + *dist as f64),
+                    meta,
+                    ts: Some(ts),
                 });
             }
         }
@@ -1902,7 +1974,7 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let mut out: Vec<Hit> = Vec::with_capacity(ids.len());
         for id in &ids {
             if let Ok(row) = self.conn.query_row(
-                "SELECT id, uri, title, text FROM docs WHERE id = ?1",
+                "SELECT id, uri, title, text, meta, ts FROM docs WHERE id = ?1",
                 rusqlite::params![id],
                 |r| {
                     Ok(Hit {
@@ -1911,6 +1983,8 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
                         title: r.get(2)?,
                         text: r.get(3)?,
                         score: 0.0,
+                        meta: parse_meta_cell(r.get::<_, Option<String>>(4)?),
+                        ts: Some(r.get(5)?),
                     })
                 },
             ) {
@@ -1935,7 +2009,10 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     pub fn open_with_brain_key(path: impl AsRef<Path>, key: &[u8; 32]) -> Result<Self> {
         let key_hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
         unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
+                *const (),
+                SqliteAutoExtensionFn,
+            >(
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
         }
@@ -2004,12 +2081,12 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
 #[cfg(feature = "ann-usearch")]
 impl Drop for Store {
     fn drop(&mut self) {
-        if let Some(ref ann) = self.ann {
-            if let Err(e) = ann.save() {
-                tracing::warn!(
-                    "ann drop-save failed: {e}; sidecar may be stale, but docs_vec is authoritative"
-                );
-            }
+        if let Some(ref ann) = self.ann
+            && let Err(e) = ann.save()
+        {
+            tracing::warn!(
+                "ann drop-save failed: {e}; sidecar may be stale, but docs_vec is authoritative"
+            );
         }
     }
 }

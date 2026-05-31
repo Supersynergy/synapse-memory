@@ -12,6 +12,7 @@ path = "src/main.rs"
 tikv-jemallocator = { version = "0.6", optional = true }
 anyhow.workspace = true
 clap.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tracing-subscriber.workspace = true
 blake3.workspace = true
@@ -32,7 +33,7 @@ tempfile = "3"
 
 [features]
 # default: static ORT + jemalloc (lower fragmentation, better throughput for alloc-heavy HNSW workloads).
-default = ["static-ort", "jemalloc"]
+default = ["static-ort", "jemalloc", "fresh-registry"]
 # jemalloc: replace system allocator with jemalloc for release binary.
 jemalloc = ["dep:tikv-jemallocator"]
 # static-ort: enable synapse-core's `embed` feature (ORT linked statically).
@@ -43,6 +44,7 @@ static-ort = ["synapse-core/embed"]
 #          --no-default-features --features cross-linux --bin synx
 # Ship libonnxruntime.so alongside the binary (see release/README.md for download URL).
 cross-linux = ["synapse-core/embed-dynamic"]
+fresh-registry = ["synapse-core/fresh-registry"]
 embed-768 = ["synapse-core/embed-768"]
 embed-1024 = ["synapse-core/embed-1024"]
 # import-parquet: enable Parquet import/export (adds ~3MB to binary)

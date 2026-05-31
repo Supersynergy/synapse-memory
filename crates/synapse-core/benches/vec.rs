@@ -3,7 +3,7 @@
 //! Run:
 //!   cargo bench -p synapse-core --features vec-hnsw --bench vec
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 #[cfg(feature = "vec-hnsw")]
 fn bench_knn(c: &mut Criterion) {

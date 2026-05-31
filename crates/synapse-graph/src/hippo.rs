@@ -15,13 +15,15 @@
 //! (capitalized multi-word noun phrases). Production upgrade path: swap
 //! `extract_entities_regex` for an Ollama/LLM call returning JSON spans.
 
-use rusqlite::{params, Connection, Result as SqlResult};
+use rusqlite::{Connection, Result as SqlResult, params};
 use std::collections::HashMap;
 
 /// Doc identifier (maps to `docs.id`).
 pub type DocId = i64;
 /// Node identifier (maps to `memories.id`).
 pub type NodeId = i64;
+pub type RankedDoc = (DocId, f64);
+pub type RankedNode = (NodeId, f64);
 
 // ── Regex NER ──────────────────────────────────────────────────────────────
 
@@ -130,7 +132,7 @@ pub fn personalized_pagerank(
     damping: f32,
     iters: usize,
     limit: usize,
-) -> SqlResult<Vec<(NodeId, f64)>> {
+) -> SqlResult<Vec<RankedNode>> {
     // inline implementation (avoids cross-crate dep on synapse-core::ppr)
     if seeds.is_empty() || iters == 0 {
         return Ok(Vec::new());
@@ -145,9 +147,8 @@ pub fn personalized_pagerank(
     };
     let mut r: HashMap<i64, f64> = teleport.clone();
 
-    let mut stmt = conn.prepare_cached(
-        "SELECT dst_id, weight FROM memory_edges WHERE src_id = ?1 LIMIT 64",
-    )?;
+    let mut stmt =
+        conn.prepare_cached("SELECT dst_id, weight FROM memory_edges WHERE src_id = ?1 LIMIT 64")?;
 
     for _ in 0..iters {
         let mut next: HashMap<i64, f64> = HashMap::with_capacity(r.len() * 2);
@@ -158,7 +159,7 @@ pub fn personalized_pagerank(
             if score < 1e-9 {
                 continue;
             }
-            let neigh: Vec<(i64, f64)> = stmt
+            let neigh: Vec<RankedNode> = stmt
                 .query_map(params![node], |row| Ok((row.get(0)?, row.get(1)?)))?
                 .filter_map(|r| r.ok())
                 .collect();
@@ -177,7 +178,7 @@ pub fn personalized_pagerank(
         r = next;
     }
 
-    let mut out: Vec<(i64, f64)> = r.into_iter().collect();
+    let mut out: Vec<RankedNode> = r.into_iter().collect();
     out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     out.truncate(limit);
     Ok(out)
@@ -196,7 +197,7 @@ pub fn hippo_retrieve(
     top_k: usize,
     damping: f32,
     iters: usize,
-) -> SqlResult<Vec<(DocId, f64)>> {
+) -> SqlResult<Vec<RankedDoc>> {
     let query_entities = extract_entities_regex(query);
 
     if query_entities.is_empty() {
@@ -246,7 +247,7 @@ pub fn hippo_retrieve(
         }
     }
 
-    let mut out: Vec<(DocId, f64)> = doc_scores.into_iter().collect();
+    let mut out: Vec<RankedDoc> = doc_scores.into_iter().collect();
     out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     out.truncate(top_k);
     Ok(out)
@@ -265,7 +266,7 @@ pub fn rrf_hippo(
     hippo_hits: &[(DocId, f64)],
     alpha_graph: f32,
     limit: usize,
-) -> Vec<(DocId, f64)> {
+) -> Vec<RankedDoc> {
     const K: f64 = 60.0;
     let alpha = alpha_graph as f64;
     let beta = 1.0 - alpha;
@@ -279,7 +280,7 @@ pub fn rrf_hippo(
         *scores.entry(*doc_id).or_insert(0.0) += alpha * (1.0 / (K + rank as f64 + 1.0));
     }
 
-    let mut out: Vec<(DocId, f64)> = scores.into_iter().collect();
+    let mut out: Vec<RankedDoc> = scores.into_iter().collect();
     out.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     out.truncate(limit);
     out
@@ -353,16 +354,40 @@ mod tests {
     // 10 synthetic docs: physics, Einstein, Bohr, collaborators, relativity.
     fn populate(conn: &Connection) {
         let docs: &[(i64, &str)] = &[
-            (1, "Albert Einstein published the theory of General Relativity in 1915."),
-            (2, "Niels Bohr and Albert Einstein debated quantum mechanics at Solvay."),
-            (3, "Max Planck introduced quantum theory which Einstein extended."),
-            (4, "Marie Curie won the Nobel Prize in Physics and Chemistry."),
+            (
+                1,
+                "Albert Einstein published the theory of General Relativity in 1915.",
+            ),
+            (
+                2,
+                "Niels Bohr and Albert Einstein debated quantum mechanics at Solvay.",
+            ),
+            (
+                3,
+                "Max Planck introduced quantum theory which Einstein extended.",
+            ),
+            (
+                4,
+                "Marie Curie won the Nobel Prize in Physics and Chemistry.",
+            ),
             (5, "Werner Heisenberg formulated the uncertainty principle."),
             (6, "Erwin Schrodinger developed wave mechanics equations."),
-            (7, "Einstein and Schrodinger exchanged letters about wave functions."),
-            (8, "Bohr and Heisenberg had the Copenhagen debate on quantum interpretation."),
-            (9, "General Relativity predicts gravitational lensing near massive objects."),
-            (10, "Max Planck and Einstein shared views on statistical mechanics."),
+            (
+                7,
+                "Einstein and Schrodinger exchanged letters about wave functions.",
+            ),
+            (
+                8,
+                "Bohr and Heisenberg had the Copenhagen debate on quantum interpretation.",
+            ),
+            (
+                9,
+                "General Relativity predicts gravitational lensing near massive objects.",
+            ),
+            (
+                10,
+                "Max Planck and Einstein shared views on statistical mechanics.",
+            ),
         ];
         for (id, text) in docs {
             insert_doc(conn, *id, text);
@@ -375,21 +400,35 @@ mod tests {
     fn entities_extracted_from_text() {
         let text = "Albert Einstein collaborated with Niels Bohr on quantum theory.";
         let ents = extract_entities_regex(text);
-        assert!(ents.iter().any(|e| e.contains("Einstein")), "expected Einstein: {:?}", ents);
-        assert!(ents.iter().any(|e| e.contains("Bohr")), "expected Bohr: {:?}", ents);
+        assert!(
+            ents.iter().any(|e| e.contains("Einstein")),
+            "expected Einstein: {:?}",
+            ents
+        );
+        assert!(
+            ents.iter().any(|e| e.contains("Bohr")),
+            "expected Bohr: {:?}",
+            ents
+        );
     }
 
     #[test]
     fn build_kg_populates_entities_and_memories() {
         let conn = setup_db();
         insert_doc(&conn, 1, "Albert Einstein published General Relativity.");
-        build_kg_from_docs(&conn, &[(1, "Albert Einstein published General Relativity.")]).unwrap();
+        build_kg_from_docs(
+            &conn,
+            &[(1, "Albert Einstein published General Relativity.")],
+        )
+        .unwrap();
         let ent_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM entities", [], |r| r.get(0))
             .unwrap();
         assert!(ent_count >= 1, "no entities inserted");
         let mem_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM memories WHERE doc_id = 1", [], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM memories WHERE doc_id = 1", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert!(mem_count >= 1, "no memories for doc 1");
     }
@@ -397,13 +436,24 @@ mod tests {
     #[test]
     fn build_kg_creates_cooccurrence_edges() {
         let conn = setup_db();
-        insert_doc(&conn, 1, "Albert Einstein and Niels Bohr debated at Solvay.");
-        build_kg_from_docs(&conn, &[(1, "Albert Einstein and Niels Bohr debated at Solvay.")])
-            .unwrap();
+        insert_doc(
+            &conn,
+            1,
+            "Albert Einstein and Niels Bohr debated at Solvay.",
+        );
+        build_kg_from_docs(
+            &conn,
+            &[(1, "Albert Einstein and Niels Bohr debated at Solvay.")],
+        )
+        .unwrap();
         let edge_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM memory_edges", [], |r| r.get(0))
             .unwrap();
-        assert!(edge_count >= 2, "expected bidirectional co-occur edges, got {}", edge_count);
+        assert!(
+            edge_count >= 2,
+            "expected bidirectional co-occur edges, got {}",
+            edge_count
+        );
     }
 
     #[test]
@@ -416,7 +466,10 @@ mod tests {
         // docs 1,2,3,7,10 mention Einstein — at least one should rank in top-5
         let top_ids: Vec<i64> = results.iter().map(|(id, _)| *id).collect();
         let einstein_docs: &[i64] = &[1, 2, 3, 7, 10];
-        let recall = top_ids.iter().filter(|id| einstein_docs.contains(id)).count();
+        let recall = top_ids
+            .iter()
+            .filter(|id| einstein_docs.contains(id))
+            .count();
         assert!(recall >= 1, "no Einstein doc in top-5: {:?}", top_ids);
     }
 
@@ -445,6 +498,9 @@ mod tests {
         let merged = rrf_hippo(&vec_hits, &hippo_hits, 0.9, 2);
         assert!(!merged.is_empty());
         // with alpha_graph=0.9, doc 2 should win
-        assert_eq!(merged[0].0, 2, "expected doc 2 to win with high alpha_graph");
+        assert_eq!(
+            merged[0].0, 2,
+            "expected doc 2 to win with high alpha_graph"
+        );
     }
 }

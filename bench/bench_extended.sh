@@ -18,10 +18,10 @@ with open('docs.jsonl','w') as f:
         f.write(json.dumps({'id':i,'title':f'doc{i}','text':' '.join(random.choices(words, k=30))})+'\n')
 "
 
-SYN=$HOME/projects/synapse/target/release/synapsed
+SYNAPSE_BIN=$HOME/projects/synapse/target/release/synapsed
 SOCK=/tmp/xbench.sock; SYNDB=$DIR/synapse.db
 rm -f $SOCK
-$SYN -f $SYNDB -s $SOCK --lazy-embed > /tmp/synd_x.log 2>&1 &
+$SYNAPSE_BIN -f $SYNDB -s $SOCK --lazy-embed > /tmp/synd_x.log 2>&1 &
 PID=$!
 sleep 0.4
 trap "kill $PID 2>/dev/null; rm -f $SOCK" EXIT

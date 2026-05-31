@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
 
 pub struct QueryLog {
@@ -129,7 +129,14 @@ impl QueryLog {
                 next_qid += 1;
                 id
             });
-            rows.push(Row { clicked, qid, bm25, vec_score, rank, score });
+            rows.push(Row {
+                clicked,
+                qid,
+                bm25,
+                vec_score,
+                rank,
+                score,
+            });
         }
 
         let mut out = std::fs::File::create(out_path)?;

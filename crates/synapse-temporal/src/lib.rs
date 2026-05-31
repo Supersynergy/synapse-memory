@@ -14,7 +14,7 @@
 //!  * facebook/sapling@master/eden/mononoke/.../datetime.rs — production usage pattern
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use chrono_english::{parse_date_string, Dialect};
+use chrono_english::{Dialect, parse_date_string};
 
 /// Inclusive Unix-seconds range produced by the parser.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

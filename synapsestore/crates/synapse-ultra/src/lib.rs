@@ -26,8 +26,13 @@ pub struct SynapseHandle {
 
 /// Load index from snapshot file. Returns null on failure.
 /// Caller must free with `synapse_close`.
-#[no_mangle]
-pub extern "C" fn synapse_open(snap_path: *const std::os::raw::c_char) -> *mut SynapseHandle {
+///
+/// # Safety
+/// `snap_path` must be a valid, NUL-terminated C string pointer or null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn synapse_open(
+    snap_path: *const std::os::raw::c_char,
+) -> *mut SynapseHandle {
     let path_str = unsafe {
         if snap_path.is_null() {
             return std::ptr::null_mut();
@@ -48,8 +53,11 @@ pub extern "C" fn synapse_open(snap_path: *const std::os::raw::c_char) -> *mut S
 }
 
 /// Free handle.
-#[no_mangle]
-pub extern "C" fn synapse_close(handle: *mut SynapseHandle) {
+///
+/// # Safety
+/// `handle` must be null or a pointer previously returned by `synapse_open` and not freed yet.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn synapse_close(handle: *mut SynapseHandle) {
     if !handle.is_null() {
         unsafe {
             drop(Box::from_raw(handle));
@@ -68,8 +76,13 @@ pub extern "C" fn synapse_close(handle: *mut SynapseHandle) {
 /// * `out_scores` — caller-allocated f32 array of length k
 ///
 /// Returns number of results written, or -1 on error.
-#[no_mangle]
-pub extern "C" fn synapse_search_raw(
+///
+/// # Safety
+/// `handle`, `query`, `out_ids`, and `out_scores` must be valid for the
+/// provided lengths. `out_ids` and `out_scores` must each have capacity for
+/// at least `k` elements.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn synapse_search_raw(
     handle: *const SynapseHandle,
     query: *const f32,
     dim: usize,

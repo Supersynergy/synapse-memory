@@ -8,13 +8,17 @@
 //!
 //! Plan cache hit = skip parse+rewrite for hot queries (zero alloc hot path).
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use parking_lot::Mutex;
-use lru::LruCache;
-use std::num::NonZeroUsize;
-use bytes::Bytes;
 use crate::parser::rewriter::RewriteResult;
+use bytes::Bytes;
+use lru::LruCache;
+use parking_lot::Mutex;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+type CacheKey = [u8; 32];
+type QueryLru = LruCache<CacheKey, CachedResult>;
+type PlanLru = LruCache<CacheKey, RewriteResult>;
 
 /// Cached result entry.
 #[derive(Clone, Debug)]
@@ -29,7 +33,7 @@ pub struct CachedResult {
 
 /// Thread-safe LRU query result cache, blake3-keyed by fingerprint.
 pub struct QueryCache {
-    inner: Mutex<LruCache<[u8; 32], CachedResult>>,
+    inner: Mutex<QueryLru>,
     /// Monotonic write epoch — bump on any INSERT/UPDATE/DELETE/DDL.
     epoch: Arc<AtomicU64>,
 }
@@ -61,7 +65,14 @@ impl QueryCache {
         let k = Self::key(fingerprint);
         let epoch = self.epoch.load(Ordering::Acquire);
         let mut inner = self.inner.lock();
-        inner.put(k, CachedResult { payload, epoch, ncols });
+        inner.put(
+            k,
+            CachedResult {
+                payload,
+                epoch,
+                ncols,
+            },
+        );
     }
 
     /// Bump write epoch — invalidates all cached reads.
@@ -78,6 +89,10 @@ impl QueryCache {
     pub fn len(&self) -> usize {
         self.inner.lock().len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Thread-safe LRU plan cache, blake3-keyed by fingerprint.
@@ -85,13 +100,15 @@ impl QueryCache {
 /// Stores `RewriteResult` (parsed + rewritten plan AST) so hot queries skip
 /// the rewrite pass entirely. Capacity typically 1000 (Vitess default per-conn).
 pub struct PlanCache {
-    inner: Mutex<LruCache<[u8; 32], RewriteResult>>,
+    inner: Mutex<PlanLru>,
 }
 
 impl PlanCache {
     pub fn new(capacity: usize) -> Self {
         let cap = NonZeroUsize::new(capacity.max(1)).unwrap();
-        Self { inner: Mutex::new(LruCache::new(cap)) }
+        Self {
+            inner: Mutex::new(LruCache::new(cap)),
+        }
     }
 
     pub fn key(fingerprint: &str) -> [u8; 32] {

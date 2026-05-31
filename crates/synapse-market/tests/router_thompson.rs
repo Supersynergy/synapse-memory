@@ -1,4 +1,4 @@
-use synapse_market::router::{Plan, QueryKey, QueryKind, PlanCache};
+use synapse_market::router::{Plan, PlanCache, QueryKey, QueryKind};
 
 /// Bandit should converge to MmapScanSkipped (2× faster) over 1000 trials.
 #[test]
@@ -40,7 +40,15 @@ fn bandit_converges_to_best_plan() {
         if plan == Plan::MmapScanSkipped {
             skipped_count += 1;
         }
-        cache.record(key2.clone(), plan, if plan == Plan::MmapScanSkipped { 50 } else { 100 });
+        cache.record(
+            key2.clone(),
+            plan,
+            if plan == Plan::MmapScanSkipped {
+                50
+            } else {
+                100
+            },
+        );
     }
     // Exploit 90%: expect ≥160/200 picks are MmapScanSkipped
     assert!(

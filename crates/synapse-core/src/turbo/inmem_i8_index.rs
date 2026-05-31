@@ -21,6 +21,8 @@
 //! # }
 //! ```
 
+#![allow(clippy::type_complexity)]
+
 use rayon::prelude::*;
 
 /// Single-thread threshold: corpora below this use plain iterators so that
@@ -39,14 +41,13 @@ const SEARCH_MIN_LEN: usize = 256;
 /// Dedicated 1-thread Rayon pool: gives us `par_chunks` SIMD dispatch without
 /// stealing cores from concurrent Tokio tasks.  One thread → one core per
 /// query; concurrency = Tokio task count (already bounded by block_in_place).
-static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> =
-    std::sync::LazyLock::new(|| {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(1)
-            .thread_name(|i| format!("synapse-search-{i}"))
-            .build()
-            .expect("rayon pool build")
-    });
+static SEARCH_POOL: std::sync::LazyLock<rayon::ThreadPool> = std::sync::LazyLock::new(|| {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .thread_name(|i| format!("synapse-search-{i}"))
+        .build()
+        .expect("rayon pool build")
+});
 
 /// Dense int8-quantized brute-force index.
 pub struct InMemoryI8Index {
@@ -91,18 +92,30 @@ impl InMemoryI8Index {
                 codes[i * dim + j] = (v * inv * 127.0).round().clamp(-127.0, 127.0) as i8;
             }
         }
-        Self { ids, codes, scales, dim, id_to_row: std::sync::OnceLock::new() }
+        Self {
+            ids,
+            codes,
+            scales,
+            dim,
+            id_to_row: std::sync::OnceLock::new(),
+        }
     }
 
     /// Number of indexed rows.
     #[must_use]
-    pub fn len(&self) -> usize { self.ids.len() }
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
     /// Empty index probe.
     #[must_use]
-    pub fn is_empty(&self) -> bool { self.ids.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
     /// Dimensionality.
     #[must_use]
-    pub const fn dim(&self) -> usize { self.dim }
+    pub const fn dim(&self) -> usize {
+        self.dim
+    }
 
     /// Rescore only a subset of ids — ideal as a rerank stage after a
     /// cheaper candidate-gen pass (Hamming, MRL, HNSW). Returns ids in
@@ -182,14 +195,20 @@ impl InMemoryI8Index {
         };
 
         let k = k.min(scores.len());
-        if k == 0 { return Vec::new(); }
+        if k == 0 {
+            return Vec::new();
+        }
         let mut idx: Vec<usize> = (0..scores.len()).collect();
         idx.select_nth_unstable_by(k - 1, |a, b| {
-            scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal)
+            scores[*b]
+                .partial_cmp(&scores[*a])
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         idx.truncate(k);
         idx.sort_by(|a, b| {
-            scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal)
+            scores[*b]
+                .partial_cmp(&scores[*a])
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         idx.into_iter().map(|i| (self.ids[i], scores[i])).collect()
     }
@@ -197,7 +216,9 @@ impl InMemoryI8Index {
 
 #[cfg(feature = "simsimd")]
 fn dot_i8(a: &[i8], b: &[i8]) -> f32 {
-    crate::turbo::simsimd_kernels::dot_i8(a, b).map(|v| v as f32).unwrap_or(0.0)
+    crate::turbo::simsimd_kernels::dot_i8(a, b)
+        .map(|v| v as f32)
+        .unwrap_or(0.0)
 }
 
 #[cfg(not(feature = "simsimd"))]
@@ -222,8 +243,8 @@ mod tests {
     fn exact_match_wins() {
         let rows = vec![
             (10_i64, unit(vec![1.0, 0.0, 0.0, 0.0])),
-            (20,     unit(vec![0.0, 1.0, 0.0, 0.0])),
-            (30,     unit(vec![0.0, 0.0, 1.0, 0.0])),
+            (20, unit(vec![0.0, 1.0, 0.0, 0.0])),
+            (30, unit(vec![0.0, 0.0, 1.0, 0.0])),
         ];
         let idx = InMemoryI8Index::build(rows);
         let top = idx.search(&unit(vec![1.0, 0.0, 0.0, 0.0]), 1);

@@ -1,8 +1,10 @@
 //! Posting-list codec: (DocId, Vec<f32>) entries, binary flat on disk, mmap'd on load.
 
-use std::{fs, path::Path};
-use memmap2::Mmap;
 use anyhow::Result;
+use memmap2::Mmap;
+use std::{fs, path::Path};
+
+use crate::DocumentEmbedding;
 
 /// Entry size in bytes: 8 (docid u64) + dim*4 (f32)
 #[inline]
@@ -12,7 +14,7 @@ pub fn entry_bytes(dim: usize) -> usize {
 
 /// Write a posting list for one cluster to disk.
 /// Format: concatenated entries — each `[u64 docid][f32 x dim]` little-endian.
-pub fn write_posting(path: &Path, entries: &[(u64, Vec<f32>)], dim: usize) -> Result<()> {
+pub fn write_posting(path: &Path, entries: &[DocumentEmbedding], dim: usize) -> Result<()> {
     if entries.is_empty() {
         // write empty file
         fs::write(path, [])?;
@@ -47,7 +49,10 @@ impl MmapPostingList {
         let file = fs::File::open(path)?;
         // SAFETY: file is read-only; process must not truncate while mmap is live.
         let mmap = unsafe { Mmap::map(&file)? };
-        Ok(Self { mmap: Some(mmap), dim })
+        Ok(Self {
+            mmap: Some(mmap),
+            dim,
+        })
     }
 
     pub fn len(&self) -> usize {
@@ -63,7 +68,7 @@ impl MmapPostingList {
 
     /// Iterate decoded entries (docid, slice of f32).
     /// Returns owned vecs to avoid lifetime entanglement.
-    pub fn entries(&self) -> Vec<(u64, Vec<f32>)> {
+    pub fn entries(&self) -> Vec<DocumentEmbedding> {
         let mmap = match &self.mmap {
             None => return vec![],
             Some(m) => m,

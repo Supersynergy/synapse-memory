@@ -1,0 +1,11 @@
+[package]
+name = "synapse-pack"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Token-budget context packer: verbatim deletion-based tiered compression, near-dup collapse, serial-position ordering (lost-in-the-middle fix). Pure, no IO."
+
+[dependencies]
+serde = { workspace = true }

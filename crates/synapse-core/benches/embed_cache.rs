@@ -11,7 +11,7 @@
 //!   BASELINE  — serial hash (pre-PR-D1): checkout HEAD~1 to compare
 //!   PARALLEL  — rayon par_iter hash (PR-D1): current HEAD
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 
 #[cfg(feature = "embed")]
 fn bench_hash_only(c: &mut Criterion) {

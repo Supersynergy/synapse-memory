@@ -1,7 +1,7 @@
-use cranelift_codegen::ir::{
-    types, AbiParam, BlockArg, Function, InstBuilder, MemFlags, UserFuncName, Value,
-};
 use cranelift_codegen::Context;
+use cranelift_codegen::ir::{
+    AbiParam, BlockArg, Function, InstBuilder, MemFlags, UserFuncName, Value, types,
+};
 use cranelift_codegen::settings::Configurable;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
@@ -61,16 +61,16 @@ pub fn compile(p: &Predicate) -> anyhow::Result<CompiledFn> {
         b.seal_block(entry);
 
         let params: Vec<Value> = b.block_params(entry).to_vec();
-        let ts_ptr    = params[0];
-        let open_ptr  = params[1];
-        let high_ptr  = params[2];
-        let low_ptr   = params[3];
+        let ts_ptr = params[0];
+        let open_ptr = params[1];
+        let high_ptr = params[2];
+        let low_ptr = params[3];
         let close_ptr = params[4];
-        let vol_ptr   = params[5];
-        let n         = params[6];
-        let out_ptr   = params[7];
+        let vol_ptr = params[5];
+        let n = params[6];
+        let out_ptr = params[7];
 
-        let loop_hdr  = b.create_block();
+        let loop_hdr = b.create_block();
         let loop_body = b.create_block();
         let loop_exit = b.create_block();
 
@@ -81,29 +81,30 @@ pub fn compile(p: &Predicate) -> anyhow::Result<CompiledFn> {
         b.append_block_param(loop_exit, ptr);
 
         let zero = b.ins().iconst(ptr, 0);
-        b.ins().jump(loop_hdr, &[BlockArg::Value(zero), BlockArg::Value(zero)]);
+        b.ins()
+            .jump(loop_hdr, &[BlockArg::Value(zero), BlockArg::Value(zero)]);
 
         // -- header --
         b.switch_to_block(loop_hdr);
-        let i     = b.block_params(loop_hdr)[0];
+        let i = b.block_params(loop_hdr)[0];
         let count = b.block_params(loop_hdr)[1];
         let lt = b.ins().icmp(
             cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThan,
-            i, n,
+            i,
+            n,
         );
-        b.ins().brif(lt, loop_body, &[], loop_exit, &[BlockArg::Value(count)]);
+        b.ins()
+            .brif(lt, loop_body, &[], loop_exit, &[BlockArg::Value(count)]);
 
         // -- body --
         b.switch_to_block(loop_body);
         b.seal_block(loop_body);
         // re-fetch params from loop_hdr
-        let i_v     = b.block_params(loop_hdr)[0];
+        let i_v = b.block_params(loop_hdr)[0];
         let count_v = b.block_params(loop_hdr)[1];
 
         let match_val = emit_predicate(
-            &mut b, p, i_v,
-            ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr,
-            ptr,
+            &mut b, p, i_v, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr,
         );
         let byte_val = b.ins().ireduce(types::I8, match_val);
         let addr = b.ins().iadd(out_ptr, i_v);
@@ -113,7 +114,10 @@ pub fn compile(p: &Predicate) -> anyhow::Result<CompiledFn> {
         let new_count = b.ins().iadd(count_v, match_ext);
         let one = b.ins().iconst(ptr, 1);
         let next_i = b.ins().iadd(i_v, one);
-        b.ins().jump(loop_hdr, &[BlockArg::Value(next_i), BlockArg::Value(new_count)]);
+        b.ins().jump(
+            loop_hdr,
+            &[BlockArg::Value(next_i), BlockArg::Value(new_count)],
+        );
         b.seal_block(loop_hdr);
 
         // -- exit --
@@ -129,14 +133,20 @@ pub fn compile(p: &Predicate) -> anyhow::Result<CompiledFn> {
     module
         .define_function(func_id, &mut ctx)
         .map_err(|e| anyhow::anyhow!("define: {e}"))?;
-    module.finalize_definitions().map_err(|e| anyhow::anyhow!("finalize: {e}"))?;
+    module
+        .finalize_definitions()
+        .map_err(|e| anyhow::anyhow!("finalize: {e}"))?;
 
     let raw = module.get_finalized_function(func_id);
     let func_ptr: CompiledFilter = unsafe { std::mem::transmute(raw) };
 
-    Ok(CompiledFn { _module: module, func_ptr })
+    Ok(CompiledFn {
+        _module: module,
+        func_ptr,
+    })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn emit_predicate(
     b: &mut FunctionBuilder,
     p: &Predicate,
@@ -152,11 +162,11 @@ fn emit_predicate(
     match p {
         Predicate::Cmp(col, op, val) => {
             let (base, is_ts) = match col {
-                Col::Ts     => (ts_ptr, true),
-                Col::Open   => (open_ptr, false),
-                Col::High   => (high_ptr, false),
-                Col::Low    => (low_ptr, false),
-                Col::Close  => (close_ptr, false),
+                Col::Ts => (ts_ptr, true),
+                Col::Open => (open_ptr, false),
+                Col::High => (high_ptr, false),
+                Col::Low => (low_ptr, false),
+                Col::Close => (close_ptr, false),
                 Col::Volume => (vol_ptr, false),
             };
             let cond = if is_ts {
@@ -179,17 +189,27 @@ fn emit_predicate(
             b.ins().uextend(ptr, cond)
         }
         Predicate::And(a, bx) => {
-            let va = emit_predicate(b, a, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr);
-            let vb = emit_predicate(b, bx, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr);
+            let va = emit_predicate(
+                b, a, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr,
+            );
+            let vb = emit_predicate(
+                b, bx, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr,
+            );
             b.ins().band(va, vb)
         }
         Predicate::Or(a, bx) => {
-            let va = emit_predicate(b, a, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr);
-            let vb = emit_predicate(b, bx, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr);
+            let va = emit_predicate(
+                b, a, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr,
+            );
+            let vb = emit_predicate(
+                b, bx, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr,
+            );
             b.ins().bor(va, vb)
         }
         Predicate::Not(inner) => {
-            let v = emit_predicate(b, inner, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr);
+            let v = emit_predicate(
+                b, inner, i, ts_ptr, open_ptr, high_ptr, low_ptr, close_ptr, vol_ptr, ptr,
+            );
             let one = b.ins().iconst(ptr, 1);
             b.ins().bxor(v, one)
         }

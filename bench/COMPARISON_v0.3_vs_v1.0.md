@@ -79,7 +79,7 @@
 
 ## Verdict
 
-**Local v0.3-full-stack**: 7/8 features — Ed25519 signing, CRDT merge, sharding, federation, self-learning, MCP, multi-ext (.syn/.brainpack).
+**Local v0.3-full-stack**: 7/8 features — Ed25519 signing, CRDT merge, sharding, federation, self-learning, MCP, multi-ext (.synx/.brainpack).
 **Remote v1.0**: 1/8 features — stripped to put/find/vec/hybrid/snap only.
 
 Performance: both use the same SQLite+FTS5+msgpack daemon core. Insert throughput is identical (~22–33k docs/s depending on workload). Lex query latency is within 0.05ms noise (<10% delta).

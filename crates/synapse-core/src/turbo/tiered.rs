@@ -19,6 +19,8 @@
 //! # }
 //! ```
 
+#![allow(clippy::type_complexity)]
+
 use std::path::PathBuf;
 
 use crate::turbo::multi_index::{MultiIndex, SearchHints};
@@ -29,8 +31,10 @@ use {
     synapse_spann::index::{SpannConfig, SpannIndex},
 };
 
+#[cfg(feature = "spann-tier")]
 const DEFAULT_THRESHOLD: usize = 100_000;
 
+#[cfg(feature = "spann-tier")]
 fn ram_threshold() -> usize {
     std::env::var("SYNAPSE_RAM_THRESHOLD_DOCS")
         .ok()
@@ -50,7 +54,12 @@ struct SpannBuffer {
 #[cfg(feature = "spann-tier")]
 impl SpannBuffer {
     fn new(dim: usize, dir: PathBuf) -> Self {
-        Self { docs: Vec::new(), dim, dir, index: None }
+        Self {
+            docs: Vec::new(),
+            dim,
+            dir,
+            index: None,
+        }
     }
 
     fn add(&mut self, doc_id: u64, vec: Vec<f32>) -> Result<()> {
@@ -63,8 +72,13 @@ impl SpannBuffer {
             return Ok(());
         }
         let n = self.docs.len();
-        let n_clusters = (n / 100).max(1).min(4096);
-        let cfg = SpannConfig { n_clusters, dim: self.dim, n_docs: n, max_iter: 50 };
+        let n_clusters = (n / 100).clamp(1, 4096);
+        let cfg = SpannConfig {
+            n_clusters,
+            dim: self.dim,
+            n_docs: n,
+            max_iter: 50,
+        };
         let spann_dir = self.dir.join("spann");
         let idx = SpannIndex::build(&spann_dir, &self.docs, cfg)?;
         self.index = Some(idx);
@@ -75,7 +89,9 @@ impl SpannBuffer {
     }
 
     fn search(&self, query: &[f32], k: usize) -> Vec<(i64, f32)> {
-        let Some(ref idx) = self.index else { return vec![] };
+        let Some(ref idx) = self.index else {
+            return vec![];
+        };
         let nprobe = 8;
         idx.search(query, k, nprobe)
             .into_iter()
@@ -91,6 +107,7 @@ impl SpannBuffer {
 /// Tiered ANN index — in-memory MultiIndex + optional SPANN disk tier.
 pub struct TieredIndex {
     dim: usize,
+    #[cfg(feature = "spann-tier")]
     threshold: usize,
     /// Buffered docs for the in-memory tier (built lazily on first search or explicit flush).
     mem_buf: Vec<(i64, Vec<f32>)>,
@@ -123,7 +140,6 @@ impl TieredIndex {
     pub fn new(dim: usize, disk_dir: impl Into<PathBuf>) -> anyhow::Result<Self> {
         Ok(Self {
             dim,
-            threshold: ram_threshold(),
             mem_buf: Vec::new(),
             mem: None,
             _disk_dir: disk_dir.into(),
@@ -183,7 +199,10 @@ impl TieredIndex {
         // Flush pending disk docs before searching.
         let _ = self.disk.flush();
 
-        let hints = SearchHints { k, ..Default::default() };
+        let hints = SearchHints {
+            k,
+            ..Default::default()
+        };
         let mut results: Vec<(i64, f32)> = self
             .mem
             .as_ref()
@@ -202,8 +221,14 @@ impl TieredIndex {
     #[cfg(not(feature = "spann-tier"))]
     pub fn search(&mut self, query: &[f32], k: usize) -> Vec<(i64, f32)> {
         self.ensure_mem_built();
-        let hints = SearchHints { k, ..Default::default() };
-        self.mem.as_ref().map(|m| m.search(query, hints)).unwrap_or_default()
+        let hints = SearchHints {
+            k,
+            ..Default::default()
+        };
+        self.mem
+            .as_ref()
+            .map(|m| m.search(query, hints))
+            .unwrap_or_default()
     }
 
     /// Total indexed docs across both tiers.
@@ -253,7 +278,7 @@ mod tests {
     fn above_threshold_spills_to_disk() {
         let dir = tempdir().unwrap();
         // Use tiny threshold so we don't need 100k docs in a unit test.
-        std::env::set_var("SYNAPSE_RAM_THRESHOLD_DOCS", "50");
+        unsafe { std::env::set_var("SYNAPSE_RAM_THRESHOLD_DOCS", "50") };
         let mut idx = TieredIndex::new(4, dir.path()).unwrap();
         for id in 0..100_i64 {
             idx.add(id, make_vec(id, 4)).unwrap();
@@ -263,6 +288,6 @@ mod tests {
         let hits = idx.search(&make_vec(75, 4), 10);
         assert!(!hits.is_empty(), "disk-tier search returned results");
         // cleanup env override
-        std::env::remove_var("SYNAPSE_RAM_THRESHOLD_DOCS");
+        unsafe { std::env::remove_var("SYNAPSE_RAM_THRESHOLD_DOCS") };
     }
 }

@@ -3,12 +3,13 @@
 pub mod backend;
 pub mod crdt;
 pub mod db;
-pub mod sync;
 pub mod error;
 pub mod federate;
+pub mod fresh;
 pub mod shard;
 pub mod sign;
 pub mod snap;
+pub mod sync;
 pub mod types;
 
 #[cfg(any(feature = "embed", feature = "embed-dynamic"))]
@@ -24,10 +25,10 @@ pub mod embedder_trait;
 /// Matryoshka (MRL) embedding truncation — 3–6× matvec speed-up, near-full recall.
 pub mod matryoshka;
 
-pub mod sql_fns;
-pub mod synx;
 pub mod brainpack;
 pub mod obs;
+pub mod sql_fns;
+pub mod synx;
 
 /// SOTA agent-memory layer: typed memories, entity graph, multi-signal recall.
 /// Additive — call `sota::sota_migrate(&store.conn)` once to enable.
@@ -57,5 +58,5 @@ pub mod conformal;
 
 pub use db::Store;
 pub use error::{Error, Result};
-pub use sota::{auto_route, SearchBackend};
+pub use sota::{SearchBackend, auto_route};
 pub use types::{Doc, Hit, MetadataPredicate, PredicateOp, PutRequest, SearchMode, SearchOptions};

@@ -26,7 +26,11 @@ pub struct CascadeReranker {
 
 impl CascadeReranker {
     pub fn new(fast: Box<dyn Reranker>, final_: Box<dyn Reranker>) -> Self {
-        Self { fast, final_, stage1_top: 20 }
+        Self {
+            fast,
+            final_,
+            stage1_top: 20,
+        }
     }
 
     pub fn with_stage1_top(mut self, n: usize) -> Self {
@@ -41,7 +45,9 @@ impl Reranker for CascadeReranker {
             return Ok(candidates);
         }
         // Stage-1: cheap narrow.
-        let stage1 = self.fast.rerank(query, candidates, self.stage1_top.max(top_k))?;
+        let stage1 = self
+            .fast
+            .rerank(query, candidates, self.stage1_top.max(top_k))?;
         // Stage-2: strong final.
         self.final_.rerank(query, stage1, top_k)
     }
@@ -53,15 +59,20 @@ mod tests {
     use crate::IdentityReranker;
 
     fn h(id: i64, score: f64, text: &str) -> Hit {
-        Hit { id, uri: None, title: None, text: text.into(), score }
+        Hit {
+            id,
+            uri: None,
+            title: None,
+            text: text.into(),
+            score,
+            meta: None,
+            ts: None,
+        }
     }
 
     #[test]
     fn identity_cascade_passes_through() {
-        let c = CascadeReranker::new(
-            Box::new(IdentityReranker),
-            Box::new(IdentityReranker),
-        );
+        let c = CascadeReranker::new(Box::new(IdentityReranker), Box::new(IdentityReranker));
         let out = c
             .rerank("q", vec![h(1, 0.9, "a"), h(2, 0.5, "b"), h(3, 0.3, "c")], 2)
             .unwrap();
@@ -70,10 +81,7 @@ mod tests {
 
     #[test]
     fn empty_input_returns_empty() {
-        let c = CascadeReranker::new(
-            Box::new(IdentityReranker),
-            Box::new(IdentityReranker),
-        );
+        let c = CascadeReranker::new(Box::new(IdentityReranker), Box::new(IdentityReranker));
         let out = c.rerank("q", vec![], 5).unwrap();
         assert!(out.is_empty());
     }

@@ -111,7 +111,7 @@ Single binary release:
 synapsed serve            → MCP server :9477 (existing)
 synapse-extract-worker    → continuous LLM extract
 synapse-lifecycle         → nightly via launchd
-syn hybrid "<q>" 20       → CLI hot path
+synx hybrid "<q>" 20       → CLI hot path
 ```
 
 Datenpfad: `~/.synapse/brain.db` (WAL mode, 256MB mmap).

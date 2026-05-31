@@ -44,6 +44,8 @@ pub struct ApiKey {
     pub label: String,
 }
 
+type ApiKeyMap = HashMap<[u8; 32], ApiKey>;
+
 pub fn hash_key(plain: &str) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(plain.as_bytes());
@@ -51,16 +53,22 @@ pub fn hash_key(plain: &str) -> [u8; 32] {
 }
 
 pub struct AuthStore {
-    keys: RwLock<HashMap<[u8; 32], ApiKey>>,
+    keys: RwLock<ApiKeyMap>,
 }
 
 impl AuthStore {
     pub fn new() -> Self {
-        Self { keys: RwLock::new(HashMap::new()) }
+        Self {
+            keys: RwLock::new(HashMap::new()),
+        }
     }
     pub fn add_key(&self, plain: &str, role: Role, label: impl Into<String>) {
         let h = hash_key(plain);
-        let k = ApiKey { hash: h, role, label: label.into() };
+        let k = ApiKey {
+            hash: h,
+            role,
+            label: label.into(),
+        };
         if let Ok(mut g) = self.keys.write() {
             g.insert(h, k);
         }

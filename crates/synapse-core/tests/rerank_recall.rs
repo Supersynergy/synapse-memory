@@ -24,7 +24,9 @@ fn gen_corpus(n: usize, dim: usize, seed: u64) -> Vec<(i64, Vec<f32>)> {
             let mut v: Vec<f32> = (0..dim).map(|_| xorshift(&mut s)).collect();
             let n: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-8);
             let inv = 1.0 / n;
-            for x in &mut v { *x *= inv; }
+            for x in &mut v {
+                *x *= inv;
+            }
             (i as i64, v)
         })
         .collect()
@@ -88,8 +90,11 @@ fn int8_alone_recall_at_10_geq_9() {
     for qi in (0..5).map(|i| i * 397 % n) {
         let query = &corpus[qi].1;
         let gt = f32_top10(&corpus, query);
-        let got: HashSet<i64> =
-            iidx.search(query, 10).into_iter().map(|(id, _)| id).collect();
+        let got: HashSet<i64> = iidx
+            .search(query, 10)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         total += gt.intersection(&got).count();
     }
     let recall = total as f64 / 50.0;

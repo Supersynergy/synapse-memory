@@ -1,0 +1,3076 @@
+{
+  "records": [
+    {
+      "id": "aether",
+      "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+      "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 Which path removes fork connect overhead?",
+        "RBK-PUBLIC-20260516-134220 hook chain batch keepalive path"
+      ]
+    },
+    {
+      "id": "boron",
+      "expected": "RBK-PUBLIC-20260516-134220-BORON",
+      "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 How should version slippage be avoided?",
+        "RBK-PUBLIC-20260516-134220 local package docs before training memory"
+      ]
+    },
+    {
+      "id": "cirrus",
+      "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+      "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 What handles evolving facts and contradictions?",
+        "RBK-PUBLIC-20260516-134220 temporal validity supersession edges"
+      ]
+    },
+    {
+      "id": "drake",
+      "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+      "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 What is the hot recall p95 hook budget?",
+        "RBK-PUBLIC-20260516-134220 twenty five milliseconds p95 prompt hooks"
+      ]
+    },
+    {
+      "id": "ember",
+      "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+      "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 How does recall save tokens?",
+        "RBK-PUBLIC-20260516-134220 task mode stale near duplicates"
+      ]
+    },
+    {
+      "id": "flint",
+      "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+      "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 What fallback is required when embeddings fail?",
+        "RBK-PUBLIC-20260516-134220 degrade lexical search embeddings fail"
+      ]
+    },
+    {
+      "id": "granite",
+      "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+      "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 What feedback should the reranker learn from?",
+        "RBK-PUBLIC-20260516-134220 accepted context file opens edits task success"
+      ]
+    },
+    {
+      "id": "helios",
+      "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+      "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+      "queries": [
+        "RBK-PUBLIC-20260516-134220 Where should fresh docs adapters sit?",
+        "RBK-PUBLIC-20260516-134220 fallback evidence primary hot path"
+      ]
+    }
+  ],
+  "summaries": [
+    {
+      "name": "sqlite_fts5_control",
+      "status": "ok",
+      "queries": 16,
+      "ingest_ms": 0.27,
+      "recall_at_1": 0.125,
+      "recall_at_3": 0.375,
+      "recall_at_5": 0.625,
+      "mrr": 0.285,
+      "p50_ms": 0.02,
+      "p95_ms": 0.04,
+      "max_ms": 0.08,
+      "notes": [
+        "local lexical control"
+      ]
+    },
+    {
+      "name": "synapse_hybrid_socket",
+      "status": "ok",
+      "queries": 16,
+      "ingest_ms": 872.53,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 13.84,
+      "p95_ms": 18.86,
+      "max_ms": 19.21,
+      "notes": [
+        "global Synapse daemon via Unix socket"
+      ]
+    },
+    {
+      "name": "synapse_scoped_fusion_sdk",
+      "status": "ok",
+      "queries": 16,
+      "ingest_ms": 0.0,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 0.34,
+      "p95_ms": 0.48,
+      "max_ms": 0.58,
+      "notes": [
+        "indexed scope-first recall, BatchSearch fallback, docs.meta filter, query-term rerank"
+      ]
+    },
+    {
+      "name": "synapse_mem0_compat_socket",
+      "status": "ok",
+      "queries": 16,
+      "ingest_ms": 816.99,
+      "recall_at_1": 1.0,
+      "recall_at_3": 1.0,
+      "recall_at_5": 1.0,
+      "mrr": 1.0,
+      "p50_ms": 0.64,
+      "p95_ms": 1.3,
+      "max_ms": 1.68,
+      "notes": [
+        "Synapse-backed drop-in mem0 API, local socket, Lex mode, no cloud"
+      ]
+    },
+    {
+      "name": "claude_mem_worker_import_fts",
+      "status": "ok",
+      "queries": 16,
+      "ingest_ms": 8.62,
+      "recall_at_1": 0.0,
+      "recall_at_3": 0.0,
+      "recall_at_5": 0.0,
+      "mrr": 0.0,
+      "p50_ms": 0.54,
+      "p95_ms": 1.97,
+      "max_ms": 2.73,
+      "notes": [
+        "claude-mem 13.2.0 worker, isolated temp profile, Chroma disabled, /api/import + /api/search?format=json",
+        "import stats: {'sessionsImported': 1, 'sessionsSkipped': 0, 'summariesImported': 0, 'summariesSkipped': 0, 'observationsImported': 8, 'observationsSkipped': 0, 'promptsImported': 0, 'promptsSkipped': 0}"
+      ]
+    }
+  ],
+  "engines": [
+    {
+      "name": "sqlite_fts5_control",
+      "status": "ok",
+      "ingest_ms": 0.27129100263118744,
+      "notes": [
+        "local lexical control"
+      ],
+      "queries": [
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Which path removes fork connect overhead?",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 0.08366700261831284,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 hook chain batch keepalive path",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 0.025624997913837433,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How should version slippage be avoided?",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 0.020833998918533325,
+          "rank": 2,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 local package docs before training memory",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 0.01833399385213852,
+          "rank": 2,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What handles evolving facts and contradictions?",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.017333000898361206,
+          "rank": 3,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 temporal validity supersession edges",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.015709005296230316,
+          "rank": 3,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What is the hot recall p95 hook budget?",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 0.021125003695487976,
+          "rank": 4,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 twenty five milliseconds p95 prompt hooks",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 0.017791002988815308,
+          "rank": 4,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How does recall save tokens?",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.01574999839067459,
+          "rank": 5,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 task mode stale near duplicates",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.015624992549419403,
+          "rank": 5,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What fallback is required when embeddings fail?",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.01891700178384781,
+          "rank": null,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 degrade lexical search embeddings fail",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.0159589946269989,
+          "rank": null,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What feedback should the reranker learn from?",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.017500005662441254,
+          "rank": null,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 accepted context file opens edits task success",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.017457999289035797,
+          "rank": null,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Where should fresh docs adapters sit?",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.016416996717453003,
+          "rank": null,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 fallback evidence primary hot path",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.015083007514476776,
+          "rank": null,
+          "hits": [
+            {
+              "id": "aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER."
+            },
+            {
+              "id": "boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON."
+            },
+            {
+              "id": "cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS."
+            },
+            {
+              "id": "drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE."
+            },
+            {
+              "id": "ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "synapse_hybrid_socket",
+      "status": "ok",
+      "ingest_ms": 872.5283329933882,
+      "notes": [
+        "global Synapse daemon via Unix socket"
+      ],
+      "queries": [
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Which path removes fork connect overhead?",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 19.214708007872105,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015625
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 hook chain batch keepalive path",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 13.872416995465755,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.015625
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How should version slippage be avoided?",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 13.800875000655651,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 0.015625
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 local package docs before training memory",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 17.89570800215006,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.015625
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What handles evolving facts and contradictions?",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 12.708958007395267,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.015625
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 temporal validity supersession edges",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 15.320624999701977,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.015625
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What is the hot recall p95 hook budget?",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 17.43333300203085,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.015625
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 twenty five milliseconds p95 prompt hooks",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 12.479166001081467,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015625
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How does recall save tokens?",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 14.048666998744011,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.015625
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 task mode stale near duplicates",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 13.111540995538235,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.015625
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What fallback is required when embeddings fail?",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 18.73591700196266,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.015625
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 degrade lexical search embeddings fail",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 13.709957994520664,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015625
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What feedback should the reranker learn from?",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 14.98275000602007,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 0.015625
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 accepted context file opens edits task success",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 10.867250010371208,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.015625
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Where should fresh docs adapters sit?",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 10.558625005185604,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 0.015625
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.015384616330265999
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 fallback evidence primary hot path",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 11.58729200065136,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.016393441706895828
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.016129031777381897
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.0158730149269104
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.015625
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 0.015384616330265999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "synapse_scoped_fusion_sdk",
+      "status": "ok",
+      "ingest_ms": 0.0,
+      "notes": [
+        "indexed scope-first recall, BatchSearch fallback, docs.meta filter, query-term rerank"
+      ],
+      "queries": [
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Which path removes fork connect overhead?",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 0.5774170085787773,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 7.524819890044333,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.9588681307994625,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 4.19047619047619e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 3.95847750865052e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 hook chain batch keepalive path",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 0.3149999976158142,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 6.859257720370647,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.9588681307994624,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.9455965995773249,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 4.19047619047619e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How should version slippage be avoided?",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 0.33374999463558197,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 1.6380796688831056,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 1.6150900805479043,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 4.94809688581315e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 4.94809688581315e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 4.8805460750853255e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 local package docs before training memory",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 0.3482079952955246,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 5.886747075790592,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 0.9588701378170064,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 6.688787771180353e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 6.285714285714285e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 6.106761565836299e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What handles evolving facts and contradictions?",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.3013330027461052,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 3.84566804140227,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.4411907487730867,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.4352487858266478,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 temporal validity supersession edges",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.2697499990463257,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 6.744315442580992,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 4.014035087719298e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 3.95847750865052e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What is the hot recall p95 hook budget?",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 0.40766599029302597,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 5.0766526924885875,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 2.57395457211676,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.9725188909369131,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 5.609831029185868e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 5.462901871141474e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 twenty five milliseconds p95 prompt hooks",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 0.35783299803733826,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 8.909251322002113,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.9725174992094192,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 4.19047619047619e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 4.014035087719298e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How does recall save tokens?",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.3328329995274544,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 1.5498358326877464,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 6.657450076804915e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 6.5109384158677945e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 6.480695465447524e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 6.480695465447524e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 task mode stale near duplicates",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.318415991961956,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 7.1194423875503645,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 0.9326874309824126,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 4.19047619047619e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What fallback is required when embeddings fail?",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.367249995470047,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 4.13105848854724,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 1.6150890770391322,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.9201259841004944,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 3.95847750865052e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 1.686082003502391,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 degrade lexical search embeddings fail",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.2744999974966049,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 7.963658680902298,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 4.19047619047619e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 4.014035087719298e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What feedback should the reranker learn from?",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.3244579955935478,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 4.712966412520336,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 1.6150900805479043,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 4.94809688581315e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 4.94809688581315e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 accepted context file opens edits task success",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.4529169946908951,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 10.358610494930934,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.9201259841004944,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 4.19047619047619e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 4.071174377224199e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Where should fresh docs adapters sit?",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.38454200327396393,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 3.5328183140766534,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 2,
+              "uri": null,
+              "title": "recall-bakeoff:boron",
+              "text": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON.",
+              "score": 1.9450309272444612,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-BORON",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 4.94809688581315e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 6,
+              "uri": null,
+              "title": "recall-bakeoff:flint",
+              "text": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT.",
+              "score": 4.94809688581315e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 7,
+              "uri": null,
+              "title": "recall-bakeoff:granite",
+              "text": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE.",
+              "score": 4.8805460750853255e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 fallback evidence primary hot path",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.33808300644159317,
+          "rank": 1,
+          "hits": [
+            {
+              "id": 8,
+              "uri": null,
+              "title": "recall-bakeoff:helios",
+              "text": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS.",
+              "score": 6.1067664903363,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 1,
+              "uri": null,
+              "title": "recall-bakeoff:aether",
+              "text": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER.",
+              "score": 0.9725174992094192,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 4,
+              "uri": null,
+              "title": "recall-bakeoff:drake",
+              "text": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE.",
+              "score": 0.9455965995773249,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 5,
+              "uri": null,
+              "title": "recall-bakeoff:ember",
+              "text": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER.",
+              "score": 0.9201259841004944,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            },
+            {
+              "id": 3,
+              "uri": null,
+              "title": "recall-bakeoff:cirrus",
+              "text": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS.",
+              "score": 4.19047619047619e-06,
+              "meta": {
+                "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+                "scope": "bench/recall_bakeoff/RBK-PUBLIC-20260516-134220"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "synapse_mem0_compat_socket",
+      "status": "ok",
+      "ingest_ms": 816.9888330027461,
+      "notes": [
+        "Synapse-backed drop-in mem0 API, local socket, Lex mode, no cloud"
+      ],
+      "queries": [
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Which path removes fork connect overhead?",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 1.6763749942183495,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 7.59670658895765,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 0.953465587757549,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 5.362880886426593e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 5.203225139549308e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 hook chain batch keepalive path",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 1.168333001434803,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 6.902221976098833,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 0.953465587757549,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 0.9433908283309843,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 5.362880886426593e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How should version slippage be avoided?",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 1.0305419936776161,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 1.658242465840733,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 1.6405345079249043,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 6.126618153931463e-06,
+              "metadata": {}
+            },
+            {
+              "id": "3c891eac-aaa6-4cca-ad31-2a14d3e5c46f",
+              "memory": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT. Engine=synapse_mem0_compat.",
+              "score": 6.126618153931463e-06,
+              "metadata": {}
+            },
+            {
+              "id": "985c6ecc-e896-4354-9d09-23e98c97bd62",
+              "memory": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE. Engine=synapse_mem0_compat.",
+              "score": 6.078523572216733e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 local package docs before training memory",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 1.0214999988675117,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.938472045887117,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 0.9534674542660034,
+              "metadata": {}
+            },
+            {
+              "id": "3c891eac-aaa6-4cca-ad31-2a14d3e5c46f",
+              "memory": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT. Engine=synapse_mem0_compat.",
+              "score": 7.804837709323962e-06,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 7.291167739016235e-06,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 7.168503471244442e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What handles evolving facts and contradictions?",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.7798340022563934,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 3.8520369067801914,
+              "metadata": {}
+            },
+            {
+              "id": "985c6ecc-e896-4354-9d09-23e98c97bd62",
+              "memory": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE. Engine=synapse_mem0_compat.",
+              "score": 0.4382093211909827,
+              "metadata": {}
+            },
+            {
+              "id": "e2392d91-1dfe-43e8-8064-6316d07c73ca",
+              "memory": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER. Engine=synapse_mem0_compat.",
+              "score": 0.43367483386689887,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 temporal validity supersession edges",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.6010409966111183,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 6.779313985154583,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 5.242241199750052e-06,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 5.203225139549308e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What is the hot recall p95 hook budget?",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 0.7052090018987656,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 5.133165402108999,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 2.593995230747326,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 0.963759173443616,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 6.703601108033242e-06,
+              "metadata": {}
+            },
+            {
+              "id": "e2392d91-1dfe-43e8-8064-6316d07c73ca",
+              "memory": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER. Engine=synapse_mem0_compat.",
+              "score": 6.615788129571065e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 twenty five milliseconds p95 prompt hooks",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 0.5867090001702309,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 9.0593594350521,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 0.9637578529819161,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 5.362880886426593e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 5.242241199750052e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How does recall save tokens?",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.6422080025076866,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "e2392d91-1dfe-43e8-8064-6316d07c73ca",
+              "memory": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER. Engine=synapse_mem0_compat.",
+              "score": 1.5896086473344158,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 7.667744534328063e-06,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 7.632601878201447e-06,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 7.5456368353074265e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 7.5456368353074265e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 task mode stale near duplicates",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.6474170014262199,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "e2392d91-1dfe-43e8-8064-6316d07c73ca",
+              "memory": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER. Engine=synapse_mem0_compat.",
+              "score": 7.28226981768719,
+              "metadata": {}
+            },
+            {
+              "id": "985c6ecc-e896-4354-9d09-23e98c97bd62",
+              "memory": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE. Engine=synapse_mem0_compat.",
+              "score": 0.9335267519872995,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 5.362880886426593e-06,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What fallback is required when embeddings fail?",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.6716250032186508,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "3c891eac-aaa6-4cca-ad31-2a14d3e5c46f",
+              "memory": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT. Engine=synapse_mem0_compat.",
+              "score": 4.1897782710194305,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 1.640533574670677,
+              "metadata": {}
+            },
+            {
+              "id": "e2392d91-1dfe-43e8-8064-6316d07c73ca",
+              "memory": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER. Engine=synapse_mem0_compat.",
+              "score": 0.9238668184118023,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 5.203225139549308e-06,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 1.6948325184493107,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 degrade lexical search embeddings fail",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.4419579952955246,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "3c891eac-aaa6-4cca-ad31-2a14d3e5c46f",
+              "memory": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT. Engine=synapse_mem0_compat.",
+              "score": 8.115973809946254,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 5.362880886426593e-06,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 5.242241199750052e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What feedback should the reranker learn from?",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.5273749977350235,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "985c6ecc-e896-4354-9d09-23e98c97bd62",
+              "memory": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE. Engine=synapse_mem0_compat.",
+              "score": 4.818670913219856,
+              "metadata": {}
+            },
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 1.6405345079249043,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 6.126618153931463e-06,
+              "metadata": {}
+            },
+            {
+              "id": "3c891eac-aaa6-4cca-ad31-2a14d3e5c46f",
+              "memory": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT. Engine=synapse_mem0_compat.",
+              "score": 6.126618153931463e-06,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 accepted context file opens edits task success",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.47816700488328934,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "985c6ecc-e896-4354-9d09-23e98c97bd62",
+              "memory": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE. Engine=synapse_mem0_compat.",
+              "score": 10.570856421379863,
+              "metadata": {}
+            },
+            {
+              "id": "e2392d91-1dfe-43e8-8064-6316d07c73ca",
+              "memory": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER. Engine=synapse_mem0_compat.",
+              "score": 0.9238668184118023,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 5.362880886426593e-06,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 5.2818467995802735e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Where should fresh docs adapters sit?",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.47749999910593033,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 3.5474551989576026,
+              "metadata": {}
+            },
+            {
+              "id": "72d09bfa-1c4e-4298-a9b3-18e69fa27c85",
+              "memory": "RBK-PUBLIC-20260516-134220-BORON: Version freshness must resolve local package docs before model training memory. Scope=local-agent-memory. Category=recall-bakeoff. Token=BORON. Engine=synapse_mem0_compat.",
+              "score": 1.9275104241170324,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 6.126618153931463e-06,
+              "metadata": {}
+            },
+            {
+              "id": "3c891eac-aaa6-4cca-ad31-2a14d3e5c46f",
+              "memory": "RBK-PUBLIC-20260516-134220-FLINT: Local-first memory should degrade to lexical search when embeddings or daemons fail. Scope=local-agent-memory. Category=recall-bakeoff. Token=FLINT. Engine=synapse_mem0_compat.",
+              "score": 6.126618153931463e-06,
+              "metadata": {}
+            },
+            {
+              "id": "985c6ecc-e896-4354-9d09-23e98c97bd62",
+              "memory": "RBK-PUBLIC-20260516-134220-GRANITE: A reranker should learn from accepted context, file opens, edits, and later task success. Scope=local-agent-memory. Category=recall-bakeoff. Token=GRANITE. Engine=synapse_mem0_compat.",
+              "score": 6.078523572216733e-06,
+              "metadata": {}
+            }
+          ]
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 fallback evidence primary hot path",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.40104200690984726,
+          "rank": 1,
+          "hits": [
+            {
+              "id": "577a4162-e56f-4a87-abbd-eff578958627",
+              "memory": "RBK-PUBLIC-20260516-134220-HELIOS: Fresh docs adapters should be fallback evidence, not the primary hot path. Scope=local-agent-memory. Category=recall-bakeoff. Token=HELIOS. Engine=synapse_mem0_compat.",
+              "score": 6.141442943649203,
+              "metadata": {}
+            },
+            {
+              "id": "d0637bed-2eef-4c2f-ac67-00eb18e5896f",
+              "memory": "RBK-PUBLIC-20260516-134220-AETHER: Socket keepalive batch path removes fork/connect overhead for hook chains. Scope=local-agent-memory. Category=recall-bakeoff. Token=AETHER. Engine=synapse_mem0_compat.",
+              "score": 0.9637578529819161,
+              "metadata": {}
+            },
+            {
+              "id": "ee35b56a-1ec1-458a-a960-57e711724ee5",
+              "memory": "RBK-PUBLIC-20260516-134220-DRAKE: Hot recall budget for prompt hooks should stay below twenty five milliseconds p95. Scope=local-agent-memory. Category=recall-bakeoff. Token=DRAKE. Engine=synapse_mem0_compat.",
+              "score": 0.9433908283309843,
+              "metadata": {}
+            },
+            {
+              "id": "e2392d91-1dfe-43e8-8064-6316d07c73ca",
+              "memory": "RBK-PUBLIC-20260516-134220-EMBER: Token saving improves when recall packs evidence by task mode and drops stale near duplicates. Scope=local-agent-memory. Category=recall-bakeoff. Token=EMBER. Engine=synapse_mem0_compat.",
+              "score": 0.9238668184118023,
+              "metadata": {}
+            },
+            {
+              "id": "ff917118-f779-4a3e-a049-4a9b8f09008a",
+              "memory": "RBK-PUBLIC-20260516-134220-CIRRUS: Contradiction handling requires temporal validity windows and supersession edges. Scope=local-agent-memory. Category=recall-bakeoff. Token=CIRRUS. Engine=synapse_mem0_compat.",
+              "score": 5.362880886426593e-06,
+              "metadata": {}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "claude_mem_worker_import_fts",
+      "status": "ok",
+      "ingest_ms": 8.61862500011921,
+      "notes": [
+        "claude-mem 13.2.0 worker, isolated temp profile, Chroma disabled, /api/import + /api/search?format=json",
+        "import stats: {'sessionsImported': 1, 'sessionsSkipped': 0, 'summariesImported': 0, 'summariesSkipped': 0, 'observationsImported': 8, 'observationsSkipped': 0, 'promptsImported': 0, 'promptsSkipped': 0}"
+      ],
+      "queries": [
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Which path removes fork connect overhead?",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 2.729583002626896,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 hook chain batch keepalive path",
+          "expected": "RBK-PUBLIC-20260516-134220-AETHER",
+          "latency_ms": 0.9268329963088036,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How should version slippage be avoided?",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 0.6399170011281967,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 local package docs before training memory",
+          "expected": "RBK-PUBLIC-20260516-134220-BORON",
+          "latency_ms": 0.5360830053687096,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What handles evolving facts and contradictions?",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.453916996717453,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 temporal validity supersession edges",
+          "expected": "RBK-PUBLIC-20260516-134220-CIRRUS",
+          "latency_ms": 0.39545800536870956,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What is the hot recall p95 hook budget?",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 0.4160410016775131,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 twenty five milliseconds p95 prompt hooks",
+          "expected": "RBK-PUBLIC-20260516-134220-DRAKE",
+          "latency_ms": 1.7148749977350235,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 How does recall save tokens?",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.6198339983820915,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 task mode stale near duplicates",
+          "expected": "RBK-PUBLIC-20260516-134220-EMBER",
+          "latency_ms": 0.5277910083532333,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What fallback is required when embeddings fail?",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.5369170010089874,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 degrade lexical search embeddings fail",
+          "expected": "RBK-PUBLIC-20260516-134220-FLINT",
+          "latency_ms": 0.4864169955253601,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 What feedback should the reranker learn from?",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.5464590042829514,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 accepted context file opens edits task success",
+          "expected": "RBK-PUBLIC-20260516-134220-GRANITE",
+          "latency_ms": 0.5466669946908951,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 Where should fresh docs adapters sit?",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.488584004342556,
+          "rank": null,
+          "hits": []
+        },
+        {
+          "query": "RBK-PUBLIC-20260516-134220 fallback evidence primary hot path",
+          "expected": "RBK-PUBLIC-20260516-134220-HELIOS",
+          "latency_ms": 0.45066599547863007,
+          "rank": null,
+          "hits": []
+        }
+      ]
+    }
+  ]
+}

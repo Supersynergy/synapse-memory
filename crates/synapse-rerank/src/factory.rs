@@ -25,7 +25,9 @@ pub fn build_reranker_from_env() -> Box<dyn Reranker> {
                 return Box::new(r);
             }
             Err(e) => {
-                tracing::warn!("LightGbmReranker load failed ({e}) — falling back to IdentityReranker");
+                tracing::warn!(
+                    "LightGbmReranker load failed ({e}) — falling back to IdentityReranker"
+                );
                 return Box::new(IdentityReranker);
             }
         }
@@ -39,13 +41,17 @@ pub fn build_reranker_from_env() -> Box<dyn Reranker> {
                 return Box::new(r);
             }
             Err(e) => {
-                tracing::warn!("OnnxCrossEncoder init failed ({e}) — falling back to IdentityReranker");
+                tracing::warn!(
+                    "OnnxCrossEncoder init failed ({e}) — falling back to IdentityReranker"
+                );
                 return Box::new(IdentityReranker);
             }
         }
     }
 
-    tracing::warn!("SYNAPSE_RERANKER={spec:?} unrecognised or feature not compiled in — using IdentityReranker");
+    tracing::warn!(
+        "SYNAPSE_RERANKER={spec:?} unrecognised or feature not compiled in — using IdentityReranker"
+    );
     Box::new(IdentityReranker)
 }
 
@@ -56,7 +62,7 @@ mod tests {
     #[test]
     fn factory_default_is_identity() {
         // Ensure env is unset for this test.
-        std::env::remove_var("SYNAPSE_RERANKER");
+        unsafe { std::env::remove_var("SYNAPSE_RERANKER") };
         let r = build_reranker_from_env();
         // Should succeed as IdentityReranker.
         let out = r.rerank("q", vec![], 10).unwrap();
@@ -65,29 +71,29 @@ mod tests {
 
     #[test]
     fn factory_identity_explicit() {
-        std::env::set_var("SYNAPSE_RERANKER", "identity");
+        unsafe { std::env::set_var("SYNAPSE_RERANKER", "identity") };
         let r = build_reranker_from_env();
         let out = r.rerank("q", vec![], 5).unwrap();
         assert!(out.is_empty());
-        std::env::remove_var("SYNAPSE_RERANKER");
+        unsafe { std::env::remove_var("SYNAPSE_RERANKER") };
     }
 
     #[test]
     fn factory_lightgbm_missing_falls_back() {
-        std::env::set_var("SYNAPSE_RERANKER", "lightgbm:/nonexistent/path/model.lgb");
+        unsafe { std::env::set_var("SYNAPSE_RERANKER", "lightgbm:/nonexistent/path/model.lgb") };
         let r = build_reranker_from_env();
         // Must not panic, must return something usable (IdentityReranker fallback).
         let out = r.rerank("q", vec![], 5).unwrap();
         assert!(out.is_empty());
-        std::env::remove_var("SYNAPSE_RERANKER");
+        unsafe { std::env::remove_var("SYNAPSE_RERANKER") };
     }
 
     #[test]
     fn factory_unknown_falls_back() {
-        std::env::set_var("SYNAPSE_RERANKER", "bogus_value");
+        unsafe { std::env::set_var("SYNAPSE_RERANKER", "bogus_value") };
         let r = build_reranker_from_env();
         let out = r.rerank("q", vec![], 5).unwrap();
         assert!(out.is_empty());
-        std::env::remove_var("SYNAPSE_RERANKER");
+        unsafe { std::env::remove_var("SYNAPSE_RERANKER") };
     }
 }

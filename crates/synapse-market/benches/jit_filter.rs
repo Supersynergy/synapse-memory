@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use synapse_market::jit::{Col, FilterCache, Op, Predicate};
 
 const TICKERS: usize = 220;
@@ -9,7 +9,7 @@ fn make_data() -> (Vec<i64>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
     let ts: Vec<i64> = (0..N as i64).collect();
     let open: Vec<f32> = (0..N).map(|i| 90.0 + (i % 50) as f32).collect();
     let high: Vec<f32> = open.iter().map(|v| v + 5.0).collect();
-    let low: Vec<f32>  = open.iter().map(|v| v - 5.0).collect();
+    let low: Vec<f32> = open.iter().map(|v| v - 5.0).collect();
     let close: Vec<f32> = (0..N).map(|i| 80.0 + (i % 60) as f32).collect();
     let volume: Vec<f32> = (0..N).map(|i| 5000.0 + (i % 20000) as f32).collect();
     (ts, open, high, low, close, volume)
@@ -71,11 +71,10 @@ fn bench_sqlite(c: &mut Criterion) {
     {
         let (_, _, _, _, close, volume) = make_data();
         let tx = conn.unchecked_transaction().unwrap();
-        let mut stmt = conn
-            .prepare("INSERT INTO candles VALUES (?1, ?2)")
-            .unwrap();
+        let mut stmt = conn.prepare("INSERT INTO candles VALUES (?1, ?2)").unwrap();
         for i in 0..N {
-            stmt.execute(rusqlite::params![close[i], volume[i]]).unwrap();
+            stmt.execute(rusqlite::params![close[i], volume[i]])
+                .unwrap();
         }
         tx.commit().unwrap();
     }
@@ -102,9 +101,7 @@ fn bench_duckdb(c: &mut Criterion) {
     conn.execute_batch("CREATE TABLE candles (close FLOAT, volume FLOAT)")
         .unwrap();
     {
-        let mut app = conn
-            .appender("candles")
-            .unwrap();
+        let mut app = conn.appender("candles").unwrap();
         for i in 0..N {
             app.append_row(duckdb::params![close[i] as f64, volume[i] as f64])
                 .unwrap();
@@ -115,13 +112,9 @@ fn bench_duckdb(c: &mut Criterion) {
     c.bench_function("duckdb_attach", |b| {
         b.iter(|| {
             let mut stmt = conn
-                .prepare(
-                    "SELECT count(*) FROM candles WHERE close > 100 AND volume > 10000",
-                )
+                .prepare("SELECT count(*) FROM candles WHERE close > 100 AND volume > 10000")
                 .unwrap();
-            let count: i64 = stmt
-                .query_row([], |r| r.get(0))
-                .unwrap();
+            let count: i64 = stmt.query_row([], |r| r.get(0)).unwrap();
             black_box(count)
         })
     });

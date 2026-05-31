@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -5,7 +7,6 @@ use crate::index::Hit;
 
 // 16 shards to reduce contention under high concurrency
 const SHARDS: usize = 16;
-const DEFAULT_CAP_PER_SHARD: usize = 2048; // 16 * 2048 = 32768 total
 
 /// ahash-based u64 key (10 cycles vs blake3 400 cycles)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,7 +28,7 @@ struct Shard {
     map: HashMap<CacheKey, (Vec<Hit>, u64), ahash::RandomState>,
     order: std::collections::VecDeque<CacheKey>,
     cap: usize,
-    gen: u64,
+    generation: u64,
 }
 
 impl Shard {
@@ -36,18 +37,14 @@ impl Shard {
             map: HashMap::with_capacity_and_hasher(cap, ahash::RandomState::default()),
             order: std::collections::VecDeque::with_capacity(cap),
             cap,
-            gen: 0,
+            generation: 0,
         }
     }
 
-    fn get(&mut self, key: &CacheKey) -> Option<&Vec<Hit>> {
-        let gen = self.gen;
+    fn get(&self, key: &CacheKey) -> Option<&Vec<Hit>> {
+        let generation = self.generation;
         match self.map.get(key) {
-            Some((hits, entry_gen)) if *entry_gen == gen => {
-                // Safety: we'll do a raw pointer trick to avoid borrow conflict
-                let ptr = hits as *const Vec<Hit>;
-                Some(unsafe { &*ptr })
-            }
+            Some((hits, entry_gen)) if *entry_gen == generation => Some(hits),
             _ => None,
         }
     }
@@ -60,11 +57,11 @@ impl Shard {
             }
         }
         self.order.push_back(key);
-        self.map.insert(key, (hits, self.gen));
+        self.map.insert(key, (hits, self.generation));
     }
 
     fn invalidate(&mut self) {
-        self.gen += 1;
+        self.generation += 1;
         self.map.clear();
         self.order.clear();
     }
@@ -90,7 +87,7 @@ impl T0Cache {
 
     pub fn get(&self, key: &CacheKey) -> Option<Vec<Hit>> {
         let idx = Self::shard_idx(key);
-        let mut shard = self.shards[idx].lock().unwrap();
+        let shard = self.shards[idx].lock().unwrap();
         shard.get(key).cloned()
     }
 
@@ -111,6 +108,10 @@ impl T0Cache {
             .iter()
             .map(|s| s.lock().unwrap().map.len())
             .sum()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
