@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ai.ctxos.retrain — weekly retrain of the Context-OS learned noise classifier.
+  As context_feedback accumulates, periodic retraining sharpens the model (the SuperML loop).
+
+  Install (opt-in, user action):
+    cp deploy/launchd/ai.ctxos.retrain.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/ai.ctxos.retrain.plist
+  Edit WorkingDirectory + the uv path below to match your machine.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.ctxos.retrain</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/uv</string>
+    <string>run</string>
+    <string>tools/ctxos/train_noise_model.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/master/projects/synapse</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>4</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/tmp/ctxos-retrain.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/ctxos-retrain.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
