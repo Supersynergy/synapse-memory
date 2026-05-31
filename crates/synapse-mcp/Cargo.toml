@@ -17,6 +17,7 @@ tokio.workspace = true
 clap.workspace = true
 synapse-market = { path = "../synapse-market" }
 synapse-pack = { path = "../synapse-pack" }
+synapse-learn = { path = "../synapse-learn" }
 rusqlite.workspace = true
 
 [dev-dependencies]

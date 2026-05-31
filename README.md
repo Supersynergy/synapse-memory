@@ -59,6 +59,33 @@ synx -f "$HOME/.synapse/brain.db" doctor --fix
 
 ---
 
+## Context-OS for any agent CLI (Claude Code · Codex · Gemini CLI)
+
+One local MCP server that gives any agent **always-best, token-budget-bounded, self-learning**
+context. Deletion-based (verbatim) — file paths, error strings and numbers survive exactly;
+no cloud, no vendor lock. Install into every CLI you have with one command:
+
+```bash
+sh scripts/install-ctxos.sh install --all   # detects claude / codex / gemini, registers the MCP server
+sh scripts/install-ctxos.sh doctor           # verify
+```
+
+Then any agent can call these tools:
+
+| Tool | What it does |
+|------|--------------|
+| `context_pack(query, budget_tokens)` | Retrieve + pack the minimal **verbatim** STATE within a token budget. Best-first, lost-in-the-middle-safe. Call it first. |
+| `context_state(topic)` | Current-truth card: latest verified facts + decisions, supersession marked. |
+| `context_feedback(used_ids, gate)` | Report what you used + whether your gate passed → retrieval self-improves (per-kind reward). |
+| `context_remember(text, kind)` | Persist a durable fact/decision (embedded, searchable). |
+
+How the packing works: hybrid retrieval (8 ms) → SimHash near-dup collapse → adaptive
+per-kind **deletion** tiers (`full → signatures → fact-delta → one-line`) → greedy
+budget knapsack → serial-position order. Pure, deterministic, no LLM call. See
+[`docs/CTXOS.md`](docs/CTXOS.md) and [`docs/SPEC-ctxos-v2.md`](docs/SPEC-ctxos-v2.md).
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -89,7 +116,8 @@ graph TD
 | `synapse-engine` | ABI bridge + RRF fusion |
 | `synapsed` | Unix-socket RPC daemon |
 | `synapse-cli` | CLI: put / find / hybrid / merge / sign / verify / stats |
-| `synapse-mcp` | MCP server (6 tools + coding-agent tools) |
+| `synapse-mcp` | MCP server — Context-OS tools (`context_pack`/`context_state`/`context_feedback`/`context_remember`) + memory/agent tools |
+| `synapse-pack` | Token-budget context packer: verbatim deletion-tiers + SimHash dedup + serial-position order (pure, no IO) |
 | `synapse-space` | Agent-memory hierarchy: Space → Wing → Room → Drawer |
 | `synapse-learn` | Thompson-sampling bandit router |
 | `synapse-rerank` | Cross-encoder rerank (identity default; ONNX optional) |

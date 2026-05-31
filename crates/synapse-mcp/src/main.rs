@@ -26,6 +26,10 @@ struct Cli {
     /// Path to synapse-market DB for smx_* tools (default: $SMX_DB or /tmp/synapse_market.db)
     #[arg(long, env = "SMX_DB", default_value = "/tmp/synapse_market.db")]
     market_db: PathBuf,
+    /// Brain DB whose sibling `*.learn.db` holds the self-learning reward tables.
+    /// Default: $SYNAPSE_BRAIN or ~/.synapse/brain.db.
+    #[arg(long, env = "SYNAPSE_BRAIN")]
+    brain: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +56,10 @@ struct JsonRpcResp {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    if let Some(b) = &cli.brain {
+        // Make the brain path visible to the self-learning helpers.
+        unsafe { std::env::set_var("SYNAPSE_BRAIN", b) };
+    }
     let stdin = tokio::io::stdin();
     let mut reader = BufReader::new(stdin).lines();
     let mut stdout = tokio::io::stdout();
@@ -1010,6 +1018,53 @@ fn pack_id(query: &str, ids: &[i64]) -> String {
     format!("pk_{h:016x}")
 }
 
+/// Brain DB path; its sibling `*.learn.db` holds the self-learning reward tables.
+fn brain_path() -> PathBuf {
+    if let Ok(p) = std::env::var("SYNAPSE_BRAIN")
+        && !p.is_empty()
+    {
+        return PathBuf::from(p);
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".synapse/brain.db");
+    }
+    PathBuf::from(".synapse/brain.db")
+}
+
+const KIND_TAGS: [&str; 5] = ["known-fact", "decision", "file", "chat", "other"];
+
+/// Learned per-kind ranking bonus (win-rate × 0.03), read from the learn store.
+/// Empty map if the store is unavailable — retrieval still works, just unlearned.
+fn learn_bonus_map() -> HashMap<&'static str, f32> {
+    let mut m = HashMap::new();
+    let lp = brain_path().with_extension("learn.db");
+    if let Ok(store) = synapse_learn::LearnStore::open(&lp) {
+        for tag in KIND_TAGS {
+            if let Ok(b) = store.memory_type_bonus(tag) {
+                m.insert(tag, b as f32);
+            }
+        }
+    }
+    m
+}
+
+/// Record reward for the kinds the agent actually used, plus a global ctxpack bandit arm.
+/// Returns the number of kind-rewards written (0 if the store is unavailable).
+fn record_ctx_reward(kinds: &[&str], hit: bool) -> usize {
+    let lp = brain_path().with_extension("learn.db");
+    let Ok(store) = synapse_learn::LearnStore::open(&lp) else {
+        return 0;
+    };
+    let mut n = 0;
+    for k in kinds {
+        if store.update_memory_type_reward(k, hit).is_ok() {
+            n += 1;
+        }
+    }
+    let _ = store.update_bandit("ctxpack", hit);
+    n
+}
+
 fn hit_kind(title: &str, meta: &Value) -> Kind {
     let s = meta
         .get("kind")
@@ -1063,6 +1118,7 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
     });
 
     let hits = hybrid_hits(sock, query, k).await?;
+    let learned = learn_bonus_map();
     let mut cands = Vec::new();
     for h in &hits {
         let text = h.get("text").and_then(|v| v.as_str()).unwrap_or_default();
@@ -1075,9 +1131,11 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .to_string();
-        let score = h.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+        let mut score = h.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
         let meta = h.get("meta").cloned().unwrap_or(Value::Null);
         let kind = hit_kind(&title, &meta);
+        // learned per-kind bonus — feedback on this kind lifts it in future packs
+        score += learned.get(kind_tag(kind)).copied().unwrap_or(0.0);
         if let Some(filter) = &kinds_filter
             && !filter.iter().any(|f| kind_tag(kind).contains(f.as_str()))
         {
@@ -1130,15 +1188,49 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
 
 async fn context_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
     let pack_id = args.get("pack_id").and_then(|v| v.as_str()).unwrap_or("");
-    let used_ids = args.get("used_ids").cloned().unwrap_or(json!([]));
     let gate = args
         .get("gate")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
+    let used_ids: Vec<i64> = args
+        .get("used_ids")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_i64()).collect())
+        .unwrap_or_default();
+
+    // Resolve the kind of each used doc so we can reward the right kinds.
+    let mut kinds: Vec<&'static str> = Vec::new();
+    if !used_ids.is_empty() {
+        let placeholders = std::iter::repeat_n("?", used_ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let rows = sql_rows(
+            sock,
+            format!("SELECT id, title, meta FROM docs WHERE id IN ({placeholders})"),
+            used_ids.iter().map(|id| json!(id)).collect(),
+        )
+        .await
+        .unwrap_or_default();
+        for r in &rows {
+            let title = r.get("title").and_then(|v| v.as_str()).unwrap_or_default();
+            let meta = r.get("meta").cloned().unwrap_or(Value::Null);
+            kinds.push(kind_tag(hit_kind(title, &meta)));
+        }
+    }
+
+    // Close the self-learning loop: gate=pass rewards the used kinds, fail dampens.
+    let rewarded = if gate == "unknown" {
+        0
+    } else {
+        record_ctx_reward(&kinds, gate == "pass")
+    };
+
+    // Persist the raw feedback event too (sweepable, auditable).
     let payload = json!({
         "pack_id": pack_id,
         "used_ids": used_ids,
         "gate": gate,
+        "kinds": kinds,
         "ts": now_secs(),
     });
     let meta = json!({"schema": "synapse.ctxos.v1", "kind": "ctx-feedback", "gate": gate});
@@ -1153,7 +1245,12 @@ async fn context_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
         }}),
     )
     .await?;
-    Ok(json!({"ok": true, "recorded": payload}))
+    Ok(json!({
+        "ok": true,
+        "gate": gate,
+        "rewarded_kinds": kinds,
+        "learn_updates": rewarded,
+    }))
 }
 
 async fn context_remember(sock: &PathBuf, args: &Value) -> Result<Value> {

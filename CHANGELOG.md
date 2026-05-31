@@ -9,6 +9,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- **Context-OS** — cross-CLI MCP server for token-budget-bounded, self-learning, verbatim context.
+  - `synapse-pack` crate: pure token-budget packer (deletion-based tiers `full → signatures → fact-delta → one-line`, SimHash near-dup collapse, greedy budget knapsack, serial-position ordering). 9 unit tests.
+  - `synapse-mcp` tools: `context_pack`, `context_state`, `context_feedback`, `context_remember`; MCP `instructions` for cross-tool guidance; `--brain`/`SYNAPSE_BRAIN` knob.
+  - Self-learning loop: `context_feedback` writes per-kind reward (`memory_type_reward`), `context_pack` applies `memory_type_bonus` to ranking.
+  - `scripts/install-ctxos.sh` (`install`/`doctor`/`uninstall`, `--dry-run`) registers the server into Claude Code, Codex and Gemini CLI via their official `mcp add`; `scripts/install.sh` curl-pipe bootstrap.
+  - Docs: `docs/CTXOS.md`, `docs/SPEC-ctxos-v2.md`, `docs/adr/0001-context-os-mcp.md`, README section.
+
 ---
 
 ## [1.0.1-wave-19] - 2026-05-13

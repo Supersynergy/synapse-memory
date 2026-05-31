@@ -196,11 +196,13 @@ pub fn pack(mut cands: Vec<Candidate>, options: &PackOptions) -> Pack {
     }
 
     // 3. Multiple-choice knapsack: greedy by score, pick richest tier that fits.
-    let avail = budget.saturating_sub(options.header_reserve);
+    //    Header reserve scales down on small budgets so a tiny budget still fits content.
+    let header = options.header_reserve.min(budget / 4);
+    let avail = budget.saturating_sub(header);
     let mut used = 0usize;
     let mut chosen: Vec<PackedBlock> = Vec::new();
     let mut dropped_ids = Vec::new();
-    for c in kept {
+    for c in &kept {
         let floor = c.kind.floor();
         let mut placed = false;
         for tier in Tier::ladder() {
@@ -226,6 +228,28 @@ pub fn pack(mut cands: Vec<Candidate>, options: &PackOptions) -> Pack {
         }
         if !placed {
             dropped_ids.push(c.id);
+        }
+    }
+
+    // Min-one guarantee: if nothing fit but candidates exist, force the top one at
+    // OneLine (floor bypassed only here) as long as a single line fits the full budget.
+    if chosen.is_empty()
+        && let Some(top) = kept.first()
+    {
+        let body = compress(&top.text, Tier::OneLine);
+        let block_text = render_block_text(&top.title, &body);
+        let toks = estimate_tokens(&block_text);
+        if toks <= budget {
+            used = toks;
+            chosen.push(PackedBlock {
+                id: top.id,
+                kind: top.kind,
+                tier: Tier::OneLine,
+                title: top.title.clone(),
+                text: body,
+                tokens: toks,
+            });
+            dropped_ids.retain(|&d| d != top.id);
         }
     }
 
@@ -540,6 +564,41 @@ mod tests {
         assert_eq!(p.blocks[0].id, 10, "best first");
         assert_eq!(p.blocks[2].id, 20, "second-best last");
         assert_eq!(p.blocks[1].id, 30, "rest middle");
+    }
+
+    #[test]
+    fn tiny_budget_still_returns_top_one() {
+        // budget too small for full/signatures, but one short line must survive
+        let cands = vec![
+            cand(
+                1,
+                "lat = 8ms\nlots of extra prose here that will not fit at all in budget",
+                0.9,
+                Kind::File,
+            ),
+            cand(
+                2,
+                "other doc with different words entirely",
+                0.5,
+                Kind::File,
+            ),
+        ];
+        let p = pack(
+            cands,
+            &PackOptions {
+                budget_tokens: 24,
+                header_reserve: 64,
+            },
+        );
+        assert!(
+            !p.blocks.is_empty(),
+            "tiny budget must still return the top fact"
+        );
+        assert_eq!(
+            p.blocks[0].id, 1,
+            "top-scored candidate wins the single slot"
+        );
+        assert!(p.used_tokens <= 24, "still within budget");
     }
 
     #[test]
