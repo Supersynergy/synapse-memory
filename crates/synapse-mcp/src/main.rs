@@ -15,7 +15,7 @@ use tokio::net::UnixStream;
 use synapse_market::Market;
 #[cfg(feature = "market")]
 use synapse_market::ffi::smx_query_range;
-use synapse_pack::{Candidate, Kind, PackOptions, kind_tag, pack, render};
+use synapse_pack::{Candidate, Kind, PackOptions, estimate_tokens, kind_tag, pack, render};
 
 type AgentScope = (String, Option<String>, String);
 #[cfg(feature = "market")]
@@ -160,7 +160,7 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
             {"name": "context_pack", "description": "Retrieve + pack the minimal VERBATIM context for a task within a token budget. Returns a STATE card (best-first, lost-in-the-middle-safe), never narrative. Call this FIRST for any task needing prior knowledge.", "inputSchema": {"type": "object", "properties": {
                 "query": {"type": "string", "description": "Task or question to gather context for"},
                 "budget_tokens": {"type": "integer", "default": 4000},
-                "k": {"type": "integer", "default": 24, "description": "Candidates to retrieve before packing"},
+                "k": {"type": "integer", "default": 32, "description": "Candidates per query angle before packing (raw + high-signal-terms merged)"},
                 "kinds": {"type": "array", "items": {"type": "string"}, "description": "Optional filter: known-fact, decision, file, chat"}
             }, "required": ["query"]}},
             {"name": "context_feedback", "description": "After the turn, report which doc ids you actually used and whether your verify-gate passed. Closes the self-learning loop so retrieval improves.", "inputSchema": {"type": "object", "properties": {
@@ -400,14 +400,6 @@ fn agent_scope(args: &Value) -> Result<AgentScope> {
 
 fn scope_component(value: &str) -> String {
     value.replace('%', "%25").replace('/', "%2F")
-}
-
-fn estimate_tokens(text: &str) -> usize {
-    if text.is_empty() {
-        0
-    } else {
-        text.len().div_ceil(4).max(1)
-    }
 }
 
 fn compact_text(text: &str, max_chars: usize) -> String {
@@ -1069,6 +1061,55 @@ fn hit_kind(title: &str, meta: &Value) -> Kind {
     Kind::from_meta(&s)
 }
 
+/// Fraction of `terms` present in `text`, scaled to a small score nudge.
+fn term_overlap_boost(terms: &[String], text: &str) -> f32 {
+    if terms.is_empty() {
+        return 0.0;
+    }
+    let lt = text.to_ascii_lowercase();
+    let hits = terms.iter().filter(|t| lt.contains(t.as_str())).count();
+    (hits as f32 / terms.len() as f32) * 0.1
+}
+
+/// Recall booster: union the raw-query hybrid search with a high-signal-terms search,
+/// deduped by id (keeping the higher daemon score). Two angles catch docs one misses.
+async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<Vec<Value>> {
+    let raw = hybrid_hits(sock, query, k).await?;
+    let terms = query_terms(query);
+    let term_query = terms.join(" ");
+    let extra = if !terms.is_empty() && term_query != query {
+        hybrid_hits(sock, &term_query, k).await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let mut by_id: HashMap<i64, Value> = HashMap::new();
+    let mut order: Vec<i64> = Vec::new();
+    for h in raw.into_iter().chain(extra) {
+        let id = h.get("id").and_then(|v| v.as_i64()).unwrap_or_default();
+        match by_id.get(&id) {
+            Some(existing) => {
+                let es = existing
+                    .get("score")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let ns = h.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                if ns > es {
+                    by_id.insert(id, h);
+                }
+            }
+            None => {
+                order.push(id);
+                by_id.insert(id, h);
+            }
+        }
+    }
+    Ok(order
+        .into_iter()
+        .filter_map(|id| by_id.remove(&id))
+        .collect())
+}
+
 async fn hybrid_hits(sock: &PathBuf, query: &str, limit: usize) -> Result<Vec<Value>> {
     let resp = daemon_call(
         sock,
@@ -1094,14 +1135,16 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
         .get("budget_tokens")
         .and_then(|v| v.as_u64())
         .unwrap_or(4000) as usize;
-    let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(24) as usize;
+    let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(32) as usize;
     let kinds_filter: Option<Vec<String>> = args.get("kinds").and_then(|v| v.as_array()).map(|a| {
         a.iter()
             .filter_map(|x| x.as_str().map(|s| s.to_ascii_lowercase()))
             .collect()
     });
 
-    let hits = hybrid_hits(sock, query, k).await?;
+    // Recall: union of the raw-query search and a high-signal-terms search, deduped.
+    let hits = recall_candidates(sock, query, k).await?;
+    let terms = query_terms(query);
     let learned = learn_bonus_map();
     let mut cands = Vec::new();
     for h in &hits {
@@ -1120,6 +1163,9 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
         let kind = hit_kind(&title, &meta);
         // learned per-kind bonus — feedback on this kind lifts it in future packs
         score += learned.get(kind_tag(kind)).copied().unwrap_or(0.0);
+        // recall: a candidate matching more query terms ranks higher (survives the budget)
+        score += term_overlap_boost(&terms, text);
+        score += term_overlap_boost(&terms, &title);
         if let Some(filter) = &kinds_filter
             && !filter.iter().any(|f| kind_tag(kind).contains(f.as_str()))
         {
@@ -1535,5 +1581,21 @@ mod tests {
             truncate_chars("äöüß alpha", 4).unwrap(),
             "äöüß\n[truncated]"
         );
+    }
+
+    #[test]
+    fn term_overlap_boost_scales_with_matches() {
+        let terms = vec![
+            "synapse".to_string(),
+            "context".to_string(),
+            "packer".to_string(),
+        ];
+        let none = term_overlap_boost(&terms, "totally unrelated prose");
+        let some = term_overlap_boost(&terms, "the synapse context engine");
+        let all = term_overlap_boost(&terms, "synapse context packer notes");
+        assert_eq!(none, 0.0);
+        assert!(some > none && all > some, "more matches => bigger boost");
+        assert!(all <= 0.1 + f32::EPSILON, "boost is bounded");
+        assert_eq!(term_overlap_boost(&[], "anything"), 0.0);
     }
 }
