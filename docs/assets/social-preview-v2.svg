@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#1F1300"/>
+  <circle cx="1120" cy="80" r="260" fill="#D97706" opacity=".22"/>
+  <circle cx="90" cy="590" r="220" fill="#10B981" opacity=".18"/>
+  <rect x="72" y="72" width="1136" height="496" rx="36" fill="#ffffff" opacity=".055" stroke="#ffffff" stroke-opacity=".18"/>
+  <text x="116" y="168" fill="#10B981" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="700">Rust / github.com</text>
+  <text x="116" y="288" fill="#FFF7ED" font-family="Inter, Arial, sans-serif" font-size="72" font-weight="800">Synapse</text>
+  <text x="120" y="362" fill="#FFF7ED" opacity=".82" font-family="Inter, Arial, sans-serif" font-size="28">Synapse is a Rust-first developer tool focused on fast local workflows.</text>
+  <text x="120" y="470" fill="#FFF7ED" opacity=".72" font-family="Inter, Arial, sans-serif" font-size="24">Quickstart • AGENTS.md • social preview • repo polish</text>
+  <circle cx="1010" cy="320" r="170" fill="none" stroke="#10B981" stroke-width="8" opacity=".8"/><circle cx="1010" cy="320" r="95" fill="none" stroke="#D97706" stroke-width="8"/><path d="M1010 320l150-80" stroke="#10B981" stroke-width="14" stroke-linecap="round"/><circle cx="1160" cy="240" r="20" fill="#10B981"/>
+</svg>

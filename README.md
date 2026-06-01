@@ -1,3 +1,36 @@
+<!-- REPO-POLISH:START -->
+<p align="center">
+  <img src="docs/assets/social-preview.png" alt="Repo social preview" width="100%">
+</p>
+
+> Synapse is a Rust-first developer tool focused on fast local workflows.
+
+## Quick Start
+
+```bash
+git clone git@github.com:Supersynergy/synapse.git
+cd synapse
+cargo fetch
+```
+
+Expected result: the project runs locally or reports the next missing prerequisite directly in the terminal.
+
+## Developer Map
+
+| Need | Command |
+|---|---|
+| test | `just test` |
+| lint | `just lint` |
+| fmt | `just fmt` |
+| check | `just check` |
+| setup | `cargo fetch` |
+| build | `cargo build` |
+
+Full verification path: `just test && just lint && just fmt && just check && cargo fetch && cargo build`
+
+Agent instructions live in [AGENTS.md](AGENTS.md).
+<!-- REPO-POLISH:END -->
+
 # Synapse
 
 [![CI](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml)
