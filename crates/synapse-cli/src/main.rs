@@ -11,6 +11,15 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use synapse_core::{
     PutRequest, SearchMode, Store,
+    corpus::{
+        CorpusSourceKind, GoldQuestion, NewCorpusDocument, PromotionKind,
+        bootstrap_eval_from_corpus, corpus_migrate, due_corpus_sync_sources, evaluate_rankings,
+        evaluate_rankings_gate, gold_candidates_from_corpus, import_synapse_docs_to_corpus,
+        ingest_fetched_document, ingest_pdf_bytes, ingest_rss_xml, ingest_web_html,
+        ingest_youtube_transcript, mark_corpus_source_synced, put_corpus_document, queue_promotion,
+        rank_gold_questions, ready_promotions, search_corpus, set_corpus_chunk_embedding,
+        upsert_corpus_sync_source, verify_promotion, youtube_video_id,
+    },
     embed::Embedder,
     federate::{Addr, Federation},
     fresh::{FreshMode, FreshOptions, build_fresh_report, render_fresh_context_xml},
@@ -341,6 +350,213 @@ enum Cmd {
         #[arg(long, default_value_t = 10)]
         iters: usize,
     },
+    /// Raw corpus sidecar: ingest/search/eval before verified memory promotion
+    Corpus {
+        #[command(subcommand)]
+        action: CorpusCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum CorpusCmd {
+    /// Add raw text to the corpus sidecar. Text comes from --text or stdin.
+    AddText {
+        #[arg(long, default_value = "text")]
+        kind: String,
+        #[arg(long)]
+        source_uri: String,
+        #[arg(long)]
+        external_id: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        text: Option<String>,
+        #[arg(long)]
+        published_ts: Option<i64>,
+        /// Embed inserted chunks so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Add RSS XML to the corpus sidecar. XML comes from --path or stdin.
+    AddRss {
+        #[arg(long)]
+        source_uri: String,
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Embed inserted/existing feed documents so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Add a YouTube transcript (plain text, VTT, or SRT) to the corpus sidecar.
+    AddYoutube {
+        #[arg(long)]
+        video_id: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        source_uri: Option<String>,
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Embed inserted transcript chunks so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Fetch YouTube subtitles/transcript with yt-dlp and ingest them.
+    FetchYoutube {
+        url: String,
+        #[arg(long)]
+        video_id: Option<String>,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long, default_value = "en.*,en")]
+        lang: String,
+        #[arg(long, default_value = "yt-dlp")]
+        yt_dlp: PathBuf,
+        /// Embed inserted transcript chunks so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Add an HTML web page to the corpus sidecar. HTML comes from --path or stdin.
+    AddWeb {
+        #[arg(long)]
+        source_uri: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Embed inserted page chunks so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Add a PDF to the corpus sidecar. Bytes come from --path or stdin.
+    AddPdf {
+        #[arg(long)]
+        source_uri: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Embed inserted PDF chunks so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Fetch a URL and route by Content-Type/URI into RSS, PDF, HTML, or text ingest.
+    FetchUrl {
+        url: String,
+        #[arg(long)]
+        title: Option<String>,
+        /// Override the HTTP Content-Type before routing.
+        #[arg(long)]
+        content_type: Option<String>,
+        /// Embed inserted chunks so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Register or update a URL source for recurring `sync-due`.
+    WatchUrl {
+        url: String,
+        #[arg(long, default_value = "web")]
+        kind: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long, default_value_t = 86_400)]
+        every_secs: i64,
+    },
+    /// Fetch and ingest all watched URL sources that are due.
+    SyncDue {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Import existing Synapse docs into the corpus sidecar for real-usage evals.
+    ImportSynapse {
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+        /// Embed imported chunks so vector+RRF retrieval can use them.
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Search the raw corpus sidecar. Default is FTS5; --embed adds vector leg.
+    Search {
+        query: String,
+        #[arg(long, default_value_t = 10)]
+        limit: usize,
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+    /// Queue a corpus chunk as a possible durable fact/decision.
+    Promote {
+        chunk_id: i64,
+        #[arg(long, default_value = "decision")]
+        kind: String,
+        #[arg(long)]
+        rationale: String,
+    },
+    /// Verify a queued promotion. Only verified promotions become ready.
+    Verify {
+        promotion_id: i64,
+        #[arg(long)]
+        verifier: String,
+    },
+    /// List verified promotion IDs ready for `synx remember`/`synx put`.
+    Ready,
+    /// Export corpus-grounded gold-question candidates for manual eval curation.
+    GoldCandidates {
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
+    /// Snapshot current corpus rankings for a gold set before retrieval changes.
+    BaselineRankings {
+        gold_json: PathBuf,
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Generate real-usage eval artifacts and enforce the min-gold gate.
+    BootstrapEval {
+        /// Candidate/gold question count target. Use 50-100 for the real gate.
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+        #[arg(long, default_value_t = 50)]
+        min_gold: usize,
+        #[arg(long, default_value_t = 5)]
+        rank_limit: usize,
+        /// First mirror existing Synapse docs into corpus before bootstrapping.
+        #[arg(long, default_value_t = false)]
+        import_synapse: bool,
+        /// Write editable candidates with title/source/preview.
+        #[arg(long)]
+        candidates_json: Option<PathBuf>,
+        /// Write machine gold questions for eval/eval-gate.
+        #[arg(long)]
+        gold_json: Option<PathBuf>,
+        /// Write current retrieval rankings as the baseline.
+        #[arg(long)]
+        baseline_rankings_json: Option<PathBuf>,
+    },
+    /// Evaluate corpus retrieval against a JSON gold set.
+    Eval {
+        gold_json: PathBuf,
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
+    /// Evaluate current corpus against baseline rankings and fail unless the gate improves.
+    EvalGate {
+        gold_json: PathBuf,
+        baseline_rankings_json: PathBuf,
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+        #[arg(long, default_value_t = 50)]
+        min_gold: usize,
+        #[arg(long, default_value_t = false)]
+        embed: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -465,11 +681,31 @@ enum ShardCmd {
     },
 }
 
+/// Resolve the brain path so commands work from ANY cwd (agents/MCP run from
+/// arbitrary dirs). The clap default `.synapse/brain.db` is cwd-relative; if it
+/// doesn't exist in the cwd but a `$HOME/.synapse/brain.db` does, use the home
+/// brain. Absolute paths and existing cwd-relative project brains are untouched,
+/// and an explicit `-f` always wins. Net: no behaviour change when a local brain
+/// exists; fixes silent "empty db" when run outside `~`.
+fn resolve_db_path(p: std::path::PathBuf) -> std::path::PathBuf {
+    if p.is_absolute() || p.exists() {
+        return p;
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let h = std::path::PathBuf::from(home).join(&p);
+        if h.exists() {
+            return h;
+        }
+    }
+    p
+}
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    cli.file = resolve_db_path(cli.file);
     if let Some(p) = cli.file.parent() {
         std::fs::create_dir_all(p).ok();
     }
@@ -1118,6 +1354,424 @@ fn main() -> Result<()> {
             });
             println!("{}", serde_json::to_string_pretty(&bundle)?);
         }
+        Cmd::Corpus { action } => {
+            let store = Store::open(&cli.file)?;
+            corpus_migrate(&store.conn)?;
+            match action {
+                CorpusCmd::AddText {
+                    kind,
+                    source_uri,
+                    external_id,
+                    title,
+                    text,
+                    published_ts,
+                    embed,
+                } => {
+                    let body = match text {
+                        Some(t) => t,
+                        None => {
+                            let mut s = String::new();
+                            std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)?;
+                            s.trim().to_string()
+                        }
+                    };
+                    anyhow::ensure!(!body.trim().is_empty(), "empty text");
+                    let doc = NewCorpusDocument {
+                        source_kind: parse_corpus_kind(&kind)?,
+                        source_uri: &source_uri,
+                        external_id: &external_id,
+                        title: &title,
+                        text: &body,
+                        published_ts,
+                    };
+                    let doc_id = put_corpus_document(&store.conn, &doc)?;
+                    let mut embedded = 0usize;
+                    if embed {
+                        embedded = embed_corpus_documents(&store.conn, &cli.file, &[doc_id])?;
+                    }
+                    println!("ok corpus_doc id={} embedded_chunks={}", doc_id, embedded);
+                }
+                CorpusCmd::AddRss {
+                    source_uri,
+                    path,
+                    embed,
+                } => {
+                    let xml = match path {
+                        Some(path) => std::fs::read_to_string(&path)
+                            .with_context(|| format!("read {}", path.display()))?,
+                        None => {
+                            let mut s = String::new();
+                            std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)?;
+                            s
+                        }
+                    };
+                    anyhow::ensure!(!xml.trim().is_empty(), "empty RSS XML");
+                    let doc_ids = ingest_rss_xml(&store.conn, &source_uri, &xml)?;
+                    let embedded = if embed {
+                        embed_corpus_documents(&store.conn, &cli.file, &doc_ids)?
+                    } else {
+                        0
+                    };
+                    println!(
+                        "ok rss_docs count={} embedded_chunks={}",
+                        doc_ids.len(),
+                        embedded
+                    );
+                }
+                CorpusCmd::AddYoutube {
+                    video_id,
+                    title,
+                    source_uri,
+                    path,
+                    embed,
+                } => {
+                    let transcript = match path {
+                        Some(path) => std::fs::read_to_string(&path)
+                            .with_context(|| format!("read {}", path.display()))?,
+                        None => {
+                            let mut s = String::new();
+                            std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)?;
+                            s
+                        }
+                    };
+                    anyhow::ensure!(!transcript.trim().is_empty(), "empty YouTube transcript");
+                    let video_uri = source_uri
+                        .unwrap_or_else(|| format!("https://www.youtube.com/watch?v={video_id}"));
+                    let doc_id = ingest_youtube_transcript(
+                        &store.conn,
+                        &video_uri,
+                        &video_id,
+                        &title,
+                        &transcript,
+                    )?;
+                    let embedded = if embed {
+                        embed_corpus_documents(&store.conn, &cli.file, &[doc_id])?
+                    } else {
+                        0
+                    };
+                    println!("ok youtube_doc id={} embedded_chunks={}", doc_id, embedded);
+                }
+                CorpusCmd::FetchYoutube {
+                    url,
+                    video_id,
+                    title,
+                    lang,
+                    yt_dlp,
+                    embed,
+                } => {
+                    let video_id = video_id
+                        .or_else(|| youtube_video_id(&url))
+                        .ok_or_else(|| anyhow::anyhow!("could not infer YouTube video id"))?;
+                    let transcript = fetch_youtube_transcript_with_ytdlp(&yt_dlp, &url, &lang)?;
+                    let title = title.unwrap_or_else(|| format!("YouTube {video_id}"));
+                    let doc_id = ingest_youtube_transcript(
+                        &store.conn,
+                        &url,
+                        &video_id,
+                        &title,
+                        &transcript,
+                    )?;
+                    let embedded = if embed {
+                        embed_corpus_documents(&store.conn, &cli.file, &[doc_id])?
+                    } else {
+                        0
+                    };
+                    println!("ok youtube_doc id={} embedded_chunks={}", doc_id, embedded);
+                }
+                CorpusCmd::AddWeb {
+                    source_uri,
+                    title,
+                    path,
+                    embed,
+                } => {
+                    let html = match path {
+                        Some(path) => std::fs::read_to_string(&path)
+                            .with_context(|| format!("read {}", path.display()))?,
+                        None => {
+                            let mut s = String::new();
+                            std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)?;
+                            s
+                        }
+                    };
+                    anyhow::ensure!(!html.trim().is_empty(), "empty web HTML");
+                    let doc_id =
+                        ingest_web_html(&store.conn, &source_uri, title.as_deref(), &html)?;
+                    let embedded = if embed {
+                        embed_corpus_documents(&store.conn, &cli.file, &[doc_id])?
+                    } else {
+                        0
+                    };
+                    println!("ok web_doc id={} embedded_chunks={}", doc_id, embedded);
+                }
+                CorpusCmd::AddPdf {
+                    source_uri,
+                    title,
+                    path,
+                    embed,
+                } => {
+                    let bytes = match path {
+                        Some(path) => std::fs::read(&path)
+                            .with_context(|| format!("read {}", path.display()))?,
+                        None => {
+                            let mut bytes = Vec::new();
+                            std::io::Read::read_to_end(&mut std::io::stdin(), &mut bytes)?;
+                            bytes
+                        }
+                    };
+                    anyhow::ensure!(!bytes.is_empty(), "empty PDF");
+                    let doc_id = ingest_pdf_bytes(&store.conn, &source_uri, &title, &bytes)?;
+                    let embedded = if embed {
+                        embed_corpus_documents(&store.conn, &cli.file, &[doc_id])?
+                    } else {
+                        0
+                    };
+                    println!("ok pdf_doc id={} embedded_chunks={}", doc_id, embedded);
+                }
+                CorpusCmd::FetchUrl {
+                    url,
+                    title,
+                    content_type,
+                    embed,
+                } => {
+                    let client = reqwest::blocking::Client::builder()
+                        .user_agent(concat!("synx/", env!("CARGO_PKG_VERSION")))
+                        .build()
+                        .context("build HTTP client")?;
+                    let response = client
+                        .get(&url)
+                        .send()
+                        .with_context(|| format!("fetch {url}"))?
+                        .error_for_status()
+                        .with_context(|| format!("fetch {url}"))?;
+                    let header_content_type = response
+                        .headers()
+                        .get(reqwest::header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .map(ToOwned::to_owned);
+                    let routed_content_type = content_type.or(header_content_type);
+                    let bytes = response.bytes().context("read response body")?;
+                    let doc_ids = ingest_fetched_document(
+                        &store.conn,
+                        &url,
+                        routed_content_type.as_deref(),
+                        title.as_deref(),
+                        bytes.as_ref(),
+                    )?;
+                    let embedded = if embed {
+                        embed_corpus_documents(&store.conn, &cli.file, &doc_ids)?
+                    } else {
+                        0
+                    };
+                    println!(
+                        "ok fetched_docs count={} embedded_chunks={}",
+                        doc_ids.len(),
+                        embedded
+                    );
+                }
+                CorpusCmd::WatchUrl {
+                    url,
+                    kind,
+                    title,
+                    every_secs,
+                } => {
+                    let id = upsert_corpus_sync_source(
+                        &store.conn,
+                        parse_corpus_kind(&kind)?,
+                        &url,
+                        title.as_deref(),
+                        every_secs,
+                    )?;
+                    println!("ok watched_source id={} every_secs={}", id, every_secs);
+                }
+                CorpusCmd::SyncDue { limit, embed } => {
+                    let now = unix_now_secs();
+                    let due = due_corpus_sync_sources(&store.conn, now, limit)?;
+                    let client = reqwest::blocking::Client::builder()
+                        .user_agent(concat!("synx/", env!("CARGO_PKG_VERSION")))
+                        .build()
+                        .context("build HTTP client")?;
+                    let mut synced = 0usize;
+                    let mut docs = 0usize;
+                    let mut embedded = 0usize;
+                    for source in due {
+                        let response = client
+                            .get(&source.uri)
+                            .send()
+                            .with_context(|| format!("fetch {}", source.uri))?
+                            .error_for_status()
+                            .with_context(|| format!("fetch {}", source.uri))?;
+                        let content_type = response
+                            .headers()
+                            .get(reqwest::header::CONTENT_TYPE)
+                            .and_then(|v| v.to_str().ok())
+                            .map(ToOwned::to_owned);
+                        let bytes = response.bytes().context("read response body")?;
+                        let doc_ids = ingest_fetched_document(
+                            &store.conn,
+                            &source.uri,
+                            content_type.as_deref(),
+                            source.title.as_deref(),
+                            bytes.as_ref(),
+                        )?;
+                        if embed {
+                            embedded += embed_corpus_documents(&store.conn, &cli.file, &doc_ids)?;
+                        }
+                        mark_corpus_source_synced(&store.conn, source.id, now)?;
+                        docs += doc_ids.len();
+                        synced += 1;
+                    }
+                    println!(
+                        "ok sync_due sources={} docs={} embedded_chunks={}",
+                        synced, docs, embedded
+                    );
+                }
+                CorpusCmd::ImportSynapse { limit, embed } => {
+                    let doc_ids = import_synapse_docs_to_corpus(&store.conn, limit)?;
+                    let embedded = if embed {
+                        embed_corpus_documents(&store.conn, &cli.file, &doc_ids)?
+                    } else {
+                        0
+                    };
+                    println!(
+                        "ok imported_synapse_docs count={} embedded_chunks={}",
+                        doc_ids.len(),
+                        embedded
+                    );
+                }
+                CorpusCmd::Search {
+                    query,
+                    limit,
+                    embed,
+                    json,
+                } => {
+                    let q = if embed {
+                        let e = Embedder::new_with_cache::<std::path::PathBuf>(
+                            cli.file.parent().map(|p| p.join(".emb-cache")),
+                        )
+                        .context("embedder init")?;
+                        Some(e.embed_one(&query)?)
+                    } else {
+                        None
+                    };
+                    let hits = search_corpus(&store.conn, &query, q.as_deref(), limit, None)?;
+                    if json {
+                        println!("{}", serde_json::to_string_pretty(&hits_to_json(&hits))?);
+                    } else {
+                        print_corpus_hits(&hits);
+                    }
+                }
+                CorpusCmd::Promote {
+                    chunk_id,
+                    kind,
+                    rationale,
+                } => {
+                    let id = queue_promotion(
+                        &store.conn,
+                        chunk_id,
+                        parse_promotion_kind(&kind)?,
+                        &rationale,
+                    )?;
+                    println!("ok promotion queued id={id} chunk_id={chunk_id}");
+                }
+                CorpusCmd::Verify {
+                    promotion_id,
+                    verifier,
+                } => {
+                    verify_promotion(&store.conn, promotion_id, &verifier)?;
+                    println!("ok promotion verified id={promotion_id}");
+                }
+                CorpusCmd::Ready => {
+                    let ids = ready_promotions(&store.conn)?;
+                    println!("{}", serde_json::to_string_pretty(&ids)?);
+                }
+                CorpusCmd::GoldCandidates { limit } => {
+                    let candidates = gold_candidates_from_corpus(&store.conn, limit)?;
+                    println!("{}", serde_json::to_string_pretty(&candidates)?);
+                }
+                CorpusCmd::BaselineRankings {
+                    gold_json,
+                    limit,
+                    embed,
+                } => {
+                    let gold = read_gold_questions(&gold_json)?;
+                    let rankings =
+                        rank_gold_questions_cli(&store.conn, &cli.file, &gold, limit, embed)?;
+                    println!("{}", serde_json::to_string_pretty(&rankings)?);
+                }
+                CorpusCmd::BootstrapEval {
+                    limit,
+                    min_gold,
+                    rank_limit,
+                    import_synapse,
+                    candidates_json,
+                    gold_json,
+                    baseline_rankings_json,
+                } => {
+                    let imported = if import_synapse {
+                        import_synapse_docs_to_corpus(&store.conn, limit)?.len()
+                    } else {
+                        0
+                    };
+                    let boot =
+                        bootstrap_eval_from_corpus(&store.conn, limit, min_gold, rank_limit)?;
+                    if let Some(path) = candidates_json.as_deref() {
+                        write_json_file(path, &boot.candidates)?;
+                    }
+                    if let Some(path) = gold_json.as_deref() {
+                        write_json_file(path, &boot.gold)?;
+                    }
+                    if let Some(path) = baseline_rankings_json.as_deref() {
+                        write_json_file(path, &boot.baseline_rankings)?;
+                    }
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&serde_json::json!({
+                            "imported_synapse_docs": imported,
+                            "gold_count": boot.gold_count,
+                            "min_gold": boot.min_gold,
+                            "baseline": boot.baseline,
+                            "candidates_json": candidates_json,
+                            "gold_json": gold_json,
+                            "baseline_rankings_json": baseline_rankings_json,
+                        }))?
+                    );
+                }
+                CorpusCmd::Eval {
+                    gold_json,
+                    limit,
+                    embed,
+                } => {
+                    let gold = read_gold_questions(&gold_json)?;
+                    let rankings =
+                        rank_gold_questions_cli(&store.conn, &cli.file, &gold, limit, embed)?;
+                    let report = evaluate_rankings(&gold, &rankings)?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                }
+                CorpusCmd::EvalGate {
+                    gold_json,
+                    baseline_rankings_json,
+                    limit,
+                    min_gold,
+                    embed,
+                } => {
+                    let gold = read_gold_questions(&gold_json)?;
+                    let raw_baseline = std::fs::read_to_string(&baseline_rankings_json)
+                        .with_context(|| format!("read {}", baseline_rankings_json.display()))?;
+                    let baseline_rankings: Vec<Vec<i64>> =
+                        serde_json::from_str(&raw_baseline).context("parse baseline rankings")?;
+                    let candidate_rankings =
+                        rank_gold_questions_cli(&store.conn, &cli.file, &gold, limit, embed)?;
+                    let report = evaluate_rankings_gate(
+                        &gold,
+                        &baseline_rankings,
+                        &candidate_rankings,
+                        min_gold,
+                    )?;
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                    anyhow::ensure!(report.passed, "corpus eval gate failed");
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -1152,6 +1806,13 @@ fn parse_fresh_input(raw: &str) -> FreshInput {
     (trimmed.to_string(), None, None)
 }
 
+fn unix_now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 fn print_hits(hits: &[synapse_core::Hit]) {
     for h in hits {
         let title = h.title.as_deref().unwrap_or("");
@@ -1163,6 +1824,161 @@ fn print_hits(hits: &[synapse_core::Hit]) {
             println!("{}\t{:.4}\t{}\t{}\t{}", h.id, h.score, title, uri, snippet);
         }
     }
+}
+
+fn parse_corpus_kind(raw: &str) -> Result<CorpusSourceKind> {
+    match raw {
+        "rss" => Ok(CorpusSourceKind::Rss),
+        "youtube" | "yt" => Ok(CorpusSourceKind::Youtube),
+        "pdf" => Ok(CorpusSourceKind::Pdf),
+        "web" | "url" | "article" => Ok(CorpusSourceKind::Web),
+        "text" | "manual" | "note" => Ok(CorpusSourceKind::Text),
+        other => Err(anyhow::anyhow!(
+            "invalid corpus kind {other:?}; expected rss|youtube|pdf|web|text"
+        )),
+    }
+}
+
+fn parse_promotion_kind(raw: &str) -> Result<PromotionKind> {
+    match raw {
+        "fact" => Ok(PromotionKind::Fact),
+        "decision" => Ok(PromotionKind::Decision),
+        other => Err(anyhow::anyhow!(
+            "invalid promotion kind {other:?}; expected fact|decision"
+        )),
+    }
+}
+
+fn fetch_youtube_transcript_with_ytdlp(
+    yt_dlp: &std::path::Path,
+    url: &str,
+    lang: &str,
+) -> Result<String> {
+    let dir = tempfile::tempdir().context("create yt-dlp tempdir")?;
+    let template = dir.path().join("%(id)s.%(ext)s");
+    let output = std::process::Command::new(yt_dlp)
+        .arg("--skip-download")
+        .arg("--write-subs")
+        .arg("--write-auto-subs")
+        .arg("--sub-langs")
+        .arg(lang)
+        .arg("--sub-format")
+        .arg("vtt/srt")
+        .arg("--no-playlist")
+        .arg("-o")
+        .arg(&template)
+        .arg(url)
+        .output()
+        .with_context(|| format!("run {}", yt_dlp.display()))?;
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(
+            "yt-dlp failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let mut transcript_paths = Vec::new();
+    for entry in std::fs::read_dir(dir.path()).context("read yt-dlp tempdir")? {
+        let path = entry?.path();
+        let ext = path
+            .extension()
+            .and_then(|v| v.to_str())
+            .unwrap_or_default();
+        if matches!(ext, "vtt" | "srt") {
+            transcript_paths.push(path);
+        }
+    }
+    transcript_paths.sort();
+    let path = transcript_paths
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("yt-dlp did not produce a .vtt or .srt transcript"))?;
+    let transcript =
+        std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    anyhow::ensure!(!transcript.trim().is_empty(), "empty YouTube transcript");
+    Ok(transcript)
+}
+
+fn embed_corpus_documents(
+    conn: &rusqlite::Connection,
+    brain_file: &std::path::Path,
+    doc_ids: &[i64],
+) -> Result<usize> {
+    let e = Embedder::new_with_cache::<std::path::PathBuf>(
+        brain_file.parent().map(|p| p.join(".emb-cache")),
+    )
+    .context("embedder init")?;
+    let mut embedded = 0usize;
+    for doc_id in doc_ids {
+        let mut stmt = conn.prepare(
+            "SELECT id, text FROM synapse_corpus_chunks WHERE document_id=?1 ORDER BY ordinal",
+        )?;
+        let chunks: Vec<(i64, String)> = stmt
+            .query_map([doc_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        for (chunk_id, chunk_text) in chunks {
+            let emb = e.embed_one(&chunk_text)?;
+            set_corpus_chunk_embedding(conn, chunk_id, &emb)?;
+            embedded += 1;
+        }
+    }
+    Ok(embedded)
+}
+
+fn read_gold_questions(path: &std::path::Path) -> Result<Vec<GoldQuestion>> {
+    let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    serde_json::from_str(&raw).context("parse gold JSON")
+}
+
+fn write_json_file<T: serde::Serialize>(path: &std::path::Path, value: &T) -> Result<()> {
+    let raw = serde_json::to_vec_pretty(value)?;
+    std::fs::write(path, raw).with_context(|| format!("write {}", path.display()))
+}
+
+fn rank_gold_questions_cli(
+    conn: &rusqlite::Connection,
+    brain_file: &std::path::Path,
+    gold: &[GoldQuestion],
+    limit: usize,
+    embed: bool,
+) -> Result<Vec<Vec<i64>>> {
+    if !embed {
+        return rank_gold_questions(conn, gold, limit).map_err(Into::into);
+    }
+    let e = Embedder::new_with_cache::<std::path::PathBuf>(
+        brain_file.parent().map(|p| p.join(".emb-cache")),
+    )
+    .context("embedder init")?;
+    let mut rankings = Vec::with_capacity(gold.len());
+    for q in gold {
+        let emb = e.embed_one(&q.query)?;
+        let hits = search_corpus(conn, &q.query, Some(&emb), limit, None)?;
+        rankings.push(hits.into_iter().map(|h| h.chunk_id).collect());
+    }
+    Ok(rankings)
+}
+
+fn print_corpus_hits(hits: &[synapse_core::corpus::CorpusHit]) {
+    for h in hits {
+        let snippet = h.text.chars().take(160).collect::<String>();
+        println!(
+            "{}\t{}\t{:.6}\t{}\t{}",
+            h.chunk_id, h.document_id, h.score, h.title, snippet
+        );
+    }
+}
+
+fn hits_to_json(hits: &[synapse_core::corpus::CorpusHit]) -> Vec<serde_json::Value> {
+    hits.iter()
+        .map(|h| {
+            serde_json::json!({
+                "chunk_id": h.chunk_id,
+                "document_id": h.document_id,
+                "title": h.title,
+                "score": h.score,
+                "text": h.text,
+            })
+        })
+        .collect()
 }
 
 #[derive(serde::Serialize)]

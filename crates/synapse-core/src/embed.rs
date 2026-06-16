@@ -73,14 +73,38 @@ fn select_model() -> EmbeddingModel {
     }
 }
 
+/// Absolute ONNX-model cache dir, resolved independently of the current working
+/// directory. fastembed's default is `.fastembed_cache` relative to the cwd, which
+/// fails ("Failed to retrieve onnx/model.onnx") when a CLI/agent runs from any other
+/// dir. Honor the daemon's env first, else a stable abs path under $HOME.
+fn embed_cache_dir() -> std::path::PathBuf {
+    for key in ["FASTEMBED_CACHE_PATH", "HF_HOME"] {
+        if let Some(v) = std::env::var_os(key) {
+            if !v.is_empty() {
+                return std::path::PathBuf::from(v);
+            }
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(home)
+            .join(".synapse")
+            .join(".fastembed_cache");
+    }
+    std::path::PathBuf::from(".fastembed_cache")
+}
+
 fn get_or_init_pool() -> Result<&'static Mutex<Vec<TextEmbedding>>> {
     SESSION_POOL.get_or_try_init(|| {
         let pool_size = get_pool_size();
         let model = select_model();
+        let cache_dir = embed_cache_dir();
+        std::fs::create_dir_all(&cache_dir).ok();
         let mut sessions = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
             let m = TextEmbedding::try_new(
-                InitOptions::new(model.clone()).with_show_download_progress(false),
+                InitOptions::new(model.clone())
+                    .with_show_download_progress(false)
+                    .with_cache_dir(cache_dir.clone()),
             )
             .map_err(|e| Error::Other(format!("fastembed init: {e}")))?;
             sessions.push(m);
