@@ -1,0 +1,60 @@
+# Synapse open-core release manifest — the single source of truth for "ready for both".
+#
+# Synapse serves TWO purposes from ONE workspace:
+#   private  — the full battle-tested engine Maxim runs locally (all 56 crates).
+#   public   — a clean MIT subset emitted by release/oss-bundle.sh (grounddb).
+#
+# Every production crate is assigned a tier. The bundle script ships ONLY `public-mit`
+# crates; the scrub-gate refuses to ship anything else (or any private data).
+#
+# Tiers:
+#   public-mit   — generic, no secrets, MIT — safe to publish.
+#   fsl-core     — source-available, NON-commercial (FSL-1.1-Apache). NEVER in the MIT bundle.
+#   proprietary  — closed: SIMD kernel, engine artifact, watermark, license, private products.
+#
+# `verify = true` means the audit must confirm the crate carries no secret/private code
+# before it can flip to public-mit. Default-deny: unknown ⇒ treated as proprietary.
+
+[meta]
+workspace = "synapse"
+public_product_name = "grounddb"
+default_tier = "proprietary"   # fail-closed: anything unlisted does NOT ship
+
+# --- proprietary: the revenue moat, never published ---
+[tiers.proprietary]
+crates = [
+  "synapse-engine",     # compiled artifact, per-customer watermarked (LICENSE-ENGINE.md)
+  "synapse-license",    # license/entitlement enforcement
+  "synapse-kernel",     # SIMD kernel (the speed moat) — verify: dual MIT/Apache header present
+  "synapse-quant",      # int8/MRL/PQ quantization (scale moat)
+  "synapse-ann",        # IVF-PQ 100M-scale index (scale moat)
+  "synapse-spann",      # disk-tier ANN (scale moat)
+  "synapse-market",     # embedded HFT/backtest — separate private product
+  "synapse-raft", "synapse-cluster", "synapse-tier",  # distributed/enterprise
+]
+
+# --- fsl-core: source-available, non-commercial — never in the MIT bundle ---
+[tiers.fsl-core]
+crates = ["synapse-core"]   # FSL-1.1-Apache (LICENSE-CORE.md)
+
+# --- public-mit candidates: generic memory primitives, safe to publish (audit-verify) ---
+[tiers.public-mit]
+verify = true
+crates = [
+  "synapse-mcp",        # MCP server (generic protocol)
+  "synapse-cli",        # CLI surface (strip private defaults)
+  "synapse-graph",      # graph traversal/PageRank (generic)
+  "synapse-fts",        # FTS5 wrapper
+  "synapse-fusion",     # RRF/MUVERA fusion
+  "synapse-rerank",     # cross-encoder rerank (fastembed ONNX wrapper)
+  "synapse-extract",    # entity extraction pipeline
+  "synapse-temporal",   # NL temporal phrase parser
+  "synapse-migrate",    # schema migrations
+  "synapse-obs",        # observability/logging
+]
+
+# Known license contradictions to fix BEFORE public release (see RELEASE-READINESS.md):
+#   - synapse-engine Cargo.toml declares `license = "MIT"` but LICENSE-ENGINE.md = Proprietary.
+#   - synapse-core inherits workspace `license = "MIT"` but LICENSE-CORE.md = FSL-1.1-Apache.
+# The MIT SPDX metadata currently LIES for these two — it must state the real license,
+# both to be honest and to not undermine the proprietary/FSL claim.

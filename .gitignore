@@ -48,3 +48,7 @@ docs/strategy/
 
 # tooling artifacts
 .grepgod/
+
+# crash coredumps (never ship)
+core
+*.core

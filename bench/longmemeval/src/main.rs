@@ -649,7 +649,8 @@ fn main() -> Result<()> {
     // Respect explicit SYNAPSE_EMBED_MODEL override.
     #[cfg(all(feature = "embed-768", feature = "rerank"))]
     if args.embed && std::env::var("SYNAPSE_EMBED_MODEL").is_err() {
-        std::env::set_var("SYNAPSE_EMBED_MODEL", "arctic-m");
+        // SAFETY: single-threaded setup before any embedder/threads spawn (edition-2024 set_var is unsafe).
+        unsafe { std::env::set_var("SYNAPSE_EMBED_MODEL", "arctic-m") };
     }
 
     let embedder = if args.embed {
