@@ -949,12 +949,16 @@ async fn put_one(state: &State, p: PutReq) -> Result<i64> {
         #[cfg(feature = "hippo")]
         {
             let emb = emb.clone();
-            match tokio::task::block_in_place(|| {
-                let store = state.store.lock();
-                store.auto_relate(id, &emb, 5, 0.0)
-            }) {
-                Ok(n) => tracing::debug!(doc = id, edges = n, "hippo auto_relate"),
-                Err(e) => tracing::debug!(doc = id, error = %e, "hippo auto_relate failed"),
+            // Split the work so the global store lock is NOT held across the full
+            // vector search: search under one short lock, RELEASE, then re-lock only
+            // to write the (fast) edges. Keeps readers responsive under heavy ingest.
+            let neighbors =
+                tokio::task::block_in_place(|| state.store.lock().similar_neighbors(id, &emb, 5));
+            if !neighbors.is_empty() {
+                let n = tokio::task::block_in_place(|| {
+                    state.store.lock().relate_similar(id, &neighbors)
+                });
+                tracing::debug!(doc = id, edges = n, "hippo auto_relate");
             }
         }
     }

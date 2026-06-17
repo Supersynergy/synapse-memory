@@ -723,13 +723,18 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         sig: Option<Vec<u8>>,
         meta_crdt: Option<Vec<u8>>,
     ) -> Result<i64> {
-        if let Some(ref e) = req.embedding
-            && e.len() != EMBED_DIM
-        {
-            return Err(Error::DimMismatch {
-                expected: EMBED_DIM,
-                got: e.len(),
-            });
+        if let Some(ref e) = req.embedding {
+            if e.len() != EMBED_DIM {
+                return Err(Error::DimMismatch {
+                    expected: EMBED_DIM,
+                    got: e.len(),
+                });
+            }
+            // Reject non-finite embeddings (NaN/Inf) at the store boundary: they
+            // poison cosine ranking and the auto-relate graph weights downstream.
+            if !e.iter().all(|x| x.is_finite()) {
+                return Err(Error::Other("embedding contains non-finite values".into()));
+            }
         }
         let hash = blake3::hash(req.text.as_bytes());
         let hash_bytes = hash.as_bytes().to_vec();
@@ -1809,29 +1814,49 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     /// `graph traverse`, and hippo retrieval work WITHOUT manual `graph relate`.
     /// Weak links (cosine below `min_sim`) are skipped to keep the graph signal-rich.
     /// Best-effort + idempotent (INSERT OR REPLACE); requires feature `hippo`.
+    /// Read-only: top-k nearest neighbours as (id, rank-weight), excluding `new_id`.
+    /// Split from the edge writes so the daemon can RELEASE the global store lock
+    /// between the expensive vector search and the writes — avoids holding the lock
+    /// across a full-corpus scan on every put (reader-starvation guard).
     #[cfg(feature = "hippo")]
-    pub fn auto_relate(&self, new_id: i64, emb: &[f32], k: usize, _min_sim: f64) -> Result<usize> {
-        let _ = synapse_graph::ensure_schema(&self.conn);
-        // Top-k nearest neighbours by vector search (already ranked best-first).
-        // We relate the new doc to each — no score threshold, because the score
-        // scale here is a small distance/RRF value, not a 0–1 cosine. Edge weight
-        // decays with rank so closer neighbours dominate traversal.
-        let hits = self.search_vec_exact(emb, k + 1)?;
-        let mut n = 0usize;
+    pub fn similar_neighbors(&self, new_id: i64, emb: &[f32], k: usize) -> Vec<(i64, f64)> {
+        let hits = match self.search_vec_exact(emb, k + 1) {
+            Ok(h) => h,
+            Err(_) => return Vec::new(),
+        };
+        let mut out = Vec::with_capacity(k);
         for (rank, h) in hits.into_iter().enumerate() {
             if h.id == new_id {
                 continue;
             }
-            let w = 1.0 / (1.0 + rank as f64); // 1.0, 0.5, 0.33, … by proximity rank
-            // bidirectional so traversal/PageRank reach the new doc from either side
-            let _ = synapse_graph::relate(&self.conn, new_id, h.id, "similar", w, None);
-            let _ = synapse_graph::relate(&self.conn, h.id, new_id, "similar", w, None);
-            n += 1;
-            if n >= k {
+            out.push((h.id, 1.0 / (1.0 + rank as f64))); // weight decays with proximity rank
+            if out.len() >= k {
                 break;
             }
         }
-        Ok(n)
+        out
+    }
+
+    /// Write-only: bidirectional "similar" edges for precomputed neighbours.
+    /// Fast (only INSERTs) so the store lock is held only briefly.
+    #[cfg(feature = "hippo")]
+    pub fn relate_similar(&self, new_id: i64, neighbors: &[(i64, f64)]) -> usize {
+        let _ = synapse_graph::ensure_schema(&self.conn);
+        let mut n = 0usize;
+        for &(to, w) in neighbors {
+            let _ = synapse_graph::relate(&self.conn, new_id, to, "similar", w, None);
+            let _ = synapse_graph::relate(&self.conn, to, new_id, "similar", w, None);
+            n += 1;
+        }
+        n
+    }
+
+    /// Convenience: search + relate in one call (holds the lock for both — prefer the
+    /// split `similar_neighbors` + `relate_similar` on the hot path).
+    #[cfg(feature = "hippo")]
+    pub fn auto_relate(&self, new_id: i64, emb: &[f32], k: usize, _min_sim: f64) -> Result<usize> {
+        let nb = self.similar_neighbors(new_id, emb, k);
+        Ok(self.relate_similar(new_id, &nb))
     }
 
     /// PR-A1-wire helper: given `(id, distance)` from the ANN, fetch full
