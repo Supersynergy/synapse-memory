@@ -285,8 +285,13 @@ pub fn pick_embedder() -> Box<dyn crate::embedder_trait::TextEmbedder> {
 pub fn pick_embedder_with_cache<P: AsRef<std::path::Path>>(
     cache_path: Option<P>,
 ) -> Box<dyn crate::embedder_trait::TextEmbedder> {
+    // SYNAPSE_DISABLE_MLX=1 forces the CPU fastembed path (skip the GPU/Metal sidecar).
+    // Benchmark 2026-06-16: MLX gives ~0% recall gain (search-dominated) and only ~17%
+    // ingest gain; CPU starts faster (1.3s vs 3.1s) with no 5s sidecar-timeout flake.
+    // Set this for low-GPU operation; unset to re-enable Metal for bulk re-index.
+    let _mlx_disabled = std::env::var("SYNAPSE_DISABLE_MLX").as_deref() == Ok("1");
     #[cfg(all(target_os = "macos", target_arch = "aarch64", feature = "embed-mlx"))]
-    {
+    if !_mlx_disabled {
         use crate::embed_mlx::MlxMetalEmbedder;
         match MlxMetalEmbedder::new() {
             Ok(mlx) => {
