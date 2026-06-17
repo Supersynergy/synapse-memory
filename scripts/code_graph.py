@@ -100,18 +100,58 @@ def synx(args: list[str], inp: str | None = None) -> str:
     ).stdout
 
 
+def from_graphify(path: str):
+    """AST-quality source: map a graphify graph.json (nodes/edges) to (defs, edges).
+    graphify already does real multi-language extraction, so this avoids the regex
+    approximation. Defensive about field names across graphify versions."""
+    d = json.load(open(path))
+    nodes = d.get("nodes", [])
+    raw_edges = d.get("edges", d.get("links", []))
+    defs: dict[str, dict] = {}
+    id2name: dict[str, str] = {}
+    for n in nodes:
+        nid = str(n.get("id", n.get("name", "")))
+        name = str(n.get("label") or n.get("name") or n.get("title") or nid)
+        id2name[nid] = name
+        defs.setdefault(
+            name,
+            {
+                "file": n.get("file", "?"),
+                "line": n.get("line", 0),
+                "sig": (n.get("summary") or n.get("kind") or name)[:160],
+            },
+        )
+    edges = set()
+    for e in raw_edges:
+        s = str(e.get("source", e.get("from", "")))
+        t = str(e.get("target", e.get("to", "")))
+        sn, tn = id2name.get(s), id2name.get(t)
+        if sn and tn and sn != tn:
+            edges.add((sn, tn))
+    return defs, edges
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
         return
-    repo = sys.argv[1]
-    lang = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else "rust"
     mx = int(sys.argv[sys.argv.index("--max") + 1]) if "--max" in sys.argv else 300
-    files = rg_files(repo, LANG[lang]["ext"])
-    defs, edges = extract(files, LANG[lang])
-    print(
-        f"extracted: {len(defs)} functions, {len(edges)} call-edges from {len(files)} {lang} files"
-    )
+    if "--from-graphify" in sys.argv:
+        gj = sys.argv[sys.argv.index("--from-graphify") + 1]
+        defs, edges = from_graphify(gj)
+        print(
+            f"imported (AST-quality, graphify): {len(defs)} nodes, {len(edges)} edges from {gj}"
+        )
+    else:
+        repo = sys.argv[1]
+        lang = (
+            sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else "rust"
+        )
+        files = rg_files(repo, LANG[lang]["ext"])
+        defs, edges = extract(files, LANG[lang])
+        print(
+            f"extracted (regex): {len(defs)} functions, {len(edges)} call-edges from {len(files)} {lang} files"
+        )
 
     # Ingest functions as docs (capped) -> name->doc_id map.
     name_id: dict[str, int] = {}
