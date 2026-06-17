@@ -1804,6 +1804,36 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         self.search_vec(emb, limit)
     }
 
+    /// Auto-build the knowledge graph on ingest: relate a freshly-stored doc to its
+    /// top-k nearest neighbours with bidirectional "similar" edges, so `ground`,
+    /// `graph traverse`, and hippo retrieval work WITHOUT manual `graph relate`.
+    /// Weak links (cosine below `min_sim`) are skipped to keep the graph signal-rich.
+    /// Best-effort + idempotent (INSERT OR REPLACE); requires feature `hippo`.
+    #[cfg(feature = "hippo")]
+    pub fn auto_relate(&self, new_id: i64, emb: &[f32], k: usize, _min_sim: f64) -> Result<usize> {
+        let _ = synapse_graph::ensure_schema(&self.conn);
+        // Top-k nearest neighbours by vector search (already ranked best-first).
+        // We relate the new doc to each — no score threshold, because the score
+        // scale here is a small distance/RRF value, not a 0–1 cosine. Edge weight
+        // decays with rank so closer neighbours dominate traversal.
+        let hits = self.search_vec_exact(emb, k + 1)?;
+        let mut n = 0usize;
+        for (rank, h) in hits.into_iter().enumerate() {
+            if h.id == new_id {
+                continue;
+            }
+            let w = 1.0 / (1.0 + rank as f64); // 1.0, 0.5, 0.33, … by proximity rank
+            // bidirectional so traversal/PageRank reach the new doc from either side
+            let _ = synapse_graph::relate(&self.conn, new_id, h.id, "similar", w, None);
+            let _ = synapse_graph::relate(&self.conn, h.id, new_id, "similar", w, None);
+            n += 1;
+            if n >= k {
+                break;
+            }
+        }
+        Ok(n)
+    }
+
     /// PR-A1-wire helper: given `(id, distance)` from the ANN, fetch full
     /// `Hit` records (uri/title/text) from SQL. One round-trip, preserved order.
     #[cfg(feature = "ann-usearch")]

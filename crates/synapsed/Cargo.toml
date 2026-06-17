@@ -35,8 +35,9 @@ rusqlite.workspace = true
 mimalloc = { version = "0.1", default-features = false }
 
 [features]
-default = ["embed-mlx", "ann-usearch", "simsimd", "tantivy-fts"]
+default = ["embed-mlx", "ann-usearch", "simsimd", "tantivy-fts", "hippo"]
 embed-mlx = ["synapse-core/embed-mlx"]
+hippo = ["synapse-core/hippo"]   # auto-populate knowledge graph on ingest (kNN "similar" edges)
 ann-usearch = ["synapse-core/ann-usearch"]
 simsimd = ["synapse-core/simsimd"]
 tantivy-fts = ["synapse-core/tantivy-fts"]

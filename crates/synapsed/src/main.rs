@@ -943,6 +943,20 @@ async fn put_one(state: &State, p: PutReq) -> Result<i64> {
     adjust_stats_cache_after_put(state, id, req.embedding.is_some());
     if let Some(ref emb) = req.embedding {
         update_lifted_ndarray(state, id, emb);
+        // Auto-populate the knowledge graph: relate this doc to its nearest
+        // neighbours so ground/traverse/hippo work without manual `graph relate`.
+        // Best-effort — never fail the put on a graph error.
+        #[cfg(feature = "hippo")]
+        {
+            let emb = emb.clone();
+            match tokio::task::block_in_place(|| {
+                let store = state.store.lock();
+                store.auto_relate(id, &emb, 5, 0.0)
+            }) {
+                Ok(n) => tracing::debug!(doc = id, edges = n, "hippo auto_relate"),
+                Err(e) => tracing::debug!(doc = id, error = %e, "hippo auto_relate failed"),
+            }
+        }
     }
     clear_query_cache(state);
     Ok(id)
