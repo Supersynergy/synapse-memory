@@ -1,17 +1,16 @@
 //! LongMemEval-S benchmark runner.
 //!
-//! Reads `lme_s_50.json` (50-question subset, derived from
-//! `xiaoyuanliu/longmemeval-s-50` HF parquet → DuckDB → JSON).
+//! Reads either the checked-in legacy `lme_s_50.json` subset or the official
+//! LongMemEval JSON shape (`haystack_sessions` + `answer_session_ids`).
 //!
 //! For each question:
 //!   1. Open temp Synapse Store (fresh, in tempdir).
 //!   2. Apply `sota_migrate`.
-//!   3. Split `conversation_str` by `Session Timestamp:` → N session-docs.
-//!   4. Ingest each as a Store doc (text-only, no embedding — lexical recall).
+//!   3. Build one retrievable document per session.
+//!   4. Ingest each session as a Store doc.
 //!   5. Run `pipeline_recall` with RuleHooks (or MlxHooks under --use-mlx).
-//!   6. Hit = answer-substring (lower-cased, alnum-only) found in any top-k doc.
-//!
-//! Reports Recall@5 and Recall@10 plus latency stats.
+//!   6. Report answer-substring/fuzzy R@k and, when labels exist, official
+//!      evidence-session R@k against `answer_session_ids`.
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -28,10 +27,12 @@ mod judge;
 mod mlx;
 
 type RunQuestionResult = (
-    bool,
-    bool,
-    bool,
-    bool,
+    bool, // substring R@5
+    bool, // substring R@10
+    bool, // fuzzy R@5
+    bool, // fuzzy R@10
+    bool, // evidence-session R@5 (official LongMemEval when answer_session_ids exist)
+    bool, // evidence-session R@10
     u128,
     usize,
     Vec<String>,
@@ -170,10 +171,21 @@ struct Question {
     #[allow(dead_code)]
     question_type: String,
     question: String,
-    answer: String,
+    answer: serde_json::Value,
     #[allow(dead_code)]
     question_date: String,
-    conversation_str: String,
+    // Legacy 50-question subset format.
+    #[serde(default)]
+    conversation_str: Option<String>,
+    // Official LongMemEval format.
+    #[serde(default)]
+    haystack_dates: Vec<String>,
+    #[serde(default)]
+    haystack_session_ids: Vec<String>,
+    #[serde(default)]
+    haystack_sessions: Vec<serde_json::Value>,
+    #[serde(default)]
+    answer_session_ids: Vec<String>,
 }
 
 /// Sanitize a free-form user query for sqlite-fts5 MATCH.
@@ -252,6 +264,73 @@ fn split_sessions(text: &str) -> Vec<String> {
     docs
 }
 
+fn session_value_to_text(v: &serde_json::Value) -> String {
+    if let Some(s) = v.as_str() {
+        return s.to_string();
+    }
+    if let Some(turns) = v.as_array() {
+        let mut out = String::new();
+        for turn in turns {
+            let role = turn
+                .get("role")
+                .and_then(|x| x.as_str())
+                .unwrap_or("unknown")
+                .to_uppercase();
+            let content = turn.get("content").and_then(|x| x.as_str()).unwrap_or("");
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(&role);
+            out.push_str(": ");
+            out.push_str(content);
+        }
+        return out;
+    }
+    v.to_string()
+}
+
+fn question_sessions(q: &Question) -> Vec<(String, String)> {
+    if let Some(text) = q.conversation_str.as_deref() {
+        return split_sessions(text)
+            .into_iter()
+            .enumerate()
+            .map(|(i, s)| (format!("session_{i}"), s))
+            .collect();
+    }
+    q.haystack_sessions
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let id = q
+                .haystack_session_ids
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| format!("session_{i}"));
+            let body = session_value_to_text(s);
+            let doc = if body.trim_start().starts_with("Session Timestamp:") {
+                body
+            } else if let Some(dt) = q.haystack_dates.get(i) {
+                format!("Session Timestamp: {dt}\n{body}")
+            } else {
+                body
+            };
+            (id, doc)
+        })
+        .collect()
+}
+
+fn answer_text(q: &Question) -> String {
+    match &q.answer {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(xs) => xs
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join("; "),
+        v => v.to_string(),
+    }
+}
+
 fn answer_in_any(answer: &str, docs: &[&str]) -> bool {
     let na = normalize(answer);
     if na.is_empty() {
@@ -305,6 +384,7 @@ fn run_question<H: PipelineHooks>(
     pre_extractor: Option<&dyn synapse_extract::Extractor>,
     rrf_k: f64,
     rerank_top: usize,
+    raw_query: bool,
     #[cfg(feature = "hyde")] hyde_cfg: Option<&synapse_core::turbo::hyde::HydeConfig>,
 ) -> Result<RunQuestionResult> {
     // Fresh tempfile-backed store per question (Store::open requires a path).
@@ -313,7 +393,9 @@ fn run_question<H: PipelineHooks>(
     let _ = std::fs::remove_file(&tmp);
     let mut store = Store::open(&tmp).context("Store::open")?;
     sota_migrate(&store.conn).context("sota_migrate")?;
-    let docs = split_sessions(&q.conversation_str);
+    let session_pairs = question_sessions(q);
+    let session_ids: Vec<String> = session_pairs.iter().map(|(id, _)| id.clone()).collect();
+    let docs: Vec<String> = session_pairs.into_iter().map(|(_, s)| s).collect();
     let n_docs = docs.len();
     // Pre-compute doc embeddings (if enabled). BGE handles long-ish input
     // by truncation internally; we feed raw session text.
@@ -324,6 +406,8 @@ fn run_question<H: PipelineHooks>(
     };
     for (i, d) in docs.iter().enumerate() {
         let req = PutRequest {
+            // uri preserves the official LongMemEval session id for evidence R@k.
+            uri: Some(format!("s{}:{}", i, session_ids[i])),
             text: d.clone(),
             embedding: doc_embs.as_ref().map(|v| v[i].clone()),
             ..Default::default()
@@ -397,9 +481,23 @@ fn run_question<H: PipelineHooks>(
     // Heat off: LongMemEval has artificial timestamps; recency decay would
     // distort multi-session retrieval. Entity-expand off: per-question fresh
     // store has no extracted memories yet (extraction pipeline not in bench).
+    // Candidate-pool fix: when an external reranker is active, pull the full
+    // rerank pool out of pipeline_recall (which truncates to k) so the
+    // cross-encoder re-scores rerank_top candidates instead of merely
+    // re-ordering the final top-10.
+    let final_k = 10usize;
+    let retrieve_k = if reranker.is_some() {
+        rerank_top.max(final_k)
+    } else {
+        final_k
+    };
     let params = RecallParams {
-        query: fts5_sanitize(&q.question),
-        k: 10,
+        query: if raw_query {
+            q.question.clone()
+        } else {
+            fts5_sanitize(&q.question)
+        },
+        k: retrieve_k,
         heat: false,
         entity_expand: pre_extractor.is_some(), // only meaningful with extracted memories
         ppr: ppr && pre_extractor.is_some(),    // PPR needs edges
@@ -418,7 +516,7 @@ fn run_question<H: PipelineHooks>(
     if let Some(r) = reranker {
         let cand: Vec<synapse_core::Hit> = hits.iter().map(|h| h.hit.clone()).collect();
         let rer = r
-            .rerank(&q.question, cand, params.k)
+            .rerank(&q.question, cand, final_k)
             .unwrap_or_else(|_| hits.iter().map(|h| h.hit.clone()).collect());
         // Re-key reranked hits back into RecallHit (memory_id/type lost — fine for bench).
         hits = rer
@@ -432,14 +530,64 @@ fn run_question<H: PipelineHooks>(
     }
     let elapsed = t.elapsed().as_micros();
 
-    let top5: Vec<&str> = hits.iter().take(5).map(|h| h.hit.text.as_str()).collect();
-    let top10: Vec<&str> = hits.iter().take(10).map(|h| h.hit.text.as_str()).collect();
-    let r5 = answer_in_any(&q.answer, &top5);
-    let r10 = answer_in_any(&q.answer, &top10);
-    let f5 = answer_in_any_fuzzy(&q.answer, &top5, 0.6);
-    let f10 = answer_in_any_fuzzy(&q.answer, &top10, 0.6);
-    let top5_owned: Vec<String> = top5.iter().map(|s| s.to_string()).collect();
-    let top10_owned: Vec<String> = top10.iter().map(|s| s.to_string()).collect();
+    let ranked_session_ids = |n: usize| -> Vec<String> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for h in &hits {
+            let idx = h
+                .hit
+                .uri
+                .as_deref()
+                .and_then(|u| u.strip_prefix('s'))
+                .and_then(|r| r.split(':').next())
+                .and_then(|x| x.parse::<usize>().ok());
+            if let Some(idx) = idx {
+                if seen.insert(idx) {
+                    if let Some(id) = session_ids.get(idx) {
+                        out.push(id.clone());
+                    }
+                    if out.len() == n {
+                        break;
+                    }
+                }
+            }
+        }
+        out
+    };
+    let top5_owned: Vec<String> = hits.iter().take(5).map(|h| h.hit.text.clone()).collect();
+    let top10_owned: Vec<String> = hits.iter().take(10).map(|h| h.hit.text.clone()).collect();
+    let answer = answer_text(q);
+    let top5: Vec<&str> = top5_owned.iter().map(|s| s.as_str()).collect();
+    let top10: Vec<&str> = top10_owned.iter().map(|s| s.as_str()).collect();
+    let r5 = answer_in_any(&answer, &top5);
+    let r10 = answer_in_any(&answer, &top10);
+    let f5 = answer_in_any_fuzzy(&answer, &top5, 0.6);
+    let f10 = answer_in_any_fuzzy(&answer, &top10, 0.6);
+    let gold: std::collections::HashSet<&str> =
+        q.answer_session_ids.iter().map(|s| s.as_str()).collect();
+    let ev5 = if gold.is_empty() {
+        false
+    } else {
+        ranked_session_ids(5)
+            .iter()
+            .any(|id| gold.contains(id.as_str()))
+    };
+    let ev10 = if gold.is_empty() {
+        false
+    } else {
+        ranked_session_ids(10)
+            .iter()
+            .any(|id| gold.contains(id.as_str()))
+    };
+    if std::env::var("LME_DEBUG_RANK").ok().as_deref() == Some("1") && !gold.is_empty() && !ev5 {
+        eprintln!(
+            "[rank q={}] type={} gold={:?} top10={:?}",
+            q.question_id,
+            q.question_type,
+            q.answer_session_ids,
+            ranked_session_ids(10)
+        );
+    }
     if std::env::var("LME_DEBUG_TOP5").ok().as_deref() == Some("1") {
         for (i, t) in top5.iter().enumerate() {
             let head: String = t.chars().take(140).collect();
@@ -461,6 +609,8 @@ fn run_question<H: PipelineHooks>(
         r10,
         f5,
         f10,
+        ev5,
+        ev10,
         elapsed,
         n_docs,
         top5_owned,
@@ -707,6 +857,10 @@ fn main() -> Result<()> {
     let mut r10_hits = 0usize;
     let mut f5_hits = 0usize;
     let mut f10_hits = 0usize;
+    let mut ev5_hits = 0usize;
+    let mut ev10_hits = 0usize;
+    let mut ev_evaluated = 0usize;
+    let has_evidence_labels = qs.iter().any(|q| !q.answer_session_ids.is_empty());
     let mut judge_r5_hits = 0usize;
     let mut judge_r5_evaluated = 0usize;
     let mut judge_r10_hits = 0usize;
@@ -744,6 +898,7 @@ fn main() -> Result<()> {
                         pre_extractor_ref,
                         args.rrf_k,
                         args.rerank_top,
+                        args.raw_query,
                         hyde_cfg_ref,
                     )
                 }
@@ -760,6 +915,7 @@ fn main() -> Result<()> {
                         pre_extractor_ref,
                         args.rrf_k,
                         args.rerank_top,
+                        args.raw_query,
                     )
                 }
             }};
@@ -784,7 +940,7 @@ fn main() -> Result<()> {
             rq!(&san)
         };
         match res {
-            Ok((r5, r10, f5, f10, ms, nd, top5, top10, hyde_us)) => {
+            Ok((r5, r10, f5, f10, ev5, ev10, ms, nd, top5, top10, hyde_us)) => {
                 if r5 {
                     r5_hits += 1;
                 }
@@ -796,6 +952,15 @@ fn main() -> Result<()> {
                 }
                 if f10 {
                     f10_hits += 1;
+                }
+                if has_evidence_labels {
+                    ev_evaluated += 1;
+                    if ev5 {
+                        ev5_hits += 1;
+                    }
+                    if ev10 {
+                        ev10_hits += 1;
+                    }
                 }
                 total_ms += ms;
                 total_docs += nd;
@@ -810,7 +975,8 @@ fn main() -> Result<()> {
                 let mut judge_verdict: Option<bool> = None;
                 if let Some(j) = judge.as_ref() {
                     let refs5: Vec<&str> = top5.iter().map(|s| s.as_str()).collect();
-                    let v5 = j.judge(&q.question, &q.answer, &refs5);
+                    let answer = answer_text(q);
+                    let v5 = j.judge(&q.question, &answer, &refs5);
                     match v5 {
                         Some(v) => {
                             judge_r5_evaluated += 1;
@@ -820,7 +986,7 @@ fn main() -> Result<()> {
                             } else {
                                 // Top-5 missed; ask judge over top-10.
                                 let refs10: Vec<&str> = top10.iter().map(|s| s.as_str()).collect();
-                                if matches!(j.judge(&q.question, &q.answer, &refs10), Some(true)) {
+                                if matches!(j.judge(&q.question, &answer, &refs10), Some(true)) {
                                     judge_r10_hits += 1;
                                 }
                             }
@@ -837,7 +1003,7 @@ fn main() -> Result<()> {
                 }
                 if args.verbose {
                     println!(
-                        "[{:>2}] {} type={} docs={} ms={} r5={} r10={} judge={:?}",
+                        "[{:>2}] {} type={} docs={} ms={} r5={} r10={} ev5={} ev10={} judge={:?}",
                         i + 1,
                         q.question_id,
                         q.question_type,
@@ -845,6 +1011,8 @@ fn main() -> Result<()> {
                         ms,
                         r5,
                         r10,
+                        ev5,
+                        ev10,
                         judge_verdict
                     );
                 }
@@ -881,6 +1049,21 @@ fn main() -> Result<()> {
         f10_hits,
         qs.len()
     );
+    if has_evidence_labels {
+        let denom = ev_evaluated as f64;
+        println!(
+            "Evidence-R@5 : {:.3}  ({}/{})  [official answer_session_ids]",
+            ev5_hits as f64 / denom,
+            ev5_hits,
+            ev_evaluated
+        );
+        println!(
+            "Evidence-R@10: {:.3}  ({}/{})  [official answer_session_ids]",
+            ev10_hits as f64 / denom,
+            ev10_hits,
+            ev_evaluated
+        );
+    }
     if args.judge {
         let denom = qs.len() as f64;
         let jr5 = if denom > 0.0 {

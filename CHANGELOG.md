@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- LongMemEval benchmark runner now accepts the official JSON shape (`haystack_sessions` + `answer_session_ids`), reports Evidence-R@5/R@10, and reranks the full candidate pool before truncating to top-10.
 - **Context-OS** — cross-CLI MCP server for token-budget-bounded, self-learning, verbatim context.
   - `synapse-pack` crate: pure token-budget packer (deletion-based tiers `full → signatures → fact-delta → one-line`, SimHash near-dup collapse, greedy budget knapsack, serial-position ordering). 9 unit tests.
   - `synapse-mcp` tools: `context_pack`, `context_state`, `context_feedback`, `context_remember`; MCP `instructions` for cross-tool guidance; `--brain`/`SYNAPSE_BRAIN` knob.
