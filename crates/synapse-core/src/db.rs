@@ -14,7 +14,7 @@ use std::path::Path;
 
 type SqliteAutoExtensionFn = unsafe extern "C" fn(
     *mut rusqlite::ffi::sqlite3,
-    *mut *mut i8,
+    *mut *mut std::ffi::c_char,
     *const rusqlite::ffi::sqlite3_api_routines,
 ) -> i32;
 

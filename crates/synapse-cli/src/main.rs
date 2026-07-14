@@ -103,7 +103,11 @@ fn optional_document_embedding(
 }
 
 #[derive(Parser)]
-#[command(name = "synapse", version, about = "Single-file memory for AI agents")]
+#[command(
+    name = "synx",
+    version,
+    about = "Synapse Memory — local-first memory for AI coding agents"
+)]
 struct Cli {
     #[arg(short = 'f', long, default_value = ".synapse/brain.db", global = true)]
     file: PathBuf,
@@ -2135,7 +2139,7 @@ fn build_prime_report(
 }
 
 fn print_prime_report(report: &PrimeReport) {
-    println!("# Synapse Prime Brief");
+    println!("# Synapse Memory Prime Brief");
     println!();
     println!("project: {}", report.project);
     println!("root: {}", report.root);
@@ -2438,7 +2442,7 @@ fn print_context_pack(
     route: &str,
     hits: &[synapse_core::Hit],
 ) {
-    println!("# Synapse Context Pack");
+    println!("# Synapse Memory Context Pack");
     println!();
     println!("context_id: {}", context_id);
     println!("query: {}", query);
@@ -2698,7 +2702,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
 }
 
 fn print_doctor_report(report: &DoctorReport) {
-    println!("# Synapse doctor");
+    println!("# Synapse Memory doctor");
     println!("db={} quick_check={}", report.db, report.quick_check);
     println!("semantic_enabled={}", report.semantic_enabled);
     println!("docs={} vectors={}", report.docs, report.vectors);

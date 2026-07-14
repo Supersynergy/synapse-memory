@@ -19,13 +19,6 @@ require_text() {
 
 echo "1/15 script syntax"
 bash -n "$script_dir/audit.sh" "$script_dir/licenses.sh" "$script_dir/install.sh" "$script_dir/uninstall.sh" "$script_dir/package.sh" "$script_dir/verify.sh" "$script_dir/fresh-snapshot.sh"
-python3 - "$script_dir/benchmark.py" <<'PY'
-import pathlib
-import sys
-
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-compile(source, sys.argv[1], "exec")
-PY
 if command -v pwsh >/dev/null 2>&1; then
   pwsh -NoProfile -Command "[scriptblock]::Create((Get-Content -Raw '$script_dir/install.ps1')) | Out-Null; [scriptblock]::Create((Get-Content -Raw '$script_dir/uninstall.ps1')) | Out-Null; [scriptblock]::Create((Get-Content -Raw '$script_dir/package.ps1')) | Out-Null"
 fi

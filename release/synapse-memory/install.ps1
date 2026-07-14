@@ -20,10 +20,10 @@ $Asset = "synapse-memory-$Target.zip"
 if ($env:SYNAPSE_RELEASE_BASE) {
     $Base = $env:SYNAPSE_RELEASE_BASE.TrimEnd("/")
 } elseif ($Version) {
-    $CleanVersion = $Version -replace "^ctxos-v", "" -replace "^v", ""
-    $Base = "$Repo/releases/download/ctxos-v$CleanVersion"
+    $CleanVersion = $Version -replace "^synapse-memory-v", "" -replace "^v", ""
+    $Base = "$Repo/releases/download/synapse-memory-v$CleanVersion"
 } else {
-    $Base = "$Repo/releases/download/ctxos-v$DefaultVersion"
+    $Base = "$Repo/releases/download/synapse-memory-v$DefaultVersion"
 }
 
 if ($DryRun) {

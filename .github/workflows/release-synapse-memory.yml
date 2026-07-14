@@ -1,10 +1,10 @@
 name: release-synapse-memory
 
 # Canonical user-facing release. One portable Rust `synx` binary per native target.
-# Tag and workspace version must match: ctxos-v1.0.1-rc.1 -> 1.0.1-rc.1.
+# Tag and workspace version must match: synapse-memory-v1.0.1-rc.1 -> 1.0.1-rc.1.
 on:
   push:
-    tags: ["ctxos-v*"]
+    tags: ["synapse-memory-v*"]
   workflow_dispatch:
 
 permissions:
@@ -18,10 +18,11 @@ jobs:
   preflight:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
         with:
           toolchain: "1.95.0"
+          components: rustfmt, clippy
       - name: Tag equals workspace version
         shell: bash
         run: |
@@ -32,7 +33,7 @@ jobs:
           grep -Fq "default_version=\"$release_version\"" release/synapse-memory/install.sh
           grep -Fq "\$DefaultVersion = \"$release_version\"" release/synapse-memory/install.ps1
           if test "${GITHUB_EVENT_NAME}" = push; then
-            tag_version="${GITHUB_REF_NAME#ctxos-v}"
+            tag_version="${GITHUB_REF_NAME#synapse-memory-v}"
             test "$tag_version" = "$workspace_version"
           fi
       - name: Owner-approved release license
@@ -88,7 +89,7 @@ jobs:
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
         with:
           toolchain: "1.95.0"
@@ -98,6 +99,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Build portable Rust binary
         run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            export CC="$GITHUB_WORKSPACE/release/synapse-memory/musl-cc.sh"
+            case "${{ matrix.target }}" in
+              x86_64-unknown-linux-musl) export SYNAPSE_MUSL_CC=x86_64-linux-musl-gcc ;;
+              aarch64-unknown-linux-musl) export SYNAPSE_MUSL_CC=aarch64-linux-musl-gcc ;;
+              *) exit 1 ;;
+            esac
+          fi
           cargo build --locked --profile release-hardened \
             --target "${{ matrix.target }}" \
             -p synapse-cli \
@@ -135,7 +144,7 @@ jobs:
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
         with:
           toolchain: "1.95.0"
@@ -155,7 +164,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
           & $bin -f "$tmp\brain.db" init
           & $bin -f "$tmp\brain.db" remember --kind decision "native release smoke"
-          $context = & $bin -f "$tmp\brain.db" context "release smoke" --json
+          $context = (& $bin -f "$tmp\brain.db" context "release smoke" --json) -join "`n"
           if ($context -notmatch '"context_id"') { throw "context smoke failed" }
       - name: Package and checksum
         shell: pwsh
@@ -192,7 +201,7 @@ jobs:
           cd dist
           for sidecar in ./*.sha256; do sha256sum -c "$sidecar"; done
           sha256sum ./*.tar.gz ./*.zip > SHA256SUMS
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: softprops/action-gh-release@5be0e66d93ac7ed76da52eca8bb058f665c3a5fe # v2.4.2
         with:
           prerelease: ${{ contains(github.ref_name, '-rc') }}

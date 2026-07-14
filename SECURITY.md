@@ -40,5 +40,5 @@ report within 72 hours; remediation timing depends on severity and reproducibili
 
 Exact audit and package gates:
 [release/synapse-memory/RELEASE-GATES.md](release/synapse-memory/RELEASE-GATES.md).
-The broader daemon threat model remains in [docs/SECURITY.md](docs/SECURITY.md), but
-it does not describe the minimal portable binary.
+Optional daemon, MCP, semantic, and hosted channels require their own threat model
+and release gate before they are supported.

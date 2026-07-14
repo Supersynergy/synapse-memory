@@ -1,73 +1,56 @@
-# Synapse Memory
+# Synapse Memory portable release
 
-Portable, local-first memory for coding agents. One native Rust binary, one
-SQLite-backed brain, no Docker, no cloud account, and no API key for the default
-product path.
+This is the small, dependable download for people who want their coding agents to
+remember the work that matters.
 
-> **Release status: CANDIDATE.** Local package, install, recovery, and portable
-> RustSec closure pass. Public publishing still requires clean commits, owner
-> license approval, and the six native CI jobs.
+One native Rust binary. One private SQLite brain. No Docker, cloud account, API
+key, model download, or background service.
 
 ## Two-minute path
 
-macOS or Linux, from a checksummed `ctxos-v*` release:
+macOS or Linux, from a checksummed `synapse-memory-v*` release:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.sh | sh
-synx remember --kind decision "Use the release verifier before publishing."
-synx context "What must pass before release?" --mode coding
+
+BRAIN="$HOME/.synapse/brain.db"
+synx -f "$BRAIN" remember --kind decision "Keep the reason, not only the result."
+synx -f "$BRAIN" context "What should the next session know?" --mode coding
 ```
 
 Windows PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.ps1 | iex
-synx remember --kind decision "Use the release verifier before publishing."
-synx context "What must pass before release?" --mode coding
+
+$Brain = "$HOME\.synapse\brain.db"
+synx -f $Brain remember --kind decision "Keep the reason, not only the result."
+synx -f $Brain context "What should the next session know?" --mode coding
 ```
 
-The installer is version-pinned and fails closed unless the matching archive and
-SHA-256 sidecar exist on GitHub Releases.
+The installer is version-pinned and stops unless the matching archive and SHA-256
+sidecar both exist and verify.
 
-## What this package is
+## What people get
 
-| Included | Contract |
+| Included | Why it matters |
 |---|---|
-| `synx` | Native Rust CLI; scripts and local wrappers are rejected by packaging |
-| `brain.db` | User-created SQLite memory file under `~/.synapse/`; never bundled |
-| Typed memory | Decisions, facts, bugs, benchmarks, research, ADRs, and notes |
-| Cited context | Bounded packs with stable ids, retrieval route, and feedback hint |
-| Freshness | Local manifest/lockfile context without registry access |
-| Durability | Backup, restore, merge, integrity check, signatures, and CRDT federation |
-| Recovery adapter | Optional Codex checkpoint integration; separate from the Rust core |
+| `synx` native CLI | Starts without a runtime, daemon, container, or cloud dependency |
+| Private `brain.db` | Your memory remains a file you own, inspect, back up, and move |
+| Typed memory | Decisions, facts, fixes, research, benchmarks, ADRs, and notes keep their meaning |
+| Bounded cited context | An agent receives useful evidence and stable ids without replaying everything |
+| Project grounding | `prime` reconnects a new session to the repository in front of it |
+| Local freshness | Manifests and lockfiles ground version-sensitive work without registry access |
+| Feedback loop | Helpful evidence earns weight from real outcomes instead of hidden guesses |
+| Recovery tools | Doctor, verification, backup, restore, merge, BLAKE3, and Ed25519 protect continuity |
+| Optional Codex adapter | Interrupted work can resume from minimal state without storing the conversation |
 
-First-party license boundary: `synapse-core` is FSL-1.1-ALv2; CLI/graph/learning
-utility crates are MIT. Both exact texts ship in `LICENSES/`. The proprietary
-`synapse-engine` is not in the portable dependency graph or archive.
-The exact portable multi-target dependency inventory and license texts ship as
-`THIRD-PARTY-LICENSES.html`; `licenses.sh check` fails when it drifts.
+The portable binary deliberately has no embedding runtime. Lexical retrieval,
+timeline fallback, cited context, freshness, feedback, backup, and merge always
+work. Explicit vector operations fail clearly instead of silently pretending to
+be semantic search.
 
-The portable binary deliberately excludes the ONNX embedding runtime. It always
-supports lexical retrieval, timeline fallback, cited context, graph commands,
-freshness, feedback, backup, and merge. Explicit vector operations fail with a
-clear message instead of silently pretending to be semantic search.
-
-Also excluded from this minimal channel: proprietary engine, Rayon/turbo/Tantivy,
-IVF sharding, encrypted `age` packs, and PDF parsing. Their commands are absent or
-return a precise feature message; normal memory, RSS/web/text ingest, and plain
-backup/restore remain available.
-
-Semantic binaries are a later release channel. They must pass the same platform
-matrix and memory-quality evals before becoming the default.
-
-## Install from a local release asset
-
-```sh
-SYNAPSE_RELEASE_BASE="file:///absolute/path/to/dist" \
-  release/synapse-memory/install.sh
-```
-
-Useful overrides:
+## Install a specific version
 
 ```sh
 SYNAPSE_PREFIX="$HOME/.local" \
@@ -76,69 +59,77 @@ SYNAPSE_REPO="https://github.com/Supersynergy/synapse" \
   release/synapse-memory/install.sh --version 1.0.1-rc.1
 ```
 
-The installer pins the version in `VERSION` instead of following GitHub's global
-`latest` release, which may belong to the frozen legacy `v*` channel. It requires
-a SHA-256 sidecar; missing or mismatched checksums are a hard failure. It then
-initializes the database and runs `doctor`.
+Install from a local release directory:
 
-## Build the portable Rust binary
+```sh
+SYNAPSE_RELEASE_BASE="file:///absolute/path/to/dist" \
+  release/synapse-memory/install.sh
+```
+
+The installer uses the exact version in `VERSION`; it never follows GitHub's
+ambiguous repository-wide `latest` endpoint. Upgrade preserves the previous
+binary as `synx.previous`. Uninstall preserves `~/.synapse/brain.db`.
+
+## Build and verify
 
 ```sh
 TARGET="$(rustc -vV | sed -n 's/^host: //p')"
 cargo build --locked --profile release-hardened \
-  --target "$TARGET" \
-  -p synapse-cli \
-  --no-default-features
+  --target "$TARGET" -p synapse-cli --no-default-features
+
+SYNX_BIN="target/$TARGET/release-hardened/synx" \
+  release/synapse-memory/verify.sh
 ```
 
 Build a host release asset from an existing binary:
 
 ```sh
-TARGET="$(rustc -vV | sed -n 's/^host: //p')"
 SYNAPSE_BIN="target/$TARGET/release-hardened/synx" \
 SYNAPSE_TARGET="$TARGET" \
   release/synapse-memory/package.sh
 ```
 
-Local end-to-end verification:
-
-```sh
-TARGET="$(rustc -vV | sed -n 's/^host: //p')"
-SYNX_BIN="target/$TARGET/release-hardened/synx" \
-  release/synapse-memory/verify.sh
-```
-
-Prove the current release overlay from a clean detached `HEAD` checkout without
-committing or touching the active worktree:
+Prove the release overlay from a clean detached checkout:
 
 ```sh
 release/synapse-memory/fresh-snapshot.sh
 ```
 
-Local macOS ARM64 footprint evidence:
-[evidence/macos-aarch64-local.md](evidence/macos-aarch64-local.md). Regenerate with
-`benchmark.py`; process startup is included and no daemon/model/network is used.
-
-## Release target matrix
+## Native target matrix
 
 | OS | Architecture | Asset |
 |---|---|---|
 | macOS | Apple Silicon | `synapse-memory-aarch64-apple-darwin.tar.gz` |
 | macOS | Intel | `synapse-memory-x86_64-apple-darwin.tar.gz` |
-| Linux | x86-64, static musl | `synapse-memory-x86_64-unknown-linux-musl.tar.gz` |
-| Linux | ARM64, static musl | `synapse-memory-aarch64-unknown-linux-musl.tar.gz` |
+| Linux | x86-64 static musl | `synapse-memory-x86_64-unknown-linux-musl.tar.gz` |
+| Linux | ARM64 static musl | `synapse-memory-aarch64-unknown-linux-musl.tar.gz` |
 | Windows | x86-64 | `synapse-memory-x86_64-pc-windows-msvc.zip` |
 | Windows | ARM64 | `synapse-memory-aarch64-pc-windows-msvc.zip` |
 
-Tier-1 means the asset is built and its add/context/feedback/backup flow runs on a
-native CI runner. A target is not advertised merely because Rust can compile it.
+A target is advertised only after a native GitHub runner builds the binary and
+executes its memory/context smoke flow.
 
-## Read next
+## What is intentionally not here
 
-- [FEATURES.md](FEATURES.md) — capability map and product boundary
-- [COMPETITOR-GAP.md](COMPETITOR-GAP.md) — honest wedge against established memory tools
-- [RELEASE-GATES.md](RELEASE-GATES.md) — required proof before public release
-- [PROOF.md](PROOF.md) — exact local results and remaining external STOPs
-- [MANIFEST.md](MANIFEST.md) — files and archive contract
-- [RELEASE-NOTES.md](RELEASE-NOTES.md) — exact candidate scope and upgrade notes
-- [evidence/macos-aarch64-local.md](evidence/macos-aarch64-local.md) — measured local footprint
+The portable archive excludes the proprietary engine, daemon/MCP transport,
+model runtime, PDF parser, encrypted packs, IVF sharding, Rayon/Tantivy paths,
+database proxies, market tooling, multimodal experiments, benchmark corpora,
+local caches, keys, memory databases, transcripts, and checkpoints.
+
+These are separate experiments or future channels. They do not belong in the
+small default that protects a person's daily work.
+
+## Trust and license boundary
+
+`synapse-core` is FSL-1.1-ALv2. The CLI, graph, and learning utility crates are
+MIT. Both exact texts ship in `LICENSES/`. The proprietary `synapse-engine` is not
+in the portable dependency graph or archive. `THIRD-PARTY-LICENSES.html` is
+generated from the exact locked multi-target dependency closure.
+
+Read next:
+
+- [FEATURES.md](FEATURES.md) — exact capability boundary
+- [RELEASE-NOTES.md](RELEASE-NOTES.md) — current release and upgrade notes
+- [PROOF.md](PROOF.md) — reproducible verification evidence
+- [RELEASE-GATES.md](RELEASE-GATES.md) — publication contract
+- [MANIFEST.md](MANIFEST.md) — exact archive contents

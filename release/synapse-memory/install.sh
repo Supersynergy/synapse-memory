@@ -86,11 +86,11 @@ asset="synapse-memory-${target}.tar.gz"
 if [ -n "${SYNAPSE_RELEASE_BASE:-}" ]; then
   base=${SYNAPSE_RELEASE_BASE%/}
 elif [ -n "$version" ]; then
-  version=${version#ctxos-v}
+  version=${version#synapse-memory-v}
   version=${version#v}
-  base="$repo/releases/download/ctxos-v$version"
+  base="$repo/releases/download/synapse-memory-v$version"
 else
-  base="$repo/releases/download/ctxos-v$default_version"
+  base="$repo/releases/download/synapse-memory-v$default_version"
 fi
 
 if [ "$dry_run" = 1 ]; then

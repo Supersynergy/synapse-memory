@@ -13,6 +13,7 @@ on:
       - "integrations/codex/**"
       - "release/synapse-memory/**"
       - ".github/workflows/synapse-memory-ci.yml"
+      - ".github/workflows/release-synapse-memory.yml"
   pull_request:
     paths:
       - "Cargo.lock"
@@ -24,6 +25,7 @@ on:
       - "integrations/codex/**"
       - "release/synapse-memory/**"
       - ".github/workflows/synapse-memory-ci.yml"
+      - ".github/workflows/release-synapse-memory.yml"
   workflow_dispatch:
 
 permissions:
@@ -38,7 +40,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
         with:
           toolchain: "1.95.0"

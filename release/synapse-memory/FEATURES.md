@@ -1,73 +1,63 @@
-# Synapse capability map
+# Synapse Memory feature boundary
 
-This map separates the portable memory product from the broader monorepo. A crate
-existing in the workspace does not make it a shipped feature.
+The portable release focuses on one outcome: a person should be able to return to
+their work with the important context intact.
 
-## Portable product: ship in every asset
+## Included in every native download
 
-| Capability | User command or surface | Release status |
+| Human need | Command or surface | Release behavior |
 |---|---|---|
-| Single-file local memory | `synx init`, `put`, `remember`, `find` | Ship |
-| Exact lexical retrieval | `find`, context lexical route | Ship |
-| Bounded cited context | `context --mode coding [--json]` | Ship |
-| Repo startup grounding | `prime <repo>` | Ship |
-| Package/API freshness | `fresh-context --no-registry` | Ship |
-| Retrieval feedback | `feedback`, `learn calibrate/status` | Ship |
-| Health and repair | `doctor`, `db-verify`, `db-repair` | Ship |
-| Portable exchange | Unencrypted `backup`, `db-restore`, `snap`, `restore`, `merge` | Ship |
-| Integrity and trust | BLAKE3, Ed25519 `keygen/sign/verify`, source metadata | Ship |
-| Typed import/export | CSV, TSV, JSON(L), SQLite, brainpack | Ship |
-| Knowledge graph basics | relate, neighbors, traversal, PageRank, paths | Ship with limits documented |
-| CRDT federation | TCP cross-platform; Unix sockets on Unix | Release candidate until Windows CI passes |
-| Raw corpus promotion | Text, RSS, web, transcript ingest/search/eval/promotion | Ship; PDF is optional |
+| “Keep this decision.” | `remember`, `put` | Stores typed memory with a stable id, source, freshness, and status metadata |
+| “Find the useful part.” | `find`, `context --mode coding` | Exact lexical retrieval and bounded cited context |
+| “Help a new session understand this repo.” | `prime <repo>` | Combines project state, source documents, commands, and relevant memory |
+| “Do not trust stale package assumptions.” | `fresh-context --no-registry` | Reads local manifests and lockfiles without external registry access |
+| “That evidence helped.” | `feedback`, `learn calibrate/status` | Records outcomes and tunes retrieval weights locally |
+| “Tell me whether my memory is healthy.” | `doctor`, `db-verify`, `db-repair` | Checks integrity and offers explicit repair paths |
+| “Let me carry and recover it.” | `backup`, `db-restore`, `snap`, `restore`, `merge` | Portable exchange, rollback, and CRDT merge |
+| “Let me verify who signed this.” | `keygen`, `sign`, `verify` | BLAKE3 integrity and Ed25519 signatures |
+| “Bring in what I already have.” | CSV, TSV, JSON(L), SQLite, brainpack | Typed import and export without a hosted service |
+| “Connect related knowledge.” | relate, neighbors, traversal, PageRank, paths | Local graph basics with documented limits |
+| “Share replicas deliberately.” | TCP federation; Unix sockets on Unix | Cross-platform CRDT federation without a central account |
 
 Portable builds store memories without embeddings and say so once on write. They
-do not report missing vectors or an absent embedding cache as health failures.
+do not treat missing vectors or a missing embedding cache as a health failure.
 
-## Optional adapters: package separately
+## Optional, separate adapter
 
-| Capability | Why separate |
+The Codex checkpoint integration is a reversible Python adapter around the Rust
+memory core. It records minimal execution state so an interrupted session can
+recover carefully. It does not store transcript text, command arguments,
+tool-output bodies, or file contents.
+
+## Deliberately outside the portable download
+
+| Surface | Reason it stays separate |
 |---|---|
-| Codex crash-safe resume | Small Python hook adapter around a Rust memory core; Codex-specific lifecycle |
-| MCP server | Current implementation connects to a Unix socket; not a Windows-portable core dependency |
-| Warm daemon | Current `synapsed` transport is Unix-only and pulls heavier embedding/rerank features |
-| Semantic embedding build | ONNX/model distribution, first-run download, binary size, and per-platform linking require their own gate |
-| Encrypted backup | `age` and its unmaintained macro dependency stay outside the zero-warning portable closure |
-| PDF ingest | `lopdf`/font parsing stays outside the minimal memory artifact; text/web ingest remains available |
-| IVF sharding/turbo/Tantivy | Rayon, proprietary engine, ANN and benchmark substrate are not required for personal agent memory |
-| Agent CLI registration | Vendor-specific config mutation must remain reversible and opt-in |
-
-## Engine Lab: do not place in the memory download
-
-- ANN/usearch experiments, ColBERT, SPLADE, SPANN, MUVERA, conformal research
-- MySQL/Postgres wire proxies and SynapsQL
-- market/HFT, TSDB, streaming, OLAP, JIT, io_uring, Raft/cluster experiments
-- multimodal, media, CLIP/audio/video scaffolds
-- CMS, server, auth, license server, dashboards, observability stacks
-- benchmark runners, fuzz corpora, graph outputs, local databases, keys, caches
-
-These may reuse the engine but they increase compile surface, platform risk, audit
-cost, and product confusion. They earn separate packages only after independent
-users and release gates exist.
+| MCP server and warm daemon | Current transports add platform and operational surface not needed for local memory |
+| Semantic embedding runtime | Model distribution, first-run download, binary size, and platform linking need independent gates |
+| Encrypted `age` packs and PDF ingest | Their dependency closures do not belong in the zero-warning minimal channel |
+| ANN, Tantivy, sharding, and rerank research | Useful experiments, not required for daily agent continuity |
+| Database, market, multimodal, CMS, and observability labs | Different products with different users and release contracts |
+| Agent-vendor config mutation | Must remain reversible, documented, and opt-in |
 
 ## Memory loop
 
 ```mermaid
 flowchart LR
-    Capture["remember / import"] --> Store["local brain.db"]
-    Store --> Retrieve["lexical / optional semantic"]
+    Capture["remember / import"] --> Store["private brain.db"]
+    Store --> Retrieve["exact local retrieval"]
     Retrieve --> Pack["bounded cited context"]
     Pack --> Agent["coding agent"]
-    Agent --> Gate["test / result gate"]
-    Gate --> Feedback["feedback + calibration"]
+    Agent --> Work["test / result"]
+    Work --> Feedback["feedback + calibration"]
     Feedback --> Retrieve
     Agent --> Decision["durable decision"]
     Decision --> Store
 ```
 
-## Product promise that can be defended now
+## Honest promise
 
-Synapse is a stronger fit when the job is local coding-agent continuity with exact
-paths, errors, decisions, compact cited context, offline operation, and crash-safe
-resume. It is not yet proven superior for automatic conversational memory extraction,
-temporal knowledge-graph quality, multi-user SaaS, or connector breadth.
+Synapse Memory is built for local coding-agent continuity: exact paths, errors,
+decisions, compact cited context, offline operation, and careful recovery. This
+release does not claim automatic human-like memory, semantic recall without a
+model, multi-user SaaS, or universal connector coverage.

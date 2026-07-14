@@ -1,4 +1,4 @@
-# Contributing to Synapse
+# Contributing to Synapse Memory
 
 Synapse Memory is the release product. The wider workspace also contains engine
 research. Keep pull requests inside one clearly named surface.
@@ -56,7 +56,7 @@ Maintainers only:
    release notes, and tag versions.
 3. Approve the recorded FSL/MIT boundary with repository variable
    `SYNAPSE_RELEASE_LICENSE_APPROVED=true`.
-4. Push `ctxos-v<version>`; do not create a third tag family.
+4. Push `synapse-memory-v<version>`; do not create another public tag family.
 5. Require all six native jobs and checksum validation before publishing.
 
 Exact gates: [release/synapse-memory/RELEASE-GATES.md](release/synapse-memory/RELEASE-GATES.md).

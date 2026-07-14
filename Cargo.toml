@@ -11,8 +11,6 @@ members = [
 release_surface = "synapse-memory"
 portable_members = [
     "synapse-cli", "synapse-core", "synapse-graph", "synapse-learn",
-    "synapse-ann", "synapse-kernel", "synapse-engine", "synapse-quant",
-    "synapse-fts", "synapse-spann", "synapse-obs",
 ]
 
 [workspace.package]
