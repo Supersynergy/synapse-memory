@@ -4,10 +4,13 @@ Evidence date: 2026-07-14. Candidate version: `1.1.0-rc.1`.
 
 ## Verdict
 
-The local portable product path passes, including the new temporal truth,
-supersession, feedback, and backup-before-repair flow. Publication remains
-fail-closed: the release job runs only for a matching `synapse-memory-v*` tag after
-preflight, all six native executions, packaging, and checksum validation succeed.
+The local portable product path and the six-target candidate matrix pass,
+including the new temporal truth, supersession, feedback, and
+backup-before-repair flow. Candidate commit `fec3440b5255397651722f5f0f81d60188d73bea`
+passed [GitHub Actions run 29367084743](https://github.com/Supersynergy/synapse/actions/runs/29367084743).
+Publication remains fail-closed: the release job runs only for a matching
+`synapse-memory-v*` tag after preflight, all six native executions, packaging,
+and checksum validation succeed.
 
 Canonical workflow:
 [release-synapse-memory.yml](../../.github/workflows/release-synapse-memory.yml).
@@ -29,15 +32,16 @@ Canonical workflow:
 | Codex checkpoint recovery tests | PASS |
 | ShellCheck and Actionlint | PASS |
 | Current release-diff secret scan | PASS |
-| Native macOS Apple Silicon | Pending candidate matrix |
-| Native macOS Intel | Pending candidate matrix |
-| Native Linux x86-64 musl | Pending candidate matrix |
-| Native Linux ARM64 musl | Pending candidate matrix |
-| Native Windows x86-64 | Pending candidate matrix |
-| Native Windows ARM64 | Pending candidate matrix |
+| Native macOS Apple Silicon | PASS |
+| Native macOS Intel | PASS |
+| Native Linux x86-64 musl | PASS |
+| Native Linux ARM64 musl | PASS |
+| Native Windows x86-64 | PASS |
+| Native Windows ARM64 | PASS |
 
-The native six-target matrix will be recorded before tagging in
-[GitHub Actions](https://github.com/Supersynergy/synapse/actions/workflows/release-synapse-memory.yml).
+The candidate matrix used workflow dispatch, so publication was skipped by design.
+The matching tag reruns the same fail-closed workflow before creating the GitHub
+release.
 
 ## Reproduce the local proof
 
