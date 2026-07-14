@@ -1,0 +1,25 @@
+[package]
+name = "synapse-fts"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Tantivy-based FTS index — BM25 drop-in for synapse keyword path"
+
+[features]
+default = []
+
+[dependencies]
+tantivy = "0.22"
+anyhow.workspace = true
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
+
+[[bench]]
+name = "fts_compare"
+harness = false

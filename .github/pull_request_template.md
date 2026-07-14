@@ -4,12 +4,18 @@
 
 <!-- one or two sentences -->
 
+## Surface and proof
+
+- Surface: <!-- portable memory / optional adapter / engine lab -->
+- Oracle: <!-- exact test, benchmark, or release gate -->
+- New dependency: <!-- none, or purpose + age + license + closure impact -->
+
 ## Checklist
 
 - [ ] `cargo fmt --all --check`
-- [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- [ ] `cargo test --workspace` passes
-- [ ] `cargo test -p synapse-core --features full` passes (if core touched)
-- [ ] `CHANGELOG.md` entry added under the current `## vNEXT` block
+- [ ] Changed package tests and Clippy pass with warnings denied
+- [ ] Portable-path changes pass `release/synapse-memory/verify.sh`
+- [ ] Dependency changes include license/security/14-day review
+- [ ] `CHANGELOG.md` entry added when behavior or release surface changes
 - [ ] Docs updated if a public API, file format, or bench number changed
-- [ ] No new crate dep unless justified in the PR description
+- [ ] No memory DB, transcript, checkpoint, key, token, cache, corpus, or local path added

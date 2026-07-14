@@ -1,0 +1,204 @@
+name: release-synapse-memory
+
+# Canonical user-facing release. One portable Rust `synx` binary per native target.
+# Tag and workspace version must match: ctxos-v1.0.1-rc.1 -> 1.0.1-rc.1.
+on:
+  push:
+    tags: ["ctxos-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: ""
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+      - name: Tag equals workspace version
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "synapse-cli") | .version')"
+          release_version="$(tr -d '[:space:]' < release/synapse-memory/VERSION)"
+          test "$release_version" = "$workspace_version"
+          grep -Fq "default_version=\"$release_version\"" release/synapse-memory/install.sh
+          grep -Fq "\$DefaultVersion = \"$release_version\"" release/synapse-memory/install.ps1
+          if test "${GITHUB_EVENT_NAME}" = push; then
+            tag_version="${GITHUB_REF_NAME#ctxos-v}"
+            test "$tag_version" = "$workspace_version"
+          fi
+      - name: Owner-approved release license
+        env:
+          SYNAPSE_RELEASE_LICENSE_APPROVED: ${{ vars.SYNAPSE_RELEASE_LICENSE_APPROVED }}
+        run: test "$SYNAPSE_RELEASE_LICENSE_APPROVED" = "true"
+      - name: Portable compile and tests
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked -p synapse-cli --no-default-features
+          cargo test --locked -p synapse-learn
+          cargo clippy --locked -p synapse-cli --no-default-features -- -D warnings
+          cargo clippy --locked -p synapse-learn -- -D warnings
+      - name: RustSec release gate
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          release/synapse-memory/audit.sh
+      - name: Dependency policy and license closure
+        run: |
+          cargo install cargo-deny --locked --version 0.19.9
+          cargo install cargo-about --locked --version 0.9.0 --features cli
+          cargo deny --manifest-path crates/synapse-cli/Cargo.toml \
+            --locked --no-default-features --exclude-dev \
+            -t aarch64-apple-darwin \
+            -t x86_64-apple-darwin \
+            -t aarch64-unknown-linux-musl \
+            -t x86_64-unknown-linux-musl \
+            -t aarch64-pc-windows-msvc \
+            -t x86_64-pc-windows-msvc \
+            check --config release/synapse-memory/deny.toml -D warnings
+          release/synapse-memory/licenses.sh check
+      - name: Full portable release proof
+        run: |
+          cargo build --locked --profile release-hardened \
+            -p synapse-cli --no-default-features
+          SYNX_BIN=target/release-hardened/synx \
+            release/synapse-memory/verify.sh
+
+  unix:
+    needs: preflight
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build portable Rust binary
+        run: |
+          cargo build --locked --profile release-hardened \
+            --target "${{ matrix.target }}" \
+            -p synapse-cli \
+            --no-default-features
+      - name: Native smoke
+        shell: bash
+        run: |
+          bin="target/${{ matrix.target }}/release-hardened/synx"
+          tmp="$(mktemp -d)"
+          "$bin" -f "$tmp/brain.db" init
+          "$bin" -f "$tmp/brain.db" remember --kind decision "native release smoke"
+          "$bin" -f "$tmp/brain.db" context "release smoke" --json | grep -q '"context_id"'
+      - name: Package and checksum
+        shell: bash
+        env:
+          SYNAPSE_BIN: target/${{ matrix.target }}/release-hardened/synx
+          SYNAPSE_TARGET: ${{ matrix.target }}
+        run: release/synapse-memory/package.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: synapse-memory-${{ matrix.target }}
+          path: release/dist-memory/*
+          if-no-files-found: error
+
+  windows:
+    needs: preflight
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+          targets: ${{ matrix.target }}
+      - name: Build portable Rust binary
+        shell: pwsh
+        run: |
+          cargo build --locked --profile release-hardened `
+            --target "${{ matrix.target }}" `
+            -p synapse-cli `
+            --no-default-features
+      - name: Native smoke
+        shell: pwsh
+        run: |
+          $bin = "target\${{ matrix.target }}\release-hardened\synx.exe"
+          $tmp = Join-Path $env:RUNNER_TEMP "synapse-memory-smoke"
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          & $bin -f "$tmp\brain.db" init
+          & $bin -f "$tmp\brain.db" remember --kind decision "native release smoke"
+          $context = & $bin -f "$tmp\brain.db" context "release smoke" --json
+          if ($context -notmatch '"context_id"') { throw "context smoke failed" }
+      - name: Package and checksum
+        shell: pwsh
+        run: |
+          & ".\release\synapse-memory\package.ps1" `
+            -Bin "target\${{ matrix.target }}\release-hardened\synx.exe" `
+            -Target "${{ matrix.target }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: synapse-memory-${{ matrix.target }}
+          path: release/dist-memory/*
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push'
+    needs: [unix, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Require six native assets and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(dist/*.tar.gz dist/*.zip)
+          checksums=(dist/*.sha256)
+          test "${#archives[@]}" -eq 6
+          test "${#checksums[@]}" -eq 6
+          cd dist
+          for sidecar in ./*.sha256; do sha256sum -c "$sidecar"; done
+          sha256sum ./*.tar.gz ./*.zip > SHA256SUMS
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: softprops/action-gh-release@5be0e66d93ac7ed76da52eca8bb058f665c3a5fe # v2.4.2
+        with:
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          body_path: release/synapse-memory/RELEASE-NOTES.md
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+            dist/SHA256SUMS
