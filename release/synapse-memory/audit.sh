@@ -8,7 +8,7 @@ audit_json="$(mktemp "${TMPDIR:-/tmp}/synapse-memory-audit.XXXXXX")"
 findings="$(mktemp "${TMPDIR:-/tmp}/synapse-memory-findings.XXXXXX")"
 trap 'rm -f "$closure" "$audit_json" "$findings"' EXIT
 
-for tool in cargo jq rg; do
+for tool in cargo jq grep; do
   command -v "$tool" >/dev/null 2>&1 || {
     printf 'error: required audit tool missing: %s\n' "$tool" >&2
     exit 2
@@ -55,7 +55,7 @@ jq -r '
   | @tsv
 ' "$audit_json" \
   | while IFS=$'\t' read -r name version id kind title; do
-      if rg -Fxq "$name@$version" "$closure"; then
+      if grep -Fqx "$name@$version" "$closure"; then
         printf '%s\t%s@%s\t%s\t%s\n' "$id" "$name" "$version" "$kind" "$title"
       fi
     done >"$findings"
