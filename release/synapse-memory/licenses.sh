@@ -13,7 +13,7 @@ case "$mode" in
   *) printf 'usage: %s [check|generate]\n' "$0" >&2; exit 2 ;;
 esac
 
-for tool in cargo jq rg comm; do
+for tool in cargo jq grep comm; do
   command -v "$tool" >/dev/null 2>&1 || {
     printf 'error: required license tool missing: %s\n' "$tool" >&2
     exit 2
@@ -69,7 +69,7 @@ if [ -s "$tmp/missing" ]; then
   exit 1
 fi
 if jq -r '.overview[].id' "$tmp/about.json" \
-  | rg -i '^(AGPL|GPL-[123]|SSPL|BUSL)' >/dev/null; then
+  | grep -E -i '^(AGPL|GPL-[123]|SSPL|BUSL)' >/dev/null; then
   printf 'FAIL copyleft or source-available dependency license in portable report\n' >&2
   exit 1
 fi
