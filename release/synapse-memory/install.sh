@@ -72,7 +72,16 @@ fetch() {
   fi
 }
 
-target=$(detect_target) || die "unsupported platform: $(uname -s)/$(uname -m)"
+# The test-only override lets the release verifier install the just-built host
+# archive on CI. Normal installs always use the platform detector below.
+target=${SYNAPSE_TEST_TARGET:-}
+if [ -z "$target" ]; then
+  target=$(detect_target) || die "unsupported platform: $(uname -s)/$(uname -m)"
+fi
+case "$target" in
+  aarch64-apple-darwin|x86_64-apple-darwin|aarch64-unknown-linux-musl|x86_64-unknown-linux-musl|aarch64-pc-windows-msvc|x86_64-pc-windows-msvc|aarch64-unknown-linux-gnu|x86_64-unknown-linux-gnu) ;;
+  *) die "unsupported release target: $target" ;;
+esac
 asset="synapse-memory-${target}.tar.gz"
 if [ -n "${SYNAPSE_RELEASE_BASE:-}" ]; then
   base=${SYNAPSE_RELEASE_BASE%/}

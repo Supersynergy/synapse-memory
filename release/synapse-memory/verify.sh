@@ -138,7 +138,7 @@ install_db="$install_home/.synapse/brain.db"
 mkdir -p "$install_prefix/bin"
 printf '#!/bin/sh\necho private-wrapper\n' >"$install_prefix/bin/synx"
 chmod 0755 "$install_prefix/bin/synx"
-HOME="$install_home" SYNAPSE_RELEASE_BASE="file://$dist" SYNAPSE_PREFIX="$install_prefix" SYNAPSE_DB="$install_db" "$script_dir/install.sh" >/dev/null
+HOME="$install_home" SYNAPSE_TEST_TARGET="$target" SYNAPSE_RELEASE_BASE="file://$dist" SYNAPSE_PREFIX="$install_prefix" SYNAPSE_DB="$install_db" "$script_dir/install.sh" >/dev/null
 installed="$install_prefix/bin/synx"
 [ -x "$installed" ] || fail "installed binary missing"
 [ "$(dd if="$installed" bs=1 count=2 2>/dev/null || true)" != '#!' ] || fail "installed script wrapper"
@@ -150,7 +150,7 @@ require_text "$installed_context" '"route": "lexical"' "installed context"
 bad_dist="$tmp/bad-dist"
 cp -R "$dist" "$bad_dist"
 printf '%064d  %s\n' 0 "$(basename "$asset")" >"$bad_dist/$(basename "$asset").sha256"
-if HOME="$tmp/bad-home" SYNAPSE_RELEASE_BASE="file://$bad_dist" SYNAPSE_PREFIX="$tmp/bad-prefix" SYNAPSE_DB="$tmp/bad.db" "$script_dir/install.sh" >/dev/null 2>&1; then
+if HOME="$tmp/bad-home" SYNAPSE_TEST_TARGET="$target" SYNAPSE_RELEASE_BASE="file://$bad_dist" SYNAPSE_PREFIX="$tmp/bad-prefix" SYNAPSE_DB="$tmp/bad.db" "$script_dir/install.sh" >/dev/null 2>&1; then
   fail "installer accepted a bad checksum"
 fi
 
@@ -183,7 +183,7 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   (cd "$link_dist" && shasum -a 256 "$(basename "$link_asset")" >"$(basename "$link_asset").sha256")
 fi
-if HOME="$tmp/link-home" SYNAPSE_RELEASE_BASE="file://$link_dist" SYNAPSE_PREFIX="$tmp/link-prefix" SYNAPSE_DB="$tmp/link.db" "$script_dir/install.sh" >/dev/null 2>&1; then
+if HOME="$tmp/link-home" SYNAPSE_TEST_TARGET="$target" SYNAPSE_RELEASE_BASE="file://$link_dist" SYNAPSE_PREFIX="$tmp/link-prefix" SYNAPSE_DB="$tmp/link.db" "$script_dir/install.sh" >/dev/null 2>&1; then
   fail "installer accepted a checksummed symlink binary"
 fi
 
