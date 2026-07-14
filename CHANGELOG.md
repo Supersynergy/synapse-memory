@@ -13,6 +13,8 @@ portable release contract.
 - Rewrote the product explanation around human continuity, privacy, provenance,
   and the smallest useful context.
 - Renamed the canonical release tag family to `synapse-memory-v*`.
+- Made release-asset publication fail when file globs are empty, moved checkout
+  before artifact download, and upgraded artifact actions to their Node 24 lines.
 
 ### Removed
 
