@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "generated_at": "2026-07-13T21:24:29+00:00",
+  "platform": "Darwin 24.5.0 arm64",
+  "version": "synapse 1.0.1-rc.1",
+  "records": 100,
+  "binary_bytes": 3342768,
+  "binary_sha256": "d5f477570545afa4aaf663c3ae9edbf2dc16970e4af27935446191c1f4179645",
+  "local_copy_install_ms": 2.169,
+  "init_ms": 7.386,
+  "remember_p50_ms": 5.365,
+  "remember_p95_ms": 6.011,
+  "first_context_ms": 6.948,
+  "context_p50_ms": 5.779,
+  "context_p95_ms": 6.562,
+  "context_peak_rss_bytes": 4833280,
+  "database_bytes": 204800
+}

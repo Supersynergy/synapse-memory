@@ -1,8 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Format RFC review
-    url: https://github.com/Supersynergy/synapse/blob/main/docs/RFC-CALL.md
-    about: Propose changes to the .synx binary layout
-  - name: Usage questions
-    url: https://github.com/Supersynergy/synapse/discussions
-    about: Ask how to wire Synapse into your agent / workflow

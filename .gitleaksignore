@@ -1,0 +1,25 @@
+# Sample / placeholder secrets used in customer-facing docs and examples.
+# These are not real credentials.
+#
+# Format: <fingerprint> = <SHA1(file:rule:offset)> from `gitleaks detect`
+# Or: <file>:<rule>:<line>
+
+# Example license key shown in onboarding docs (Keygen.sh-compatible format demo).
+gtm/CUSTOMER-ONBOARDING.md:generic-api-key:10
+
+# Repovista's `reuseKey` values are content-addressed SHA-256 digests, not
+# credentials. The SearXNG reference contains its documented placeholder key.
+# Pin exact historical fingerprints so new findings still fail closed.
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T04-55-30-729Z/meta.json:generic-api-key:1172
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-45-50-759Z/meta.json:generic-api-key:1316
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-48-02-783Z/meta.json:generic-api-key:1267
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-48-41-824Z/meta.json:generic-api-key:1183
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-46-56-776Z/meta.json:generic-api-key:1225
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/cache/project-scan.json:generic-api-key:8
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-47-18-668Z/meta.json:generic-api-key:1113
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-45-50-759Z/report.json:generic-api-key:658
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-46-56-776Z/report.json:generic-api-key:658
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-48-02-783Z/report.json:generic-api-key:658
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-48-41-824Z/report.json:generic-api-key:658
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.tools/signet-agent/skills/web-search/references/searxng-settings.yml:generic-api-key:5
+8960739c66757f60d6160adf5a5d4ba00ba74c61:.repovista/2026-05-22T05-47-18-668Z/report.json:generic-api-key:658

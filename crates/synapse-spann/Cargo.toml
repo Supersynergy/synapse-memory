@@ -1,0 +1,37 @@
+[package]
+name = "synapse-spann"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SPANN disk-tier ANN: in-memory centroids + mmap posting-lists — unlimited corpus scale"
+
+[features]
+default = []
+# Enable disk-tier SPANN index
+spann = []
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+ndarray.workspace = true
+linfa.workspace = true
+linfa-clustering.workspace = true
+memmap2 = "0.9"
+rand.workspace = true
+synapse-kernel = { path = "../synapse-kernel" }
+
+[dev-dependencies]
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[lib]
+name = "synapse_spann"
+path = "src/lib.rs"
+doctest = false
+
+[[bench]]
+name = "spann_vs_flat"
+path = "benches/spann_vs_flat.rs"
+harness = false

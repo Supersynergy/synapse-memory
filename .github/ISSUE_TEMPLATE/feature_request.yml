@@ -2,6 +2,16 @@ name: Feature request
 description: Something you'd like Synapse to do
 labels: ["enhancement"]
 body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Intended surface
+      options:
+        - Portable Synapse Memory
+        - Optional agent adapter
+        - Engine lab
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
@@ -19,3 +29,8 @@ body:
     id: alternatives
     attributes:
       label: Alternatives you've considered
+  - type: textarea
+    id: proof
+    attributes:
+      label: Success proof
+      description: Which executable test, benchmark, or user outcome would prove this is worth shipping?

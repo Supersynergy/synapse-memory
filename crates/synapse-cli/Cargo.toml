@@ -1,0 +1,55 @@
+[package]
+name = "synapse-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "synx"
+path = "src/main.rs"
+
+[dependencies]
+tikv-jemallocator = { version = "0.6", optional = true }
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing-subscriber.workspace = true
+blake3.workspace = true
+rusqlite.workspace = true
+reqwest = { workspace = true, optional = true }
+synapse-learn = { path = "../synapse-learn" }
+synapse-graph = { path = "../synapse-graph" }
+# synapse-core base (no embed features) — embed variant selected via [features] below.
+synapse-core = { path = "../synapse-core", default-features = false, features = ["backend-rusqlite"] }
+tempfile = "3"
+csv = "1"
+# optional: parquet import/export via arrow2 (lightweight, no arrow ecosystem pull)
+parquet = { version = "54", optional = true, default-features = false, features = ["snap"] }
+arrow-array = { version = "54", optional = true }
+arrow-schema = { version = "54", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# default: static ORT + jemalloc (lower fragmentation, better throughput for alloc-heavy HNSW workloads).
+default = ["static-ort", "jemalloc", "network", "turbo", "sharding"]
+# jemalloc: replace system allocator with jemalloc for release binary.
+jemalloc = ["dep:tikv-jemallocator"]
+# static-ort: enable synapse-core's `embed` feature (ORT linked statically).
+static-ort = ["synapse-core/embed"]
+# cross-linux: enable synapse-core's `embed-dynamic` feature (ORT via dlopen at runtime).
+# Required when cross-compiling from mac-arm64 to linux without a Linux libstdc++ sysroot.
+# Build: cargo zigbuild --profile release-hardened --target aarch64-unknown-linux-gnu
+#          --no-default-features --features cross-linux --bin synx
+# Ship libonnxruntime.so alongside the binary (see release/README.md for download URL).
+cross-linux = ["synapse-core/embed-dynamic"]
+fresh-registry = ["synapse-core/fresh-registry"]
+network = ["dep:reqwest", "fresh-registry"]
+turbo = ["synapse-core/turbo", "synapse-core/simsimd", "synapse-core/tantivy-fts"]
+sharding = ["synapse-core/sharding"]
+embed-768 = ["synapse-core/embed-768"]
+embed-1024 = ["synapse-core/embed-1024"]
+# import-parquet: enable Parquet import/export (adds ~3MB to binary)
+import-parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-schema"]

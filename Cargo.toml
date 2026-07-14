@@ -1,43 +1,118 @@
 [workspace]
-resolver = "2"
-members = ["crates/synapsedb-core", "crates/synapse", "crates/synapsedb-daemon", "crates/synapsedb-mcp", "crates/synapsedb-learn"]
+resolver = "3"
+members = [
+    "crates/synapse-core",
+    "crates/synapse-cli",
+    "crates/synapse-learn",
+    "crates/synapse-graph",
+]
+
+[workspace.metadata]
+release_surface = "synapse-memory"
+portable_members = [
+    "synapse-cli", "synapse-core", "synapse-graph", "synapse-learn",
+    "synapse-ann", "synapse-kernel", "synapse-engine", "synapse-quant",
+    "synapse-fts", "synapse-spann", "synapse-obs",
+]
 
 [workspace.package]
-version = "0.1.0"
-edition = "2021"
+version = "1.0.1-rc.1"
+edition = "2024"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"
-repository = "https://github.com/Supersynergy/synapsedb"
-
+repository = "https://github.com/Supersynergy/synapse"
+rust-version = "1.95"
 [workspace.dependencies]
 anyhow = "1"
 thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rmp-serde = "1"
-rusqlite = { version = "0.33", features = ["bundled", "blob", "backup"] }
+rusqlite = { version = "0.39", features = ["bundled", "blob", "backup", "functions"] }
 sqlite-vec = "0.1"
 zstd = "0.13"
 blake3 = "1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 clap = { version = "4", features = ["derive", "env"] }
-fastembed = "5"
+fastembed = { version = "5", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"] }
+# For Linux cross-compile, use: fastembed-dynamic = { package = "fastembed", version = "5", default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls"] }
+# PINNED: redb 4.x has heavy schema breaking changes; revisit later.
 redb = "2"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
-rand = "0.8"
-age = { version = "0.10", features = ["armor"] }
-yrs = "0.21"
+rand = "0.10"
+# age bumped 0.10 → 0.11 (2026-05-22): Decryptor enum→struct + scrypt::Identity + SecretString::from. Resolves RUSTSEC proc-macro-error advisory.
+age = { version = "0.11", features = ["armor"] }
+yrs = "0.26"
 linfa = "0.8"
 linfa-clustering = "0.8"
+# PINNED: ndarray 0.17 conflicts with linfa 0.8 (needs 0.16).
 ndarray = "0.16.1"
 fastbloom = "0.17"
-toml = "0.8"
+toml = "1.1"
 base64 = "0.22"
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 argon2 = "0.5"
 parking_lot = "0.12"
 once_cell = "1"
 statrs = "0.18"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "blocking"] }
+
+# 2026-05-10: default release now uses thin LTO + codegen-units=1.
+# Adds ~30s build time, gains 5-15% perf across all benches (Mac+Linux).
+# For dev iteration speed use `cargo build` (debug profile).
+# For max-perf single-binary use `--profile release-fast` (fat LTO, ~5min build).
+# For native-CPU max: `RUSTFLAGS="-C target-cpu=native" cargo build --profile release-native`
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+overflow-checks = false
+debug = false
+incremental = false
+
+# Native-CPU profile: inherit release + RUSTFLAGS="-C target-cpu=native" for AVX2/NEON tuning.
+# Usage: RUSTFLAGS="-C target-cpu=native" cargo build --profile release-native -p synapsed
+[profile.release-native]
+inherits = "release"
+
+[profile.release-hardened]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+overflow-checks = false
+debug = false
+incremental = false
+
+# Speed-optimized profile: max inlining, fat LTO, abort. Slow build (~5min).
+[profile.release-fast]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+overflow-checks = false
+debug = false
+incremental = false
+
+# Use this for production daemon binary: `cargo build --profile release-fast -p synapsed`
+
+# ANN bench profile: native CPU + fat LTO + native-tuned.
+# Usage: RUSTFLAGS="-C target-cpu=native" cargo bench --profile release-bench -p synapse-ann
+[profile.release-bench]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "none"
+debug = true
+overflow-checks = false

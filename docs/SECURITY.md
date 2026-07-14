@@ -1,5 +1,8 @@
 # Synapse Security Model
 
+> This document covers the optional daemon/engine surface. The canonical policy
+> and supported portable release boundary are in [`../SECURITY.md`](../SECURITY.md).
+
 Threat-model. What Synapse defends against, what it doesn't, and the safe-default configuration.
 
 ---

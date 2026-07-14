@@ -1,0 +1,13 @@
+[package]
+name = "synapse-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license-file = "../../LICENSE-ENGINE.md"
+
+[lib]
+name = "synapse_engine"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+obfstr = "0.4"
