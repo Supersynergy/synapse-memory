@@ -153,13 +153,76 @@ impl Default for PackOptions {
     }
 }
 
-/// Estimate token count of `text` (chars/4 heuristic, min 1 for non-empty).
+/// Estimate token count of `text`.
+///
+/// A flat chars/4 ratio undercounts for code and non-English text: BPE
+/// tokenizers split punctuation/symbol runs and long/compound identifiers
+/// into multiple tokens, and commonly spend one or more tokens per CJK
+/// codepoint rather than per 4 chars. This counts whitespace-delimited word
+/// runs, punctuation/symbol runs, and CJK codepoints separately, then takes
+/// the max against a chars/3 floor (for dense separator-free text like
+/// base64/minified code/long paths). It is deliberately biased to
+/// over-estimate: the packer's `budget_tokens` guarantee only holds if this
+/// never reports fewer tokens than a real tokenizer would.
 pub fn estimate_tokens(text: &str) -> usize {
     if text.is_empty() {
-        0
-    } else {
-        text.len().div_ceil(4).max(1)
+        return 0;
     }
+
+    let mut chars = 0usize;
+    let mut words = 0usize;
+    let mut punct_runs = 0usize;
+    let mut cjk = 0usize;
+    let mut in_word = false;
+    let mut in_punct = false;
+
+    for c in text.chars() {
+        chars += 1;
+        if is_cjk(c) {
+            cjk += 1;
+            in_word = false;
+            in_punct = false;
+        } else if c.is_whitespace() {
+            in_word = false;
+            in_punct = false;
+        } else if c.is_alphanumeric() || c == '_' {
+            if !in_word {
+                words += 1;
+            }
+            in_word = true;
+            in_punct = false;
+        } else {
+            // punctuation / symbol (BPE tokenizers usually spend a token per run)
+            if !in_punct {
+                punct_runs += 1;
+            }
+            in_punct = true;
+            in_word = false;
+        }
+    }
+
+    // Words split into ~1.3 subword tokens on average (long identifiers,
+    // plurals/suffixes); CJK codepoints run ~2 tokens/char in common BPE
+    // vocabs (e.g. cl100k-style), leaning high on purpose.
+    let word_tokens = (words * 13).div_ceil(10);
+    let structural = word_tokens + punct_runs + cjk * 2;
+
+    // Floor against a conservative chars/3 ratio so dense, separator-free
+    // text (minified code, base64, long paths) can never be under-counted.
+    let char_floor = chars.div_ceil(3);
+
+    structural.max(char_floor).max(1)
+}
+
+/// True for common CJK ranges (Han, Hiragana/Katakana, Hangul syllables).
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32,
+        0x4E00..=0x9FFF   // CJK Unified Ideographs
+        | 0x3400..=0x4DBF // CJK Extension A
+        | 0x3040..=0x30FF // Hiragana + Katakana
+        | 0xAC00..=0xD7A3 // Hangul syllables
+        | 0xF900..=0xFAFF // CJK Compatibility Ideographs
+    )
 }
 
 /// Pack candidates into the minimal verbatim STATE within budget.
@@ -609,6 +672,60 @@ mod tests {
         assert_eq!(p.blocks.len(), 0);
         assert_eq!(p.used_tokens, 0);
         assert_eq!(p.savings_pct(), 0.0);
+    }
+
+    #[test]
+    fn estimate_tokens_empty_is_zero() {
+        assert_eq!(estimate_tokens(""), 0);
+    }
+
+    #[test]
+    fn estimate_tokens_never_under_naive_baseline() {
+        // Punctuation-dense, low-word-length text is exactly where chars/4
+        // undercounts worst (each `.`-separated symbol is its own BPE token).
+        let dense = "a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p";
+        let naive_chars_over_4 = dense.len().div_ceil(4);
+        let est = estimate_tokens(dense);
+        assert!(
+            est >= naive_chars_over_4,
+            "estimate {est} must be >= naive chars/4 baseline {naive_chars_over_4}"
+        );
+    }
+
+    #[test]
+    fn estimate_tokens_code_sample_is_conservative() {
+        let code = "fn add(a: i32, b: i32) -> i32 { a + b }\nlet x = a.field.get(&key)?;";
+        let est = estimate_tokens(code);
+        // Conservative floor: real BPE tokenizers run roughly 1 token per
+        // ~3 chars for punctuation-heavy code; must not read lower than that.
+        let floor = code.len() / 3;
+        assert!(
+            est >= floor,
+            "code estimate {est} too low for {} chars (floor {floor})",
+            code.len()
+        );
+    }
+
+    #[test]
+    fn estimate_tokens_prose_sample_covers_word_count() {
+        let prose = "the quick brown fox jumps over the lazy dog every single morning";
+        let words = prose.split_whitespace().count();
+        let est = estimate_tokens(prose);
+        assert!(
+            est >= words,
+            "prose estimate {est} must be >= word count {words}"
+        );
+    }
+
+    #[test]
+    fn estimate_tokens_cjk_sample_is_conservative() {
+        let cjk = "你好世界这是一个测试";
+        let chars = cjk.chars().count();
+        let est = estimate_tokens(cjk);
+        assert!(
+            est >= chars,
+            "CJK estimate {est} must be >= char count {chars}"
+        );
     }
 
     #[test]

@@ -10,6 +10,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Codex crash-safe resume integration: content-minimal `PreToolUse`/`PostToolUse` checkpoints, append-only fsynced journals, atomic per-project snapshots, and `SessionStart` recovery hints without transcript or tool-output storage.
 - LongMemEval benchmark runner now accepts the official JSON shape (`haystack_sessions` + `answer_session_ids`), reports Evidence-R@5/R@10, and reranks the full candidate pool before truncating to top-10.
 - **Context-OS** — cross-CLI MCP server for token-budget-bounded, self-learning, verbatim context.
   - `synapse-pack` crate: pure token-budget packer (deletion-based tiers `full → signatures → fact-delta → one-line`, SimHash near-dup collapse, greedy budget knapsack, serial-position ordering). 9 unit tests.
@@ -22,6 +23,31 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   - Docs: `docs/CTXOS.md`, `docs/SPEC-ctxos-v2.md`, `docs/adr/0001-context-os-mcp.md`, README section.
 
 ---
+
+## [1.0.1-rc.1] - 2026-07-13
+
+### Added
+
+- Portable Synapse Memory release package: six native Rust targets, fail-closed
+  checksum installers, safe rollback/uninstall, build metadata, and first- plus
+  third-party license payloads.
+- Exact portable release gates for RustSec, `cargo-deny`, Cargo license closure,
+  native-binary validation, memory/feedback/backup flow, and corrupt-checksum
+  rejection.
+
+### Changed
+
+- Portable `synx` now disables network, proprietary engine, semantic runtime,
+  sharding, PDF parsing, encrypted packs, Rayon, and Tantivy by feature closure.
+- Thompson sampling no longer pulls `statrs`/`nalgebra`/unmaintained `paste`;
+  it uses a tested in-crate Beta sampler over the existing `rand` dependency.
+
+### Security
+
+- `synapse-core` metadata now matches the existing FSL-1.1-ALv2 decision; exact
+  FSL and MIT texts plus a generated dependency-license report ship per archive.
+- Portable six-target dependency union has zero RustSec vulnerabilities or
+  warnings; non-shipped monorepo feature paths remain separate audit scopes.
 
 ## [1.0.1-wave-19] - 2026-05-13
 

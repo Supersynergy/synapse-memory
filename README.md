@@ -1,117 +1,205 @@
-# Synapse
+# SYNAPSE
 
-[![CI](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml/badge.svg)](https://github.com/supersynergy/synapse/actions/workflows/rust-ci.yml)
+![Synapse — local Rust memory for coding agents that survives disconnects.](docs/assets/social-preview.png)
+
+[![Synapse Memory CI](https://github.com/Supersynergy/synapse/actions/workflows/synapse-memory-ci.yml/badge.svg)](https://github.com/Supersynergy/synapse/actions/workflows/synapse-memory-ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/synapse-core.svg)](https://crates.io/crates/synapse-core)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-CORE.md)
+[![License: FSL-1.1-ALv2 + MIT](https://img.shields.io/badge/license-FSL--1.1--ALv2%20%2B%20MIT-orange.svg)](LICENSE-CORE.md)
 
-**Local-first Context OS for AI agents: bounded, cited, freshness-aware context with feedback.**
+> **Your AI forgets. Synapse doesn't.**
 
-One SQLite-backed local brain. No Docker. No cloud. CLI, daemon, and MCP tooling
-for giving coding agents the best relevant context before they act.
+Local-first Context OS for coding agents. Synapse remembers decisions, retrieves
+bounded cited context, checks freshness, learns from feedback, and resumes safely
+after an interrupted Codex session.
 
-> Core promise: best context, not biggest context.
+One SQLite-backed brain. No Docker. No cloud account. No LLM in the retrieval
+path. Portable release = one native Rust CLI; MCP and daemon stay optional.
 
-## Current Release Path
+## Why Synapse
 
-For a clean Mac/Linux user install, use the Context OS release:
+| Agent failure | Synapse command | Result |
+|---|---|---|
+| New session starts cold | `synx prime .` | Repo state, source docs, commands, and relevant memory in one startup brief |
+| A decision disappears in chat history | `synx remember --kind decision "..."` | Typed durable memory with a stable id |
+| Full history wastes the context window | `synx context "task" --mode coding` | Small cited pack with route, ids, and feedback hint |
+| Package/API knowledge may be stale | `synx fresh-context --cwd . --prompt "..."` | Version-pinned context from local manifests and lockfiles |
+| Useful retrieval should improve | `synx feedback context:<context_id> <doc_id>` | Accepted evidence rewards its retrieval route |
+| Codex disconnects mid-task | Codex checkpoint hooks | Next session receives the last unfinished state, not a blind replay |
 
-```bash
-tar -xzf release/dist/synapse-context-os-1.0.1-rc.1.tar.gz
-cd synapse-context-os-1.0.1-rc.1
-./install.sh
-```
+**Core promise:** best context, not biggest context.
 
-From a repo checkout:
+## Install
 
-```bash
-release/context-os/install.sh
-release/context-os/verify.sh
-SYNAPSE_VERIFY_INSTALL=1 SYNAPSE_VERIFY_BUILD_PROFILE=dev release/context-os/verify.sh
-```
+### Portable Rust binary — canonical release path
 
-Release docs and evidence live in [`release/context-os/`](release/context-os/).
-The broad engine and benchmark sections below describe the substrate and
-experimental surface. They are not the default first-run product promise.
-
----
-
-## Engine Benchmark Notes
-
-| What | Number | Source |
-|------|--------|--------|
-| HNSW-i8 p50 latency (SIFT-1M, ef=64) | **0.10 ms** | [SIFT1M_BENCH_2026-05-12.md](bench-dashboard/SIFT1M_BENCH_2026-05-12.md) |
-| Pub/sub throughput (ring-buffer, tokio broadcast) | **13.1 M events/s** (76 ns/msg) | [REAL_BENCH_WAVE17_18_2026-05-13.md](bench-dashboard/REAL_BENCH_WAVE17_18_2026-05-13.md) |
-| Conformal recall bound | **R=1.0 guaranteed** (split-conformal, validated LongMemEval) | [RELEASE_NOTES_v1.0.1-rc.md](RELEASE_NOTES_v1.0.1-rc.md) |
-
-**Caveats**: HNSW-i8 has R@10=0.908 at ef=64 on SIFT-1M (use ef=192 for R@10≥0.99 at 3240 QPS). Pub/sub is in-process tokio channel — not a persistent durable queue. Conformal guarantee validated on LongMemEval only.
-
----
-
-## 5-line Context OS demo
+Install a checksummed `ctxos-v*` release:
 
 ```bash
-synx -f "$HOME/.synapse/brain.db" prime .
-synx -f "$HOME/.synapse/brain.db" remember --kind decision "Use Synapse context packs before major code edits."
-synx -f "$HOME/.synapse/brain.db" context "current repo task" --mode coding
-synx -f "$HOME/.synapse/brain.db" fresh-context --cwd . --prompt "latest package API changes"
-synx -f "$HOME/.synapse/brain.db" doctor --fix
+curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.sh | sh
 ```
 
----
+Windows PowerShell:
 
-## Context-OS for any agent CLI (Claude Code · Codex · Gemini CLI)
+```powershell
+irm https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.ps1 | iex
+```
 
-One local MCP server that gives any agent **always-best, token-budget-bounded, self-learning**
-context. Deletion-based (verbatim) — file paths, error strings and numbers survive exactly;
-no cloud, no vendor lock. Worldwide one-liner (sha256-verified prebuilt, falls back to
-`cargo install`/source; re-signs on macOS):
+This installs only the portable native `synx` memory CLI. No Rust toolchain, Python,
+Node, Docker, database server, cloud account, or API key. Platform matrix, package
+contract, feature boundary, and release gates:
+[release/synapse-memory/README.md](release/synapse-memory/README.md).
+
+### From this checkout
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/supersynergy/synapse/main/scripts/install.sh | sh
+TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+cargo build --locked --profile release-hardened \
+  --target "$TARGET" -p synapse-cli --no-default-features
+install -m 0755 "target/$TARGET/release-hardened/synx" "$HOME/.local/bin/synx"
+"$HOME/.local/bin/synx" init
+"$HOME/.local/bin/synx" doctor --json
 ```
 
-From a checkout instead:
+### From a downloaded release archive
 
 ```bash
-sh scripts/install-ctxos.sh install --all   # detects claude / codex / gemini, registers the MCP server
-sh scripts/install-ctxos.sh doctor           # verify
+shasum -a 256 -c synapse-memory-aarch64-apple-darwin.tar.gz.sha256
+tar -xzf synapse-memory-aarch64-apple-darwin.tar.gz
+install -m 0755 synapse-memory-aarch64-apple-darwin/synx "$HOME/.local/bin/synx"
+synx init
 ```
 
-Then any agent can call these tools:
+Choose the asset matching the six-target table in
+[release/synapse-memory/README.md](release/synapse-memory/README.md). Windows uses
+the matching ZIP and `synx.exe`.
 
-| Tool | What it does |
-|------|--------------|
-| `context_pack(query, budget_tokens)` | Retrieve + pack the minimal **verbatim** STATE within a token budget. Best-first, lost-in-the-middle-safe. Call it first. |
-| `context_state(topic)` | Current-truth card: latest verified facts + decisions, supersession marked. |
-| `context_feedback(used_ids, gate)` | Report what you used + whether your gate passed → retrieval self-improves (per-kind reward). |
-| `context_remember(text, kind)` | Persist a durable fact/decision (embedded, searchable). |
+Defaults: binary in `~/.local/bin/`; data in `~/.synapse/brain.db`. Archives never
+contain memory, transcripts, session logs, embeddings, keys, or checkpoints.
 
-How the packing works: hybrid retrieval (8 ms) → SimHash near-dup collapse → adaptive
-per-kind **deletion** tiers (`full → signatures → fact-delta → one-line`) → greedy
-budget knapsack → serial-position order. Pure, deterministic, no LLM call. See
-[`docs/CTXOS.md`](docs/CTXOS.md) and [`docs/SPEC-ctxos-v2.md`](docs/SPEC-ctxos-v2.md).
+## First useful session
+
+Run this inside a project:
+
+```bash
+BRAIN="$HOME/.synapse/brain.db"
+
+synx -f "$BRAIN" prime .
+synx -f "$BRAIN" remember --kind decision \
+  "Run the release verifier before publishing Synapse."
+synx -f "$BRAIN" context \
+  "What must pass before the next Synapse release?" --mode coding
+```
+
+The context result includes a `context_id`, selected document ids, retrieval route,
+and the exact feedback command. Reward only evidence that helped the task pass:
+
+```bash
+synx -f "$BRAIN" feedback context:<context_id> <doc_id>
+synx -f "$BRAIN" learn calibrate
+```
+
+For version-sensitive work, add local package/API evidence without registry access:
+
+```bash
+synx -f "$BRAIN" fresh-context \
+  --cwd . --prompt "current dependencies and API constraints" --no-registry
+```
+
+## Keep Codex work across disconnects
+
+Install the reversible checkpoint hooks:
+
+```bash
+python3 integrations/codex/install.py --dry-run
+python3 integrations/codex/install.py install
+```
+
+Restart Codex once. Synapse then writes a compact checkpoint before and after tool
+work and marks clean turn completion. A later `SessionStart` injects only a recent
+unfinished checkpoint and tells the agent to inspect Git, files, and processes before
+continuing.
+
+Checkpoint data lives in `~/.synapse/checkpoints/`. It contains execution state,
+Git HEAD, changed path names, tool name, and a command hash. It does **not** contain
+the transcript, command arguments, tool-output bodies, or file contents.
+
+Remove it without touching unrelated Codex hooks:
+
+```bash
+python3 integrations/codex/install.py uninstall
+```
+
+Full contract: [integrations/codex/README.md](integrations/codex/README.md).
+
+## Connect an agent CLI
+
+Build and register the local MCP server only when your agent needs MCP tools:
+
+```bash
+cargo build --release -p synapse-mcp
+sh scripts/install-ctxos.sh install --all
+sh scripts/install-ctxos.sh doctor --all
+```
+
+| Core MCP tool | Use it for |
+|---|---|
+| `context_pack(query, budget_tokens)` | Minimal verbatim state inside a hard token budget |
+| `context_state(topic)` | Latest verified facts and decisions with supersession marked |
+| `context_feedback(used_ids, gate)` | Reward context that helped a real gate pass |
+| `context_remember(text, kind)` | Persist a durable fact or decision |
+
+Packing is deterministic: hybrid retrieval → near-duplicate collapse → deletion
+tiers → budget knapsack → serial-position ordering. No summarizing LLM call.
+Implementation notes: [docs/CTXOS.md](docs/CTXOS.md) and
+[docs/SPEC-ctxos-v2.md](docs/SPEC-ctxos-v2.md).
+
+## Verify the product path
+
+```bash
+TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+cargo build --locked --profile release-hardened \
+  --target "$TARGET" -p synapse-cli --no-default-features
+SYNX_BIN="target/$TARGET/release-hardened/synx" \
+  release/synapse-memory/verify.sh
+```
+
+The 15-stage verifier covers the locked dependency fetch, six-target dependency policy, RustSec and license
+closure, native-binary guard, typed memory, cited context, feedback, offline
+freshness, backup/restore, package/checksum/install/rollback, data-safe uninstall,
+and Codex disconnect recovery.
+
+| Engine proof | Verified result | Evidence |
+|---|---:|---|
+| Hybrid search, 294k docs | **35 ms p50** | [REAL_BENCH_2026-05-11.md](bench-dashboard/REAL_BENCH_2026-05-11.md) |
+| HNSW-i8, SIFT-1M, ef=64 | **0.10 ms p50**, R@10 0.908 | [SIFT1M_BENCH_2026-05-12.md](bench-dashboard/SIFT1M_BENCH_2026-05-12.md) |
+| Strict SQLite-WAL durability | **943k writes/s**, batch 1000 | [FAIR_DURABILITY_BENCH_2026-05-13.md](bench-dashboard/FAIR_DURABILITY_BENCH_2026-05-13.md) |
+
+These are substrate benchmarks, not end-to-end agent-task guarantees. Benchmark
+conditions and caveats live in the linked evidence.
 
 ---
 
 ## Architecture
 
 ```mermaid
-graph TD
-    CLI["synx CLI"] --> Daemon["synapsed (Unix-socket)"]
-    MCP["synapse-mcp (agent memory tools)"] --> Daemon
-    Daemon --> Core["synapse-core (SQLite + FTS5 + sqlite-vec)"]
-    CLI --> Context["context / prime / fresh-context / feedback"]
-    Context --> Core
-    Context --> Learn["synapse-learn feedback loop"]
-    Daemon --> Ann["synapse-ann (usearch HNSW)"]
-    Daemon --> Fts["synapse-fts (Tantivy)"]
-    Daemon --> Rerank["synapse-rerank (ColBERT-i8)"]
-    Core --> DB[(brain.db)]
-    Ann --> DB
-    Fts --> DB
+flowchart LR
+    Agent["Codex / Claude / Gemini"] --> CLI["synx portable Rust CLI"]
+    CLI --> Context["remember · context · feedback · backup"]
+    Context --> Core["synapse-core + FTS5"]
+    Context --> Learn["small local feedback loop"]
+    Core --> DB[("one brain.db")]
+    Hooks["optional crash-safe hooks"] --> Checkpoint["fsynced checkpoint journal"]
+    Checkpoint --> Agent
+    Lab["optional MCP · daemon · semantic engine lab"] -. separate release gates .-> Core
 ```
 
 ---
+
+<details>
+<summary><strong>Engine Lab: crates, deep benchmarks, and experimental surface</strong></summary>
+
+The Context OS flow above is the release product. This section documents the broad
+engine substrate, including components that remain experimental or incomplete.
 
 ## Crate map
 
@@ -135,7 +223,7 @@ graph TD
 | `synapse-ann` | HNSW via usearch + brute-force SIMD scan |
 | `synapse-fts` | Tantivy persistent index (BMP block-max pruning) |
 | `synapse-fusion` | MUVERA RRF API |
-| `synapse-colbert` | MaxSim late-interaction scaffold |
+| `synapse-colbert` | MaxSim late-interaction — experimental scaffold, not production-hardened |
 | `synapse-splade` | Neural-sparse inverted index (SPLADE-v3) |
 | `synapse-cluster` | CRDT gossip + Raft CP-mode |
 | `synapse-graph` | Knowledge-graph triples + Datalog (⚠️ semi-naive broken above 100 facts) |
@@ -256,10 +344,10 @@ Source: [REAL_BENCH_WAVE17_18_2026-05-13.md](bench-dashboard/REAL_BENCH_WAVE17_1
 | Tantivy BM25 | ✅ stable | 18.3× warm-start |
 | usearch HNSW | ✅ stable | 0.10ms p50 at ef=64 (SIFT-1M) |
 | RRF hybrid fusion | ✅ stable | NEON SIMD 5–8× vs scalar |
-| ColBERT-i8 rerank | ✅ stable | 12.2× speed, 3.9× storage vs f32 |
+| ColBERT-i8 rerank | 🧪 experimental | scaffold (`synapse-colbert`, not production-hardened); int8 quant 12.2× speed, 3.9× storage vs f32. Cross-encoder rerank is off by default — ~zero R@5 gain at ~3600× latency, see [KNOWN-ISSUES.md](KNOWN-ISSUES.md) |
 | SPLADE neural-sparse (BMP) | ✅ stable | 9.7× vs naive scan |
-| MUVERA full pipeline | ✅ stable | Dense+SPLADE+RRF+ColBERT, sub-ms |
-| Conformal R=1.0 guarantee | ✅ stable | split-conformal, LongMemEval validated |
+| MUVERA full pipeline | ✅ stable | Dense+SPLADE+RRF+ColBERT, sub-ms. Rerank stage is off by default — cross-encoder rerank gave ~zero R@5 gain at ~3600× latency on the LongMemEval subset, see [KNOWN-ISSUES.md](KNOWN-ISSUES.md) |
+| Conformal recall bound | ✅ stable | distribution-bound (not an absolute per-query guarantee); split-conformal, validated on a 50-question LongMemEval subset |
 | CRDT gossip cluster | ✅ stable | <200ms LAN convergence |
 | Raft CP-mode | ✅ minimal | `cluster-raft` feature, 3-node <1s election |
 | Ed25519 signing | ✅ stable | 25µs sign + verify |
@@ -275,6 +363,8 @@ Source: [REAL_BENCH_WAVE17_18_2026-05-13.md](bench-dashboard/REAL_BENCH_WAVE17_1
 | Audio CLAP | ✅ scaffold | `audio-clap` feature |
 | VJEPA-2 video | ✅ scaffold | ONNX swap-path |
 
+</details>
+
 ---
 
 ## Roadmap (next 3 months)
@@ -288,16 +378,19 @@ Source: [REAL_BENCH_WAVE17_18_2026-05-13.md](bench-dashboard/REAL_BENCH_WAVE17_1
 - [ ] MTEB full 56-task suite (2/56 measured today)
 - [ ] Python wheel publish to PyPI (`synapse-py` via maturin)
 - [ ] `synapse-raft` production hardening
-- [ ] Windows: not planned
+- [ ] Windows: native x64/ARM64 package CI, then Authenticode signing
 
 ---
 
 ## License
 
-MIT — library crates.
-`synapse-engine` — source-available Engine License (non-commercial free; commercial license available).
+`synapse-core` uses FSL-1.1-ALv2 with an Apache-2.0 future grant. CLI, graph,
+learning, and other utility crates inherit MIT unless their manifest says
+otherwise. `synapse-engine` has separate proprietary terms and is excluded from
+the portable memory release.
 
-See [LICENSE-CORE.md](LICENSE-CORE.md) and [LICENSE-ENGINE.md](LICENSE-ENGINE.md).
+See [LICENSE-CORE.md](LICENSE-CORE.md), [LICENSE](LICENSE), and
+[LICENSE-ENGINE.md](LICENSE-ENGINE.md).
 
 ## Contributing
 

@@ -1,7 +1,5 @@
 //! Thompson-sampling shard router.
 use anyhow::Result;
-use rand::RngExt;
-use statrs::distribution::{Beta, ContinuousCDF};
 use std::collections::HashMap;
 
 pub type ShardId = String;
@@ -26,11 +24,7 @@ impl ShardBandit {
             let alpha = w as f64;
             let beta_param = l as f64;
             let sample = if alpha > 0.0 && beta_param > 0.0 {
-                // Thompson sample via beta distribution quantile of uniform
-                let u: f64 = rng.random_range(0.0..1.0);
-                Beta::new(alpha, beta_param)
-                    .map(|b| b.inverse_cdf(u.clamp(1e-9, 1.0 - 1e-9)))
-                    .unwrap_or(0.5)
+                crate::sampling::beta(&mut rng, alpha, beta_param).unwrap_or(0.5)
             } else {
                 0.5
             };

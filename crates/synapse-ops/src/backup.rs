@@ -39,6 +39,26 @@ impl Backup {
             }
         }
     }
+
+    /// Restore a snapshot produced by [`Backup::snapshot`] to `dest`.
+    ///
+    /// Precondition: the daemon must NOT be writing `dest` while this runs
+    /// (stop the daemon or point `dest` at a fresh path, then swap it in).
+    /// This mirrors `snapshot()`'s plain-file-copy approach so the restored
+    /// file is byte-identical to the backup, including any WAL-checkpointed
+    /// state that was already baked into `backup` at snapshot time.
+    pub fn restore(backup: &Path, dest: &Path) -> Result<u64, BackupError> {
+        if !backup.exists() {
+            return Err(BackupError::SourceNotFound(backup.display().to_string()));
+        }
+        if let Some(parent) = dest.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)?;
+        }
+        let bytes = std::fs::copy(backup, dest)?;
+        Ok(bytes)
+    }
 }
 
 #[cfg(test)]
@@ -53,6 +73,24 @@ mod tests {
         let n = Backup::snapshot(&src, BackupTarget::LocalFile(dst.clone())).unwrap();
         assert_eq!(n, 13);
         assert_eq!(std::fs::read(&dst).unwrap(), b"FAKEDBCONTENT");
+    }
+    #[test]
+    fn snapshot_then_restore_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("source.db");
+        std::fs::write(&src, b"FAKEDBCONTENT").unwrap();
+        let backup = dir.path().join("backup/snapshot.db");
+        let snapshot_bytes =
+            Backup::snapshot(&src, BackupTarget::LocalFile(backup.clone())).unwrap();
+
+        let restored = dir.path().join("restored/dest.db");
+        let restore_bytes = Backup::restore(&backup, &restored).unwrap();
+
+        assert_eq!(snapshot_bytes, restore_bytes);
+        assert_eq!(
+            std::fs::read(&restored).unwrap(),
+            std::fs::read(&src).unwrap()
+        );
     }
     #[test]
     fn missing_source_errors() {

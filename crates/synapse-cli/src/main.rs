@@ -9,6 +9,12 @@ mod synx_io;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+#[cfg(any(feature = "static-ort", feature = "cross-linux"))]
+use synapse_core::corpus::set_corpus_chunk_embedding;
+#[cfg(any(feature = "static-ort", feature = "cross-linux"))]
+use synapse_core::embed::Embedder;
+#[cfg(feature = "sharding")]
+use synapse_core::shard;
 use synapse_core::{
     PutRequest, SearchMode, Store,
     corpus::{
@@ -17,19 +23,84 @@ use synapse_core::{
         evaluate_rankings_gate, gold_candidates_from_corpus, import_synapse_docs_to_corpus,
         ingest_fetched_document, ingest_pdf_bytes, ingest_rss_xml, ingest_web_html,
         ingest_youtube_transcript, mark_corpus_source_synced, put_corpus_document, queue_promotion,
-        rank_gold_questions, ready_promotions, search_corpus, set_corpus_chunk_embedding,
-        upsert_corpus_sync_source, verify_promotion, youtube_video_id,
+        rank_gold_questions, ready_promotions, search_corpus, upsert_corpus_sync_source,
+        verify_promotion, youtube_video_id,
     },
-    embed::Embedder,
     federate::{Addr, Federation},
     fresh::{FreshMode, FreshOptions, build_fresh_report, render_fresh_context_xml},
-    shard, sign, snap,
+    sign, snap,
 };
 use synapse_learn::LearnStore;
 
 type VerifyRow = (i64, String, Vec<u8>);
 type FreshInput = (String, Option<PathBuf>, Option<String>);
 type SearchBestEffortResult = (Vec<synapse_core::Hit>, String);
+type FetchedUrl = (Option<String>, Vec<u8>);
+
+#[cfg(feature = "network")]
+fn fetch_url_bytes(url: &str) -> Result<FetchedUrl> {
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(concat!("synx/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .context("build HTTP client")?;
+    let response = client
+        .get(url)
+        .send()
+        .with_context(|| format!("fetch {url}"))?
+        .error_for_status()
+        .with_context(|| format!("fetch {url}"))?;
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(ToOwned::to_owned);
+    let bytes = response.bytes().context("read response body")?.to_vec();
+    Ok((content_type, bytes))
+}
+
+#[cfg(not(feature = "network"))]
+fn fetch_url_bytes(_url: &str) -> Result<FetchedUrl> {
+    Err(anyhow::anyhow!(
+        "network fetch is not included in this portable build; download the source yourself and use local corpus ingest"
+    ))
+}
+
+#[cfg(any(feature = "static-ort", feature = "cross-linux"))]
+fn semantic_embedding(file: &std::path::Path, text: &str) -> Result<Vec<f32>> {
+    let embedder = Embedder::new_with_cache::<std::path::PathBuf>(
+        file.parent().map(|parent| parent.join(".emb-cache")),
+    )
+    .context("embedder init")?;
+    embedder.embed_one(text).map_err(Into::into)
+}
+
+#[cfg(not(any(feature = "static-ort", feature = "cross-linux")))]
+fn semantic_embedding(_file: &std::path::Path, _text: &str) -> Result<Vec<f32>> {
+    Err(anyhow::anyhow!(
+        "semantic embeddings are not included in this portable build; use lexical/context commands or install a semantic build"
+    ))
+}
+
+fn optional_document_embedding(
+    _file: &std::path::Path,
+    _text: &str,
+    disabled: bool,
+) -> Result<Option<Vec<f32>>> {
+    if disabled {
+        return Ok(None);
+    }
+    #[cfg(any(feature = "static-ort", feature = "cross-linux"))]
+    {
+        return semantic_embedding(_file, _text).map(Some);
+    }
+    #[cfg(not(any(feature = "static-ort", feature = "cross-linux")))]
+    {
+        eprintln!(
+            "warning: portable build stores this memory without an embedding; lexical and cited context retrieval remain available"
+        );
+        Ok(None)
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "synapse", version, about = "Single-file memory for AI agents")]
@@ -247,6 +318,7 @@ enum Cmd {
         action: FederateCmd,
     },
     /// IVF shard operations
+    #[cfg(feature = "sharding")]
     Shard {
         #[command(subcommand)]
         action: ShardCmd,
@@ -663,6 +735,7 @@ enum FederateCmd {
 }
 
 #[derive(Subcommand)]
+#[cfg(feature = "sharding")]
 enum ShardCmd {
     /// Split a brain.db into N shards (k-means on embeddings)
     Split {
@@ -736,15 +809,7 @@ fn main() -> Result<()> {
             };
             anyhow::ensure!(!body.is_empty(), "empty text");
             let mut store = Store::open(&cli.file)?;
-            let embedding = if no_embed {
-                None
-            } else {
-                let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                    cli.file.parent().map(|p| p.join(".emb-cache")),
-                )
-                .context("embedder init")?;
-                Some(e.embed_one(&body)?)
-            };
+            let embedding = optional_document_embedding(&cli.file, &body, no_embed)?;
             let meta = build_put_meta(source, updated, kind, status, meta)?;
             let req = PutRequest {
                 title,
@@ -783,10 +848,7 @@ fn main() -> Result<()> {
         }
         Cmd::Vec { query, limit } => {
             let store = Store::open(&cli.file)?;
-            let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                cli.file.parent().map(|p| p.join(".emb-cache")),
-            )?;
-            let q = e.embed_one(&query)?;
+            let q = semantic_embedding(&cli.file, &query)?;
             let hits = store.search("", SearchMode::Vec, Some(&q), limit)?;
             print_hits(&hits);
         }
@@ -796,10 +858,7 @@ fn main() -> Result<()> {
             guarantee,
         } => {
             let store = Store::open(&cli.file)?;
-            let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                cli.file.parent().map(|p| p.join(".emb-cache")),
-            )?;
-            let q = e.embed_one(&query)?;
+            let q = semantic_embedding(&cli.file, &query)?;
             let hits = if guarantee {
                 // Two-stage: hybrid RRF for candidate expansion, then exact brute-force vec
                 let candidates = store.search(&query, SearchMode::Hybrid, Some(&q), limit * 10)?;
@@ -846,15 +905,7 @@ fn main() -> Result<()> {
             anyhow::ensure!(!text.trim().is_empty(), "empty text");
             let mut store = Store::open(&cli.file)?;
             let normalized_kind = normalize_kind(&kind);
-            let embedding = if no_embed {
-                None
-            } else {
-                let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                    cli.file.parent().map(|p| p.join(".emb-cache")),
-                )
-                .context("embedder init")?;
-                Some(e.embed_one(&text)?)
-            };
+            let embedding = optional_document_embedding(&cli.file, &text, no_embed)?;
             let req = PutRequest {
                 title: title.or_else(|| Some(auto_title(&normalized_kind, &text))),
                 uri,
@@ -994,6 +1045,7 @@ fn main() -> Result<()> {
                 .context("update sig")?;
             println!("ok signed id={}", id);
         }
+        #[cfg(feature = "sharding")]
         Cmd::Shard { action } => match action {
             ShardCmd::Split {
                 brain,
@@ -1015,8 +1067,7 @@ fn main() -> Result<()> {
                 limit,
             } => {
                 let manager = shard::ShardManager::open(manifest)?;
-                let e = Embedder::new_with_cache::<std::path::PathBuf>(None)?;
-                let q_vec = e.embed_one(&query)?;
+                let q_vec = semantic_embedding(&cli.file, &query)?;
                 let q_arr: [f32; synapse_core::types::EMBED_DIM] = q_vec
                     .try_into()
                     .map_err(|_| anyhow::anyhow!("embedding dim mismatch"))?;
@@ -1305,13 +1356,10 @@ fn main() -> Result<()> {
             alpha,
             iters,
         } => {
-            // Pipeline: hybrid → seeds → PPR → traverse → JSON bundle
+            // Pipeline: best available retrieval → seeds → PPR → traverse → JSON bundle.
+            // Portable builds use lexical/timeline retrieval; semantic builds add hybrid retrieval.
             let store = Store::open(&cli.file)?;
-            let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                cli.file.parent().map(|p| p.join(".emb-cache")),
-            )?;
-            let q = e.embed_one(&query)?;
-            let hits = store.search(&query, SearchMode::Hybrid, Some(&q), k)?;
+            let (hits, _route) = search_best_effort(&store, &cli.file, &query, k)?;
 
             let mut seeds: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
             for h in &hits {
@@ -1533,29 +1581,14 @@ fn main() -> Result<()> {
                     content_type,
                     embed,
                 } => {
-                    let client = reqwest::blocking::Client::builder()
-                        .user_agent(concat!("synx/", env!("CARGO_PKG_VERSION")))
-                        .build()
-                        .context("build HTTP client")?;
-                    let response = client
-                        .get(&url)
-                        .send()
-                        .with_context(|| format!("fetch {url}"))?
-                        .error_for_status()
-                        .with_context(|| format!("fetch {url}"))?;
-                    let header_content_type = response
-                        .headers()
-                        .get(reqwest::header::CONTENT_TYPE)
-                        .and_then(|v| v.to_str().ok())
-                        .map(ToOwned::to_owned);
+                    let (header_content_type, bytes) = fetch_url_bytes(&url)?;
                     let routed_content_type = content_type.or(header_content_type);
-                    let bytes = response.bytes().context("read response body")?;
                     let doc_ids = ingest_fetched_document(
                         &store.conn,
                         &url,
                         routed_content_type.as_deref(),
                         title.as_deref(),
-                        bytes.as_ref(),
+                        &bytes,
                     )?;
                     let embedded = if embed {
                         embed_corpus_documents(&store.conn, &cli.file, &doc_ids)?
@@ -1586,32 +1619,17 @@ fn main() -> Result<()> {
                 CorpusCmd::SyncDue { limit, embed } => {
                     let now = unix_now_secs();
                     let due = due_corpus_sync_sources(&store.conn, now, limit)?;
-                    let client = reqwest::blocking::Client::builder()
-                        .user_agent(concat!("synx/", env!("CARGO_PKG_VERSION")))
-                        .build()
-                        .context("build HTTP client")?;
                     let mut synced = 0usize;
                     let mut docs = 0usize;
                     let mut embedded = 0usize;
                     for source in due {
-                        let response = client
-                            .get(&source.uri)
-                            .send()
-                            .with_context(|| format!("fetch {}", source.uri))?
-                            .error_for_status()
-                            .with_context(|| format!("fetch {}", source.uri))?;
-                        let content_type = response
-                            .headers()
-                            .get(reqwest::header::CONTENT_TYPE)
-                            .and_then(|v| v.to_str().ok())
-                            .map(ToOwned::to_owned);
-                        let bytes = response.bytes().context("read response body")?;
+                        let (content_type, bytes) = fetch_url_bytes(&source.uri)?;
                         let doc_ids = ingest_fetched_document(
                             &store.conn,
                             &source.uri,
                             content_type.as_deref(),
                             source.title.as_deref(),
-                            bytes.as_ref(),
+                            &bytes,
                         )?;
                         if embed {
                             embedded += embed_corpus_documents(&store.conn, &cli.file, &doc_ids)?;
@@ -1645,11 +1663,7 @@ fn main() -> Result<()> {
                     json,
                 } => {
                     let q = if embed {
-                        let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                            cli.file.parent().map(|p| p.join(".emb-cache")),
-                        )
-                        .context("embedder init")?;
-                        Some(e.embed_one(&query)?)
+                        Some(semantic_embedding(&cli.file, &query)?)
                     } else {
                         None
                     };
@@ -1898,6 +1912,7 @@ fn fetch_youtube_transcript_with_ytdlp(
     Ok(transcript)
 }
 
+#[cfg(any(feature = "static-ort", feature = "cross-linux"))]
 fn embed_corpus_documents(
     conn: &rusqlite::Connection,
     brain_file: &std::path::Path,
@@ -1924,6 +1939,17 @@ fn embed_corpus_documents(
     Ok(embedded)
 }
 
+#[cfg(not(any(feature = "static-ort", feature = "cross-linux")))]
+fn embed_corpus_documents(
+    _conn: &rusqlite::Connection,
+    _brain_file: &std::path::Path,
+    _doc_ids: &[i64],
+) -> Result<usize> {
+    Err(anyhow::anyhow!(
+        "corpus embedding requires a semantic build; rerun without --embed on the portable build"
+    ))
+}
+
 fn read_gold_questions(path: &std::path::Path) -> Result<Vec<GoldQuestion>> {
     let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     serde_json::from_str(&raw).context("parse gold JSON")
@@ -1934,6 +1960,7 @@ fn write_json_file<T: serde::Serialize>(path: &std::path::Path, value: &T) -> Re
     std::fs::write(path, raw).with_context(|| format!("write {}", path.display()))
 }
 
+#[cfg(any(feature = "static-ort", feature = "cross-linux"))]
 fn rank_gold_questions_cli(
     conn: &rusqlite::Connection,
     brain_file: &std::path::Path,
@@ -1955,6 +1982,22 @@ fn rank_gold_questions_cli(
         rankings.push(hits.into_iter().map(|h| h.chunk_id).collect());
     }
     Ok(rankings)
+}
+
+#[cfg(not(any(feature = "static-ort", feature = "cross-linux")))]
+fn rank_gold_questions_cli(
+    conn: &rusqlite::Connection,
+    _brain_file: &std::path::Path,
+    gold: &[GoldQuestion],
+    limit: usize,
+    embed: bool,
+) -> Result<Vec<Vec<i64>>> {
+    if embed {
+        return Err(anyhow::anyhow!(
+            "corpus evaluation with embeddings requires a semantic build; rerun without --embed on the portable build"
+        ));
+    }
+    rank_gold_questions(conn, gold, limit).map_err(Into::into)
 }
 
 fn print_corpus_hits(hits: &[synapse_core::corpus::CorpusHit]) {
@@ -2305,16 +2348,14 @@ fn search_best_effort(
         return Ok((lex, "lexical".to_string()));
     }
 
-    let hybrid =
-        Embedder::new_with_cache::<std::path::PathBuf>(file.parent().map(|p| p.join(".emb-cache")))
-            .ok()
-            .and_then(|e| e.embed_one(query).ok())
-            .and_then(|q| {
-                store
-                    .search(query, SearchMode::Hybrid, Some(&q), limit)
-                    .ok()
-            })
-            .unwrap_or_default();
+    let hybrid = semantic_embedding(file, query)
+        .ok()
+        .and_then(|q| {
+            store
+                .search(query, SearchMode::Hybrid, Some(&q), limit)
+                .ok()
+        })
+        .unwrap_or_default();
     if !hybrid.is_empty() {
         return Ok((hybrid, "hybrid".to_string()));
     }
@@ -2531,6 +2572,7 @@ fn compact(text: &str, max_chars: usize) -> String {
 struct DoctorReport {
     db: String,
     quick_check: String,
+    semantic_enabled: bool,
     docs: i64,
     vectors: i64,
     duplicate_hash_groups: i64,
@@ -2545,6 +2587,7 @@ struct DoctorReport {
 }
 
 fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> {
+    let semantic_enabled = cfg!(any(feature = "static-ort", feature = "cross-linux"));
     let stats = store.stats()?;
     let quick_check = store
         .conn
@@ -2590,9 +2633,9 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
             "/file-history/",
         ],
     );
-    let embed_cache = file
-        .parent()
-        .map(|p| p.join(".emb-cache"))
+    let embed_cache = semantic_enabled
+        .then(|| file.parent().map(|p| p.join(".emb-cache")))
+        .flatten()
         .filter(|p| p.exists())
         .map(|p| p.display().to_string());
     let backup = newest_backup(file);
@@ -2603,7 +2646,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
     if duplicate_hash_groups > 0 {
         warnings.push("duplicate hash groups detected".to_string());
     }
-    if missing_vectors > 0 {
+    if semantic_enabled && missing_vectors > 0 {
         warnings.push("docs without vectors: run import/re-embed path when available".to_string());
     }
     if private_source_hits > 0 {
@@ -2618,7 +2661,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
                 .to_string(),
         );
     }
-    if embed_cache.is_none() {
+    if semantic_enabled && embed_cache.is_none() {
         warnings.push("embedding cache missing; first semantic query may be slow".to_string());
     }
     if stats.docs > 0 && backup.is_none() {
@@ -2635,6 +2678,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
     Ok(DoctorReport {
         db: file.display().to_string(),
         quick_check,
+        semantic_enabled,
         docs: stats.docs,
         vectors: stats.vecs,
         duplicate_hash_groups,
@@ -2644,7 +2688,11 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
         embed_cache,
         backup_path,
         backup_age_seconds,
-        fallbacks: vec!["hybrid", "lexical", "timeline", "fresh-context", "ground"],
+        fallbacks: if semantic_enabled {
+            vec!["hybrid", "lexical", "timeline", "fresh-context", "ground"]
+        } else {
+            vec!["lexical", "timeline", "fresh-context", "ground"]
+        },
         warnings,
     })
 }
@@ -2652,6 +2700,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
 fn print_doctor_report(report: &DoctorReport) {
     println!("# Synapse doctor");
     println!("db={} quick_check={}", report.db, report.quick_check);
+    println!("semantic_enabled={}", report.semantic_enabled);
     println!("docs={} vectors={}", report.docs, report.vectors);
     println!("duplicate_hash_groups={}", report.duplicate_hash_groups);
     println!("missing_vectors={}", report.missing_vectors);

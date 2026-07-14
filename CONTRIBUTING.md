@@ -1,65 +1,66 @@
 # Contributing to Synapse
 
-Thanks for wanting to help. Synapse is MIT for the code and CC0 for the format spec — contributions land under the same terms.
+Synapse Memory is the release product. The wider workspace also contains engine
+research. Keep pull requests inside one clearly named surface.
 
 ## Setup
 
-```bash
+Rust 1.95 is pinned by `rust-toolchain.toml`.
+
+```sh
 git clone https://github.com/Supersynergy/synapse
 cd synapse
-# rust-toolchain.toml pins 1.95.0 automatically
-cargo build --workspace
-cargo test --workspace
+cargo test --locked -p synapse-cli --no-default-features
 ```
 
-For the v0.3 engine features:
+Portable release smoke:
 
-```bash
-cargo test -p synapse-core --features full
+```sh
+cargo build --locked --profile release-hardened \
+  -p synapse-cli --no-default-features
+SYNX_BIN=target/release-hardened/synx \
+  release/synapse-memory/verify.sh
 ```
 
-## Local check before sending a PR
+That verifier requires exact local versions of `cargo-audit 0.22.2`,
+`cargo-deny 0.19.9`, and `cargo-about 0.9.0` with its `cli` feature.
 
-Run `just check-all` before opening a PR — this runs the full fmt/clippy/test/audit/deny suite locally. Before tagging a release, run `scripts/pre_release.sh` which additionally checks semver compatibility, bloat, and the e2e smoke bench. Install the pre-push git hook via `bash scripts/setup_hooks.sh` to catch issues before they reach CI.
+## Pull-request contract
 
-```bash
-just check-all          # fmt + clippy + nextest + audit + deny
-scripts/pre_release.sh  # before tagging only
-```
+- State whether the change affects portable memory, an optional adapter, or the
+  engine lab.
+- Add a test that fails before the fix and passes after it.
+- Keep new heavy or platform-specific dependencies behind a feature.
+- Do not add a package published less than 14 days ago.
+- Include dependency purpose, license, maintenance, and portable-closure impact.
+- Never commit a brain database, checkpoint journal, transcript, keys, model
+  cache, benchmark corpus, generated graph, or local absolute path.
+- Document a breaking format or CLI change in `CHANGELOG.md` and an ADR.
 
-## Areas that want help
+Rust: use `synapse_core::Error` inside core libraries; `anyhow` is acceptable in
+binaries. Format with rustfmt and deny Clippy warnings on the changed package.
 
-- **Phase 3.2 — rkyv manifest**: replace JSON archival with zero-copy rkyv.
-- **Phase 3.3 — persisted FTS / HNSW chunks**: right now both indexes rebuild on open; the design lets them live inside `.synx` chunks.
-- **Conformance suite**: byte-exact test vectors at `spec/conformance/` so any language can verify its reader.
-- **SDKs**: Go, Zig, Elixir, Swift — the format is CC0, the reader is <200 LOC in Python, port it.
-- **Bench coverage**: add more incumbents to `bench/top20_formats.py` — every binding counts.
+## License of contributions
 
-## Format-spec changes
-
-`.synx` is spec-versioned. Any breaking layout change must:
-
-1. Bump the header version byte.
-2. Land with a migration path from the prior version.
-3. Ship conformance vectors covering the new chunk kind.
-4. Open an RFC issue tagged `rfc-synx`.
-
-See [`docs/RFC-CALL.md`](docs/RFC-CALL.md) for the review loop.
-
-## Code style
-
-- Rust: `rustfmt.toml` = defaults. `clippy.toml` = strict.
-- Errors: prefer `synapse_core::Error` variants over `anyhow` inside `synapse-core`; `anyhow` is fine in binaries.
-- No new dependencies without justification in the PR body.
-- Feature-gate anything that pulls a heavy dep (Tantivy, Automerge, Ed25519).
+Files inherit the license declared by their crate or directory. In particular,
+`synapse-core` uses FSL-1.1-ALv2; the portable CLI, graph, and learning utilities
+use MIT; `synapse-engine` has separate proprietary terms. By submitting a
+contribution, you agree to license it under the existing terms of its destination.
 
 ## Release process
 
-1. Land PRs into `main`.
-2. Bump `workspace.package.version` in `Cargo.toml`.
-3. Add a `## vX.Y.Z` entry to `CHANGELOG.md`.
-4. Tag `vX.Y.Z` — the GitHub release is generated from the changelog entry.
+Maintainers only:
+
+1. Resolve the intentional diff and run the portable verifier from a clean tree.
+2. Match workspace, CLI, `release/synapse-memory/VERSION`, installer constants,
+   release notes, and tag versions.
+3. Approve the recorded FSL/MIT boundary with repository variable
+   `SYNAPSE_RELEASE_LICENSE_APPROVED=true`.
+4. Push `ctxos-v<version>`; do not create a third tag family.
+5. Require all six native jobs and checksum validation before publishing.
+
+Exact gates: [release/synapse-memory/RELEASE-GATES.md](release/synapse-memory/RELEASE-GATES.md).
 
 ## Code of Conduct
 
-We follow the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct). Be decent.
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

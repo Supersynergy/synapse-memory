@@ -1,0 +1,8 @@
+Synapse
+Copyright 2026 Supersynergy
+
+The portable release combines components under FSL-1.1-ALv2 and MIT terms.
+Exact first-party license texts ship under LICENSES/.
+
+Third-party dependency names, versions, source links, and license texts are in
+THIRD-PARTY-LICENSES.html inside every Synapse Memory archive.

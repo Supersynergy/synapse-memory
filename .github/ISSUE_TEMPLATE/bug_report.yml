@@ -10,10 +10,17 @@ body:
     validations:
       required: true
   - type: input
+    id: surface
+    attributes:
+      label: Surface
+      placeholder: portable synx / Codex adapter / engine lab
+    validations:
+      required: true
+  - type: input
     id: version
     attributes:
       label: Synapse version
-      placeholder: v1.0.0 / git sha
+      placeholder: synx --version and git sha, if built from source
     validations:
       required: true
   - type: input
@@ -34,4 +41,5 @@ body:
     id: logs
     attributes:
       label: Relevant logs
+      description: Redact memory text, paths, tokens, keys, and personal data. Report security issues privately per SECURITY.md.
       render: shell

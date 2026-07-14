@@ -11,6 +11,7 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -293,6 +294,7 @@ impl Federation {
     }
 
     /// Start a Unix socket listener.
+    #[cfg(unix)]
     pub fn listen_unix(&self, path: &std::path::Path) -> Result<()> {
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path).map_err(|e| Error::Other(e.to_string()))?;
@@ -317,6 +319,14 @@ impl Federation {
         });
         Ok(())
     }
+
+    /// Unix sockets are unavailable on non-Unix targets; TCP federation remains portable.
+    #[cfg(not(unix))]
+    pub fn listen_unix(&self, _path: &std::path::Path) -> Result<()> {
+        Err(Error::Other(
+            "unix federation sockets are unavailable on this platform; use tcp:host:port".into(),
+        ))
+    }
 }
 
 fn connect(addr: &Addr) -> Result<Box<dyn ReadWrite>> {
@@ -326,14 +336,26 @@ fn connect(addr: &Addr) -> Result<Box<dyn ReadWrite>> {
             Ok(Box::new(s))
         }
         Addr::Unix(p) => {
-            let s = UnixStream::connect(p).map_err(|e| Error::Other(e.to_string()))?;
-            Ok(Box::new(s))
+            #[cfg(unix)]
+            {
+                let s = UnixStream::connect(p).map_err(|e| Error::Other(e.to_string()))?;
+                Ok(Box::new(s))
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = p;
+                Err(Error::Other(
+                    "unix federation sockets are unavailable on this platform; use tcp:host:port"
+                        .into(),
+                ))
+            }
         }
     }
 }
 
 trait ReadWrite: Read + Write + Send {}
 impl ReadWrite for TcpStream {}
+#[cfg(unix)]
 impl ReadWrite for UnixStream {}
 
 fn handle_stream(

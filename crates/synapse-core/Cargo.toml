@@ -2,7 +2,7 @@
 name = "synapse-core"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "FSL-1.1-ALv2"
 authors.workspace = true
 repository.workspace = true
 description = "Single-file AI agent memory: SQLite+FTS5+sqlite-vec+fastembed, Ed25519-signed, CRDT-merge, hybrid BM25+vec RRF. Sub-ms library-mode."
@@ -15,6 +15,9 @@ anyhow.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+quick-xml = "0.41.0"
+htmlescape = "0.3.1"
+pdf-extract = { version = "0.12.0", optional = true }
 rusqlite.workspace = true
 sqlite-vec.workspace = true
 tempfile = "3"
@@ -30,18 +33,18 @@ redb = { workspace = true, optional = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
 getrandom = "0.2"
-age = { workspace = true }
+age = { workspace = true, optional = true }
 yrs = { workspace = true }
 rmp-serde = { workspace = true }
-linfa.workspace = true
-linfa-clustering.workspace = true
-ndarray.workspace = true
-fastbloom.workspace = true
+linfa = { workspace = true, optional = true }
+linfa-clustering = { workspace = true, optional = true }
+ndarray = { workspace = true, optional = true }
+fastbloom = { workspace = true, optional = true }
 toml.workspace = true
 base64.workspace = true
 bitflags = "2"
-rayon = "1"
-dashmap = "6"
+rayon = { version = "1", optional = true }
+dashmap = { version = "6", optional = true }
 parking_lot = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 argon2 = { workspace = true, optional = true }
@@ -50,18 +53,18 @@ reqwest = { workspace = true, optional = true }
 # M4 Max integration: NEON-native SIMD distances (f32/f16/i8/b8).
 simsimd = { version = "6.5", optional = true }
 # f16 storage/conversion helpers in turbo::f16_kernels (50% RAM savings).
-half = "2.7"
+half = { version = "2.7", optional = true }
 # Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
 tikv-jemallocator = { version = "0.6", optional = true }
 # mlock / madvise / madvise wrappers in turbo::ram (unix only).
-libc = "0.2"
+libc = { version = "0.2", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
 synapse-ann = { path = "../synapse-ann", optional = true }
 # NEON f16/i8 dot-product kernels (3.9× over scalar on M4 Max).
-synapse-kernel = { path = "../synapse-kernel" }
-synapse-engine = { path = "../synapse-engine" }
+synapse-kernel = { path = "../synapse-kernel", optional = true }
+synapse-engine = { path = "../synapse-engine", optional = true }
 # RaBitQ 1-bit cascade index — proper Householder rotation from synapse-quant.
-synapse-quant = { path = "../synapse-quant", features = ["rabitq"] }
+synapse-quant = { path = "../synapse-quant", features = ["rabitq"], optional = true }
 async-trait = "0.1"
 tokio = { workspace = true }
 # SOTA agent-memory layer: NER gazetteer + temporal/regex extraction.
@@ -102,15 +105,41 @@ features = ["core"]
 # 2026-05-10: simsimd enabled by default — 1.5× NEON cosine on M4 Max,
 # AVX2 on x86_64. Apple Silicon + Linux aarch64 / x86_64 supported.
 # Pure-Rust default lost; build with --no-default-features --features backend-rusqlite for pure-Rust.
-default = ["backend-rusqlite", "turbo", "simsimd", "tantivy-fts"]
+default = [
+    "backend-rusqlite",
+    "turbo",
+    "simsimd",
+    "tantivy-fts",
+    "sharding",
+    "age-encryption",
+    "pdf-ingest",
+]
 backend-rusqlite = []
 backend-libsql = ["dep:libsql"]
-embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
+embed = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell", "dep:rayon"]
 # embed-dynamic: ORT loaded via dlopen. Use for Linux cross-compile builds.
 # At runtime, libonnxruntime.so must be on LD_LIBRARY_PATH or next to the binary.
-embed-dynamic = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell"]
+embed-dynamic = ["dep:fastembed", "dep:redb", "dep:parking_lot", "dep:once_cell", "dep:rayon"]
 encryption = ["dep:argon2", "rusqlite/bundled-sqlcipher-vendored-openssl"]
-turbo = []
+turbo = [
+    "dep:dashmap",
+    "dep:half",
+    "dep:libc",
+    "dep:ndarray",
+    "dep:rayon",
+    "dep:synapse-engine",
+    "dep:synapse-kernel",
+    "dep:synapse-quant",
+]
+sharding = [
+    "dep:fastbloom",
+    "dep:linfa",
+    "dep:linfa-clustering",
+    "dep:ndarray",
+    "dep:rayon",
+]
+age-encryption = ["dep:age"]
+pdf-ingest = ["dep:pdf-extract"]
 ollama = ["turbo", "dep:reqwest"]
 fresh-registry = ["dep:reqwest"]
 # M4 Max NEON SIMD (f32/i8/b8). Apple Silicon + Linux aarch64 / x86_64 AVX2+.

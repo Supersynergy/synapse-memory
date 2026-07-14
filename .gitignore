@@ -1,6 +1,8 @@
 # --- build / deps ---
 target/
+# Application releases require a committed, reproducible dependency graph.
 Cargo.lock
+!/Cargo.lock
 **/node_modules/
 .DS_Store
 
@@ -10,7 +12,11 @@ Cargo.lock
 *.db-shm
 *.db-journal
 *.brainpack
+*.synx
+synapse.sk
+synapse.vk
 .synapse/
+.emb-cache/
 .fastembed_cache/
 .pytest_cache/
 
@@ -19,6 +25,9 @@ __pycache__/
 **/*.pyc
 catboost_info/
 *.parquet
+*.npy
+*.safetensors
+graphify-out/
 
 # --- dev tooling / vendored tool repos (not part of synapse) ---
 .tools/
@@ -29,6 +38,7 @@ catboost_info/
 
 # --- release / packaging artifacts ---
 release/dist/
+release/dist-memory/
 dist/
 *.tar.gz
 *.tar.gz.sha256

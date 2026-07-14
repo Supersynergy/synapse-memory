@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synapse Memory dependency licenses</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 0; color: #202124; }
+    main { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    h1, h2, h3 { line-height: 1.2; }
+    .license { border-top: 1px solid #ddd; padding-top: 1rem; }
+    .license-text { max-height: 22rem; overflow: auto; white-space: pre-wrap; background: #f6f7f8; padding: 1rem; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #171717; color: #f5f5f5; }
+      a { color: #ff9a76; }
+      .license-text { background: #252525; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Synapse Memory dependency licenses</h1>
+  <p>Generated offline from the locked multi-target dependency graph covering <code>synapse-cli --no-default-features</code>. First-party FSL and MIT terms are shipped separately under <code>LICENSES/</code>.</p>
+  <h2>License overview</h2>
+  <ul>
+    {{#each overview}}
+    <li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+    {{/each}}
+  </ul>
+  <h2>License texts and packages</h2>
+  {{#each licenses}}
+  <section class="license">
+    {{#if first_of_kind}}<h3 id="{{id}}">{{name}}</h3>{{/if}}
+    <h4 id="{{id}}-{{@index}}">{{name}}</h4>
+    <ul>
+      {{#each used_by}}
+      <li><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></li>
+      {{/each}}
+    </ul>
+    <pre class="license-text">{{text}}</pre>
+  </section>
+  {{/each}}
+</main>
+</body>
+</html>

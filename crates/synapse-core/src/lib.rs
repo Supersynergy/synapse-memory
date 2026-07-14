@@ -6,6 +6,7 @@ pub mod db;
 pub mod error;
 pub mod federate;
 pub mod fresh;
+#[cfg(feature = "sharding")]
 pub mod shard;
 pub mod sign;
 pub mod snap;
@@ -26,6 +27,7 @@ pub mod embedder_trait;
 pub mod matryoshka;
 
 pub mod brainpack;
+pub mod corpus;
 pub mod obs;
 pub mod sql_fns;
 pub mod synx;

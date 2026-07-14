@@ -266,6 +266,7 @@ pub fn import(pack: impl AsRef<Path>, out: impl AsRef<Path>) -> Result<()> {
 }
 
 /// Encrypt an existing .brainpack file with age passphrase. Writes `.brainpack.age`.
+#[cfg(feature = "age-encryption")]
 pub fn encrypt_pack(pack: impl AsRef<Path>, out: impl AsRef<Path>, passphrase: &str) -> Result<()> {
     use age::secrecy::SecretString;
     use std::io::Write as _;
@@ -281,7 +282,20 @@ pub fn encrypt_pack(pack: impl AsRef<Path>, out: impl AsRef<Path>, passphrase: &
     Ok(())
 }
 
+#[cfg(not(feature = "age-encryption"))]
+pub fn encrypt_pack(
+    _pack: impl AsRef<Path>,
+    _out: impl AsRef<Path>,
+    _passphrase: &str,
+) -> Result<()> {
+    Err(Error::Other(
+        "age encryption is not included in this portable build; unencrypted backup remains available"
+            .into(),
+    ))
+}
+
 /// Decrypt an age-encrypted .brainpack file.
+#[cfg(feature = "age-encryption")]
 pub fn decrypt_pack(
     enc_pack: impl AsRef<Path>,
     out: impl AsRef<Path>,
@@ -299,6 +313,18 @@ pub fn decrypt_pack(
     reader.read_to_end(&mut plaintext)?;
     std::fs::write(out, plaintext)?;
     Ok(())
+}
+
+#[cfg(not(feature = "age-encryption"))]
+pub fn decrypt_pack(
+    _enc_pack: impl AsRef<Path>,
+    _out: impl AsRef<Path>,
+    _passphrase: &str,
+) -> Result<()> {
+    Err(Error::Other(
+        "age decryption is not included in this portable build; install a full build for encrypted packs"
+            .into(),
+    ))
 }
 
 #[cfg(test)]

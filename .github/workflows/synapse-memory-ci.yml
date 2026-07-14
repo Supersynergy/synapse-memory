@@ -1,0 +1,67 @@
+name: synapse-memory-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/synapse-cli/**"
+      - "crates/synapse-core/**"
+      - "crates/synapse-graph/**"
+      - "crates/synapse-learn/**"
+      - "integrations/codex/**"
+      - "release/synapse-memory/**"
+      - ".github/workflows/synapse-memory-ci.yml"
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/synapse-cli/**"
+      - "crates/synapse-core/**"
+      - "crates/synapse-graph/**"
+      - "crates/synapse-learn/**"
+      - "integrations/codex/**"
+      - "release/synapse-memory/**"
+      - ".github/workflows/synapse-memory-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: ""
+
+jobs:
+  portable-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          cache-on-failure: true
+      - name: Install pinned release auditors
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          cargo install cargo-deny --locked --version 0.19.9
+          cargo install cargo-about --locked --version 0.9.0 --features cli
+      - name: Portable Rust checks
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked -p synapse-cli --no-default-features
+          cargo test --locked -p synapse-learn
+          cargo clippy --locked -p synapse-cli --no-default-features -- -D warnings
+      - name: Build hardened host artifact
+        run: |
+          cargo build --locked --profile release-hardened \
+            -p synapse-cli --no-default-features
+      - name: Full local release proof
+        env:
+          SYNX_BIN: target/release-hardened/synx
+        run: release/synapse-memory/verify.sh
