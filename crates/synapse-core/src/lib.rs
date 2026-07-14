@@ -11,6 +11,7 @@ pub mod shard;
 pub mod sign;
 pub mod snap;
 pub mod sync;
+pub mod temporal;
 pub mod types;
 
 #[cfg(any(feature = "embed", feature = "embed-dynamic"))]

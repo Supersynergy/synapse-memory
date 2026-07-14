@@ -11,6 +11,6 @@ mod sampling;
 #[cfg(feature = "learn-to-rank")]
 pub mod query_log;
 
-pub use db::LearnStore;
+pub use db::{ContextQueryLog, LearnStore};
 #[cfg(feature = "learn-to-rank")]
 pub use query_log::QueryLog;

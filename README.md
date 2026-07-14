@@ -6,11 +6,12 @@
 [![Release](https://img.shields.io/github/v/release/Supersynergy/synapse?include_prereleases&label=release)](https://github.com/Supersynergy/synapse/releases)
 [![License: FSL-1.1-ALv2 + MIT](https://img.shields.io/badge/license-FSL--1.1--ALv2%20%2B%20MIT-orange.svg)](LICENSE-CORE.md)
 
-> **Your agents forget. Your work shouldn't.**
+> **Your agents forget. Your work — and the care behind it — shouldn't.**
 
-Synapse Memory keeps the decisions, context, and recovery breadcrumbs behind your
-work in one private SQLite file. Close the chat, switch sessions, or come back
-tomorrow: the next agent can understand where you left off instead of guessing.
+Synapse Memory keeps the decisions, context, dates, and recovery breadcrumbs
+behind your work in one private SQLite file. Close the chat, switch agents, or
+come back next month: the next agent can recover what mattered, when it happened,
+and what has since replaced it.
 
 One native Rust CLI. No Docker. No cloud account. No API key. No LLM in the
 retrieval path.
@@ -20,10 +21,13 @@ retrieval path.
 | When this happens | Synapse Memory helps by | You get |
 |---|---|---|
 | A fresh session knows nothing | `synx prime .` reads the project and relevant memory | A compact starting brief, not another long explanation |
-| A decision is buried in chat history | `synx remember --kind decision "..."` saves it with a stable id | The reason behind the work stays with the work |
-| Full history would flood the context window | `synx context "task" --mode coding` selects a bounded cited pack | Useful context with source ids and a clear retrieval route |
+| A decision is buried in chat history | `remember` stores its type, priority, confidence, event time, and source | The reason behind the work stays with the work |
+| A decision changes | `remember --supersedes <id>` links new truth to old truth | Agents see the active answer without erasing history |
+| Full history would flood the context window | `context` applies a hard budget and filters transport noise and superseded memory | Useful context with source ids, dates, and an auditable route |
+| You ask “what happened last week?” | English/German date cues, ISO dates, and `Q1`–`Q4` select event time | Capture time and event time no longer get confused |
 | Package or API assumptions may be stale | `synx fresh-context --cwd . --prompt "..." --no-registry` reads local manifests and lockfiles | Version-aware context without sending the project away |
-| Retrieval helped—or did not | `synx feedback` and `synx learn calibrate` record the outcome | Memory routing improves from real use, locally |
+| Retrieval helped—or failed | Explicit pass/fail feedback records accepted and actually used ids | Score and memory-type calibration improves from real use, locally |
+| The derived search index drifts | `doctor --fix` verifies SQLite, creates and restores a brainpack, then repairs only FTS | Self-healing stays reversible and leaves canonical memory untouched |
 | Codex disconnects mid-task | The optional checkpoint adapter records minimal execution state | A careful recovery hint without storing the transcript |
 
 **The promise:** bring back the smallest useful truth, with enough provenance to
@@ -56,7 +60,8 @@ Release assets and checksums:
 BRAIN="$HOME/.synapse/brain.db"
 
 synx -f "$BRAIN" init
-synx -f "$BRAIN" remember --kind decision \
+synx -f "$BRAIN" remember --kind decision --priority critical \
+  --occurred-at 2026-07-14 \
   "Run the release verifier before publishing."
 synx -f "$BRAIN" context \
   "What must pass before the next release?" --mode coding
@@ -66,8 +71,11 @@ The context output includes a `context_id`, selected document ids, and the exact
 feedback command. Reward only evidence that genuinely helped:
 
 ```sh
-synx -f "$BRAIN" feedback context:<context_id> <doc_id>
-synx -f "$BRAIN" learn calibrate
+synx -f "$BRAIN" feedback context:<context_id> <doc_id> \
+  --gate pass --used <doc_id>
+
+# When the pack was not good enough:
+synx -f "$BRAIN" feedback context:<context_id> --gate fail
 ```
 
 Inside an existing project, start with:
@@ -90,6 +98,39 @@ person should not have to explain twice:
 Memories remain inspectable. Retrieval remains deterministic in the portable
 release. If semantic embeddings are not installed, explicit vector operations
 fail clearly instead of pretending they worked.
+
+## The long-term truth loop
+
+Synapse Memory now separates four things that chat logs usually blur together:
+
+1. **Captured at** — when the memory entered the brain.
+2. **Occurred at** — when the event actually happened.
+3. **Active truth** — the newest memory after explicit supersession.
+4. **Usefulness** — pass/fail evidence from the context packs an agent used.
+
+Priority is bounded: `critical` can break a close ranking tie, but it cannot turn
+an unrelated note into a top result. Feedback ids must belong to the emitted pack,
+which blocks accidental or malicious reward poisoning.
+
+This is practical self-optimization, not a claim of consciousness or perfect
+recall. The loop is measurable, local, reversible, and inspectable in SQLite.
+
+## What happened to Telepathy?
+
+The old Telepathy prototype tailed live transcript events. It was fast, but status
+payloads and tool notifications could become durable memory. That transport is not
+in the portable release.
+
+Its best idea survives in safer form:
+
+- optional Codex checkpoints carry minimal interruption state;
+- raw sources can enter the corpus sidecar before promotion;
+- only explicit, typed memory enters the high-value truth path;
+- `[telepathy]`, notification, stale, and archived records are excluded from
+  context without deleting evidence.
+
+A future live transport must obey those same promotion and noise gates. It cannot
+bypass them merely because an event arrived in real time.
 
 ## Keep Codex work across disconnects
 
@@ -121,6 +162,9 @@ Full contract: [integrations/codex/README.md](integrations/codex/README.md).
 - Upgrade keeps the previous binary for rollback.
 - Uninstall leaves your memory untouched unless you delete it yourself.
 - Backup, restore, database verification, BLAKE3, and Ed25519 signing are built in.
+- `doctor --fix` refuses mutation after a failed SQLite check, creates a private
+  pre-repair brainpack, restores and checks that pack, repairs only FTS, then
+  records a health event. An interrupted repair remains visible on the next run.
 
 Read the complete threat boundary in [SECURITY.md](SECURITY.md).
 
@@ -156,7 +200,8 @@ SYNX_BIN="target/$TARGET/release-hardened/synx" \
 ```
 
 The verifier covers the portable dependency and license closure, native-binary
-guard, typed memory, cited context, feedback, offline freshness, backup/restore,
+guard, temporal typed memory, supersession, bounded cited context, pass/fail
+feedback, backup-before-repair self-healing, offline freshness, backup/restore,
 checksum install and rollback, data-safe uninstall, and Codex recovery.
 
 Release details: [release/synapse-memory/README.md](release/synapse-memory/README.md) ·

@@ -27,10 +27,16 @@ The default portable profile uses:
 cargo build -p synapse-cli --no-default-features
 ```
 
-It ships lexical/timeline context, typed memory, feedback, freshness, graph basics,
+It ships lexical/timeline context, typed memory, dual timestamps, bounded priority,
+explicit supersession, pass/fail feedback, freshness, graph basics,
 backup/restore/merge, signing, import/export, and TCP federation. Writes succeed
 without embeddings and say so. Explicit vector operations fail clearly. Doctor does
 not report absent embeddings as a health defect in this profile.
+
+The v1.1 truth path filters known transport/status noise and superseded memories
+before packing context. Self-healing is restricted to rebuildable FTS state and may
+run only after canonical SQLite and a restored pre-repair brainpack both pass
+integrity checks. Canonical documents and vectors are never silently rewritten.
 
 Semantic embeddings, daemon, MCP, and Codex hooks are optional packages/adapters.
 They cannot block installation of the portable memory core.

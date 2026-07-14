@@ -76,21 +76,39 @@ mkdir -p "$home" "$tmp/project"
 
 echo "7/15 init and typed memory"
 HOME="$home" "$bin" -f "$db" init >/dev/null
-remember_out="$(HOME="$home" "$bin" -f "$db" remember --kind decision "Portable Synapse ships one verified Rust binary.")"
-require_text "$remember_out" "ok remembered" "remember"
+old_out="$(HOME="$home" "$bin" -f "$db" remember --kind decision --priority low --occurred-at 2026-07-13 "Portable Synapse truth used the old release path.")"
+require_text "$old_out" "ok remembered" "old remember"
+old_id="$(printf '%s\n' "$old_out" | sed -n 's/.*id=\([0-9][0-9]*\).*/\1/p' | head -1)"
+[ -n "$old_id" ] || fail "old remember id missing"
+remember_out="$(HOME="$home" "$bin" -f "$db" remember --kind decision --priority critical --occurred-at 2026-07-14 --supersedes "$old_id" "Portable Synapse truth uses one verified Rust binary.")"
+require_text "$remember_out" "priority=critical" "priority remember"
+require_text "$remember_out" "supersedes=$old_id" "supersession remember"
 
 echo "8/15 bounded cited context"
-context_json="$(HOME="$home" "$bin" -f "$db" context "verified Rust binary" --mode coding --json)"
+context_json="$(HOME="$home" "$bin" -f "$db" context "Portable Synapse truth Q3 2026" --mode coding --json)"
 require_text "$context_json" '"context_id"' "context"
 require_text "$context_json" '"route": "lexical"' "portable context route"
+require_text "$context_json" '"priority": "critical"' "context priority"
+require_text "$context_json" '"occurred_at": "2026-07-14T00:00:00Z"' "event time"
+require_text "$context_json" '"superseded_filtered": 1' "supersession filter"
+require_text "$context_json" '"temporal_lo": "2026-07-01T00:00:00Z"' "quarter filter"
 context_id="$(printf '%s\n' "$context_json" | sed -n 's/.*"context_id": "\([^"]*\)".*/\1/p' | head -1)"
 doc_id="$(printf '%s\n' "$context_json" | sed -n 's/.*"id": \([0-9][0-9]*\).*/\1/p' | head -1)"
 [ -n "$context_id" ] && [ -n "$doc_id" ] || fail "context ids missing"
+case "$context_json" in
+  *'"id": '"$old_id"*) fail "superseded doc leaked into context" ;;
+esac
 
 echo "9/15 feedback loop"
-HOME="$home" "$bin" -f "$db" feedback "context:$context_id" "$doc_id" >/dev/null
+HOME="$home" "$bin" -f "$db" feedback "context:$context_id" "$doc_id" --gate pass --used "$doc_id" >/dev/null
+failed_context="$(HOME="$home" "$bin" -f "$db" context "Portable Synapse truth" --mode coding --json)"
+failed_context_id="$(printf '%s\n' "$failed_context" | sed -n 's/.*"context_id": "\([^"]*\)".*/\1/p' | head -1)"
+[ -n "$failed_context_id" ] || fail "failed-pack context id missing"
+HOME="$home" "$bin" -f "$db" feedback "context:$failed_context_id" --gate fail >/dev/null
 learn_out="$(HOME="$home" "$bin" -f "$db" learn status)"
 require_text "$learn_out" "feedback_entries=1" "learn status"
+require_text "$learn_out" "rewarded_packs=2" "explicit pack outcomes"
+require_text "$learn_out" "calibration_samples=2" "score calibration"
 
 echo "10/15 offline freshness and doctor"
 printf '[package]\nname = "portable-smoke"\nversion = "0.1.0"\n\n[dependencies]\nserde = "1"\n' >"$tmp/project/Cargo.toml"
@@ -99,6 +117,10 @@ require_text "$fresh_out" "fresh_context" "fresh context"
 doctor_json="$(HOME="$home" "$bin" -f "$db" doctor --json)"
 require_text "$doctor_json" '"quick_check": "ok"' "doctor"
 require_text "$doctor_json" '"semantic_enabled": false' "portable doctor profile"
+doctor_fix_json="$(HOME="$home" "$bin" -f "$db" doctor --fix --json)"
+require_text "$doctor_fix_json" '"backup_verified": true' "pre-repair backup proof"
+require_text "$doctor_fix_json" '"action": "fts_optimize"' "derived-index repair"
+require_text "$doctor_fix_json" '"incomplete_repairs": 0' "repair audit completion"
 
 echo "11/15 backup restore integrity"
 pack="$tmp/brain.synx"
@@ -106,7 +128,7 @@ restored="$tmp/restored.db"
 HOME="$home" "$bin" -f "$db" backup "$pack" >/dev/null
 HOME="$home" "$bin" -f "$restored" db-restore "$pack" >/dev/null
 verify_out="$(HOME="$home" "$bin" -f "$restored" db-verify)"
-require_text "$verify_out" "1 docs clean" "restored db verify"
+require_text "$verify_out" "2 docs clean" "restored db verify"
 
 echo "12/15 package native archive"
 target="$(rustc -vV | sed -n 's/^host: //p')"

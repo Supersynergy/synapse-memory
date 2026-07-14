@@ -6,6 +6,24 @@ portable release contract.
 
 ## [Unreleased]
 
+## [1.1.0-rc.1] - 2026-07-14
+
+### Added
+
+- Added dual timestamps: capture time remains automatic; `remember --occurred-at`
+  records when an event happened. Context understands ISO dates, English/German
+  relative dates, and `Q1`–`Q4` ranges.
+- Added bounded `critical|high|normal|low` memory priority and explicit
+  `--supersedes <docs.id>` history links.
+- Added context-time exclusion of superseded truth, known Telepathy/status noise,
+  stale/archived records, plus machine-readable filter diagnostics.
+- Added explicit context `--gate pass|fail` feedback with actually used ids,
+  reward-poisoning checks, score buckets, memory-type rewards, and automatic local
+  calibration.
+- Added safe FTS self-healing: canonical SQLite must pass first; a private
+  brainpack is created, restored, and checked before the derived index changes.
+  Repair state is written to `health_events` and interrupted repairs remain visible.
+
 ### Changed
 
 - Standardized the public product name as **Synapse Memory** across the CLI,
@@ -15,6 +33,17 @@ portable release contract.
 - Renamed the canonical release tag family to `synapse-memory-v*`.
 - Made release-asset publication fail when file globs are empty, moved checkout
   before artifact download, and upgraded artifact actions to their Node 24 lines.
+- Context budgets now apply to the emitted blocks, compact Unicode safely, and log
+  the precise candidates and normalized scores used by the learning loop.
+- `db-repair` now states and enforces its real boundary: FTS only; vectors and
+  canonical documents are never silently rebuilt or deleted.
+
+### Security
+
+- Feedback rejects document ids that were not part of the referenced context pack.
+- Self-healing refuses mutation after failed canonical or backup integrity checks.
+- Historical Telepathy transport stays outside the portable release; its known
+  status/notification records are filtered from context without data deletion.
 
 ### Removed
 
@@ -50,5 +79,6 @@ portable release contract.
 - Retrieval is lexical in this channel. Unsupported semantic operations fail with
   a clear feature message.
 
-[Unreleased]: https://github.com/Supersynergy/synapse/compare/synapse-memory-v1.0.1-rc.1...HEAD
+[Unreleased]: https://github.com/Supersynergy/synapse/compare/synapse-memory-v1.1.0-rc.1...HEAD
+[1.1.0-rc.1]: https://github.com/Supersynergy/synapse/compare/synapse-memory-v1.0.1-rc.1...synapse-memory-v1.1.0-rc.1
 [1.0.1-rc.1]: https://github.com/Supersynergy/synapse/releases/tag/synapse-memory-v1.0.1-rc.1

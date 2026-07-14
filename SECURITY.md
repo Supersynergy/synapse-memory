@@ -37,6 +37,12 @@ report within 72 hours; remediation timing depends on severity and reproducibili
   wrappers, preserve the previous binary, and never purge memory by default.
 - Codex recovery journals store compact execution metadata, not prompt text,
   command arguments, file contents, or tool-output bodies.
+- Context excludes explicit Telepathy/status notifications, stale/archived rows,
+  and superseded memory without deleting the underlying evidence.
+- Context feedback is accepted only for document ids emitted in that pack.
+- `doctor --fix` refuses work when canonical SQLite is unhealthy. Before changing
+  FTS it creates a mode-0600 brainpack, restores it, and runs `quick_check`;
+  canonical documents and vectors are not rewritten.
 
 Exact audit and package gates:
 [release/synapse-memory/RELEASE-GATES.md](release/synapse-memory/RELEASE-GATES.md).

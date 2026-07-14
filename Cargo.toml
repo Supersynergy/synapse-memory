@@ -14,7 +14,7 @@ portable_members = [
 ]
 
 [workspace.package]
-version = "1.0.1-rc.1"
+version = "1.1.0-rc.1"
 edition = "2024"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"

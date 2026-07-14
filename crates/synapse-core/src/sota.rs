@@ -14,7 +14,7 @@
 
 #![allow(clippy::type_complexity)]
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -91,6 +91,14 @@ pub struct MemoryEdge {
     pub dst_id: i64,
     pub edge_type: String, // "supports" | "contradicts" | "supersedes" | "about"
     pub weight: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DocMemoryState {
+    pub memory_type: MemoryType,
+    pub confidence: f64,
+    pub event_date: Option<String>,
+    pub superseded: bool,
 }
 
 /// Vector search backend selector.
@@ -249,6 +257,15 @@ pub fn sota_migrate(conn: &Connection) -> Result<()> {
             status TEXT NOT NULL DEFAULT 'pending'
         );
         CREATE INDEX IF NOT EXISTS idx_extract_status ON extraction_queue(status);
+
+        CREATE TABLE IF NOT EXISTS health_events (
+            id INTEGER PRIMARY KEY,
+            ts INTEGER NOT NULL,
+            event_kind TEXT NOT NULL,
+            status TEXT NOT NULL,
+            details_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_health_events_ts ON health_events(ts);
         "#,
     )?;
     // Additive: add event_date column for dual-layer timestamps if missing.
@@ -406,6 +423,103 @@ pub fn ensure_raw_memory_and_enqueue_batch(
     };
     tx.commit()?;
     Ok(created)
+}
+
+/// Promote the existing raw row for `doc_id` into durable typed memory.
+///
+/// This is deliberately in-place: `Store::put` already creates a raw memory,
+/// so inserting another typed row would duplicate state and leave a fake
+/// pending extraction. Optional supersession links the previous doc's active
+/// memory to this one in the same transaction.
+pub fn promote_doc_memory(
+    conn: &Connection,
+    doc_id: i64,
+    memory_type: MemoryType,
+    confidence: f64,
+    event_date: Option<&str>,
+    supersedes_doc_id: Option<i64>,
+) -> Result<i64> {
+    if !confidence.is_finite() || !(0.0..=1.0).contains(&confidence) {
+        return Err(Error::Other("confidence must be between 0 and 1".into()));
+    }
+    if supersedes_doc_id == Some(doc_id) {
+        return Err(Error::Other("a memory cannot supersede itself".into()));
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    let memory_id = tx
+        .query_row(
+            "SELECT id FROM memories
+             WHERE doc_id = ?1 AND entity_id IS NULL AND superseded_by IS NULL
+             ORDER BY CASE WHEN memory_type = 'raw' THEN 0 ELSE 1 END, updated_ts DESC
+             LIMIT 1",
+            [doc_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?;
+    let ts = now_ts();
+    let weight = memory_type.default_weight();
+    let memory_id = if let Some(id) = memory_id {
+        tx.execute(
+            "UPDATE memories
+             SET memory_type = ?1, weight = ?2, confidence = ?3,
+                 event_date = ?4, updated_ts = ?5
+             WHERE id = ?6",
+            rusqlite::params![memory_type.as_str(), weight, confidence, event_date, ts, id],
+        )?;
+        id
+    } else {
+        put_memory_with_date(&tx, doc_id, memory_type, None, None, confidence, event_date)?
+    };
+
+    tx.execute(
+        "INSERT INTO extraction_queue (doc_id, enqueued_ts, attempts, last_error, status)
+         VALUES (?1, ?2, 0, NULL, 'promoted')
+         ON CONFLICT(doc_id) DO UPDATE SET status='promoted', last_error=NULL",
+        rusqlite::params![doc_id, ts],
+    )?;
+
+    if let Some(old_doc_id) = supersedes_doc_id {
+        let old_memory_id = tx
+            .query_row(
+                "SELECT id FROM memories
+                 WHERE doc_id = ?1 AND superseded_by IS NULL
+                 ORDER BY updated_ts DESC LIMIT 1",
+                [old_doc_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .ok_or_else(|| Error::NotFound(format!("active memory for doc_id={old_doc_id}")))?;
+        supersede(&tx, old_memory_id, memory_id)?;
+    }
+
+    tx.commit()?;
+    Ok(memory_id)
+}
+
+/// Return the newest memory state for a document. An active row wins over old
+/// superseded rows; `superseded=true` means no active truth remains.
+pub fn doc_memory_state(conn: &Connection, doc_id: i64) -> Result<Option<DocMemoryState>> {
+    conn.query_row(
+        "SELECT memory_type, confidence, event_date,
+                CASE WHEN superseded_by IS NULL THEN 0 ELSE 1 END
+         FROM memories
+         WHERE doc_id = ?1
+         ORDER BY CASE WHEN superseded_by IS NULL THEN 0 ELSE 1 END, updated_ts DESC
+         LIMIT 1",
+        [doc_id],
+        |row| {
+            let memory_type: String = row.get(0)?;
+            Ok(DocMemoryState {
+                memory_type: MemoryType::parse(&memory_type),
+                confidence: row.get(1)?,
+                event_date: row.get(2)?,
+                superseded: row.get::<_, i64>(3)? != 0,
+            })
+        },
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
 /// Mark `old_id` superseded by `new_id`. Records an edge.
@@ -964,6 +1078,68 @@ mod tests {
             )
             .unwrap();
         assert_eq!(s, Some(m2));
+    }
+
+    #[test]
+    fn promote_is_single_row_typed_and_supersedes_old_truth() {
+        let c = open_mem();
+        sota_migrate(&c).unwrap();
+        c.execute("INSERT INTO docs (id, text) VALUES (1, 'old fact')", [])
+            .unwrap();
+        c.execute("INSERT INTO docs (id, text) VALUES (2, 'new fact')", [])
+            .unwrap();
+        ensure_raw_memory_and_enqueue(&c, 1).unwrap();
+        ensure_raw_memory_and_enqueue(&c, 2).unwrap();
+        promote_doc_memory(
+            &c,
+            1,
+            MemoryType::Fact,
+            0.8,
+            Some("2026-05-01T00:00:00Z"),
+            None,
+        )
+        .unwrap();
+        let new_memory_id = promote_doc_memory(
+            &c,
+            2,
+            MemoryType::Decision,
+            0.9,
+            Some("2026-05-02T00:00:00Z"),
+            Some(1),
+        )
+        .unwrap();
+
+        assert_eq!(
+            c.query_row("SELECT COUNT(*) FROM memories WHERE doc_id=2", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap(),
+            1
+        );
+        let new_state = doc_memory_state(&c, 2).unwrap().unwrap();
+        assert_eq!(new_state.memory_type, MemoryType::Decision);
+        assert_eq!(
+            new_state.event_date.as_deref(),
+            Some("2026-05-02T00:00:00Z")
+        );
+        assert!(!new_state.superseded);
+        assert!(doc_memory_state(&c, 1).unwrap().unwrap().superseded);
+        let old_target: i64 = c
+            .query_row(
+                "SELECT superseded_by FROM memories WHERE doc_id=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(old_target, new_memory_id);
+        let status: String = c
+            .query_row(
+                "SELECT status FROM extraction_queue WHERE doc_id=2",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "promoted");
     }
 
     #[test]

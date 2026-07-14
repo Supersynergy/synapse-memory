@@ -15,8 +15,9 @@ No public tag until every P0 gate has a machine-readable log or artifact.
 - [x] Native runners build and execute macOS, Linux, and Windows on x86-64 and ARM64.
 - [x] Every archive contains one native `synx`, build metadata, README, exact
       licenses, and a SHA-256 sidecar. Script wrappers are rejected.
-- [x] Init, remember, context, feedback, freshness, backup/restore, doctor,
-      install, corrupt-checksum rejection, rollback, and data-safe uninstall pass.
+- [x] Init, temporal/priority remember, supersession filtering, pass/fail feedback,
+      freshness, verified backup-before-repair, backup/restore, doctor, install,
+      corrupt-checksum rejection, rollback, and data-safe uninstall pass.
 - [x] Windows TCP federation compiles; Unix-only transports fail with a useful
       feature message on unsupported targets.
 - [x] Codex forced-disconnect recovery passes without transcript storage or blind
@@ -28,7 +29,9 @@ No public tag until every P0 gate has a machine-readable log or artifact.
 - [ ] Citation fidelity and context-budget adherence measured on real coding tasks.
 - [ ] Install time, first query, p50/p95, peak RSS, and disk growth across all targets.
 - [ ] Semantic channel with pinned model, offline cache, license review, and lexical fallback.
-- [ ] Temporal supersession tests before claiming temporal knowledge quality.
+- [x] Deterministic English/German/quarter parsing, event-range filtering, and
+      supersession have executable regression tests.
+- [ ] Temporal and citation quality measured on real multi-session coding tasks.
 
 Until those gates pass, public copy stays with the verified promise: small,
 deterministic, local coding-agent continuity.

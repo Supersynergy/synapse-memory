@@ -1,12 +1,16 @@
 # Synapse Memory release proof
 
-Evidence date: 2026-07-14. Candidate version: `1.0.1-rc.1`.
+Evidence date: 2026-07-14. Candidate version: `1.1.0-rc.1`.
 
 ## Verdict
 
-The portable product path and all six native target jobs pass. Publication remains
-fail-closed: the release job runs only for a matching `synapse-memory-v*` tag after
-preflight, native execution, packaging, and checksum validation succeed.
+The local portable product path and the six-target candidate matrix pass,
+including the new temporal truth, supersession, feedback, and
+backup-before-repair flow. Candidate commit `fec3440b5255397651722f5f0f81d60188d73bea`
+passed [GitHub Actions run 29367084743](https://github.com/Supersynergy/synapse/actions/runs/29367084743).
+Publication remains fail-closed: the release job runs only for a matching
+`synapse-memory-v*` tag after preflight, all six native executions, packaging,
+and checksum validation succeed.
 
 Canonical workflow:
 [release-synapse-memory.yml](../../.github/workflows/release-synapse-memory.yml).
@@ -21,7 +25,10 @@ Canonical workflow:
 | Exact six-target RustSec closure | 0 vulnerabilities, 0 warnings |
 | Cargo dependency policy | PASS |
 | First- and third-party license closure | PASS |
-| Full 15-stage product/package/install/recovery verifier | PASS |
+| Full 15-stage product/package/install/recovery verifier | PASS on macOS ARM64 |
+| Temporal parsing, event-range, supersession core regressions | PASS |
+| Context noise, hard budget, feedback poisoning, calibration regressions | PASS |
+| Verified backup-before-FTS-repair regression | PASS |
 | Codex checkpoint recovery tests | PASS |
 | ShellCheck and Actionlint | PASS |
 | Current release-diff secret scan | PASS |
@@ -32,8 +39,9 @@ Canonical workflow:
 | Native Windows x86-64 | PASS |
 | Native Windows ARM64 | PASS |
 
-The native six-target matrix is recorded in
-[GitHub Actions](https://github.com/Supersynergy/synapse/actions/workflows/release-synapse-memory.yml).
+The candidate matrix used workflow dispatch, so publication was skipped by design.
+The matching tag reruns the same fail-closed workflow before creating the GitHub
+release.
 
 ## Reproduce the local proof
 
@@ -49,9 +57,10 @@ release/synapse-memory/fresh-snapshot.sh
 ```
 
 The verifier covers dependency licenses and policy, RustSec, native-binary guard,
-typed memory, cited context, feedback, offline freshness, doctor, backup/restore,
-package contents, checksum install, corrupt-checksum and unsafe-archive rejection,
-rollback, data-preserving uninstall, and Codex disconnect recovery.
+temporal/priority memory, supersession filtering, bounded cited context, explicit
+pass/fail feedback, offline freshness, verified backup-before-repair self-healing,
+backup/restore, package contents, checksum install, corrupt-checksum and
+unsafe-archive rejection, rollback, data-preserving uninstall, and Codex recovery.
 
 ## Claim boundary
 

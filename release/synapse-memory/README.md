@@ -14,7 +14,8 @@ macOS or Linux, from a checksummed `synapse-memory-v*` release:
 curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.sh | sh
 
 BRAIN="$HOME/.synapse/brain.db"
-synx -f "$BRAIN" remember --kind decision "Keep the reason, not only the result."
+synx -f "$BRAIN" remember --kind decision --priority high \
+  --occurred-at 2026-07-14 "Keep the reason, not only the result."
 synx -f "$BRAIN" context "What should the next session know?" --mode coding
 ```
 
@@ -24,7 +25,8 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.ps1 | iex
 
 $Brain = "$HOME\.synapse\brain.db"
-synx -f $Brain remember --kind decision "Keep the reason, not only the result."
+synx -f $Brain remember --kind decision --priority high `
+  --occurred-at 2026-07-14 "Keep the reason, not only the result."
 synx -f $Brain context "What should the next session know?" --mode coding
 ```
 
@@ -37,12 +39,14 @@ sidecar both exist and verify.
 |---|---|
 | `synx` native CLI | Starts without a runtime, daemon, container, or cloud dependency |
 | Private `brain.db` | Your memory remains a file you own, inspect, back up, and move |
-| Typed memory | Decisions, facts, fixes, research, benchmarks, ADRs, and notes keep their meaning |
-| Bounded cited context | An agent receives useful evidence and stable ids without replaying everything |
+| Temporal typed memory | Decisions, facts, fixes, research, and ADRs keep type, confidence, priority, capture time, and optional event time |
+| Supersession | New truth can replace an old memory without deleting its history |
+| Bounded cited context | An agent receives useful evidence, dates, filter counts, and stable ids without replaying everything |
 | Project grounding | `prime` reconnects a new session to the repository in front of it |
 | Local freshness | Manifests and lockfiles ground version-sensitive work without registry access |
-| Feedback loop | Helpful evidence earns weight from real outcomes instead of hidden guesses |
-| Recovery tools | Doctor, verification, backup, restore, merge, BLAKE3, and Ed25519 protect continuity |
+| Feedback loop | Explicit pass/fail and actually used ids drive local score and memory-type calibration |
+| Safe self-healing | Doctor verifies canonical SQLite and a restored pre-repair pack before repairing only the derived FTS index |
+| Recovery tools | Verification, backup, restore, merge, BLAKE3, and Ed25519 protect continuity |
 | Optional Codex adapter | Interrupted work can resume from minimal state without storing the conversation |
 
 The portable binary deliberately has no embedding runtime. Lexical retrieval,
@@ -50,13 +54,18 @@ timeline fallback, cited context, freshness, feedback, backup, and merge always
 work. Explicit vector operations fail clearly instead of silently pretending to
 be semantic search.
 
+The old Telepathy transcript tailer is intentionally absent. It mixed useful live
+continuity with status and notification noise. The portable path keeps minimal
+Codex checkpoints and explicit memory promotion; context filters known Telepathy,
+stale, archived, and notification records without deleting them.
+
 ## Install a specific version
 
 ```sh
 SYNAPSE_PREFIX="$HOME/.local" \
 SYNAPSE_DB="$HOME/.synapse/brain.db" \
 SYNAPSE_REPO="https://github.com/Supersynergy/synapse" \
-  release/synapse-memory/install.sh --version 1.0.1-rc.1
+  release/synapse-memory/install.sh --version 1.1.0-rc.1
 ```
 
 Install from a local release directory:
