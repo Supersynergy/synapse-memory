@@ -1,7 +1,7 @@
 name: release-synapse-memory
 
 # Canonical user-facing release. One portable Rust `synx` binary per native target.
-# Tag and workspace version must match: synapse-memory-v1.0.1-rc.1 -> 1.0.1-rc.1.
+# Tag and workspace version must match: synapse-memory-vX.Y.Z -> X.Y.Z.
 on:
   push:
     tags: ["synapse-memory-v*"]
@@ -45,6 +45,12 @@ jobs:
           cargo fmt --all -- --check
           cargo test --locked -p synapse-cli --no-default-features
           cargo test --locked -p synapse-learn
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib temporal::tests
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib promote_is_single_row
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib timeline_between_prefers
           cargo clippy --locked -p synapse-cli --no-default-features -- -D warnings
           cargo clippy --locked -p synapse-learn -- -D warnings
       - name: RustSec release gate
@@ -117,8 +123,15 @@ jobs:
           bin="target/${{ matrix.target }}/release-hardened/synx"
           tmp="$(mktemp -d)"
           "$bin" -f "$tmp/brain.db" init
-          "$bin" -f "$tmp/brain.db" remember --kind decision "native release smoke"
-          "$bin" -f "$tmp/brain.db" context "release smoke" --json | grep -q '"context_id"'
+          old="$("$bin" -f "$tmp/brain.db" remember --kind decision --priority low --occurred-at 2026-07-13 "native release smoke old")"
+          old_id="$(printf '%s\n' "$old" | sed -n 's/.*id=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          test -n "$old_id"
+          "$bin" -f "$tmp/brain.db" remember --kind decision --priority high \
+            --occurred-at 2026-07-14 --supersedes "$old_id" "native release smoke active"
+          context="$("$bin" -f "$tmp/brain.db" context "native release smoke Q3 2026" --json)"
+          grep -q '"context_id"' <<<"$context"
+          grep -q '"priority": "high"' <<<"$context"
+          grep -q '"superseded_filtered": 1' <<<"$context"
       - name: Package and checksum
         shell: bash
         env:
@@ -163,9 +176,14 @@ jobs:
           $tmp = Join-Path $env:RUNNER_TEMP "synapse-memory-smoke"
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
           & $bin -f "$tmp\brain.db" init
-          & $bin -f "$tmp\brain.db" remember --kind decision "native release smoke"
-          $context = (& $bin -f "$tmp\brain.db" context "release smoke" --json) -join "`n"
+          $old = (& $bin -f "$tmp\brain.db" remember --kind decision --priority low --occurred-at 2026-07-13 "native release smoke old") -join "`n"
+          if ($old -notmatch 'id=(\d+)') { throw "old memory id missing" }
+          $oldId = $Matches[1]
+          & $bin -f "$tmp\brain.db" remember --kind decision --priority high --occurred-at 2026-07-14 --supersedes $oldId "native release smoke active"
+          $context = (& $bin -f "$tmp\brain.db" context "native release smoke Q3 2026" --json) -join "`n"
           if ($context -notmatch '"context_id"') { throw "context smoke failed" }
+          if ($context -notmatch '"priority": "high"') { throw "priority smoke failed" }
+          if ($context -notmatch '"superseded_filtered": 1') { throw "supersession smoke failed" }
       - name: Package and checksum
         shell: pwsh
         run: |

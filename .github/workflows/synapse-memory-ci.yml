@@ -58,6 +58,12 @@ jobs:
           cargo fmt --all -- --check
           cargo test --locked -p synapse-cli --no-default-features
           cargo test --locked -p synapse-learn
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib temporal::tests
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib promote_is_single_row
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib timeline_between_prefers
           cargo clippy --locked -p synapse-cli --no-default-features -- -D warnings
       - name: Build hardened host artifact
         run: |

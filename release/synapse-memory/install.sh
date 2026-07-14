@@ -4,7 +4,7 @@ set -eu
 repo="${SYNAPSE_REPO:-https://github.com/Supersynergy/synapse}"
 prefix="${SYNAPSE_PREFIX:-$HOME/.local}"
 db="${SYNAPSE_DB:-$HOME/.synapse/brain.db}"
-default_version="1.0.1-rc.1"
+default_version="1.1.0-rc.1"
 version=""
 dry_run=0
 

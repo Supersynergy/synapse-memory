@@ -2,8 +2,36 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::path::Path;
 
+fn ensure_column(conn: &Connection, table: &str, column: &str, definition: &str) -> Result<()> {
+    let exists = conn
+        .prepare(&format!("PRAGMA table_info({table})"))?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(std::result::Result::ok)
+        .any(|name| name == column);
+    if !exists {
+        conn.execute(
+            &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 pub struct LearnStore {
     pub conn: Connection,
+}
+
+pub struct ContextQueryLog<'a> {
+    pub context_id: &'a str,
+    pub ts: i64,
+    pub query: &'a str,
+    pub mode: &'a str,
+    pub route: &'a str,
+    pub doc_ids: &'a [i64],
+    pub scores: &'a [f64],
+    pub kinds: &'a [String],
+    pub budget_chars: usize,
+    pub used_chars: usize,
 }
 
 impl LearnStore {
@@ -57,6 +85,48 @@ impl LearnStore {
                 correction REAL NOT NULL DEFAULT 1.0
             );
         "#,
+        )?;
+        ensure_column(
+            &conn,
+            "context_query_log",
+            "score_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )?;
+        ensure_column(
+            &conn,
+            "context_query_log",
+            "kind_json",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )?;
+        ensure_column(
+            &conn,
+            "context_query_log",
+            "used_doc_ids",
+            "TEXT NOT NULL DEFAULT '[]'",
+        )?;
+        ensure_column(
+            &conn,
+            "context_query_log",
+            "budget_chars",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
+        ensure_column(
+            &conn,
+            "context_query_log",
+            "used_chars",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
+        ensure_column(
+            &conn,
+            "learn_calibration",
+            "samples",
+            "INTEGER NOT NULL DEFAULT 0",
+        )?;
+        ensure_column(
+            &conn,
+            "learn_calibration",
+            "updated_ts",
+            "INTEGER NOT NULL DEFAULT 0",
         )?;
         Ok(Self { conn })
     }
@@ -141,36 +211,96 @@ impl LearnStore {
         Ok(())
     }
 
-    pub fn log_context_query(
-        &self,
-        context_id: &str,
-        ts: i64,
-        query: &str,
-        mode: &str,
-        route: &str,
-        doc_ids: &[i64],
-    ) -> Result<()> {
-        let doc_ids_json = serde_json::to_string(doc_ids)?;
+    pub fn log_context_query(&self, entry: &ContextQueryLog<'_>) -> Result<()> {
+        anyhow::ensure!(
+            entry.doc_ids.len() == entry.scores.len() && entry.doc_ids.len() == entry.kinds.len(),
+            "context candidate ids, scores, and kinds must align"
+        );
+        let doc_ids_json = serde_json::to_string(entry.doc_ids)?;
+        let score_json = serde_json::to_string(entry.scores)?;
+        let kind_json = serde_json::to_string(entry.kinds)?;
         self.conn.execute(
-            "INSERT OR REPLACE INTO context_query_log(context_id,ts,query,mode,route,doc_ids)
-             VALUES(?1,?2,?3,?4,?5,?6)",
-            params![context_id, ts, query, mode, route, doc_ids_json],
+            "INSERT INTO context_query_log(
+                 context_id,ts,query,mode,route,doc_ids,score_json,kind_json,
+                 budget_chars,used_chars,used_doc_ids
+             ) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'[]')",
+            params![
+                entry.context_id,
+                entry.ts,
+                entry.query,
+                entry.mode,
+                entry.route,
+                doc_ids_json,
+                score_json,
+                kind_json,
+                entry.budget_chars as i64,
+                entry.used_chars as i64,
+            ],
         )?;
         Ok(())
     }
 
-    pub fn reward_context(&self, context_id: &str, accepted_doc_id: i64, hit: bool) -> Result<()> {
-        self.conn.execute(
-            "UPDATE context_query_log SET accepted_doc_id=?1, reward=?2 WHERE context_id=?3",
-            params![accepted_doc_id, if hit { 1 } else { 0 }, context_id],
-        )?;
+    pub fn reward_context(
+        &self,
+        context_id: &str,
+        accepted_doc_id: Option<i64>,
+        used_doc_ids: &[i64],
+        hit: bool,
+    ) -> Result<()> {
         let row = self.conn.query_row(
-            "SELECT route FROM context_query_log WHERE context_id=?1",
+            "SELECT route, doc_ids, kind_json FROM context_query_log WHERE context_id=?1",
             params![context_id],
-            |r| r.get::<_, String>(0),
-        );
-        if let Ok(route) = row {
-            self.update_route_reward(&route, hit)?;
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )?;
+        let (route, doc_json, kind_json) = row;
+        let doc_ids: Vec<i64> = serde_json::from_str(&doc_json).unwrap_or_default();
+        let kinds: Vec<String> = serde_json::from_str(&kind_json).unwrap_or_default();
+        let effective_used = if !used_doc_ids.is_empty() {
+            used_doc_ids.to_vec()
+        } else if let Some(id) = accepted_doc_id {
+            vec![id]
+        } else if !hit {
+            doc_ids.clone()
+        } else {
+            Vec::new()
+        };
+        for doc_id in &effective_used {
+            anyhow::ensure!(
+                doc_ids.contains(doc_id),
+                "feedback doc_id={doc_id} was not part of context_id={context_id}"
+            );
+        }
+        let used_json = serde_json::to_string(&effective_used)?;
+        let changed = self.conn.execute(
+            "UPDATE context_query_log
+             SET accepted_doc_id=?1, reward=?2, used_doc_ids=?3
+             WHERE context_id=?4",
+            params![
+                accepted_doc_id,
+                if hit { 1 } else { 0 },
+                used_json,
+                context_id
+            ],
+        )?;
+        anyhow::ensure!(changed == 1, "unknown context_id: {context_id}");
+        self.update_route_reward(&route, hit)?;
+
+        let mut rewarded_kinds = std::collections::BTreeSet::new();
+        for doc_id in effective_used {
+            if let Some(index) = doc_ids.iter().position(|candidate| *candidate == doc_id)
+                && let Some(kind) = kinds.get(index)
+            {
+                rewarded_kinds.insert(kind.clone());
+            }
+        }
+        for kind in rewarded_kinds {
+            self.update_memory_type_reward(&kind, hit)?;
         }
         Ok(())
     }

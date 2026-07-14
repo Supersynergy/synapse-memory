@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$DefaultVersion = "1.0.1-rc.1"
+$DefaultVersion = "1.1.0-rc.1"
 $Repo = if ($env:SYNAPSE_REPO) { $env:SYNAPSE_REPO } else { "https://github.com/Supersynergy/synapse" }
 $Arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 $Target = switch ($Arch) {

@@ -2119,6 +2119,35 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         Ok(docs)
     }
 
+    /// Return docs whose event time falls in a Unix-second range.
+    ///
+    /// `meta.occurred_ts` is authoritative when present; insertion time is the
+    /// compatibility fallback for older documents. `docs.ts` is stored in ms.
+    pub fn timeline_between(
+        &self,
+        lo_secs: i64,
+        hi_secs: i64,
+        limit: usize,
+    ) -> Result<Vec<crate::types::Doc>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, uri, title, text, meta, ts
+             FROM docs
+             WHERE CAST(COALESCE(
+                       CASE WHEN json_valid(meta) THEN json_extract(meta, '$.occurred_ts') END,
+                       ts / 1000
+                   ) AS INTEGER) BETWEEN ?1 AND ?2
+             ORDER BY CAST(COALESCE(
+                       CASE WHEN json_valid(meta) THEN json_extract(meta, '$.occurred_ts') END,
+                       ts / 1000
+                   ) AS INTEGER) DESC
+             LIMIT ?3",
+        )?;
+        let docs = stmt
+            .query_map(params![lo_secs, hi_secs, limit as i64], map_doc)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(docs)
+    }
+
     pub fn stats(&self) -> Result<Stats> {
         let docs: i64 = self
             .conn
@@ -2197,6 +2226,30 @@ mod tests {
         let hits = s.search("sqlite", SearchMode::Lex, None, 10).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].id, id);
+    }
+
+    #[test]
+    fn timeline_between_prefers_event_time_over_capture_time() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut store = Store::open(tmp.path()).unwrap();
+        let event_ts = 1_735_689_600_i64; // 2025-01-01 UTC
+        let id = store
+            .put(&PutRequest {
+                text: "historical release decision".into(),
+                meta: Some(serde_json::json!({"occurred_ts": event_ts})),
+                ..Default::default()
+            })
+            .unwrap();
+        let hits = store
+            .timeline_between(event_ts, event_ts + 86_399, 10)
+            .unwrap();
+        assert_eq!(hits.iter().map(|doc| doc.id).collect::<Vec<_>>(), vec![id]);
+        assert!(
+            store
+                .timeline_between(event_ts + 86_400, event_ts + 172_799, 10)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

@@ -1,12 +1,13 @@
 # Synapse Memory release proof
 
-Evidence date: 2026-07-14. Candidate version: `1.0.1-rc.1`.
+Evidence date: 2026-07-14. Candidate version: `1.1.0-rc.1`.
 
 ## Verdict
 
-The portable product path and all six native target jobs pass. Publication remains
+The local portable product path passes, including the new temporal truth,
+supersession, feedback, and backup-before-repair flow. Publication remains
 fail-closed: the release job runs only for a matching `synapse-memory-v*` tag after
-preflight, native execution, packaging, and checksum validation succeed.
+preflight, all six native executions, packaging, and checksum validation succeed.
 
 Canonical workflow:
 [release-synapse-memory.yml](../../.github/workflows/release-synapse-memory.yml).
@@ -21,18 +22,21 @@ Canonical workflow:
 | Exact six-target RustSec closure | 0 vulnerabilities, 0 warnings |
 | Cargo dependency policy | PASS |
 | First- and third-party license closure | PASS |
-| Full 15-stage product/package/install/recovery verifier | PASS |
+| Full 15-stage product/package/install/recovery verifier | PASS on macOS ARM64 |
+| Temporal parsing, event-range, supersession core regressions | PASS |
+| Context noise, hard budget, feedback poisoning, calibration regressions | PASS |
+| Verified backup-before-FTS-repair regression | PASS |
 | Codex checkpoint recovery tests | PASS |
 | ShellCheck and Actionlint | PASS |
 | Current release-diff secret scan | PASS |
-| Native macOS Apple Silicon | PASS |
-| Native macOS Intel | PASS |
-| Native Linux x86-64 musl | PASS |
-| Native Linux ARM64 musl | PASS |
-| Native Windows x86-64 | PASS |
-| Native Windows ARM64 | PASS |
+| Native macOS Apple Silicon | Pending candidate matrix |
+| Native macOS Intel | Pending candidate matrix |
+| Native Linux x86-64 musl | Pending candidate matrix |
+| Native Linux ARM64 musl | Pending candidate matrix |
+| Native Windows x86-64 | Pending candidate matrix |
+| Native Windows ARM64 | Pending candidate matrix |
 
-The native six-target matrix is recorded in
+The native six-target matrix will be recorded before tagging in
 [GitHub Actions](https://github.com/Supersynergy/synapse/actions/workflows/release-synapse-memory.yml).
 
 ## Reproduce the local proof
@@ -49,9 +53,10 @@ release/synapse-memory/fresh-snapshot.sh
 ```
 
 The verifier covers dependency licenses and policy, RustSec, native-binary guard,
-typed memory, cited context, feedback, offline freshness, doctor, backup/restore,
-package contents, checksum install, corrupt-checksum and unsafe-archive rejection,
-rollback, data-preserving uninstall, and Codex disconnect recovery.
+temporal/priority memory, supersession filtering, bounded cited context, explicit
+pass/fail feedback, offline freshness, verified backup-before-repair self-healing,
+backup/restore, package contents, checksum install, corrupt-checksum and
+unsafe-archive rejection, rollback, data-preserving uninstall, and Codex recovery.
 
 ## Claim boundary
 

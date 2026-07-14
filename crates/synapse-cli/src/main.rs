@@ -29,8 +29,10 @@ use synapse_core::{
     federate::{Addr, Federation},
     fresh::{FreshMode, FreshOptions, build_fresh_report, render_fresh_context_xml},
     sign, snap,
+    sota::{MemoryType, doc_memory_state, promote_doc_memory},
+    temporal::{DateRange, format_timestamp, parse_temporal, parse_timestamp},
 };
-use synapse_learn::LearnStore;
+use synapse_learn::{ContextQueryLog, LearnStore};
 
 type VerifyRow = (i64, String, Vec<u8>);
 type FreshInput = (String, Option<PathBuf>, Option<String>);
@@ -224,6 +226,15 @@ enum Cmd {
         /// high|medium|low
         #[arg(long, default_value = "high")]
         confidence: String,
+        /// critical|high|normal|low — bounded ranking signal, not absolute truth.
+        #[arg(long, default_value = "normal")]
+        priority: String,
+        /// When the event happened: YYYY-MM-DD or RFC3339.
+        #[arg(long)]
+        occurred_at: Option<String>,
+        /// Previous docs.id whose active memory this one replaces.
+        #[arg(long)]
+        supersedes: Option<i64>,
         #[arg(long, default_value_t = false)]
         no_embed: bool,
     },
@@ -332,10 +343,17 @@ enum Cmd {
         #[command(subcommand)]
         action: LearnCmd,
     },
-    /// Record positive feedback for a doc
+    /// Record explicit pass/fail feedback for a generated context pack
     Feedback {
         query_id: String,
-        accepted_doc_id: i64,
+        /// Accepted docs.id (compatible with the v1 positional form).
+        accepted_doc_id: Option<i64>,
+        /// pass|fail
+        #[arg(long, default_value = "pass")]
+        gate: String,
+        /// Comma-separated docs.id values actually used by the agent.
+        #[arg(long)]
+        used: Option<String>,
         #[arg(long, default_value = "default")]
         shard_id: String,
     },
@@ -372,7 +390,7 @@ enum Cmd {
         #[arg(long)]
         db: Option<PathBuf>,
     },
-    /// Repair: rebuild FTS5 + vec0 index from docs table
+    /// Safely repair FTS5 after a verified brainpack backup (vectors unchanged)
     DbRepair {
         /// db path (defaults to --file)
         #[arg(long)]
@@ -881,20 +899,76 @@ fn main() -> Result<()> {
             budget,
             json,
         } => {
+            anyhow::ensure!(limit > 0, "--limit must be greater than zero");
+            anyhow::ensure!(budget > 0, "--budget must be greater than zero");
             let store = Store::open(&cli.file)?;
             let learn_path = cli.file.with_extension("learn.db");
             let lstore = LearnStore::open(&learn_path).ok();
-            let (hits, route) = search_best_effort(&store, &cli.file, &query, limit)?;
-            let ranked = rank_context_hits(&store, lstore.as_ref(), hits)?;
-            let context_id = context_id(&query, &mode, &ranked);
-            if let Some(ls) = lstore.as_ref() {
-                let ids: Vec<i64> = ranked.iter().map(|h| h.id).collect();
-                let _ = ls.log_context_query(&context_id, now_secs(), &query, &mode, &route, &ids);
+            let temporal_range = parse_temporal(&query, now_secs());
+            let retrieval_query = temporal_range
+                .map(|_| temporal_retrieval_query(&query))
+                .unwrap_or_else(|| query.clone());
+            let retrieval_limit = limit.saturating_mul(4).max(limit);
+            let (hits, mut route) =
+                search_best_effort(&store, &cli.file, &retrieval_query, retrieval_limit)?;
+            let (mut ranked, mut diagnostics) =
+                rank_context_hits_in_range(&store, lstore.as_ref(), hits, temporal_range)?;
+            if retrieval_query != query {
+                diagnostics.retrieval_query = Some(retrieval_query);
             }
+            if ranked.is_empty()
+                && let Some(range) = temporal_range
+            {
+                let timeline_hits = store
+                    .timeline_between(range.lo, range.hi, retrieval_limit)?
+                    .into_iter()
+                    .map(doc_to_hit)
+                    .collect();
+                let (fallback_ranked, fallback_diagnostics) = rank_context_hits_in_range(
+                    &store,
+                    lstore.as_ref(),
+                    timeline_hits,
+                    Some(range),
+                )?;
+                ranked = fallback_ranked;
+                diagnostics.merge(fallback_diagnostics);
+                route = "event_timeline".to_string();
+            }
+            ranked.truncate(limit);
+            let (packed, used_chars) = bounded_context_hits(&ranked, budget);
+            let context_id = context_id(&query, &mode, &packed);
+            if let Some(ls) = lstore.as_ref() {
+                let ids: Vec<i64> = packed.iter().map(|h| h.id).collect();
+                let scores = normalized_context_scores(&packed);
+                let kinds: Vec<String> = packed.iter().map(context_hit_kind).collect();
+                ls.log_context_query(&ContextQueryLog {
+                    context_id: &context_id,
+                    ts: now_secs(),
+                    query: &query,
+                    mode: &mode,
+                    route: &route,
+                    doc_ids: &ids,
+                    scores: &scores,
+                    kinds: &kinds,
+                    budget_chars: budget,
+                    used_chars,
+                })
+                .context("log context pack for feedback")?;
+            }
+            let output = ContextOutput {
+                context_id: &context_id,
+                query: &query,
+                mode: &mode,
+                budget,
+                used_chars,
+                route: &route,
+                hits: &packed,
+                diagnostics: &diagnostics,
+            };
             if json {
-                print_context_json(&context_id, &query, &mode, budget, &route, &ranked)?;
+                print_context_json(&output)?;
             } else {
-                print_context_pack(&context_id, &query, &mode, budget, &route, &ranked);
+                print_context_pack(&output);
             }
         }
         Cmd::Remember {
@@ -904,42 +978,94 @@ fn main() -> Result<()> {
             uri,
             freshness,
             confidence,
+            priority,
+            occurred_at,
+            supersedes,
             no_embed,
         } => {
             anyhow::ensure!(!text.trim().is_empty(), "empty text");
             let mut store = Store::open(&cli.file)?;
-            let normalized_kind = normalize_kind(&kind);
+            let normalized_kind = normalize_kind(&kind)
+                .with_context(|| format!("unsupported memory kind: {kind}"))?;
+            let freshness = normalize_freshness(&freshness)
+                .with_context(|| format!("unsupported freshness: {freshness}"))?;
+            let confidence_score = confidence_score(&confidence)
+                .with_context(|| format!("unsupported confidence: {confidence}"))?;
+            let priority = normalize_priority(&priority)
+                .with_context(|| format!("unsupported priority: {priority}"))?;
+            let occurred_ts = occurred_at
+                .as_deref()
+                .map(|value| {
+                    parse_timestamp(value)
+                        .with_context(|| format!("invalid --occurred-at value: {value}"))
+                })
+                .transpose()?;
+            let occurred_at = occurred_ts.and_then(format_timestamp);
             let embedding = optional_document_embedding(&cli.file, &text, no_embed)?;
+            let captured_at = now_ms();
             let req = PutRequest {
                 title: title.or_else(|| Some(auto_title(&normalized_kind, &text))),
                 uri,
-                text,
+                text: text.clone(),
                 meta: Some(serde_json::json!({
                     "kind": normalized_kind,
                     "freshness": freshness,
                     "confidence": confidence,
-                    "observed_at": now_ms(),
+                    "confidence_score": confidence_score,
+                    "priority": priority,
+                    "observed_at": captured_at,
+                    "occurred_at": occurred_at,
+                    "occurred_ts": occurred_ts,
                     "source": "synx remember",
-                    "chunker": "synx-cli-v1"
+                    "chunker": "synx-cli-v1.1"
                 })),
                 embedding,
             };
             let id = store.put(&req)?;
-            println!("ok remembered id={} kind={}", id, normalized_kind);
+            merge_remember_metadata(
+                &store,
+                id,
+                &normalized_kind,
+                &freshness,
+                &confidence,
+                confidence_score,
+                &priority,
+                captured_at,
+                occurred_at.as_deref(),
+                occurred_ts,
+            )?;
+            let memory_id = promote_doc_memory(
+                &store.conn,
+                id,
+                memory_type_for_kind(&normalized_kind),
+                confidence_score,
+                occurred_at.as_deref(),
+                supersedes,
+            )?;
+            println!(
+                "ok remembered id={} memory_id={} kind={} priority={}{}",
+                id,
+                memory_id,
+                normalized_kind,
+                priority,
+                supersedes
+                    .map(|old| format!(" supersedes={old}"))
+                    .unwrap_or_default()
+            );
         }
         Cmd::Doctor { fix, json } => {
             let store = Store::open(&cli.file)?;
-            let report = doctor_report(&store, &cli.file)?;
+            let repair = if fix {
+                Some(safe_repair(&store, &cli.file)?)
+            } else {
+                None
+            };
+            let mut report = doctor_report(&store, &cli.file)?;
+            report.repair = repair;
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
                 print_doctor_report(&report);
-            }
-            if fix {
-                store
-                    .conn
-                    .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('optimize');")?;
-                println!("fix=fts_optimize_ok");
             }
         }
         Cmd::Fallback { query, limit } => {
@@ -1122,9 +1248,29 @@ fn main() -> Result<()> {
                         .conn
                         .query_row("SELECT COUNT(*) FROM feedback", [], |r| r.get(0))
                         .unwrap_or(0);
+                    let context_count: i64 = lstore
+                        .conn
+                        .query_row("SELECT COUNT(*) FROM context_query_log", [], |r| r.get(0))
+                        .unwrap_or(0);
+                    let rewarded_count: i64 = lstore
+                        .conn
+                        .query_row(
+                            "SELECT COUNT(*) FROM context_query_log WHERE reward IS NOT NULL",
+                            [],
+                            |r| r.get(0),
+                        )
+                        .unwrap_or(0);
+                    let calibration_samples: i64 = lstore
+                        .conn
+                        .query_row(
+                            "SELECT COALESCE(SUM(samples),0) FROM learn_calibration",
+                            [],
+                            |r| r.get(0),
+                        )
+                        .unwrap_or(0);
                     println!(
-                        "bandit_shards={} feedback_entries={}",
-                        bandit_count, fb_count
+                        "bandit_shards={} feedback_entries={} context_packs={} rewarded_packs={} calibration_samples={}",
+                        bandit_count, fb_count, context_count, rewarded_count, calibration_samples
                     );
                 }
                 LearnCmd::Consolidate => {
@@ -1147,14 +1293,44 @@ fn main() -> Result<()> {
         Cmd::Feedback {
             query_id,
             accepted_doc_id,
+            gate,
+            used,
             shard_id,
         } => {
             let learn_path = cli.file.with_extension("learn.db");
             let lstore = LearnStore::open(&learn_path)?;
-            synapse_learn::feedback::record_accept(&lstore, &query_id, accepted_doc_id, &shard_id)?;
+            let passed = match gate.trim().to_ascii_lowercase().as_str() {
+                "pass" => true,
+                "fail" => false,
+                _ => anyhow::bail!("--gate must be pass or fail"),
+            };
+            let used_doc_ids = used
+                .as_deref()
+                .map(parse_doc_ids)
+                .transpose()?
+                .unwrap_or_default();
+            anyhow::ensure!(
+                !passed || accepted_doc_id.is_some() || !used_doc_ids.is_empty(),
+                "a passing pack needs <accepted_doc_id> or --used"
+            );
+            synapse_learn::feedback::record_context_outcome(
+                &lstore,
+                &query_id,
+                accepted_doc_id,
+                &used_doc_ids,
+                passed,
+                &shard_id,
+            )?;
+            let calibrated = synapse_learn::calibrate::update_calibration(&lstore)?;
             println!(
-                "ok feedback recorded doc_id={} shard={}",
-                accepted_doc_id, shard_id
+                "ok feedback gate={} accepted={} used={} shard={} calibrated_buckets={}",
+                if passed { "pass" } else { "fail" },
+                accepted_doc_id
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "none".to_string()),
+                used_doc_ids.len(),
+                shard_id,
+                calibrated
             );
         }
         Cmd::Backup {
@@ -1231,19 +1407,8 @@ fn main() -> Result<()> {
         Cmd::DbRepair { db } => {
             let db_path = db.as_ref().unwrap_or(&cli.file);
             let store = Store::open(db_path)?;
-            // Rebuild FTS5
-            store
-                .conn
-                .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('rebuild')")?;
-            // Rebuild vec0 from scratch using put_batch on existing docs
-            // Minimal: just report FTS rebuilt; vec index lives in vec0 which is shadow table
-            store
-                .conn
-                .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('integrity-check')")?;
-            let count: i64 = store
-                .conn
-                .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))?;
-            println!("ok repair fts5 rebuilt docs={count}");
+            let report = safe_repair(&store, db_path)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Cmd::Import { src, format } => {
             let mut store = Store::open(&cli.file)?;
@@ -2366,19 +2531,63 @@ fn search_best_effort(
 
     let docs = store.timeline(limit, 0)?;
     Ok((
-        docs.into_iter()
-            .map(|d| synapse_core::Hit {
-                id: d.id,
-                uri: d.uri,
-                title: d.title,
-                text: d.text,
-                score: 0.0,
-                meta: d.meta,
-                ts: Some(d.ts),
-            })
-            .collect(),
+        docs.into_iter().map(doc_to_hit).collect(),
         "timeline".to_string(),
     ))
+}
+
+fn doc_to_hit(doc: synapse_core::Doc) -> synapse_core::Hit {
+    synapse_core::Hit {
+        id: doc.id,
+        uri: doc.uri,
+        title: doc.title,
+        text: doc.text,
+        score: 0.0,
+        meta: doc.meta,
+        ts: Some(doc.ts),
+    }
+}
+
+#[derive(Debug, Default, Clone, serde::Serialize)]
+struct ContextDiagnostics {
+    candidates_seen: usize,
+    noise_filtered: usize,
+    superseded_filtered: usize,
+    temporal_filtered: usize,
+    temporal_lo: Option<String>,
+    temporal_hi: Option<String>,
+    retrieval_query: Option<String>,
+}
+
+impl ContextDiagnostics {
+    fn with_range(range: Option<DateRange>) -> Self {
+        Self {
+            temporal_lo: range.and_then(|value| format_timestamp(value.lo)),
+            temporal_hi: range.and_then(|value| format_timestamp(value.hi)),
+            ..Self::default()
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.candidates_seen += other.candidates_seen;
+        self.noise_filtered += other.noise_filtered;
+        self.superseded_filtered += other.superseded_filtered;
+        self.temporal_filtered += other.temporal_filtered;
+        self.temporal_lo = self.temporal_lo.take().or(other.temporal_lo);
+        self.temporal_hi = self.temporal_hi.take().or(other.temporal_hi);
+        self.retrieval_query = self.retrieval_query.take().or(other.retrieval_query);
+    }
+}
+
+struct ContextOutput<'a> {
+    context_id: &'a str,
+    query: &'a str,
+    mode: &'a str,
+    budget: usize,
+    used_chars: usize,
+    route: &'a str,
+    hits: &'a [synapse_core::Hit],
+    diagnostics: &'a ContextDiagnostics,
 }
 
 fn rank_context_hits(
@@ -2386,19 +2595,66 @@ fn rank_context_hits(
     learn: Option<&LearnStore>,
     hits: Vec<synapse_core::Hit>,
 ) -> Result<Vec<synapse_core::Hit>> {
-    let mut ranked = Vec::with_capacity(hits.len());
-    for mut hit in hits {
-        let doc = store.get(hit.id).ok();
-        let kind = doc
-            .as_ref()
-            .and_then(|d| d.meta.as_ref())
-            .and_then(|m| m.get("kind"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("note");
-        hit.score += memory_kind_prior(kind);
-        if let Some(learn) = learn {
-            hit.score += learn.memory_type_bonus(kind).unwrap_or(0.0);
+    Ok(rank_context_hits_in_range(store, learn, hits, None)?.0)
+}
+
+fn rank_context_hits_in_range(
+    store: &Store,
+    learn: Option<&LearnStore>,
+    hits: Vec<synapse_core::Hit>,
+    temporal_range: Option<DateRange>,
+) -> Result<(Vec<synapse_core::Hit>, ContextDiagnostics)> {
+    let mut diagnostics = ContextDiagnostics::with_range(temporal_range);
+    diagnostics.candidates_seen = hits.len();
+    let mut filtered = Vec::with_capacity(hits.len());
+    for hit in hits {
+        if is_context_noise(&hit) {
+            diagnostics.noise_filtered += 1;
+            continue;
         }
+        if doc_memory_state(&store.conn, hit.id)?.is_some_and(|state| state.superseded) {
+            diagnostics.superseded_filtered += 1;
+            continue;
+        }
+        if let Some(range) = temporal_range {
+            let occurred = context_hit_event_ts(&hit);
+            if !occurred.is_some_and(|ts| (range.lo..=range.hi).contains(&ts)) {
+                diagnostics.temporal_filtered += 1;
+                continue;
+            }
+        }
+        filtered.push(hit);
+    }
+
+    let min_score = filtered
+        .iter()
+        .map(|hit| hit.score)
+        .fold(f64::INFINITY, f64::min);
+    let max_score = filtered
+        .iter()
+        .map(|hit| hit.score)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let spread = max_score - min_score;
+    let mut ranked = Vec::with_capacity(filtered.len());
+    for mut hit in filtered {
+        let mut score = if spread.is_finite() && spread > f64::EPSILON {
+            (hit.score - min_score) / spread
+        } else {
+            0.5
+        };
+        if let Some(learn) = learn {
+            score = synapse_learn::calibrate::calibrate(learn, score).unwrap_or(score);
+        }
+        let kind = context_hit_kind(&hit);
+        score += memory_kind_prior(&kind);
+        score += priority_bonus(context_hit_priority(&hit));
+        if let Some(state) = doc_memory_state(&store.conn, hit.id)? {
+            score += (state.confidence.clamp(0.0, 1.0) - 0.5) * 0.08;
+        }
+        if let Some(learn) = learn {
+            score += learn.memory_type_bonus(&kind).unwrap_or(0.0);
+        }
+        hit.score = score;
         ranked.push(hit);
     }
     ranked.sort_by(|a, b| {
@@ -2406,7 +2662,7 @@ fn rank_context_hits(
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    Ok(ranked)
+    Ok((ranked, diagnostics))
 }
 
 fn memory_kind_prior(kind: &str) -> f64 {
@@ -2424,6 +2680,225 @@ fn memory_kind_prior(kind: &str) -> f64 {
     }
 }
 
+fn priority_bonus(priority: &str) -> f64 {
+    match priority {
+        "critical" => 0.120,
+        "high" => 0.070,
+        "low" => -0.050,
+        _ => 0.0,
+    }
+}
+
+fn context_hit_kind(hit: &synapse_core::Hit) -> String {
+    hit.meta
+        .as_ref()
+        .and_then(|meta| meta.get("kind"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("note")
+        .to_ascii_lowercase()
+}
+
+fn context_hit_priority(hit: &synapse_core::Hit) -> &str {
+    hit.meta
+        .as_ref()
+        .and_then(|meta| meta.get("priority"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("normal")
+}
+
+fn context_hit_event_ts(hit: &synapse_core::Hit) -> Option<i64> {
+    let meta_ts = hit
+        .meta
+        .as_ref()
+        .and_then(|meta| meta.get("occurred_ts"))
+        .and_then(|value| value.as_i64())
+        .or_else(|| {
+            hit.meta
+                .as_ref()
+                .and_then(|meta| meta.get("occurred_at"))
+                .and_then(|value| value.as_str())
+                .and_then(parse_timestamp)
+        });
+    meta_ts.or_else(|| hit.ts.map(|millis| millis / 1000))
+}
+
+fn context_hit_captured_at(hit: &synapse_core::Hit) -> Option<String> {
+    hit.ts.and_then(|millis| format_timestamp(millis / 1000))
+}
+
+fn context_hit_occurred_at(hit: &synapse_core::Hit) -> Option<String> {
+    hit.meta
+        .as_ref()
+        .and_then(|meta| meta.get("occurred_at"))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+fn is_context_noise(hit: &synapse_core::Hit) -> bool {
+    let status = hit
+        .meta
+        .as_ref()
+        .and_then(|meta| meta.get("status"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let kind = context_hit_kind(hit);
+    if matches!(
+        status.as_str(),
+        "stale" | "archived" | "noise" | "generated"
+    ) || matches!(kind.as_str(), "status" | "telepathy" | "notification")
+    {
+        return true;
+    }
+    let text = hit.text.to_ascii_lowercase();
+    text.trim_start().starts_with("[telepathy]")
+        || text.contains("<task-notification>")
+        || text.contains("tool-use-id")
+        || (text.contains("\"models_loaded\"")
+            && text.contains("\"desktop_procs\"")
+            && text.contains("\"cli_sessions\""))
+}
+
+fn temporal_retrieval_query(query: &str) -> String {
+    let raw: Vec<&str> = query.split_whitespace().collect();
+    let tokens: Vec<String> = raw
+        .iter()
+        .map(|token| {
+            token
+                .trim_matches(|c: char| !(c.is_alphanumeric() || c == '-' || c == '/'))
+                .to_ascii_lowercase()
+        })
+        .collect();
+    let is_year = |value: &str| value.len() == 4 && value.chars().all(|c| c.is_ascii_digit());
+    let is_quarter = |value: &str| matches!(value, "q1" | "q2" | "q3" | "q4");
+    let is_month = |value: &str| {
+        matches!(
+            value,
+            "january"
+                | "jan"
+                | "januar"
+                | "february"
+                | "feb"
+                | "februar"
+                | "march"
+                | "mar"
+                | "märz"
+                | "maerz"
+                | "april"
+                | "apr"
+                | "may"
+                | "mai"
+                | "june"
+                | "jun"
+                | "juni"
+                | "july"
+                | "jul"
+                | "juli"
+                | "august"
+                | "aug"
+                | "september"
+                | "sep"
+                | "sept"
+                | "october"
+                | "oct"
+                | "oktober"
+                | "okt"
+                | "november"
+                | "nov"
+                | "december"
+                | "dec"
+                | "dezember"
+                | "dez"
+        )
+    };
+    let is_unit = |value: &str| {
+        matches!(
+            value,
+            "day"
+                | "days"
+                | "week"
+                | "weeks"
+                | "month"
+                | "months"
+                | "year"
+                | "years"
+                | "tag"
+                | "tage"
+                | "tagen"
+                | "woche"
+                | "wochen"
+                | "monat"
+                | "monate"
+                | "monaten"
+                | "jahr"
+                | "jahre"
+                | "jahren"
+        )
+    };
+    let is_cue = |value: &str| {
+        matches!(
+            value,
+            "yesterday"
+                | "today"
+                | "tomorrow"
+                | "last"
+                | "this"
+                | "next"
+                | "ago"
+                | "in"
+                | "gestern"
+                | "heute"
+                | "morgen"
+                | "letzte"
+                | "letzten"
+                | "letzter"
+                | "letztes"
+                | "diese"
+                | "dieser"
+                | "diesen"
+                | "dieses"
+                | "nächste"
+                | "nächsten"
+                | "nächstes"
+                | "naechste"
+                | "naechsten"
+                | "naechstes"
+                | "vor"
+                | "im"
+        )
+    };
+
+    let mut keep = Vec::new();
+    for (index, token) in tokens.iter().enumerate() {
+        let previous = index.checked_sub(1).and_then(|value| tokens.get(value));
+        let next = tokens.get(index + 1);
+        let explicit_date = parse_timestamp(token).is_some();
+        let numeric_relative = token.chars().all(|c| c.is_ascii_digit())
+            && (previous.is_some_and(|value| matches!(value.as_str(), "in" | "vor"))
+                || next.is_some_and(|value| is_unit(value)));
+        let adjacent_year =
+            is_year(token) && previous.is_some_and(|value| is_quarter(value) || is_month(value));
+        if explicit_date
+            || numeric_relative
+            || adjacent_year
+            || is_quarter(token)
+            || is_month(token)
+            || is_unit(token)
+            || is_cue(token)
+        {
+            continue;
+        }
+        if !raw[index].trim().is_empty() {
+            keep.push(raw[index]);
+        }
+    }
+    if keep.is_empty() {
+        query.to_string()
+    } else {
+        keep.join(" ")
+    }
+}
+
 fn context_id(query: &str, mode: &str, hits: &[synapse_core::Hit]) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(query.as_bytes());
@@ -2431,69 +2906,69 @@ fn context_id(query: &str, mode: &str, hits: &[synapse_core::Hit]) -> String {
     for h in hits.iter().take(16) {
         hasher.update(&h.id.to_le_bytes());
     }
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    hasher.update(&nonce.to_le_bytes());
+    hasher.update(&std::process::id().to_le_bytes());
     hasher.finalize().to_hex()[..16].to_string()
 }
 
-fn print_context_pack(
-    context_id: &str,
-    query: &str,
-    mode: &str,
-    budget: usize,
-    route: &str,
-    hits: &[synapse_core::Hit],
-) {
+fn print_context_pack(output: &ContextOutput<'_>) {
     println!("# Synapse Memory Context Pack");
     println!();
-    println!("context_id: {}", context_id);
-    println!("query: {}", query);
-    println!("mode: {}", mode);
-    println!("route: {}", route);
-    println!("budget: {} chars", budget);
+    println!("context_id: {}", output.context_id);
+    println!("query: {}", output.query);
+    println!("mode: {}", output.mode);
+    println!("route: {}", output.route);
+    println!("budget: {}/{} chars", output.used_chars, output.budget);
+    println!(
+        "filters: noise={} superseded={} temporal={}",
+        output.diagnostics.noise_filtered,
+        output.diagnostics.superseded_filtered,
+        output.diagnostics.temporal_filtered
+    );
+    if let (Some(lo), Some(hi)) = (
+        &output.diagnostics.temporal_lo,
+        &output.diagnostics.temporal_hi,
+    ) {
+        println!("event_window: {}..{}", lo, hi);
+    }
+    if let Some(retrieval_query) = &output.diagnostics.retrieval_query {
+        println!("retrieval_query: {}", retrieval_query);
+    }
     println!();
     println!("## Working brief");
     println!("- Use these memories as cited context, not unquestioned truth.");
     println!("- Prefer decision/fact/bugfix/benchmark memories over raw session notes.");
     println!(
-        "- If useful, reward this pack with: synx feedback context:{} <doc_id>",
-        context_id
+        "- Pass: `synx feedback context:{} <doc_id> --gate pass --used <ids>`",
+        output.context_id
+    );
+    println!(
+        "- Fail: `synx feedback context:{} --gate fail`",
+        output.context_id
     );
     println!("- If the task is freshness-sensitive, verify current docs before acting.");
     println!();
     println!("## Retrieved context");
 
-    let mut used = 0usize;
-    for h in hits {
-        let title = h.title.as_deref().unwrap_or("untitled");
-        let uri = h.uri.as_deref().unwrap_or("local:synapse");
-        let text = compact(&h.text, 620);
-        let block = format!(
-            "\n### [{}] {} score={:.4}\nsource: {}\n{}\n",
-            h.id, title, h.score, uri, text
-        );
-        if used + block.len() > budget && used > 0 {
-            break;
-        }
-        used += block.len();
-        print!("{}", block);
+    for h in output.hits {
+        print!("{}", context_block(h));
     }
 
     println!();
     println!("## Fallback ladder");
-    println!("1. Context above: hybrid → lexical → recent timeline");
+    println!("1. Context above: lexical → hybrid → event/recent timeline");
     println!("2. `synx fallback <query>` when context is thin");
     println!("3. `synx fresh-context --prompt <query>` for package/API freshness");
     println!("4. `synx ground <query>` when graph expansion is useful");
 }
 
-fn print_context_json(
-    context_id: &str,
-    query: &str,
-    mode: &str,
-    budget: usize,
-    route: &str,
-    hits: &[synapse_core::Hit],
-) -> Result<()> {
-    let blocks: Vec<_> = hits
+fn print_context_json(output: &ContextOutput<'_>) -> Result<()> {
+    let blocks: Vec<_> = output
+        .hits
         .iter()
         .map(|h| {
             serde_json::json!({
@@ -2501,33 +2976,215 @@ fn print_context_json(
                 "score": h.score,
                 "title": h.title,
                 "uri": h.uri,
-                "text": compact(&h.text, 620),
+                "kind": context_hit_kind(h),
+                "priority": context_hit_priority(h),
+                "captured_at": context_hit_captured_at(h),
+                "occurred_at": context_hit_occurred_at(h),
+                "text": h.text,
             })
         })
         .collect();
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
-            "context_id": context_id,
-            "query": query,
-            "mode": mode,
-            "budget_chars": budget,
-            "route": route,
-            "retrieval": "hybrid_then_lexical_then_timeline",
+            "context_id": output.context_id,
+            "query": output.query,
+            "mode": output.mode,
+            "budget_chars": output.budget,
+            "used_chars": output.used_chars,
+            "route": output.route,
+            "retrieval": "lexical_then_hybrid_then_event_timeline",
+            "filters": output.diagnostics,
             "hits": blocks,
-            "reward_hint": format!("synx feedback context:{} <doc_id>", context_id),
+            "reward_hint": {
+                "pass": format!("synx feedback context:{} <doc_id> --gate pass --used <ids>", output.context_id),
+                "fail": format!("synx feedback context:{} --gate fail", output.context_id)
+            },
             "fallbacks": ["fallback", "fresh-context", "ground"]
         }))?
     );
     Ok(())
 }
 
-fn normalize_kind(kind: &str) -> String {
+fn context_block(hit: &synapse_core::Hit) -> String {
+    let title = hit.title.as_deref().unwrap_or("untitled");
+    let uri = hit.uri.as_deref().unwrap_or("local:synapse");
+    let captured = context_hit_captured_at(hit).unwrap_or_else(|| "unknown".to_string());
+    let occurred = context_hit_occurred_at(hit).unwrap_or_else(|| "unspecified".to_string());
+    format!(
+        "\n### [{}] {} score={:.4}\nsource: {}\nkind: {} priority: {}\ncaptured_at: {} occurred_at: {}\n{}\n",
+        hit.id,
+        title,
+        hit.score,
+        uri,
+        context_hit_kind(hit),
+        context_hit_priority(hit),
+        captured,
+        occurred,
+        hit.text
+    )
+}
+
+fn bounded_context_hits(
+    hits: &[synapse_core::Hit],
+    budget: usize,
+) -> (Vec<synapse_core::Hit>, usize) {
+    let mut selected = Vec::new();
+    let mut used = 0usize;
+    for hit in hits {
+        let mut candidate = hit.clone();
+        candidate.text = compact(&candidate.text, 620);
+        let full_cost = context_block(&candidate).len();
+        if used + full_cost <= budget {
+            used += full_cost;
+            selected.push(candidate);
+            continue;
+        }
+        let mut empty = candidate.clone();
+        empty.text.clear();
+        let overhead = context_block(&empty).len();
+        let available = budget.saturating_sub(used + overhead);
+        if available < 32 {
+            break;
+        }
+        candidate.text = compact(&candidate.text, available);
+        let cost = context_block(&candidate).len();
+        if used + cost <= budget {
+            used += cost;
+            selected.push(candidate);
+        }
+        break;
+    }
+    (selected, used)
+}
+
+fn normalized_context_scores(hits: &[synapse_core::Hit]) -> Vec<f64> {
+    if hits.is_empty() {
+        return Vec::new();
+    }
+    let min = hits
+        .iter()
+        .map(|hit| hit.score)
+        .fold(f64::INFINITY, f64::min);
+    let max = hits
+        .iter()
+        .map(|hit| hit.score)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let spread = max - min;
+    hits.iter()
+        .map(|hit| {
+            if spread.is_finite() && spread > f64::EPSILON {
+                ((hit.score - min) / spread).clamp(0.0, 1.0)
+            } else {
+                0.5
+            }
+        })
+        .collect()
+}
+
+fn normalize_kind(kind: &str) -> Option<String> {
     match kind.trim().to_ascii_lowercase().as_str() {
         "decision" | "fact" | "preference" | "bugfix" | "benchmark" | "command" | "session"
-        | "adr" | "research" | "note" => kind.trim().to_ascii_lowercase(),
-        _ => "note".to_string(),
+        | "adr" | "research" | "note" => Some(kind.trim().to_ascii_lowercase()),
+        _ => None,
     }
+}
+
+fn confidence_score(confidence: &str) -> Option<f64> {
+    match confidence.trim().to_ascii_lowercase().as_str() {
+        "high" => Some(0.90),
+        "medium" => Some(0.70),
+        "low" => Some(0.50),
+        _ => None,
+    }
+}
+
+fn normalize_priority(priority: &str) -> Option<String> {
+    match priority.trim().to_ascii_lowercase().as_str() {
+        value @ ("critical" | "high" | "normal" | "low") => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn normalize_freshness(freshness: &str) -> Option<String> {
+    match freshness.trim().to_ascii_lowercase().as_str() {
+        value @ ("stable" | "slow" | "fast" | "volatile") => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn memory_type_for_kind(kind: &str) -> MemoryType {
+    match kind {
+        "decision" | "adr" => MemoryType::Decision,
+        "fact" | "benchmark" | "research" => MemoryType::Fact,
+        "preference" => MemoryType::Preference,
+        "bugfix" => MemoryType::Lesson,
+        "command" | "session" => MemoryType::Episodic,
+        _ => MemoryType::Raw,
+    }
+}
+
+fn parse_doc_ids(value: &str) -> Result<Vec<i64>> {
+    let mut ids = Vec::new();
+    for token in value
+        .split(',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+    {
+        let id = token
+            .parse::<i64>()
+            .with_context(|| format!("invalid docs.id in --used: {token}"))?;
+        anyhow::ensure!(id > 0, "docs.id values in --used must be positive");
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    anyhow::ensure!(!ids.is_empty(), "--used must contain at least one docs.id");
+    Ok(ids)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn merge_remember_metadata(
+    store: &Store,
+    doc_id: i64,
+    kind: &str,
+    freshness: &str,
+    confidence: &str,
+    confidence_score: f64,
+    priority: &str,
+    captured_at: i64,
+    occurred_at: Option<&str>,
+    occurred_ts: Option<i64>,
+) -> Result<()> {
+    let mut meta = store
+        .get(doc_id)?
+        .meta
+        .unwrap_or_else(|| serde_json::json!({}));
+    let object = meta
+        .as_object_mut()
+        .context("stored document metadata is not a JSON object")?;
+    object.insert("kind".into(), serde_json::json!(kind));
+    object.insert("freshness".into(), serde_json::json!(freshness));
+    object.insert("confidence".into(), serde_json::json!(confidence));
+    object.insert(
+        "confidence_score".into(),
+        serde_json::json!(confidence_score),
+    );
+    object.insert("priority".into(), serde_json::json!(priority));
+    object.insert("observed_at".into(), serde_json::json!(captured_at));
+    object.insert("source".into(), serde_json::json!("synx remember"));
+    object.insert("chunker".into(), serde_json::json!("synx-cli-v1.1"));
+    if let Some(value) = occurred_at {
+        object.insert("occurred_at".into(), serde_json::json!(value));
+    }
+    if let Some(value) = occurred_ts {
+        object.insert("occurred_ts".into(), serde_json::json!(value));
+    }
+    store.conn.execute(
+        "UPDATE docs SET meta=?1 WHERE id=?2",
+        rusqlite::params![meta.to_string(), doc_id],
+    )?;
+    Ok(())
 }
 
 fn auto_title(kind: &str, text: &str) -> String {
@@ -2551,6 +3208,9 @@ fn auto_title(kind: &str, text: &str) -> String {
 }
 
 fn compact(text: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
     let mut out = String::new();
     for line in text.lines() {
         let trimmed = line.trim();
@@ -2566,28 +3226,56 @@ fn compact(text: &str, max_chars: usize) -> String {
         }
     }
     if out.len() > max_chars {
-        out.truncate(max_chars.saturating_sub(1));
-        out.push('…');
+        let ellipsis = '…';
+        let mut end = max_chars.saturating_sub(ellipsis.len_utf8());
+        while end > 0 && !out.is_char_boundary(end) {
+            end -= 1;
+        }
+        out.truncate(end);
+        if max_chars >= ellipsis.len_utf8() {
+            out.push(ellipsis);
+        }
     }
     out
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct RepairReport {
+    backup_path: String,
+    backup_verified: bool,
+    action: String,
+    docs: i64,
+    fts_rows_before: i64,
+    fts_rows_after: i64,
+    quick_check_after: String,
 }
 
 #[derive(serde::Serialize)]
 struct DoctorReport {
     db: String,
+    health: String,
     quick_check: String,
     semantic_enabled: bool,
     docs: i64,
     vectors: i64,
+    fts_rows: i64,
+    fts_mismatch: i64,
     duplicate_hash_groups: i64,
     missing_vectors: i64,
     private_source_hits: i64,
     stale_or_generated_source_hits: i64,
+    context_noise_hits: i64,
+    active_raw_memories: i64,
+    pending_extractions: i64,
+    event_dated_memories: i64,
+    superseded_memories: i64,
+    incomplete_repairs: i64,
     embed_cache: Option<String>,
     backup_path: Option<String>,
     backup_age_seconds: Option<i64>,
     fallbacks: Vec<&'static str>,
     warnings: Vec<String>,
+    repair: Option<RepairReport>,
 }
 
 fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> {
@@ -2605,6 +3293,12 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
             |r| r.get(0),
         )
         .unwrap_or(0);
+    let fts_rows = fts_indexed_rows(store).unwrap_or(-1);
+    let fts_mismatch = if fts_rows < 0 {
+        stats.docs
+    } else {
+        (stats.docs - fts_rows).abs()
+    };
     let missing_vectors = store
         .conn
         .query_row(
@@ -2637,6 +3331,47 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
             "/file-history/",
         ],
     );
+    let context_noise_hits = doctor_context_noise_count(store);
+    let active_raw_memories = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM memories WHERE memory_type='raw' AND superseded_by IS NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let pending_extractions = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM extraction_queue WHERE status='pending'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let event_dated_memories = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM memories WHERE event_date IS NOT NULL AND event_date != ''",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let superseded_memories = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM memories WHERE superseded_by IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let incomplete_repairs = store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM health_events WHERE status != 'ok'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
     let embed_cache = semantic_enabled
         .then(|| file.parent().map(|p| p.join(".emb-cache")))
         .flatten()
@@ -2649,6 +3384,9 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
     }
     if duplicate_hash_groups > 0 {
         warnings.push("duplicate hash groups detected".to_string());
+    }
+    if fts_mismatch > 0 {
+        warnings.push("FTS5 row count differs from canonical docs; run doctor --fix".to_string());
     }
     if semantic_enabled && missing_vectors > 0 {
         warnings.push("docs without vectors: run import/re-embed path when available".to_string());
@@ -2665,6 +3403,20 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
                 .to_string(),
         );
     }
+    if context_noise_hits > 0 {
+        warnings.push(
+            "transport/status noise exists; context filters it without deleting source data"
+                .to_string(),
+        );
+    }
+    if pending_extractions > 0 {
+        warnings.push(
+            "raw memories await typing; use synx remember for high-value durable truth".to_string(),
+        );
+    }
+    if incomplete_repairs > 0 {
+        warnings.push("an earlier repair did not reach its verified end state".to_string());
+    }
     if semantic_enabled && embed_cache.is_none() {
         warnings.push("embedding cache missing; first semantic query may be slow".to_string());
     }
@@ -2679,16 +3431,35 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
     let (backup_path, backup_age_seconds) = backup
         .map(|(path, age)| (Some(path), Some(age)))
         .unwrap_or((None, None));
+    let health = if quick_check != "ok" {
+        "unsafe"
+    } else if fts_mismatch > 0 {
+        "repairable"
+    } else if warnings.is_empty() {
+        "healthy"
+    } else {
+        "attention"
+    }
+    .to_string();
     Ok(DoctorReport {
         db: file.display().to_string(),
+        health,
         quick_check,
         semantic_enabled,
         docs: stats.docs,
         vectors: stats.vecs,
+        fts_rows,
+        fts_mismatch,
         duplicate_hash_groups,
         missing_vectors,
         private_source_hits,
         stale_or_generated_source_hits,
+        context_noise_hits,
+        active_raw_memories,
+        pending_extractions,
+        event_dated_memories,
+        superseded_memories,
+        incomplete_repairs,
         embed_cache,
         backup_path,
         backup_age_seconds,
@@ -2698,14 +3469,21 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
             vec!["lexical", "timeline", "fresh-context", "ground"]
         },
         warnings,
+        repair: None,
     })
 }
 
 fn print_doctor_report(report: &DoctorReport) {
     println!("# Synapse Memory doctor");
-    println!("db={} quick_check={}", report.db, report.quick_check);
+    println!(
+        "db={} health={} quick_check={}",
+        report.db, report.health, report.quick_check
+    );
     println!("semantic_enabled={}", report.semantic_enabled);
-    println!("docs={} vectors={}", report.docs, report.vectors);
+    println!(
+        "docs={} vectors={} fts_rows={} fts_mismatch={}",
+        report.docs, report.vectors, report.fts_rows, report.fts_mismatch
+    );
     println!("duplicate_hash_groups={}", report.duplicate_hash_groups);
     println!("missing_vectors={}", report.missing_vectors);
     println!("private_source_hits={}", report.private_source_hits);
@@ -2713,6 +3491,12 @@ fn print_doctor_report(report: &DoctorReport) {
         "stale_or_generated_source_hits={}",
         report.stale_or_generated_source_hits
     );
+    println!("context_noise_hits={}", report.context_noise_hits);
+    println!("active_raw_memories={}", report.active_raw_memories);
+    println!("pending_extractions={}", report.pending_extractions);
+    println!("event_dated_memories={}", report.event_dated_memories);
+    println!("superseded_memories={}", report.superseded_memories);
+    println!("incomplete_repairs={}", report.incomplete_repairs);
     println!(
         "embed_cache={}",
         report.embed_cache.as_deref().unwrap_or("missing")
@@ -2732,6 +3516,124 @@ fn print_doctor_report(report: &DoctorReport) {
     for warning in &report.warnings {
         println!("warning={}", warning);
     }
+    if let Some(repair) = &report.repair {
+        println!("repair_action={}", repair.action);
+        println!("repair_backup={}", repair.backup_path);
+        println!("repair_backup_verified={}", repair.backup_verified);
+        println!("repair_quick_check_after={}", repair.quick_check_after);
+    }
+}
+
+fn safe_repair(store: &Store, file: &std::path::Path) -> Result<RepairReport> {
+    let quick_check: String = store
+        .conn
+        .query_row("PRAGMA quick_check", [], |row| row.get(0))?;
+    anyhow::ensure!(
+        quick_check == "ok",
+        "refusing repair: canonical SQLite quick_check is {quick_check}"
+    );
+    let parent = file
+        .parent()
+        .context("brain file has no parent directory")?;
+    let backup_dir = parent.join("backups");
+    std::fs::create_dir_all(&backup_dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&backup_dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let stem = file
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("brain");
+    let backup = backup_dir.join(format!("{stem}.pre-repair-{}.brainpack", now_ms()));
+    snap::export(file, &backup, 3).context("create pre-repair brainpack")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&backup, std::fs::Permissions::from_mode(0o600))?;
+    }
+
+    let verify_dir = tempfile::tempdir()?;
+    let verify_db = verify_dir.path().join("verify.db");
+    snap::import(&backup, &verify_db).context("verify pre-repair brainpack hash")?;
+    let verify_conn = rusqlite::Connection::open(&verify_db)?;
+    let backup_quick_check: String =
+        verify_conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
+    anyhow::ensure!(
+        backup_quick_check == "ok",
+        "refusing repair: backup quick_check is {backup_quick_check}"
+    );
+
+    store.conn.execute(
+        "INSERT INTO health_events(ts,event_kind,status,details_json)
+         VALUES(?1,'safe_repair','started',?2)",
+        rusqlite::params![
+            now_secs(),
+            serde_json::json!({
+                "backup_path": backup.display().to_string(),
+                "backup_verified": true
+            })
+            .to_string()
+        ],
+    )?;
+    let health_event_id = store.conn.last_insert_rowid();
+
+    let docs: i64 = store
+        .conn
+        .query_row("SELECT COUNT(*) FROM docs", [], |row| row.get(0))?;
+    let fts_rows_before = fts_indexed_rows(store)?;
+    let action = if fts_rows_before != docs {
+        store
+            .conn
+            .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('rebuild');")?;
+        "fts_rebuild"
+    } else {
+        store
+            .conn
+            .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('optimize');")?;
+        "fts_optimize"
+    };
+    store
+        .conn
+        .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('integrity-check');")?;
+    let fts_rows_after = fts_indexed_rows(store)?;
+    anyhow::ensure!(
+        fts_rows_after == docs,
+        "FTS repair incomplete: docs={docs} fts_rows={fts_rows_after}"
+    );
+    let quick_check_after: String = store
+        .conn
+        .query_row("PRAGMA quick_check", [], |row| row.get(0))?;
+    anyhow::ensure!(
+        quick_check_after == "ok",
+        "post-repair quick_check failed: {quick_check_after}"
+    );
+    let report = RepairReport {
+        backup_path: backup.display().to_string(),
+        backup_verified: true,
+        action: action.to_string(),
+        docs,
+        fts_rows_before,
+        fts_rows_after,
+        quick_check_after,
+    };
+    store.conn.execute(
+        "UPDATE health_events SET status='ok', details_json=?1 WHERE id=?2",
+        rusqlite::params![serde_json::to_string(&report)?, health_event_id],
+    )?;
+    Ok(report)
+}
+
+fn fts_indexed_rows(store: &Store) -> Result<i64> {
+    // External-content FTS tables mirror COUNT(*) from `docs`; the docsize
+    // shadow table reflects actual indexed rows and therefore detects drift.
+    store
+        .conn
+        .query_row("SELECT COUNT(*) FROM docs_fts_docsize", [], |row| {
+            row.get(0)
+        })
+        .map_err(Into::into)
 }
 
 fn doctor_source_count(store: &Store, needles: &[&str]) -> i64 {
@@ -2748,6 +3650,24 @@ fn doctor_source_count(store: &Store, needles: &[&str]) -> i64 {
         clauses.join(" OR ")
     );
     store.conn.query_row(&sql, [], |r| r.get(0)).unwrap_or(0)
+}
+
+fn doctor_context_noise_count(store: &Store) -> i64 {
+    store
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM docs
+             WHERE lower(ltrim(text)) LIKE '[telepathy]%'
+                OR lower(text) LIKE '%<task-notification>%'
+                OR lower(text) LIKE '%tool-use-id%'
+                OR (json_valid(meta) AND lower(coalesce(json_extract(meta,'$.status'),''))
+                    IN ('stale','archived','noise','generated'))
+                OR (json_valid(meta) AND lower(coalesce(json_extract(meta,'$.kind'),''))
+                    IN ('status','telepathy','notification'))",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0)
 }
 
 fn newest_backup(file: &std::path::Path) -> Option<(String, i64)> {
@@ -2809,6 +3729,18 @@ fn now_secs() -> i64 {
 mod tests {
     use super::*;
 
+    fn hit(id: i64, text: &str, meta: serde_json::Value) -> synapse_core::Hit {
+        synapse_core::Hit {
+            id,
+            uri: Some(format!("local:{id}")),
+            title: Some(format!("doc-{id}")),
+            text: text.to_string(),
+            score: 0.5,
+            meta: Some(meta),
+            ts: Some(1_783_000_000_000),
+        }
+    }
+
     #[test]
     fn fresh_input_accepts_hook_json() {
         let (prompt, cwd, project) = parse_fresh_input(
@@ -2825,5 +3757,144 @@ mod tests {
         assert_eq!(prompt, "install newest better-sqlite3");
         assert!(cwd.is_none());
         assert!(project.is_none());
+    }
+
+    #[test]
+    fn context_noise_filter_is_narrow_and_explicit() {
+        assert!(is_context_noise(&hit(
+            1,
+            "[telepathy] models_loaded status",
+            serde_json::json!({"kind":"note"})
+        )));
+        assert!(is_context_noise(&hit(
+            2,
+            "useful old note",
+            serde_json::json!({"status":"archived"})
+        )));
+        assert!(!is_context_noise(&hit(
+            3,
+            "Decision: Telepathy transport stays optional",
+            serde_json::json!({"kind":"decision","priority":"high"})
+        )));
+    }
+
+    #[test]
+    fn temporal_cues_do_not_poison_lexical_query() {
+        assert_eq!(
+            temporal_retrieval_query("Portable Synapse truth Q3 2026"),
+            "Portable Synapse truth"
+        );
+        assert_eq!(
+            temporal_retrieval_query("Welche Entscheidung vor 3 Tagen?"),
+            "Welche Entscheidung"
+        );
+        assert_eq!(
+            temporal_retrieval_query("release on 2026-07-14"),
+            "release on"
+        );
+    }
+
+    #[test]
+    fn context_budget_is_hard_cap() {
+        let source = hit(
+            1,
+            &"memory ".repeat(500),
+            serde_json::json!({"kind":"decision","priority":"critical"}),
+        );
+        let (selected, used) = bounded_context_hits(&[source], 420);
+        assert_eq!(selected.len(), 1);
+        assert!(used <= 420);
+        assert!(selected[0].text.len() < 500 * "memory ".len());
+    }
+
+    #[test]
+    fn priority_and_supersession_change_context_rank() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut store = Store::open(tmp.path()).unwrap();
+        let old = store
+            .put(&PutRequest {
+                text: "old decision".into(),
+                meta: Some(serde_json::json!({"kind":"decision","priority":"critical"})),
+                ..Default::default()
+            })
+            .unwrap();
+        let normal = store
+            .put(&PutRequest {
+                text: "normal decision".into(),
+                meta: Some(serde_json::json!({"kind":"decision","priority":"normal"})),
+                ..Default::default()
+            })
+            .unwrap();
+        let high = store
+            .put(&PutRequest {
+                text: "high decision".into(),
+                meta: Some(serde_json::json!({"kind":"decision","priority":"high"})),
+                ..Default::default()
+            })
+            .unwrap();
+        promote_doc_memory(&store.conn, old, MemoryType::Decision, 0.9, None, None).unwrap();
+        promote_doc_memory(
+            &store.conn,
+            high,
+            MemoryType::Decision,
+            0.9,
+            None,
+            Some(old),
+        )
+        .unwrap();
+        let ranked = rank_context_hits(
+            &store,
+            None,
+            vec![
+                hit(
+                    old,
+                    "old decision",
+                    serde_json::json!({"kind":"decision","priority":"critical"}),
+                ),
+                hit(
+                    normal,
+                    "normal decision",
+                    serde_json::json!({"kind":"decision","priority":"normal"}),
+                ),
+                hit(
+                    high,
+                    "high decision",
+                    serde_json::json!({"kind":"decision","priority":"high"}),
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            ranked.iter().map(|value| value.id).collect::<Vec<_>>(),
+            vec![high, normal]
+        );
+    }
+
+    #[test]
+    fn safe_repair_backs_up_before_rebuilding_fts() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("brain.db");
+        let mut store = Store::open(&db).unwrap();
+        let id = store
+            .put(&PutRequest {
+                text: "repairable search index".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        store
+            .conn
+            .execute("DELETE FROM docs_fts WHERE rowid=?1", [id])
+            .unwrap();
+
+        let report = safe_repair(&store, &db).unwrap();
+        assert_eq!(report.action, "fts_rebuild");
+        assert!(report.backup_verified);
+        assert!(std::path::Path::new(&report.backup_path).exists());
+        assert_eq!(report.docs, report.fts_rows_after);
+        let events: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM health_events", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(events, 1);
     }
 }
