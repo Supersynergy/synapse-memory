@@ -220,7 +220,7 @@ jobs:
           cd dist
           for sidecar in ./*.sha256; do sha256sum -c "$sidecar"; done
           sha256sum ./*.tar.gz ./*.zip > SHA256SUMS
-      - uses: softprops/action-gh-release@5be0e66d93ac7ed76da52eca8bb058f665c3a5fe # v2.4.2
+      - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1, Node 24
         with:
           prerelease: ${{ contains(github.ref_name, '-rc') }}
           body_path: release/synapse-memory/RELEASE-NOTES.md
