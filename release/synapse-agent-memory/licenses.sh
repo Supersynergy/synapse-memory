@@ -5,7 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
 mode="${1:-check}"
 report="$script_dir/THIRD-PARTY-LICENSES.html"
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/synapse-memory-licenses.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/synapse-agent-memory-licenses.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
 case "$mode" in
@@ -52,10 +52,10 @@ common=(
   --fail
   --manifest-path crates/synapse-cli/Cargo.toml
   --no-default-features
-  --config release/synapse-memory/about.toml
+  --config release/synapse-agent-memory/about.toml
 )
 cargo about generate "${common[@]}" --format json --output-file "$tmp/about.json"
-cargo about generate "${common[@]}" release/synapse-memory/about.hbs --output-file "$tmp/report.html"
+cargo about generate "${common[@]}" release/synapse-agent-memory/about.hbs --output-file "$tmp/report.html"
 # cargo-about preserves trailing spaces inside embedded license text. Normalize
 # the generated artifact here so `git diff --check` and `check` agree.
 perl -pi -e 's/\r$//; s/[ \t]+$//' "$tmp/report.html"

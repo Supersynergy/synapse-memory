@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
-tmp_parent="$(mktemp -d "${TMPDIR:-/tmp}/synapse-memory-fresh.XXXXXX")"
+tmp_parent="$(mktemp -d "${TMPDIR:-/tmp}/synapse-agent-memory-fresh.XXXXXX")"
 snapshot="$tmp_parent/repo"
 
 cleanup() {
@@ -29,7 +29,7 @@ git -C "$repo_root" diff --name-only -z --diff-filter=ACMRTUXB \
 
 # New release files are not visible to `git diff` until the owner stages them.
 new_paths=(
-  .github/workflows/synapse-memory-ci.yml
+  .github/workflows/synapse-agent-memory-ci.yml
   ATTRIBUTIONS.md
   Cargo.lock
   CODE_OF_CONDUCT.md
@@ -38,8 +38,9 @@ new_paths=(
   SECURITY.md
   crates/synapse-core/src/corpus.rs
   crates/synapse-learn/src/sampling.rs
-  docs/adr/0003-portable-synapse-memory-release.md
+  docs/adr/0003-portable-synapse-agent-memory-release.md
   integrations/codex
+  release/synapse-agent-memory
   release/synapse-memory
 )
 for path in "${new_paths[@]}"; do
@@ -68,6 +69,6 @@ case "$host_target" in
   *) executable=synx ;;
 esac
 SYNX_BIN="$snapshot/target-fresh/$host_target/release-hardened/$executable" \
-  release/synapse-memory/verify.sh
+  release/synapse-agent-memory/verify.sh
 
 printf 'PASS clean-HEAD snapshot plus release overlay\n'

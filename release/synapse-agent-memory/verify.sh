@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
+legacy_dir="$repo_root/release/synapse-memory"
 bin="${SYNX_BIN:-$repo_root/target/debug/synx}"
 
 fail() {
@@ -19,8 +20,9 @@ require_text() {
 
 echo "1/15 script syntax"
 bash -n "$script_dir/audit.sh" "$script_dir/licenses.sh" "$script_dir/install.sh" "$script_dir/uninstall.sh" "$script_dir/package.sh" "$script_dir/verify.sh" "$script_dir/fresh-snapshot.sh"
+sh -n "$legacy_dir/install.sh"
 if command -v pwsh >/dev/null 2>&1; then
-  pwsh -NoProfile -Command "[scriptblock]::Create((Get-Content -Raw '$script_dir/install.ps1')) | Out-Null; [scriptblock]::Create((Get-Content -Raw '$script_dir/uninstall.ps1')) | Out-Null; [scriptblock]::Create((Get-Content -Raw '$script_dir/package.ps1')) | Out-Null"
+  pwsh -NoProfile -Command "[scriptblock]::Create((Get-Content -Raw '$script_dir/install.ps1')) | Out-Null; [scriptblock]::Create((Get-Content -Raw '$script_dir/uninstall.ps1')) | Out-Null; [scriptblock]::Create((Get-Content -Raw '$script_dir/package.ps1')) | Out-Null; [scriptblock]::Create((Get-Content -Raw '$legacy_dir/install.ps1')) | Out-Null"
 fi
 
 release_version="$(tr -d '[:space:]' <"$script_dir/VERSION")"
@@ -39,6 +41,13 @@ ps_default="$(sed -n 's/^[$]DefaultVersion = "\([^"]*\)"/\1/p' "$script_dir/inst
 if git -C "$repo_root" check-ignore -q Cargo.lock; then
   fail "Cargo.lock is ignored"
 fi
+
+current_dry="$(SYNAPSE_TEST_TARGET=x86_64-unknown-linux-musl "$script_dir/install.sh" --dry-run)"
+require_text "$current_dry" "asset=synapse-agent-memory-x86_64-unknown-linux-musl.tar.gz" "current installer asset"
+require_text "$current_dry" "/synapse-agent-memory-v$release_version/" "current installer tag"
+legacy_dry="$(SYNAPSE_TEST_TARGET=x86_64-unknown-linux-musl "$script_dir/install.sh" --dry-run --version synapse-memory-v1.1.0-rc.1)"
+require_text "$legacy_dry" "asset=synapse-memory-x86_64-unknown-linux-musl.tar.gz" "legacy installer asset"
+require_text "$legacy_dry" "/synapse-memory-v1.1.0-rc.1/" "legacy installer tag"
 
 echo "2/15 locked dependency fetch"
 # cargo-about resolves the full locked workspace metadata even though this
@@ -68,7 +77,7 @@ echo "6/15 native portable binary"
 [ "$(dd if="$bin" bs=1 count=2 2>/dev/null || true)" != '#!' ] || fail "binary is a script wrapper"
 "$bin" --version
 
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/synapse-memory-verify.XXXXXX")"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/synapse-agent-memory-verify.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 home="$tmp/home"
 db="$home/.synapse/brain.db"
@@ -137,7 +146,7 @@ if SYNAPSE_BIN="$script_dir/install.sh" SYNAPSE_TARGET="$target" SYNAPSE_RELEASE
   fail "package accepted a script wrapper"
 fi
 SYNAPSE_BIN="$bin" SYNAPSE_TARGET="$target" SYNAPSE_RELEASE_OUT="$dist" SYNAPSE_ALLOW_DIRTY=1 "$script_dir/package.sh" >/dev/null
-asset="$dist/synapse-memory-$target.tar.gz"
+asset="$dist/synapse-agent-memory-$target.tar.gz"
 [ -f "$asset" ] && [ -f "$asset.sha256" ] || fail "package assets missing"
 archive_list="$(tar -tzf "$asset")"
 require_text "$archive_list" "LICENSES/FSL-1.1-ALv2.txt" "FSL license payload"
@@ -180,7 +189,7 @@ import tarfile
 source = pathlib.Path(sys.argv[1])
 destination = pathlib.Path(sys.argv[2])
 target = sys.argv[3]
-binary = f"synapse-memory-{target}/synx"
+binary = f"synapse-agent-memory-{target}/synx"
 with tarfile.open(source, "r:gz") as incoming, tarfile.open(destination, "w:gz") as outgoing:
     for member in incoming.getmembers():
         if member.name == binary:
@@ -210,4 +219,4 @@ HOME="$install_home" SYNAPSE_PREFIX="$install_prefix" SYNAPSE_DB="$install_db" "
 echo "15/15 Codex disconnect recovery adapter"
 python3 "$repo_root/integrations/codex/hooks/test_checkpoint.py"
 
-echo "PASS synapse-memory portable release"
+echo "PASS synapse-agent-memory portable release"

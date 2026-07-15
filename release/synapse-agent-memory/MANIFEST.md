@@ -3,7 +3,7 @@
 Every release asset contains exactly one top-level folder:
 
 ```text
-synapse-memory-<rust-target>/
+synapse-agent-memory-<rust-target>/
 ├── synx[.exe]
 ├── README.md
 ├── THIRD-PARTY-LICENSES.html

@@ -3,7 +3,7 @@ set -eu
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
-out_dir="${SYNAPSE_RELEASE_OUT:-$repo_root/release/dist-memory}"
+out_dir="${SYNAPSE_RELEASE_OUT:-$repo_root/release/dist-agent-memory}"
 target="${SYNAPSE_TARGET:-$(rustc -vV | sed -n 's/^host: //p')}"
 allow_dirty="${SYNAPSE_ALLOW_DIRTY:-0}"
 dry_run="${SYNAPSE_PACKAGE_DRY_RUN:-0}"
@@ -53,9 +53,9 @@ commit=$(git -C "$repo_root" rev-parse --short=12 HEAD)
 dirty=false
 [ -z "$(git -C "$repo_root" status --porcelain)" ] || dirty=true
 
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/synapse-memory-package.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/synapse-agent-memory-package.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-root="synapse-memory-$target"
+root="synapse-agent-memory-$target"
 stage="$tmp/$root"
 mkdir -p "$stage/LICENSES"
 cp "$bin" "$stage/$exe"
@@ -68,7 +68,7 @@ cp "$repo_root/LICENSES/MIT.txt" "$stage/LICENSES/MIT.txt"
 cp "$repo_root/LICENSES/FSL-1.1-ALv2.txt" "$stage/LICENSES/FSL-1.1-ALv2.txt"
 cat >"$stage/BUILD-INFO.json" <<EOF
 {
-  "product": "synapse-memory",
+  "product": "synapse-agent-memory",
   "binary": "$exe",
   "version": "$version",
   "target": "$target",
@@ -91,7 +91,7 @@ if [ "$dry_run" = 1 ]; then
 fi
 
 mkdir -p "$out_dir"
-asset="synapse-memory-$target.$ext"
+asset="synapse-agent-memory-$target.$ext"
 archive="$out_dir/$asset"
 if [ "$ext" = tar.gz ]; then
   (cd "$tmp" && tar -czf "$archive" "$root")

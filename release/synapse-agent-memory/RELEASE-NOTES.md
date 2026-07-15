@@ -1,13 +1,25 @@
-# Synapse Memory 1.1.0-rc.1
+# Synapse Agent Memory 1.1.0-rc.2
 
 Your agents forget. Your work — and the care behind it — shouldn't.
 
-This release makes long-term memory more truthful: it knows when an event
-happened, what answer replaced an older one, which memories mattered to the
-human, and whether a context pack actually helped.
+This release gives the product one clear public identity:
+`Synapse Agent Memory` at
+`https://github.com/Supersynergy/synapse-agent-memory`.
+
+It keeps the long-term truth loop from the previous candidate and makes the
+purpose easier to understand: remember what mattered, preserve why it mattered,
+and help the next agent continue without asking a person to reconstruct the work.
 
 ## What is new
 
+- Repository, workflows, release paths, tags, archives, CLI headings, README,
+  badges, and social preview now use `Synapse Agent Memory` consistently.
+- Existing `synx`, `SYNAPSE_*`, and `~/.synapse/brain.db` interfaces remain
+  compatible. The former repository URL redirects, and old installer paths have
+  minimal forwarders. Explicit old `synapse-memory-v*` versions still resolve to
+  their matching legacy archives.
+- The README now includes a code-backed feature map, 60-second explanation,
+  explicit self-healing contract, and the honest Telepathy boundary.
 - `remember --occurred-at` separates event time from capture time. Context date
   cues support ISO dates, English/German relative dates, and quarters.
 - `--priority critical|high|normal|low` adds a bounded tie-breaker;
@@ -59,13 +71,13 @@ fail with a clear message instead of pretending they worked.
 macOS or Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-agent-memory/main/release/synapse-agent-memory/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.ps1 | iex
+irm https://raw.githubusercontent.com/Supersynergy/synapse-agent-memory/main/release/synapse-agent-memory/install.ps1 | iex
 ```
 
 The release workflow publishes only after all six native runners build, execute,

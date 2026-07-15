@@ -9,5 +9,5 @@
 - Canonical template: https://fsl.software/FSL-1.1-ALv2.template.md
 
 Other workspace crates may use MIT or separate proprietary terms. See their Cargo
-metadata and license files. The portable `synapse-memory` release excludes
+metadata and license files. The portable `synapse-agent-memory` release excludes
 `synapse-engine` and bundles both applicable first-party license texts.

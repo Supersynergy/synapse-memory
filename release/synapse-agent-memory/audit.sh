@@ -3,9 +3,9 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/../.." && pwd)"
-closure="$(mktemp "${TMPDIR:-/tmp}/synapse-memory-closure.XXXXXX")"
-audit_json="$(mktemp "${TMPDIR:-/tmp}/synapse-memory-audit.XXXXXX")"
-findings="$(mktemp "${TMPDIR:-/tmp}/synapse-memory-findings.XXXXXX")"
+closure="$(mktemp "${TMPDIR:-/tmp}/synapse-agent-memory-closure.XXXXXX")"
+audit_json="$(mktemp "${TMPDIR:-/tmp}/synapse-agent-memory-audit.XXXXXX")"
+findings="$(mktemp "${TMPDIR:-/tmp}/synapse-agent-memory-findings.XXXXXX")"
 trap 'rm -f "$closure" "$audit_json" "$findings"' EXIT
 
 for tool in cargo jq grep; do

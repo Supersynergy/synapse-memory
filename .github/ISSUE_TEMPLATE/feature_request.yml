@@ -7,7 +7,7 @@ body:
     attributes:
       label: Intended surface
       options:
-        - Portable Synapse Memory
+        - Portable Synapse Agent Memory
         - Optional agent adapter
         - Engine lab
     validations:

@@ -1,4 +1,4 @@
-name: synapse-memory-ci
+name: synapse-agent-memory-ci
 
 on:
   push:
@@ -11,9 +11,10 @@ on:
       - "crates/synapse-graph/**"
       - "crates/synapse-learn/**"
       - "integrations/codex/**"
+      - "release/synapse-agent-memory/**"
       - "release/synapse-memory/**"
-      - ".github/workflows/synapse-memory-ci.yml"
-      - ".github/workflows/release-synapse-memory.yml"
+      - ".github/workflows/synapse-agent-memory-ci.yml"
+      - ".github/workflows/release-synapse-agent-memory.yml"
   pull_request:
     paths:
       - "Cargo.lock"
@@ -23,9 +24,10 @@ on:
       - "crates/synapse-graph/**"
       - "crates/synapse-learn/**"
       - "integrations/codex/**"
+      - "release/synapse-agent-memory/**"
       - "release/synapse-memory/**"
-      - ".github/workflows/synapse-memory-ci.yml"
-      - ".github/workflows/release-synapse-memory.yml"
+      - ".github/workflows/synapse-agent-memory-ci.yml"
+      - ".github/workflows/release-synapse-agent-memory.yml"
   workflow_dispatch:
 
 permissions:
@@ -72,4 +74,4 @@ jobs:
       - name: Full local release proof
         env:
           SYNX_BIN: target/release-hardened/synx
-        run: release/synapse-memory/verify.sh
+        run: release/synapse-agent-memory/verify.sh

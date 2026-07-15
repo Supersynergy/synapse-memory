@@ -8,17 +8,17 @@ members = [
 ]
 
 [workspace.metadata]
-release_surface = "synapse-memory"
+release_surface = "synapse-agent-memory"
 portable_members = [
     "synapse-cli", "synapse-core", "synapse-graph", "synapse-learn",
 ]
 
 [workspace.package]
-version = "1.1.0-rc.1"
+version = "1.1.0-rc.2"
 edition = "2024"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"
-repository = "https://github.com/Supersynergy/synapse"
+repository = "https://github.com/Supersynergy/synapse-agent-memory"
 rust-version = "1.95"
 [workspace.dependencies]
 anyhow = "1"

@@ -1,4 +1,4 @@
-# ADR 0003: Binary-first portable Synapse Memory release
+# ADR 0003: Binary-first portable Synapse Agent Memory release
 
 - Status: proposed, implemented as a release candidate
 - Date: 2026-07-13
@@ -19,7 +19,7 @@ use Unix sockets and therefore cannot define a universal Windows contract today.
 ## Decision
 
 The end-user product is `synx`: one native Rust binary and one user-owned SQLite
-database. `release/synapse-memory/` is the canonical binary package.
+database. `release/synapse-agent-memory/` is the canonical binary package.
 
 The default portable profile uses:
 
@@ -60,7 +60,8 @@ Costs:
 - Portable recall is lexical until semantic assets pass separate distribution and
   eval gates.
 - MCP and warm daemon behavior are not part of the Windows promise.
-- Existing release scripts remain legacy until redirects and old workflow cleanup
-  are approved.
+- Earlier installer URLs remain as tiny compatibility forwarders; packaging,
+  workflows, tags, archives, and active documentation use the canonical renamed
+  surface only.
 - “Better than established memory tools” requires equal-workload memory evals, not
   the current engine microbenchmarks.
