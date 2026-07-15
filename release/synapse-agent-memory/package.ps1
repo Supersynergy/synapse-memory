@@ -66,7 +66,13 @@ try {
     $Archive = Join-Path $OutDir $Asset
     Compress-Archive -LiteralPath $Stage -DestinationPath $Archive -Force
     $Hash = (Get-FileHash -Algorithm SHA256 $Archive).Hash.ToLowerInvariant()
-    "$Hash  $Asset" | Set-Content -Encoding ascii "$Archive.sha256"
+    # Keep checksum sidecars portable. Set-Content follows the host newline on
+    # Windows, while shasum -c on macOS treats a trailing CR as part of the name.
+    [IO.File]::WriteAllText(
+        "$Archive.sha256",
+        "$Hash  $Asset`n",
+        [Text.Encoding]::ASCII
+    )
     [pscustomobject]@{ archive = $Archive; checksum = "$Archive.sha256" } | ConvertTo-Json
 } finally {
     Remove-Item -LiteralPath $Temp -Recurse -Force -ErrorAction SilentlyContinue

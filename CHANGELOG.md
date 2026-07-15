@@ -6,6 +6,16 @@ portable release contract.
 
 ## [Unreleased]
 
+## [1.1.0-rc.3] - 2026-07-15
+
+### Fixed
+
+- Emit Windows checksum sidecars with LF line endings so they verify unchanged
+  with PowerShell, GNU `sha256sum`, and macOS `shasum`.
+- Normalize and re-verify every checksum sidecar in the release assembler before
+  GitHub upload.
+- Reject a stale or mismatched native binary in the full release verifier.
+
 ## [1.1.0-rc.2] - 2026-07-15
 
 ### Changed
@@ -101,7 +111,8 @@ portable release contract.
 - Retrieval is lexical in this channel. Unsupported semantic operations fail with
   a clear feature message.
 
-[Unreleased]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-agent-memory-v1.1.0-rc.2...HEAD
+[Unreleased]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-agent-memory-v1.1.0-rc.3...HEAD
+[1.1.0-rc.3]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-agent-memory-v1.1.0-rc.2...synapse-agent-memory-v1.1.0-rc.3
 [1.1.0-rc.2]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-memory-v1.1.0-rc.1...synapse-agent-memory-v1.1.0-rc.2
 [1.1.0-rc.1]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-memory-v1.0.1-rc.1...synapse-memory-v1.1.0-rc.1
 [1.0.1-rc.1]: https://github.com/Supersynergy/synapse-agent-memory/releases/tag/synapse-memory-v1.0.1-rc.1

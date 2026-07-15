@@ -4,7 +4,7 @@ set -eu
 repo="${SYNAPSE_REPO:-https://github.com/Supersynergy/synapse-agent-memory}"
 prefix="${SYNAPSE_PREFIX:-$HOME/.local}"
 db="${SYNAPSE_DB:-$HOME/.synapse/brain.db}"
-default_version="1.1.0-rc.2"
+default_version="1.1.0-rc.3"
 version=""
 dry_run=0
 

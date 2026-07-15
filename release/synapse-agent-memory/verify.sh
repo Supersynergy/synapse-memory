@@ -75,7 +75,10 @@ echo "5/15 portable RustSec closure"
 echo "6/15 native portable binary"
 [ -x "$bin" ] || fail "binary is not executable: $bin"
 [ "$(dd if="$bin" bs=1 count=2 2>/dev/null || true)" != '#!' ] || fail "binary is a script wrapper"
-"$bin" --version
+binary_version="$("$bin" --version)"
+[ "$binary_version" = "synx $release_version" ] || \
+  fail "binary version ($binary_version) != release version (synx $release_version)"
+printf '%s\n' "$binary_version"
 
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/synapse-agent-memory-verify.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT

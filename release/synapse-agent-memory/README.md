@@ -65,7 +65,7 @@ stale, archived, and notification records without deleting them.
 SYNAPSE_PREFIX="$HOME/.local" \
 SYNAPSE_DB="$HOME/.synapse/brain.db" \
 SYNAPSE_REPO="https://github.com/Supersynergy/synapse-agent-memory" \
-  release/synapse-agent-memory/install.sh --version 1.1.0-rc.2
+  release/synapse-agent-memory/install.sh --version 1.1.0-rc.3
 ```
 
 Install from a local release directory:

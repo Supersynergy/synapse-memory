@@ -4,8 +4,8 @@ No public tag until every P0 gate has a machine-readable log or artifact.
 
 ## P0 — blocks publication
 
-- [x] Workspace, CLI, `VERSION`, installer constants, release notes, and canonical
-      `synapse-agent-memory-v*` tag family agree.
+- [x] Workspace, native CLI, `VERSION`, installer constants, release notes, and
+      canonical `synapse-agent-memory-v*` tag family agree.
 - [x] Owner explicitly approves the FSL/MIT boundary through repository variable
       `SYNAPSE_RELEASE_LICENSE_APPROVED=true`.
 - [x] The release tree contains no memory database, key, checkpoint, transcript,
@@ -14,7 +14,8 @@ No public tag until every P0 gate has a machine-readable log or artifact.
       and release-diff secret scan pass.
 - [x] Native runners build and execute macOS, Linux, and Windows on x86-64 and ARM64.
 - [x] Every archive contains one native `synx`, build metadata, README, exact
-      licenses, and a SHA-256 sidecar. Script wrappers are rejected.
+      licenses, and a portable LF-only SHA-256 sidecar. Script wrappers are
+      rejected.
 - [x] Init, temporal/priority remember, supersession filtering, pass/fail feedback,
       freshness, verified backup-before-repair, backup/restore, doctor, install,
       corrupt-checksum rejection, rollback, and data-safe uninstall pass.

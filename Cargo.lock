@@ -5856,7 +5856,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-ann"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "criterion 0.8.2",
  "libc",
@@ -5871,7 +5871,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-cli"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "anyhow",
  "arrow-array",
@@ -5894,7 +5894,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-core"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "age",
  "aho-corasick",
@@ -5965,14 +5965,14 @@ dependencies = [
 
 [[package]]
 name = "synapse-engine"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "obfstr",
 ]
 
 [[package]]
 name = "synapse-fts"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "anyhow",
  "criterion 0.5.1",
@@ -5984,7 +5984,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-graph"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "regex",
  "rusqlite",
@@ -6005,7 +6005,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-learn"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "anyhow",
  "rand 0.10.2",
@@ -6017,7 +6017,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-obs"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -6034,7 +6034,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-quant"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "rand 0.10.2",
  "thiserror 2.0.18",
@@ -6042,7 +6042,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-spann"
-version = "1.1.0-rc.2"
+version = "1.1.0-rc.3"
 dependencies = [
  "anyhow",
  "criterion 0.5.1",

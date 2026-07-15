@@ -264,7 +264,16 @@ jobs:
           test "${#archives[@]}" -eq 6
           test "${#checksums[@]}" -eq 6
           cd dist
-          for sidecar in ./*.sha256; do sha256sum -c "$sidecar"; done
+          for sidecar in ./*.sha256; do
+            clean="${sidecar}.lf"
+            tr -d '\r' < "$sidecar" > "$clean"
+            mv "$clean" "$sidecar"
+            if LC_ALL=C grep -q $'\r' "$sidecar"; then
+              printf 'non-portable CR byte remains in %s\n' "$sidecar" >&2
+              exit 1
+            fi
+            sha256sum -c "$sidecar"
+          done
           sha256sum ./*.tar.gz ./*.zip > SHA256SUMS
       - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1, Node 24
         with:

@@ -1,4 +1,4 @@
-# Synapse Agent Memory 1.1.0-rc.2
+# Synapse Agent Memory 1.1.0-rc.3
 
 Your agents forget. Your work — and the care behind it — shouldn't.
 
@@ -12,6 +12,11 @@ and help the next agent continue without asking a person to reconstruct the work
 
 ## What is new
 
+- Windows checksum sidecars now use portable LF line endings. The release
+  assembler normalizes and re-verifies all six sidecars before upload, so the
+  same `*.sha256` files work with Windows, GNU `sha256sum`, and macOS `shasum`.
+- The full verifier now rejects a native binary whose embedded version differs
+  from the release contract, preventing stale build reuse.
 - Repository, workflows, release paths, tags, archives, CLI headings, README,
   badges, and social preview now use `Synapse Agent Memory` consistently.
 - Existing `synx`, `SYNAPSE_*`, and `~/.synapse/brain.db` interfaces remain
