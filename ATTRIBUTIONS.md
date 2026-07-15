@@ -3,12 +3,12 @@
 ## Rust dependencies
 
 The generated portable dependency report is
-[`release/synapse-memory/THIRD-PARTY-LICENSES.html`](release/synapse-memory/THIRD-PARTY-LICENSES.html).
+[`release/synapse-agent-memory/THIRD-PARTY-LICENSES.html`](release/synapse-agent-memory/THIRD-PARTY-LICENSES.html).
 It covers the locked six-target `synapse-cli --no-default-features` release graph
 and includes package links and license texts. Regenerate with:
 
 ```sh
-release/synapse-memory/licenses.sh generate
+release/synapse-agent-memory/licenses.sh generate
 ```
 
 ## Visual assets

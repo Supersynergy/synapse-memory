@@ -1,0 +1,2 @@
+{"title":"decision:portable-memory-default","text":"Use bounded cited Synapse Agent Memory context before agent work, then save only durable decisions and verified facts.","meta":{"kind":"decision","source":"synapse-agent-memory-sample","status":"public"}}
+{"title":"fact:version-sensitive-work","text":"For package, API, model, pricing, or version questions, refresh current evidence before trusting cached memory.","meta":{"kind":"fact","source":"synapse-agent-memory-sample","status":"public"}}

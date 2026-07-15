@@ -1,6 +1,6 @@
-# Contributing to Synapse Memory
+# Contributing to Synapse Agent Memory
 
-Synapse Memory is the release product. The wider workspace also contains engine
+Synapse Agent Memory is the release product. The wider workspace also contains engine
 research. Keep pull requests inside one clearly named surface.
 
 ## Setup
@@ -8,7 +8,7 @@ research. Keep pull requests inside one clearly named surface.
 Rust 1.95 is pinned by `rust-toolchain.toml`.
 
 ```sh
-git clone https://github.com/Supersynergy/synapse
+git clone https://github.com/Supersynergy/synapse-agent-memory
 cd synapse
 cargo test --locked -p synapse-cli --no-default-features
 ```
@@ -19,7 +19,7 @@ Portable release smoke:
 cargo build --locked --profile release-hardened \
   -p synapse-cli --no-default-features
 SYNX_BIN=target/release-hardened/synx \
-  release/synapse-memory/verify.sh
+  release/synapse-agent-memory/verify.sh
 ```
 
 That verifier requires exact local versions of `cargo-audit 0.22.2`,
@@ -52,14 +52,14 @@ contribution, you agree to license it under the existing terms of its destinatio
 Maintainers only:
 
 1. Resolve the intentional diff and run the portable verifier from a clean tree.
-2. Match workspace, CLI, `release/synapse-memory/VERSION`, installer constants,
+2. Match workspace, CLI, `release/synapse-agent-memory/VERSION`, installer constants,
    release notes, and tag versions.
 3. Approve the recorded FSL/MIT boundary with repository variable
    `SYNAPSE_RELEASE_LICENSE_APPROVED=true`.
-4. Push `synapse-memory-v<version>`; do not create another public tag family.
+4. Push `synapse-agent-memory-v<version>`; do not create another public tag family.
 5. Require all six native jobs and checksum validation before publishing.
 
-Exact gates: [release/synapse-memory/RELEASE-GATES.md](release/synapse-memory/RELEASE-GATES.md).
+Exact gates: [release/synapse-agent-memory/RELEASE-GATES.md](release/synapse-agent-memory/RELEASE-GATES.md).
 
 ## Code of Conduct
 

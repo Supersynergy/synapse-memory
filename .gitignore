@@ -38,7 +38,7 @@ graphify-out/
 
 # --- release / packaging artifacts ---
 release/dist/
-release/dist-memory/
+release/dist-agent-memory/
 dist/
 *.tar.gz
 *.tar.gz.sha256

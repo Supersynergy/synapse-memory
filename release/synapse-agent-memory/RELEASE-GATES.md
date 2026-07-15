@@ -1,24 +1,24 @@
-# Synapse Memory release gates
+# Synapse Agent Memory release gates
 
 No public tag until every P0 gate has a machine-readable log or artifact.
 
 ## P0 — blocks publication
 
 - [x] Workspace, CLI, `VERSION`, installer constants, release notes, and canonical
-      `synapse-memory-v*` tag family agree.
+      `synapse-agent-memory-v*` tag family agree.
 - [x] Owner explicitly approves the FSL/MIT boundary through repository variable
       `SYNAPSE_RELEASE_LICENSE_APPROVED=true`.
 - [x] The release tree contains no memory database, key, checkpoint, transcript,
       cache, model, generated graph, or local absolute path.
 - [x] Rustfmt, portable tests, Clippy, RustSec, dependency policy, license closure,
       and release-diff secret scan pass.
-- [x] Native runners build and execute macOS, Linux, and Windows on x86-64 and ARM64.
+- [ ] Native runners build and execute macOS, Linux, and Windows on x86-64 and ARM64.
 - [x] Every archive contains one native `synx`, build metadata, README, exact
       licenses, and a SHA-256 sidecar. Script wrappers are rejected.
 - [x] Init, temporal/priority remember, supersession filtering, pass/fail feedback,
       freshness, verified backup-before-repair, backup/restore, doctor, install,
       corrupt-checksum rejection, rollback, and data-safe uninstall pass.
-- [x] Windows TCP federation compiles; Unix-only transports fail with a useful
+- [ ] Windows TCP federation compiles; Unix-only transports fail with a useful
       feature message on unsupported targets.
 - [x] Codex forced-disconnect recovery passes without transcript storage or blind
       mutation replay.

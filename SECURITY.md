@@ -2,7 +2,7 @@
 
 ## Supported surface
 
-Security fixes target the latest Synapse Memory release and `main`. Engine-lab
+Security fixes target the latest Synapse Agent Memory release and `main`. Engine-lab
 crates are not part of the portable security promise unless a release explicitly
 names them.
 
@@ -45,6 +45,6 @@ report within 72 hours; remediation timing depends on severity and reproducibili
   canonical documents and vectors are not rewritten.
 
 Exact audit and package gates:
-[release/synapse-memory/RELEASE-GATES.md](release/synapse-memory/RELEASE-GATES.md).
+[release/synapse-agent-memory/RELEASE-GATES.md](release/synapse-agent-memory/RELEASE-GATES.md).
 Optional daemon, MCP, semantic, and hosted channels require their own threat model
 and release gate before they are supported.

@@ -14,7 +14,7 @@
 
 - [ ] `cargo fmt --all --check`
 - [ ] Changed package tests and Clippy pass with warnings denied
-- [ ] Portable-path changes pass `release/synapse-memory/verify.sh`
+- [ ] Portable-path changes pass `release/synapse-agent-memory/verify.sh`
 - [ ] Dependency changes include license/security/14-day review
 - [ ] `CHANGELOG.md` entry added when behavior or release surface changes
 - [ ] Docs updated if a public API, file format, or bench number changed

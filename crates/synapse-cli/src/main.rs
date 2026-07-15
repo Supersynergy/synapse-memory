@@ -108,7 +108,7 @@ fn optional_document_embedding(
 #[command(
     name = "synx",
     version,
-    about = "Synapse Memory — local-first memory for AI coding agents"
+    about = "Synapse Agent Memory — local-first memory for AI coding agents"
 )]
 struct Cli {
     #[arg(short = 'f', long, default_value = ".synapse/brain.db", global = true)]
@@ -563,7 +563,7 @@ enum CorpusCmd {
         #[arg(long, default_value_t = false)]
         embed: bool,
     },
-    /// Import existing Synapse docs into the corpus sidecar for real-usage evals.
+    /// Import existing Synapse Agent Memory docs into the corpus sidecar for real-usage evals.
     ImportSynapse {
         #[arg(long, default_value_t = 100)]
         limit: usize,
@@ -619,7 +619,7 @@ enum CorpusCmd {
         min_gold: usize,
         #[arg(long, default_value_t = 5)]
         rank_limit: usize,
-        /// First mirror existing Synapse docs into corpus before bootstrapping.
+        /// First mirror existing Synapse Agent Memory docs into corpus before bootstrapping.
         #[arg(long, default_value_t = false)]
         import_synapse: bool,
         /// Write editable candidates with title/source/preview.
@@ -2304,7 +2304,7 @@ fn build_prime_report(
 }
 
 fn print_prime_report(report: &PrimeReport) {
-    println!("# Synapse Memory Prime Brief");
+    println!("# Synapse Agent Memory Prime Brief");
     println!();
     println!("project: {}", report.project);
     println!("root: {}", report.root);
@@ -2916,7 +2916,7 @@ fn context_id(query: &str, mode: &str, hits: &[synapse_core::Hit]) -> String {
 }
 
 fn print_context_pack(output: &ContextOutput<'_>) {
-    println!("# Synapse Memory Context Pack");
+    println!("# Synapse Agent Memory Context Pack");
     println!();
     println!("context_id: {}", output.context_id);
     println!("query: {}", output.query);
@@ -3474,7 +3474,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
 }
 
 fn print_doctor_report(report: &DoctorReport) {
-    println!("# Synapse Memory doctor");
+    println!("# Synapse Agent Memory doctor");
     println!(
         "db={} health={} quick_check={}",
         report.db, report.health, report.quick_check

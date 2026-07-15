@@ -1,4 +1,4 @@
-# Synapse Memory feature boundary
+# Synapse Agent Memory feature boundary
 
 The portable release focuses on one outcome: a person should be able to return to
 their work with the important context intact.
@@ -26,7 +26,7 @@ do not treat missing vectors or a missing embedding cache as a health failure.
 
 ## Retrieval priority order
 
-Synapse Memory uses a bounded, evidence-first order:
+Synapse Agent Memory uses a bounded, evidence-first order:
 
 1. Remove explicit transport/status noise and memories with a newer successor.
 2. Apply event-time range when the query contains a date cue.
@@ -84,7 +84,7 @@ flowchart LR
 
 ## Honest promise
 
-Synapse Memory is built for local coding-agent continuity: exact paths, errors,
+Synapse Agent Memory is built for local coding-agent continuity: exact paths, errors,
 decisions, temporal truth, compact cited context, offline operation, and careful
 recovery. Self-healing means verified backup plus repair of rebuildable indexes;
 it never means silently rewriting or deleting canonical memory. This release does

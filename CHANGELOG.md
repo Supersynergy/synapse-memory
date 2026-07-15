@@ -1,10 +1,32 @@
 # Changelog
 
-Notable changes to the public Synapse Memory product are recorded here. Earlier
+Notable changes to the public Synapse Agent Memory product are recorded here. Earlier
 engine-lab wave notes remain available in Git history; they are not part of the
 portable release contract.
 
 ## [Unreleased]
+
+## [1.1.0-rc.2] - 2026-07-15
+
+### Changed
+
+- Renamed the public repository and product to **Synapse Agent Memory**:
+  `https://github.com/Supersynergy/synapse-agent-memory`.
+- Renamed the canonical workflow, release directory, tag family, archives, badges,
+  installer URLs, CLI headings, and documentation to `synapse-agent-memory`.
+- Rebuilt the README around a 60-second explanation, a code-backed feature map,
+  the long-term truth loop, and clearer safety and Telepathy boundaries.
+- Refreshed the social preview with the full product name and a warmer continuity
+  message.
+
+### Compatibility
+
+- Kept `synx`, `SYNAPSE_*`, and `~/.synapse/brain.db` stable so existing agents,
+  hooks, scripts, and memory files continue to work.
+- Kept the old GitHub URL as an automatic GitHub redirect and added minimal
+  forwarding installers at the former release path.
+- Installers accept both the old `synapse-memory-v*` and new
+  `synapse-agent-memory-v*` version prefixes.
 
 ## [1.1.0-rc.1] - 2026-07-14
 
@@ -79,6 +101,7 @@ portable release contract.
 - Retrieval is lexical in this channel. Unsupported semantic operations fail with
   a clear feature message.
 
-[Unreleased]: https://github.com/Supersynergy/synapse/compare/synapse-memory-v1.1.0-rc.1...HEAD
-[1.1.0-rc.1]: https://github.com/Supersynergy/synapse/compare/synapse-memory-v1.0.1-rc.1...synapse-memory-v1.1.0-rc.1
-[1.0.1-rc.1]: https://github.com/Supersynergy/synapse/releases/tag/synapse-memory-v1.0.1-rc.1
+[Unreleased]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-agent-memory-v1.1.0-rc.2...HEAD
+[1.1.0-rc.2]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-memory-v1.1.0-rc.1...synapse-agent-memory-v1.1.0-rc.2
+[1.1.0-rc.1]: https://github.com/Supersynergy/synapse-agent-memory/compare/synapse-memory-v1.0.1-rc.1...synapse-memory-v1.1.0-rc.1
+[1.0.1-rc.1]: https://github.com/Supersynergy/synapse-agent-memory/releases/tag/synapse-memory-v1.0.1-rc.1

@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $ScriptDir "..\..")).Path
-if (-not $OutDir) { $OutDir = Join-Path $RepoRoot "release\dist-memory" }
+if (-not $OutDir) { $OutDir = Join-Path $RepoRoot "release\dist-agent-memory" }
 if (-not $Target.EndsWith("-pc-windows-msvc")) { throw "package.ps1 only packages Windows MSVC targets" }
 
 $Dirty = [bool](git -C $RepoRoot status --porcelain)
@@ -30,8 +30,8 @@ if ($Bytes.Length -lt 2 -or $Bytes[0] -ne 0x4d -or $Bytes[1] -ne 0x5a) {
 $Version = ((& $Bin --version) -split "\s+")[-1]
 if ($LASTEXITCODE -ne 0 -or -not $Version) { throw "Binary did not report a version" }
 $Commit = (git -C $RepoRoot rev-parse --short=12 HEAD).Trim()
-$Temp = Join-Path ([System.IO.Path]::GetTempPath()) ("synapse-memory-package-" + [guid]::NewGuid())
-$Root = "synapse-memory-$Target"
+$Temp = Join-Path ([System.IO.Path]::GetTempPath()) ("synapse-agent-memory-package-" + [guid]::NewGuid())
+$Root = "synapse-agent-memory-$Target"
 $Stage = Join-Path $Temp $Root
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 try {
@@ -45,7 +45,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $RepoRoot "LICENSES\MIT.txt") -Destination (Join-Path $LicenseDir "MIT.txt")
     Copy-Item -LiteralPath (Join-Path $RepoRoot "LICENSES\FSL-1.1-ALv2.txt") -Destination (Join-Path $LicenseDir "FSL-1.1-ALv2.txt")
     [ordered]@{
-        product = "synapse-memory"
+        product = "synapse-agent-memory"
         binary = "synx.exe"
         version = $Version
         target = $Target
@@ -62,7 +62,7 @@ try {
     } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $Stage "BUILD-INFO.json")
 
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-    $Asset = "synapse-memory-$Target.zip"
+    $Asset = "synapse-agent-memory-$Target.zip"
     $Archive = Join-Path $OutDir $Asset
     Compress-Archive -LiteralPath $Stage -DestinationPath $Archive -Force
     $Hash = (Get-FileHash -Algorithm SHA256 $Archive).Hash.ToLowerInvariant()
