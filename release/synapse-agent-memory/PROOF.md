@@ -1,6 +1,6 @@
 # Synapse Agent Memory release proof
 
-Evidence date: 2026-07-15. Candidate version: `1.1.0-rc.2`.
+Evidence date: 2026-07-15. Candidate version: `1.1.0-rc.3`.
 
 ## Verdict
 
@@ -8,9 +8,9 @@ The local portable product path passes on macOS ARM64, including the renamed
 package, the 15-stage product/install/recovery verifier, and a real install of the
 earlier `synapse-memory-v1.1.0-rc.1` archive through the compatibility route.
 
-The renamed six-target candidate matrix passes on merge commit
-`32e49d556524a74ad163c22a066b75d1372bfb3e` in
-[GitHub Actions run 29426212399](https://github.com/Supersynergy/synapse-agent-memory/actions/runs/29426212399).
+The corrected six-target candidate matrix passes on merge commit
+`b050e200af93660ab43feb8a0dfbe7fb9b9bcb62` in
+[GitHub Actions run 29429954455](https://github.com/Supersynergy/synapse-agent-memory/actions/runs/29429954455).
 Publication remains fail-closed: the release job runs only for a matching
 `synapse-agent-memory-v*` tag after preflight, all six native executions,
 packaging, and checksum validation succeed.
@@ -37,12 +37,13 @@ Canonical workflow:
 | Codex checkpoint recovery tests | PASS |
 | ShellCheck and Actionlint | PASS |
 | Legacy RC1 download, checksum, install, init, and doctor | PASS on macOS ARM64 |
+| Cross-platform checksum sidecars | 6/6 PASS on macOS `shasum`, 0 CR bytes |
 
 The broader experimental workspace lockfile contains 745 packages and reports
-nine existing OSV advisories outside the portable closure. This candidate changes
-only the ten first-party workspace version entries in `Cargo.lock`; it adds or
-upgrades no dependency. The release gate resolves the exact portable 146-package
-closure independently and reports zero findings.
+nine existing OSV advisories outside the portable closure. RC3 adds or upgrades
+no dependency; its `Cargo.lock` delta changes only the ten first-party workspace
+version entries. The release gate resolves the exact portable 146-package closure
+independently and reports zero findings.
 
 ## Native candidate matrix
 
@@ -54,6 +55,11 @@ closure independently and reports zero findings.
 | Linux musl x86-64 | PASS |
 | Windows ARM64 | PASS, including current/legacy installer routing |
 | Windows x86-64 | PASS, including current/legacy installer routing |
+
+All six candidate archives and sidecars were downloaded unchanged from the run
+artifacts. Every sidecar contains LF-only text, all six contain zero CR bytes,
+and all six verify with macOS `shasum -a 256 -c`. This specifically closes the
+cross-platform Windows-sidecar defect found during the RC2 online download test.
 
 The first dispatch exposed an external Ubuntu ports outage before the Linux ARM64
 build. The release bootstrap now probes HTTPS, uses signed-mirror fallback only
