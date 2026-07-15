@@ -8,10 +8,12 @@ The local portable product path passes on macOS ARM64, including the renamed
 package, the 15-stage product/install/recovery verifier, and a real install of the
 earlier `synapse-memory-v1.1.0-rc.1` archive through the compatibility route.
 
-The renamed six-target candidate matrix is pending. Publication remains
-fail-closed: the release job runs only for a matching `synapse-agent-memory-v*`
-tag after preflight, all six native executions, packaging, and checksum
-validation succeed.
+The renamed six-target candidate matrix passes on merge commit
+`32e49d556524a74ad163c22a066b75d1372bfb3e` in
+[GitHub Actions run 29426212399](https://github.com/Supersynergy/synapse-agent-memory/actions/runs/29426212399).
+Publication remains fail-closed: the release job runs only for a matching
+`synapse-agent-memory-v*` tag after preflight, all six native executions,
+packaging, and checksum validation succeed.
 
 Canonical workflow:
 [release-synapse-agent-memory.yml](../../.github/workflows/release-synapse-agent-memory.yml).
@@ -26,7 +28,7 @@ Canonical workflow:
 | Exact six-target RustSec closure | 146 packages, 0 findings |
 | Cargo dependency policy | PASS |
 | First- and third-party license closure | 146/146 packages |
-| Diff-aware Semgrep and 405-commit Gitleaks scan | PASS, 0 leaks |
+| Diff-aware Semgrep and 406-commit Gitleaks scan | PASS, 0 leaks |
 | Full 15-stage product/package/install/recovery verifier | PASS on macOS ARM64 |
 | Clean detached-HEAD snapshot plus complete release overlay | PASS on macOS ARM64 |
 | Temporal parsing, event-range, supersession core regressions | PASS |
@@ -46,12 +48,17 @@ closure independently and reports zero findings.
 
 | Target | Result |
 |---|---|
-| macOS ARM64 | PENDING |
-| macOS x86-64 | PENDING |
-| Linux musl ARM64 | PENDING |
-| Linux musl x86-64 | PENDING |
-| Windows ARM64 | PENDING |
-| Windows x86-64 | PENDING |
+| macOS ARM64 | PASS |
+| macOS x86-64 | PASS |
+| Linux musl ARM64 | PASS |
+| Linux musl x86-64 | PASS |
+| Windows ARM64 | PASS, including current/legacy installer routing |
+| Windows x86-64 | PASS, including current/legacy installer routing |
+
+The first dispatch exposed an external Ubuntu ports outage before the Linux ARM64
+build. The release bootstrap now probes HTTPS, uses signed-mirror fallback only
+when needed, forces IPv4, and applies bounded timeouts and retries. The exact
+post-fix matrix then passed 6/6.
 
 The candidate matrix uses workflow dispatch, so publication is skipped by design.
 The matching tag reruns the same fail-closed workflow before creating the GitHub

@@ -12,13 +12,13 @@ No public tag until every P0 gate has a machine-readable log or artifact.
       cache, model, generated graph, or local absolute path.
 - [x] Rustfmt, portable tests, Clippy, RustSec, dependency policy, license closure,
       and release-diff secret scan pass.
-- [ ] Native runners build and execute macOS, Linux, and Windows on x86-64 and ARM64.
+- [x] Native runners build and execute macOS, Linux, and Windows on x86-64 and ARM64.
 - [x] Every archive contains one native `synx`, build metadata, README, exact
       licenses, and a SHA-256 sidecar. Script wrappers are rejected.
 - [x] Init, temporal/priority remember, supersession filtering, pass/fail feedback,
       freshness, verified backup-before-repair, backup/restore, doctor, install,
       corrupt-checksum rejection, rollback, and data-safe uninstall pass.
-- [ ] Windows TCP federation compiles; Unix-only transports fail with a useful
+- [x] Windows TCP federation compiles; Unix-only transports fail with a useful
       feature message on unsupported targets.
 - [x] Codex forced-disconnect recovery passes without transcript storage or blind
       mutation replay.
