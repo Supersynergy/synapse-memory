@@ -14,6 +14,8 @@ pub enum Error {
     DimMismatch { expected: usize, got: usize },
     #[error("not found: {0}")]
     NotFound(String),
+    #[error("refusing to store private/session source: matched {0:?} in uri/title/meta")]
+    PrivateSource(String),
     #[error("other: {0}")]
     Other(String),
     #[error("format: {0}")]

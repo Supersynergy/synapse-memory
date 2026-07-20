@@ -936,6 +936,7 @@ fn main() -> Result<()> {
                     .conn
                     .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('optimize');")?;
                 println!("fix=fts_optimize_ok");
+                reembed_missing_vectors(&store, &cli.file)?;
             }
         }
         Cmd::Fallback { query, limit } => {
@@ -2586,6 +2587,62 @@ struct DoctorReport {
     warnings: Vec<String>,
 }
 
+/// Backfill `docs_vec` rows for docs that have none (e.g. ingested via a
+/// portable/no-embed build, or a past embed failure). No-op on a build
+/// without the embed feature. Never re-touches `docs` or `docs_fts` — only
+/// adds the missing vector row, so this is safe to run repeatedly.
+#[cfg(any(feature = "static-ort", feature = "cross-linux"))]
+fn reembed_missing_vectors(store: &Store, file: &std::path::Path) -> Result<()> {
+    let missing: Vec<(i64, String)> = {
+        let mut stmt = store.conn.prepare(
+            "SELECT d.id, d.text FROM docs d LEFT JOIN docs_vec v ON d.id = v.id WHERE v.id IS NULL",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    if missing.is_empty() {
+        println!("fix=reembed_skip_no_missing_vectors");
+        return Ok(());
+    }
+    let embedder =
+        Embedder::new_with_cache::<std::path::PathBuf>(file.parent().map(|p| p.join(".emb-cache")))
+            .context("embedder init")?;
+    let (mut backfilled, mut failed) = (0i64, 0i64);
+    for chunk in missing.chunks(64) {
+        let texts: Vec<String> = chunk.iter().map(|(_, t)| t.clone()).collect();
+        match embedder.embed_batch(&texts) {
+            Ok(embs) => {
+                for ((id, _), emb) in chunk.iter().zip(embs.iter()) {
+                    if emb.len() != synapse_core::types::EMBED_DIM
+                        || !emb.iter().all(|x| x.is_finite())
+                    {
+                        failed += 1;
+                        continue;
+                    }
+                    let bytes: Vec<u8> = emb.iter().flat_map(|f| f.to_le_bytes()).collect();
+                    store.conn.execute(
+                        "INSERT OR IGNORE INTO docs_vec(id, embedding) VALUES (?1, ?2)",
+                        rusqlite::params![id, bytes],
+                    )?;
+                    backfilled += 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("warning: embed batch failed for {} docs: {e}", chunk.len());
+                failed += chunk.len() as i64;
+            }
+        }
+    }
+    println!("fix=reembed backfilled={backfilled} failed={failed}");
+    Ok(())
+}
+
+#[cfg(not(any(feature = "static-ort", feature = "cross-linux")))]
+fn reembed_missing_vectors(_store: &Store, _file: &std::path::Path) -> Result<()> {
+    println!("fix=reembed_skip_no_embed_feature");
+    Ok(())
+}
+
 fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> {
     let semantic_enabled = cfg!(any(feature = "static-ort", feature = "cross-linux"));
     let stats = store.stats()?;
@@ -2609,16 +2666,9 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
             |r| r.get(0),
         )
         .unwrap_or(0);
-    let private_source_hits = doctor_source_count(
-        store,
-        &[
-            "/.claude/projects",
-            "/.codex/sessions",
-            "/file-history/",
-            "/node_modules/",
-            "/.trash/",
-        ],
-    );
+    // Same list the write-time gate in synapse-core::db rejects on — single
+    // source of truth so this count and the gate can't drift apart.
+    let private_source_hits = doctor_source_count(store, synapse_core::db::PRIVATE_SOURCE_NEEDLES);
     let stale_or_generated_source_hits = doctor_source_count(
         store,
         &[
@@ -2760,6 +2810,13 @@ fn newest_backup(file: &std::path::Path) -> Option<(String, i64)> {
             if !is_backup_path(&path) {
                 continue;
             }
+            // A `.db` sibling of the live db is now an accepted backup extension
+            // (see is_backup_path), but the live db itself must never count as
+            // its own backup — that would always report age=0 and mask a real
+            // staleness problem.
+            if path == file {
+                continue;
+            }
             let Ok(meta) = entry.metadata() else {
                 continue;
             };
@@ -2783,7 +2840,7 @@ fn newest_backup(file: &std::path::Path) -> Option<(String, i64)> {
 fn is_backup_path(path: &std::path::Path) -> bool {
     matches!(
         path.extension().and_then(|e| e.to_str()),
-        Some("synx") | Some("brainpack") | Some("bp")
+        Some("synx") | Some("brainpack") | Some("bp") | Some("db")
     )
 }
 

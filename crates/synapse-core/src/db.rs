@@ -22,6 +22,39 @@ fn parse_meta_cell(raw: Option<String>) -> Option<serde_json::Value> {
     raw.and_then(|s| serde_json::from_str(&s).ok())
 }
 
+/// Path fragments that mark a source as private session data or vendored/junk
+/// output, never a durable memory. Kept narrow (unambiguous path fragments,
+/// not generic words) so a legitimate memory is never rejected by accident.
+/// Single source of truth: `synapse-cli`'s `doctor` reuses this same list so
+/// the write-time gate and the post-hoc doctor count can't drift apart.
+pub const PRIVATE_SOURCE_NEEDLES: &[&str] = &[
+    ".claude/projects",
+    ".codex/sessions",
+    "/file-history/",
+    "/node_modules/",
+    "/.trash/",
+];
+
+/// Returns the first matched needle if `uri`/`title`/`meta` look like private
+/// session data or vendored/junk output rather than a durable memory.
+pub fn matched_private_source(
+    uri: Option<&str>,
+    title: Option<&str>,
+    meta: Option<&str>,
+) -> Option<&'static str> {
+    let haystack = format!(
+        "{} {} {}",
+        uri.unwrap_or_default(),
+        title.unwrap_or_default(),
+        meta.unwrap_or_default()
+    )
+    .to_ascii_lowercase();
+    PRIVATE_SOURCE_NEEDLES
+        .iter()
+        .find(|needle| haystack.contains(&needle.to_ascii_lowercase()))
+        .copied()
+}
+
 /// HKDF-derive a SQLCipher key from a license signature + hardware fingerprint.
 ///
 /// Key derivation:
@@ -735,6 +768,17 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             if !e.iter().all(|x| x.is_finite()) {
                 return Err(Error::Other("embedding contains non-finite values".into()));
             }
+        }
+        // Reject private session data / vendored junk at the write boundary
+        // (both CLI direct-writes and daemon socket-writes go through here) instead
+        // of only counting it after the fact in `doctor`.
+        let meta_for_check = req.meta.as_ref().map(|m| m.to_string());
+        if let Some(needle) = matched_private_source(
+            req.uri.as_deref(),
+            req.title.as_deref(),
+            meta_for_check.as_deref(),
+        ) {
+            return Err(Error::PrivateSource(needle.to_string()));
         }
         let hash = blake3::hash(req.text.as_bytes());
         let hash_bytes = hash.as_bytes().to_vec();
@@ -2215,6 +2259,34 @@ mod tests {
             .search("sota-auto-memory", SearchMode::Lex, None, 10)
             .unwrap();
         assert!(hits.iter().any(|h| h.id == id));
+    }
+
+    #[test]
+    fn put_rejects_private_session_source() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut s = Store::open(tmp.path()).unwrap();
+        let r = PutRequest {
+            uri: Some("/Users/x/.claude/projects/foo/session.jsonl".into()),
+            text: "some session transcript line".into(),
+            ..Default::default()
+        };
+        let err = s.put(&r).unwrap_err();
+        assert!(matches!(err, Error::PrivateSource(_)), "got {err:?}");
+        assert_eq!(s.stats().unwrap().docs, 0);
+    }
+
+    #[test]
+    fn put_allows_normal_uri_mentioning_similar_words() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut s = Store::open(tmp.path()).unwrap();
+        // "claude" and "projects" alone (not the ".claude/projects" fragment)
+        // must not false-positive the gate.
+        let r = PutRequest {
+            uri: Some("decision/claude-projects-roadmap".into()),
+            text: "Claude Code projects roadmap decision".into(),
+            ..Default::default()
+        };
+        assert!(s.put(&r).is_ok());
     }
 
     #[test]
