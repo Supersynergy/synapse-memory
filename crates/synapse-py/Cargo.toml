@@ -8,7 +8,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
-repository = "https://github.com/Supersynergy/synapse"
+repository = "https://github.com/Supersynergy/synapse-agent-memory"
 description = "PyO3 bindings for synapse-core — single-file agent memory exposed to Python."
 keywords = ["python", "pyo3", "memory", "vector", "embedding"]
 

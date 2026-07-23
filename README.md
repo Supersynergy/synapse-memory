@@ -1,4 +1,4 @@
-# Synapse
+# Synapse Memory
 
 [![CI](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/ci.yml)
 [![Release](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/release-matrix.yml/badge.svg)](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/release-matrix.yml)
@@ -10,7 +10,7 @@
 
 **Local-first Context OS for AI agents. One SQLite file. No Docker. No cloud. Sub-ms vector search.**
 
-Synapse gives coding agents the best relevant context before they act — bounded, cited,
+Synapse Memory gives coding agents the best relevant context before they act — bounded, cited,
 freshness-aware, and signed. It runs entirely on your machine, ships as a single binary,
 and scales from a 5-line demo to a 294k-doc production brain.
 
@@ -18,9 +18,9 @@ and scales from a 5-line demo to a 294k-doc production brain.
 
 ---
 
-## Why Synapse
+## Why Synapse Memory
 
-| | Synapse | Mem0 | Letta (MemGPT) | Zep | Chroma | Qdrant |
+| | Synapse Memory | Mem0 | Letta (MemGPT) | Zep | Chroma | Qdrant |
 |---|---|---|---|---|---|---|
 | **Local-first, no Docker** | ✅ one binary | ❌ Python+Docker | ❌ Python+Docker | ❌ server | ⚠️ embedded | ❌ server |
 | **SQLite-backed** | ✅ one file | ❌ Postgres/Neo4j | ❌ Postgres/SQLite | ❌ Postgres | ✅ | ❌ custom |

@@ -9,6 +9,37 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+- Layering guard `scripts/check-layering.py`, wired into `just check` and CI:
+  fails if a product crate depends on an excluded experimental crate (ADR 0001).
+  Also exposed as `just check-layers`.
+- Root `ARCHITECTURE.md` with the L0 substrate / L1 domain / L2 interface overview.
+
+### Changed
+- Default workspace build is now the Context-OS product surface only:
+  `synapsed`, `synapse-cli`, `synapse-mcp`, `synapse-rerank`, `synapse-learn`,
+  `synapse-extract`, `synapse-space`, `synapse-temporal` (8 crates, down from
+  14). Advanced retrieval (`colbert`, `splade`, `fusion`), multimodal
+  (`multimodal`, `media`), and bindings (`js`) are excluded from the default
+  build and built on demand. Default `cargo check --workspace` dropped 50s -> 20s.
+  See `docs/adr/0001-context-os-product-boundary.md`.
+- Clippy now runs with `-D warnings` in the `just check` gate and CI (warning-free bar).
+
+### Removed
+- Stale `MarketSeries` type alias in `synapse-mcp` (leftover from the market cut).
+- Stale market MCP tests (`smx_candles_tool_returns_json` and the `smx_*` entries
+  in the tool-surface assertion) — those tools were already cut from `synapse-mcp`.
+  Tool-surface threshold corrected 20 -> 16 to match the real served surface.
+
+### Fixed
+- Lexical search (`synapse find`) returned the same document twice when the
+  vendored tantivy FTS index held a doc across multiple segments; the read path
+  now dedups hits by id (bumps `vendor/synapse-db`).
+- Clippy warnings: `manual_range_contains` in `synapse-extract`, `type_complexity`
+  in `synapse-cli` IO round-trip tests.
+
+---
+
 ## [2.1.0] — 2026-08-24
 
 ### Added — Production Tools
@@ -57,41 +88,6 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   for consistent snapshots without locking writers.
 - `integrity_quick` pragma replaced with `integrity_check` for broader SQLite
   compatibility.
-
----
-
-## [Unreleased]
-
-### Changed
-- Default workspace build is now the Context-OS product surface only:
-  `synapsed`, `synapse-cli`, `synapse-mcp`, `synapse-rerank`, `synapse-learn`,
-  `synapse-extract`, `synapse-space`, `synapse-temporal` (8 crates, down from
-  14). Advanced retrieval (`colbert`, `splade`, `fusion`), multimodal
-  (`multimodal`, `media`), and bindings (`js`) are excluded from the default
-  build and built on demand. Default `cargo check --workspace` dropped 50s -> 20s.
-  See `docs/adr/0001-context-os-product-boundary.md`.
-
-### Added
-- Layering guard `scripts/check-layering.py`, wired into `just check` and CI:
-  fails if a product crate depends on an excluded experimental crate (ADR 0001).
-  Also exposed as `just check-layers`.
-- Root `ARCHITECTURE.md` with the L0 substrate / L1 domain / L2 interface overview.
-
-### Changed
-- Clippy now runs with `-D warnings` in the `just check` gate and CI (warning-free bar).
-
-### Removed
-- Stale `MarketSeries` type alias in `synapse-mcp` (leftover from the market cut).
-- Stale market MCP tests (`smx_candles_tool_returns_json` and the `smx_*` entries
-  in the tool-surface assertion) — those tools were already cut from `synapse-mcp`.
-  Tool-surface threshold corrected 20 -> 16 to match the real served surface.
-
-### Fixed
-- Lexical search (`synapse find`) returned the same document twice when the
-  vendored tantivy FTS index held a doc across multiple segments; the read path
-  now dedups hits by id (bumps `vendor/synapse-db`).
-- Clippy warnings: `manual_range_contains` in `synapse-extract`, `type_complexity`
-  in `synapse-cli` IO round-trip tests.
 
 ---
 

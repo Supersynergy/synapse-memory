@@ -2,7 +2,7 @@
 
 Local-first **Context OS** for AI agents: bounded, cited, freshness-aware context with feedback. One SQLite-backed local brain — no Docker, no cloud. CLI + daemon + MCP tooling. Core promise: **best context, not biggest context.**
 
-- Crate: `synapse-core` (crates.io) · MIT · Repo: https://github.com/supersynergy/synapse
+- Crate: `synapse-core` (crates.io) · MIT · Repo: https://github.com/Supersynergy/synapse-agent-memory
 - Local: `~/BASE/projects/synapse-memory` · current branch: **`split-memory`** (WIP)
 - Runtime socket: `/tmp/synapse.sock` :9477 (SQLite fallback `~/.synapse/brain.db`)
 
