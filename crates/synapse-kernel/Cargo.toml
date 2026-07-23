@@ -1,6 +1,6 @@
 [package]
 name = "synapse-kernel"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "ns-tier hot-path kernels for Synapse: branchless, prefetch, NEON FMLAL2, AMX, cascade quant"
 license = "MIT OR Apache-2.0"
