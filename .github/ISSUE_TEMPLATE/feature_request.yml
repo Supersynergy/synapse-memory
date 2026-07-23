@@ -1,0 +1,36 @@
+name: Feature request
+description: Something you'd like Synapse to do
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Intended surface
+      options:
+        - Portable Synapse Agent Memory
+        - Optional agent adapter
+        - Engine lab
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: What would the API / CLI / format look like?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+  - type: textarea
+    id: proof
+    attributes:
+      label: Success proof
+      description: Which executable test, benchmark, or user outcome would prove this is worth shipping?

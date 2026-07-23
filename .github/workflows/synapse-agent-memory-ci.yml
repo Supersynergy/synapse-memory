@@ -1,0 +1,77 @@
+name: synapse-agent-memory-ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/synapse-cli/**"
+      - "crates/synapse-core/**"
+      - "crates/synapse-graph/**"
+      - "crates/synapse-learn/**"
+      - "integrations/codex/**"
+      - "release/synapse-agent-memory/**"
+      - "release/synapse-memory/**"
+      - ".github/workflows/synapse-agent-memory-ci.yml"
+      - ".github/workflows/release-synapse-agent-memory.yml"
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "crates/synapse-cli/**"
+      - "crates/synapse-core/**"
+      - "crates/synapse-graph/**"
+      - "crates/synapse-learn/**"
+      - "integrations/codex/**"
+      - "release/synapse-agent-memory/**"
+      - "release/synapse-memory/**"
+      - ".github/workflows/synapse-agent-memory-ci.yml"
+      - ".github/workflows/release-synapse-agent-memory.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: ""
+
+jobs:
+  portable-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          cache-on-failure: true
+      - name: Install pinned release auditors
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          cargo install cargo-deny --locked --version 0.19.9
+          cargo install cargo-about --locked --version 0.9.0 --features cli
+      - name: Portable Rust checks
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked -p synapse-cli --no-default-features
+          cargo test --locked -p synapse-learn
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib temporal::tests
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib promote_is_single_row
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib timeline_between_prefers
+          cargo clippy --locked -p synapse-cli --no-default-features -- -D warnings
+      - name: Build hardened host artifact
+        run: |
+          cargo build --locked --profile release-hardened \
+            -p synapse-cli --no-default-features
+      - name: Full local release proof
+        env:
+          SYNX_BIN: target/release-hardened/synx
+        run: release/synapse-agent-memory/verify.sh

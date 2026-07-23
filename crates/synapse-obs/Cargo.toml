@@ -1,0 +1,42 @@
+[package]
+name = "synapse-obs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Production observability for synapse-core: OpenTelemetry traces + Prometheus metrics + structured logs."
+
+[dependencies]
+anyhow.workspace = true
+# Tracing core (always present — zero-cost when feature off)
+tracing.workspace = true
+
+# Feature-gated observability stack
+opentelemetry         = { version = "0.27", optional = true }
+opentelemetry-otlp    = { version = "0.27", optional = true, features = ["grpc-tonic"] }
+opentelemetry_sdk     = { version = "0.27", optional = true, features = ["rt-tokio"] }
+opentelemetry-semantic-conventions = { version = "0.27", optional = true }
+tracing-opentelemetry = { version = "0.28", optional = true }
+tracing-subscriber    = { workspace = true, optional = true }
+
+# Prometheus metrics
+prometheus            = { version = "0.14", optional = true, features = ["process"] }
+
+# Prometheus HTTP endpoint
+axum                  = { workspace = true, optional = true }
+tokio                 = { workspace = true, optional = true }
+
+[features]
+default = []
+observability = [
+    "dep:opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-semantic-conventions",
+    "dep:tracing-opentelemetry",
+    "dep:tracing-subscriber",
+    "dep:prometheus",
+    "dep:axum",
+    "dep:tokio",
+]

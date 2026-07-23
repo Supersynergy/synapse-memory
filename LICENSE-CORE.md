@@ -1,12 +1,13 @@
 # License — synapse-core
 
-**Functional Source License 1.1 with Apache-2.0 Future Grant (FSL-1.1-Apache)**
+`synapse-core` is licensed under **FSL-1.1-ALv2**.
 
-- Source-available: you may read, audit, and run synapse-core for non-commercial purposes.
-- Commercial use requires a separate commercial license from Supersynergy.
-- **Change Date**: 2 years from each tagged release date.
-- **Change License**: On the Change Date the release converts automatically to Apache-2.0.
+- SPDX identifier: `FSL-1.1-ALv2`
+- Licensor: Maxim Supersynergy
+- Future license: Apache-2.0, effective two years after each version is made available
+- Exact bundled terms: [LICENSES/FSL-1.1-ALv2.txt](LICENSES/FSL-1.1-ALv2.txt)
+- Canonical template: https://fsl.software/FSL-1.1-ALv2.template.md
 
-SPDX-License-Identifier: FSL-1.1-Apache-2.0
-
-Full FSL-1.1 text: https://fsl.software
+Other workspace crates may use MIT or separate proprietary terms. See their Cargo
+metadata and license files. The portable `synapse-agent-memory` release excludes
+`synapse-engine` and bundles both applicable first-party license texts.

@@ -1,0 +1,287 @@
+name: release-synapse-agent-memory
+
+# Canonical user-facing release. One portable Rust `synx` binary per native target.
+# Tag and workspace version must match: synapse-agent-memory-vX.Y.Z -> X.Y.Z.
+on:
+  push:
+    tags: ["synapse-agent-memory-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: ""
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+          components: rustfmt, clippy
+      - name: Tag equals workspace version
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace_version="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "synapse-cli") | .version')"
+          release_version="$(tr -d '[:space:]' < release/synapse-agent-memory/VERSION)"
+          test "$release_version" = "$workspace_version"
+          grep -Fq "default_version=\"$release_version\"" release/synapse-agent-memory/install.sh
+          grep -Fq "\$DefaultVersion = \"$release_version\"" release/synapse-agent-memory/install.ps1
+          if test "${GITHUB_EVENT_NAME}" = push; then
+            tag_version="${GITHUB_REF_NAME#synapse-agent-memory-v}"
+            test "$tag_version" = "$workspace_version"
+          fi
+      - name: Owner-approved release license
+        env:
+          SYNAPSE_RELEASE_LICENSE_APPROVED: ${{ vars.SYNAPSE_RELEASE_LICENSE_APPROVED }}
+        run: test "$SYNAPSE_RELEASE_LICENSE_APPROVED" = "true"
+      - name: Portable compile and tests
+        run: |
+          cargo fmt --all -- --check
+          cargo test --locked -p synapse-cli --no-default-features
+          cargo test --locked -p synapse-learn
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib temporal::tests
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib promote_is_single_row
+          cargo test --locked -p synapse-core --no-default-features \
+            --features backend-rusqlite --lib timeline_between_prefers
+          cargo clippy --locked -p synapse-cli --no-default-features -- -D warnings
+          cargo clippy --locked -p synapse-learn -- -D warnings
+      - name: RustSec release gate
+        run: |
+          cargo install cargo-audit --locked --version 0.22.2
+          release/synapse-agent-memory/audit.sh
+      - name: Dependency policy and license closure
+        run: |
+          cargo install cargo-deny --locked --version 0.19.9
+          cargo install cargo-about --locked --version 0.9.0 --features cli
+          cargo deny --manifest-path crates/synapse-cli/Cargo.toml \
+            --locked --no-default-features --exclude-dev \
+            -t aarch64-apple-darwin \
+            -t x86_64-apple-darwin \
+            -t aarch64-unknown-linux-musl \
+            -t x86_64-unknown-linux-musl \
+            -t aarch64-pc-windows-msvc \
+            -t x86_64-pc-windows-msvc \
+            check --config release/synapse-agent-memory/deny.toml -D warnings
+          release/synapse-agent-memory/licenses.sh check
+      - name: Full portable release proof
+        run: |
+          cargo build --locked --profile release-hardened \
+            -p synapse-cli --no-default-features
+          SYNX_BIN=target/release-hardened/synx \
+            release/synapse-agent-memory/verify.sh
+
+  unix:
+    needs: preflight
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f /etc/apt/sources.list.d/ubuntu.sources; then
+            ubuntu_ports="https://ports.ubuntu.com/ubuntu-ports"
+            if ! curl --fail --silent --show-error --head --location \
+              --retry 2 --connect-timeout 10 --max-time 30 \
+              "$ubuntu_ports/dists/noble/InRelease" >/dev/null; then
+              # Ubuntu signatures still authenticate metadata and packages
+              # when the canonical ports service needs this HTTPS mirror.
+              ubuntu_ports="https://mirror.leaseweb.com/ubuntu-ports"
+            fi
+            sudo sed -E -i \
+              "s|https?://(azure\\.)?ports\\.ubuntu\\.com/ubuntu-ports|$ubuntu_ports|g" \
+              /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          apt_opts=(
+            -o Acquire::Retries=5
+            -o Acquire::ForceIPv4=true
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+          )
+          sudo apt-get "${apt_opts[@]}" update
+          sudo apt-get "${apt_opts[@]}" install -y --no-install-recommends musl-tools
+      - name: Build portable Rust binary
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            export CC="$GITHUB_WORKSPACE/release/synapse-agent-memory/musl-cc.sh"
+            case "${{ matrix.target }}" in
+              x86_64-unknown-linux-musl) export SYNAPSE_MUSL_CC=x86_64-linux-musl-gcc ;;
+              aarch64-unknown-linux-musl) export SYNAPSE_MUSL_CC=aarch64-linux-musl-gcc ;;
+              *) exit 1 ;;
+            esac
+          fi
+          cargo build --locked --profile release-hardened \
+            --target "${{ matrix.target }}" \
+            -p synapse-cli \
+            --no-default-features
+      - name: Native smoke
+        shell: bash
+        run: |
+          bin="target/${{ matrix.target }}/release-hardened/synx"
+          tmp="$(mktemp -d)"
+          "$bin" -f "$tmp/brain.db" init
+          old="$("$bin" -f "$tmp/brain.db" remember --kind decision --priority low --occurred-at 2026-07-13 "native release smoke old")"
+          old_id="$(printf '%s\n' "$old" | sed -n 's/.*id=\([0-9][0-9]*\).*/\1/p' | head -1)"
+          test -n "$old_id"
+          "$bin" -f "$tmp/brain.db" remember --kind decision --priority high \
+            --occurred-at 2026-07-14 --supersedes "$old_id" "native release smoke active"
+          context="$("$bin" -f "$tmp/brain.db" context "native release smoke Q3 2026" --json)"
+          grep -q '"context_id"' <<<"$context"
+          grep -q '"priority": "high"' <<<"$context"
+          grep -q '"superseded_filtered": 1' <<<"$context"
+      - name: Package and checksum
+        shell: bash
+        env:
+          SYNAPSE_BIN: target/${{ matrix.target }}/release-hardened/synx
+          SYNAPSE_TARGET: ${{ matrix.target }}
+        run: release/synapse-agent-memory/package.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: synapse-agent-memory-${{ matrix.target }}
+          path: release/dist-agent-memory/*
+          if-no-files-found: error
+
+  windows:
+    needs: preflight
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
+        with:
+          toolchain: "1.95.0"
+          targets: ${{ matrix.target }}
+      - name: Build portable Rust binary
+        shell: pwsh
+        run: |
+          cargo build --locked --profile release-hardened `
+            --target "${{ matrix.target }}" `
+            -p synapse-cli `
+            --no-default-features
+      - name: Native smoke
+        shell: pwsh
+        run: |
+          $bin = "target\${{ matrix.target }}\release-hardened\synx.exe"
+          $tmp = Join-Path $env:RUNNER_TEMP "synapse-agent-memory-smoke"
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          & $bin -f "$tmp\brain.db" init
+          $old = (& $bin -f "$tmp\brain.db" remember --kind decision --priority low --occurred-at 2026-07-13 "native release smoke old") -join "`n"
+          if ($old -notmatch 'id=(\d+)') { throw "old memory id missing" }
+          $oldId = $Matches[1]
+          & $bin -f "$tmp\brain.db" remember --kind decision --priority high --occurred-at 2026-07-14 --supersedes $oldId "native release smoke active"
+          $context = (& $bin -f "$tmp\brain.db" context "native release smoke Q3 2026" --json) -join "`n"
+          if ($context -notmatch '"context_id"') { throw "context smoke failed" }
+          if ($context -notmatch '"priority": "high"') { throw "priority smoke failed" }
+          if ($context -notmatch '"superseded_filtered": 1') { throw "supersession smoke failed" }
+      - name: Package and checksum
+        shell: pwsh
+        run: |
+          & ".\release\synapse-agent-memory\package.ps1" `
+            -Bin "target\${{ matrix.target }}\release-hardened\synx.exe" `
+            -Target "${{ matrix.target }}"
+      - name: Installer routing smoke
+        shell: pwsh
+        run: |
+          $installer = ".\release\synapse-agent-memory\install.ps1"
+          $version = (Get-Content -Raw ".\release\synapse-agent-memory\VERSION").Trim()
+          $current = (& pwsh -NoProfile -File $installer -DryRun | Out-String | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0) { throw "Current installer dry-run failed" }
+          if ($current.asset -ne "synapse-agent-memory-${{ matrix.target }}.zip") {
+            throw "Current installer selected the wrong asset: $($current.asset)"
+          }
+          if (-not $current.archive.Contains("/synapse-agent-memory-v$version/")) {
+            throw "Current installer selected the wrong tag: $($current.archive)"
+          }
+
+          $legacy = (& pwsh -NoProfile -File $installer `
+            -Version synapse-memory-v1.1.0-rc.1 -DryRun | Out-String | ConvertFrom-Json)
+          if ($LASTEXITCODE -ne 0) { throw "Legacy installer dry-run failed" }
+          if ($legacy.asset -ne "synapse-memory-${{ matrix.target }}.zip") {
+            throw "Legacy installer selected the wrong asset: $($legacy.asset)"
+          }
+          if ($legacy.archive -notmatch '/synapse-memory-v1\.1\.0-rc\.1/') {
+            throw "Legacy installer selected the wrong tag: $($legacy.archive)"
+          }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: synapse-agent-memory-${{ matrix.target }}
+          path: release/dist-agent-memory/*
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push'
+    needs: [unix, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Require six native assets and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          archives=(dist/*.tar.gz dist/*.zip)
+          checksums=(dist/*.sha256)
+          test "${#archives[@]}" -eq 6
+          test "${#checksums[@]}" -eq 6
+          cd dist
+          for sidecar in ./*.sha256; do
+            clean="${sidecar}.lf"
+            tr -d '\r' < "$sidecar" > "$clean"
+            mv "$clean" "$sidecar"
+            if LC_ALL=C grep -q $'\r' "$sidecar"; then
+              printf 'non-portable CR byte remains in %s\n' "$sidecar" >&2
+              exit 1
+            fi
+            sha256sum -c "$sidecar"
+          done
+          sha256sum ./*.tar.gz ./*.zip > SHA256SUMS
+      - uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1, Node 24
+        with:
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
+          body_path: release/synapse-agent-memory/RELEASE-NOTES.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+            dist/SHA256SUMS
