@@ -8,11 +8,15 @@
 [![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-lightgrey)](#install)
 [![Arch](https://img.shields.io/badge/arch-x86__64%20%2B%20aarch64-orange)](#install)
 
-**Local-first Context OS for AI agents. One SQLite file. No Docker. No cloud. Sub-ms vector search.**
+**A memory for your coding assistant. One file on your disk. Nothing to install, nothing to keep running, nothing sent anywhere.**
 
-Synapse Memory gives coding agents the best relevant context before they act — bounded, cited,
-freshness-aware, and signed. It runs entirely on your machine, ships as a single binary,
-and scales from a 5-line demo to a 294k-doc production brain.
+Your assistant forgets everything between sessions. Synapse Memory gives it somewhere to look
+things up: past decisions, what worked, what broke. It hands back a short relevant answer with
+a source instead of a wall of text, and it knows when a fact was true, so an old note does not
+outrank a newer one.
+
+It is one binary. Searches come back in well under a millisecond whether the file holds five
+notes or 294,000.
 
 > **Core promise:** best context, not biggest context.
 
