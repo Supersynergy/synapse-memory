@@ -100,6 +100,12 @@ install -m 0644 "$script_dir/sample/seed.jsonl" "$pkg/release/context-os/sample/
 mkdir -p "$pkg/python/migrations"
 install -m 0644 "$repo_root/python/migrations/add_rerank_log.sql" "$pkg/python/migrations/add_rerank_log.sql"
 
+mkdir -p "$pkg/integrations/codex/hooks"
+install -m 0644 "$repo_root/integrations/codex/README.md" "$pkg/integrations/codex/README.md"
+install -m 0755 "$repo_root/integrations/codex/install.py" "$pkg/integrations/codex/install.py"
+install -m 0755 "$repo_root/integrations/codex/hooks/checkpoint.py" "$pkg/integrations/codex/hooks/checkpoint.py"
+install -m 0644 "$repo_root/integrations/codex/hooks/test_checkpoint.py" "$pkg/integrations/codex/hooks/test_checkpoint.py"
+
 copy_tree() {
   rel="$1"
   mkdir -p "$pkg/$(dirname "$rel")"

@@ -7,7 +7,7 @@ on:
 
 jobs:
   bench:
-    runs-on: macos-15-arm64
+    runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -47,15 +47,15 @@ jobs:
       - name: Aggregate JSONL
         run: |
           DATE=$(date -u +%Y-%m-%d)
-          mkdir -p bench/results/$DATE
+          mkdir -p "bench/results/$DATE"
           # convert text outputs to jsonl rows  (script TBD)
-          echo "{\"date\":\"$DATE\",\"sha\":\"${{ github.sha }}\",\"suite\":\"smoke\",\"status\":\"ok\"}" > bench/results/$DATE/run.jsonl
+          echo "{\"date\":\"$DATE\",\"sha\":\"${{ github.sha }}\",\"suite\":\"smoke\",\"status\":\"ok\"}" > "bench/results/$DATE/run.jsonl"
 
       - name: Build dashboard
         working-directory: bench-dashboard
         run: |
           npm install
-          PUBLIC_BUILD_SHA=${{ github.sha }} npm run build
+          PUBLIC_BUILD_SHA="${{ github.sha }}" npm run build
 
       - name: Commit + push results
         run: |
@@ -67,7 +67,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: bench-dashboard/dist

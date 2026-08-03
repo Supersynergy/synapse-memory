@@ -6,7 +6,10 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     let upper = out.trim().to_uppercase();
 
     // Multi-table DELETE (WordPress transient cleanup) -> no-op
-    if Regex::new(r"(?i)^DELETE\s+\w+,\s*\w+\s+FROM").unwrap().is_match(&upper) {
+    if Regex::new(r"(?i)^DELETE\s+\w+,\s*\w+\s+FROM")
+        .unwrap()
+        .is_match(&upper)
+    {
         return Ok("SELECT 1".to_string());
     }
 
@@ -38,7 +41,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
             let var = cap.get(1).unwrap().as_str();
             return Ok(format!(
                 "SELECT '{}' as Variable_name, '' as Value UNION ALL SELECT 'max_allowed_packet','67108864' UNION ALL SELECT 'sql_mode','NO_ENGINE_SUBSTITUTION'",
-                var
+                sql_escape_literal(var)
             ));
         }
         return Ok("SELECT '' as Variable_name, '' as Value WHERE 0=1".to_string());
@@ -48,6 +51,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     if upper.starts_with("SHOW CREATE TABLE ") {
         if let Some(t) = out.split_whitespace().nth(3) {
             let t = t.trim_matches('`');
+            let t = sql_escape_literal(t);
             return Ok(format!(
                 "SELECT '{}' as Table, ('CREATE TABLE ' || name || '(' || group_concat(name || ' ' || type, ', ') || ')') as CreateTable FROM pragma_table_info('{}')",
                 t, t
@@ -62,6 +66,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         let words: Vec<&str> = out.split_whitespace().collect();
         if let Some(t) = words.last() {
             let t = t.trim_matches('`').trim_matches('\'');
+            let t = sql_escape_literal(t);
             return Ok(format!(
                 "SELECT \
                   name AS Field, \
@@ -82,7 +87,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
             let t = t.trim_matches('`').trim_matches('\'');
             return Ok(format!(
                 "SELECT name as Key_name, seq as Seq_in_index, 'BTREE' as Index_type FROM pragma_index_list('{}')",
-                t
+                sql_escape_literal(t)
             ));
         }
     }
@@ -96,7 +101,8 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
              0 as Index_length, 0 as Data_free, 0 as Auto_increment, \
              datetime('now') as Create_time, datetime('now') as Update_time, \
              datetime('now') as Check_time, 'utf8mb4' as Collation, NULL as Checksum, \
-             '' as Create_options, '' as Comment FROM sqlite_master WHERE type='table'".to_string()
+             '' as Create_options, '' as Comment FROM sqlite_master WHERE type='table'"
+                .to_string(),
         );
     }
 
@@ -105,6 +111,7 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         let parts: Vec<&str> = out.split_whitespace().collect();
         if parts.len() >= 2 {
             let t = parts[1].trim_matches('`');
+            let t = sql_escape_literal(t);
             return Ok(format!(
                 "SELECT \
                   name AS Field, \
@@ -127,8 +134,8 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
                 let body = out.clone();
                 let store_sql = format!(
                     "INSERT OR REPLACE INTO _mysql_proc(name, body) VALUES('{}', '{}')",
-                    name.replace("'", "''"),
-                    body.replace("'", "''")
+                    sql_escape_literal(name),
+                    sql_escape_literal(&body)
                 );
                 return Ok(store_sql);
             }
@@ -139,19 +146,28 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     if upper.starts_with("GRANT ") {
         return Ok(format!(
             "INSERT OR IGNORE INTO _mysql_grants(rule) VALUES('{}')",
-            out.replace("'", "''")
+            sql_escape_literal(&out)
         ));
     }
 
     // INSERT IGNORE -> INSERT OR IGNORE
     if upper.starts_with("INSERT IGNORE ") {
-        out = Regex::new(r"(?i)^INSERT\s+IGNORE\s+").unwrap().replace(&out, "INSERT OR IGNORE ").to_string();
+        out = Regex::new(r"(?i)^INSERT\s+IGNORE\s+")
+            .unwrap()
+            .replace(&out, "INSERT OR IGNORE ")
+            .to_string();
     }
 
     // REPLACE INTO -> INSERT OR REPLACE INTO
     if upper.starts_with("REPLACE INTO ") || upper.starts_with("REPLACE ") {
-        out = Regex::new(r"(?i)^REPLACE\s+INTO\s+").unwrap().replace(&out, "INSERT OR REPLACE INTO ").to_string();
-        out = Regex::new(r"(?i)^REPLACE\s+").unwrap().replace(&out, "INSERT OR REPLACE INTO ").to_string();
+        out = Regex::new(r"(?i)^REPLACE\s+INTO\s+")
+            .unwrap()
+            .replace(&out, "INSERT OR REPLACE INTO ")
+            .to_string();
+        out = Regex::new(r"(?i)^REPLACE\s+")
+            .unwrap()
+            .replace(&out, "INSERT OR REPLACE INTO ")
+            .to_string();
     }
 
     // ON DUPLICATE KEY UPDATE -> INSERT ... ON CONFLICT DO UPDATE SET ...
@@ -200,22 +216,46 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
     if upper.starts_with("TRUNCATE TABLE ") {
         if let Some(t) = out.split_whitespace().nth(2) {
             let t = t.trim_matches('`');
-            return Ok(format!("DELETE FROM {}", t));
+            return Ok(format!("DELETE FROM {}", sql_quote_ident(t)));
         }
     }
 
     // General MySQL -> SQLite rewrites (case-insensitive)
     out = out.replace("`", "\"");
     // All MySQL integer types with size -> INTEGER
-    out = Regex::new(r"(?i)(BIGINT|SMALLINT|TINYINT|MEDIUMINT|INT)\(\d+\)").unwrap().replace_all(&out, "INTEGER").to_string();
-    out = Regex::new(r"(?i)\bUNSIGNED\b").unwrap().replace_all(&out, "").to_string();
-    out = Regex::new(r"(?i)ENGINE\s*=\s*\w+").unwrap().replace_all(&out, "").to_string();
-    out = Regex::new(r"(?i)DEFAULT\s+CHARSET\s*(?:=\s*)?\w+").unwrap().replace_all(&out, "").to_string();
-    out = Regex::new(r"(?i)DEFAULT\s+CHARACTER\s+SET\s*(?:=\s*)?\w+").unwrap().replace_all(&out, "").to_string();
-    out = Regex::new(r"(?i)COLLATE\s*(?:=\s*)?\w+").unwrap().replace_all(&out, "").to_string();
-    out = Regex::new(r"(?i)COMMENT\s+'[^']*'").unwrap().replace_all(&out, "").to_string();
+    out = Regex::new(r"(?i)(BIGINT|SMALLINT|TINYINT|MEDIUMINT|INT)\(\d+\)")
+        .unwrap()
+        .replace_all(&out, "INTEGER")
+        .to_string();
+    out = Regex::new(r"(?i)\bUNSIGNED\b")
+        .unwrap()
+        .replace_all(&out, "")
+        .to_string();
+    out = Regex::new(r"(?i)ENGINE\s*=\s*\w+")
+        .unwrap()
+        .replace_all(&out, "")
+        .to_string();
+    out = Regex::new(r"(?i)DEFAULT\s+CHARSET\s*(?:=\s*)?\w+")
+        .unwrap()
+        .replace_all(&out, "")
+        .to_string();
+    out = Regex::new(r"(?i)DEFAULT\s+CHARACTER\s+SET\s*(?:=\s*)?\w+")
+        .unwrap()
+        .replace_all(&out, "")
+        .to_string();
+    out = Regex::new(r"(?i)COLLATE\s*(?:=\s*)?\w+")
+        .unwrap()
+        .replace_all(&out, "")
+        .to_string();
+    out = Regex::new(r"(?i)COMMENT\s+'[^']*'")
+        .unwrap()
+        .replace_all(&out, "")
+        .to_string();
     // MySQL text variants -> TEXT (SQLite handles them, but normalise for cleanliness)
-    out = Regex::new(r"(?i)\b(LONGTEXT|MEDIUMTEXT|TINYTEXT)\b").unwrap().replace_all(&out, "TEXT").to_string();
+    out = Regex::new(r"(?i)\b(LONGTEXT|MEDIUMTEXT|TINYTEXT)\b")
+        .unwrap()
+        .replace_all(&out, "TEXT")
+        .to_string();
 
     // SQLite AUTOINCREMENT requires INTEGER PRIMARY KEY.
     // Match: col <any-int-type> [NOT NULL] AUTO_INCREMENT -> col INTEGER PRIMARY KEY AUTOINCREMENT
@@ -232,7 +272,10 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
                 continue;
             }
             let trimmed_upper = trimmed.to_uppercase();
-            if trimmed_upper.starts_with("KEY ") || trimmed_upper.starts_with("INDEX ") || trimmed_upper.starts_with("FULLTEXT ") {
+            if trimmed_upper.starts_with("KEY ")
+                || trimmed_upper.starts_with("INDEX ")
+                || trimmed_upper.starts_with("FULLTEXT ")
+            {
                 // Remove trailing comma from previous line to avoid syntax error
                 if let Some(last) = cleaned.last_mut() {
                     *last = Regex::new(r",\s*$").unwrap().replace(last, "").to_string();
@@ -243,21 +286,28 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
                 has_autoincrement = true;
             }
             // Strip standalone PRIMARY KEY (single_col) when AUTOINCREMENT already implies PK
-            if has_autoincrement && Regex::new(r"(?i)^\s*PRIMARY\s+KEY\s+\(\s*\w+\s*\)\s*,?\s*$").unwrap().is_match(line) {
+            if has_autoincrement
+                && Regex::new(r"(?i)^\s*PRIMARY\s+KEY\s+\(\s*\w+\s*\)\s*,?\s*$")
+                    .unwrap()
+                    .is_match(line)
+            {
                 if let Some(last) = cleaned.last_mut() {
                     *last = Regex::new(r",\s*$").unwrap().replace(last, "").to_string();
                 }
                 continue;
             }
             // UNIQUE KEY name (cols) -> UNIQUE (cols)  (strip constraint name, SQLite syntax)
-            let fixed = Regex::new(r#"(?i)\bUNIQUE\s+KEY\s+(?:"[^"]+"|\w+)\s*(\([^)]+\))"#).unwrap().replace(line, "UNIQUE $1");
+            let fixed = Regex::new(r#"(?i)\bUNIQUE\s+KEY\s+(?:"[^"]+"|\w+)\s*(\([^)]+\))"#)
+                .unwrap()
+                .replace(line, "UNIQUE $1");
             cleaned.push(fixed.to_string());
         }
         // Fix commas: every body line must end with comma except the last before ')'
         for i in 0..cleaned.len().saturating_sub(1) {
             let curr = cleaned[i].trim();
             let next = cleaned[i + 1].trim();
-            if curr.is_empty() || curr.to_uppercase().starts_with("CREATE TABLE") || next.is_empty() {
+            if curr.is_empty() || curr.to_uppercase().starts_with("CREATE TABLE") || next.is_empty()
+            {
                 continue;
             }
             if next.starts_with(')') {
@@ -280,45 +330,104 @@ pub fn rewrite(sql: &str, _mode: &str) -> Result<String> {
         // DROP COLUMN is supported since SQLite 3.35 (bundled should be new enough)
         // ADD COLUMN is supported
         // MODIFY COLUMN is NOT supported -> no-op
-        if upper.contains("MODIFY COLUMN") || upper.contains("CHANGE COLUMN") || upper.contains("ALTER COLUMN") {
+        if upper.contains("MODIFY COLUMN")
+            || upper.contains("CHANGE COLUMN")
+            || upper.contains("ALTER COLUMN")
+        {
             return Ok("SELECT 1".to_string());
         }
         // DROP INDEX inside ALTER TABLE -> DROP INDEX
         if upper.contains("DROP INDEX") {
-            if let Some(cap) = Regex::new(r"(?i)DROP\s+INDEX\s+(\w+)").unwrap().captures(&out) {
+            if let Some(cap) = Regex::new(r"(?i)DROP\s+INDEX\s+(\w+)")
+                .unwrap()
+                .captures(&out)
+            {
                 let idx = cap.get(1).unwrap().as_str();
-                return Ok(format!("DROP INDEX IF EXISTS {}", idx));
+                return Ok(format!("DROP INDEX IF EXISTS {}", sql_quote_ident(idx)));
             }
         }
         // ADD INDEX / ADD UNIQUE INDEX -> CREATE INDEX
         if upper.contains("ADD INDEX") {
-            if let Some(cap) = Regex::new(r"(?i)ADD\s+INDEX\s+(\w+)\s*\(([^)]+)\)").unwrap().captures(&out) {
+            if let Some(cap) = Regex::new(r"(?i)ADD\s+INDEX\s+(\w+)\s*\(([^)]+)\)")
+                .unwrap()
+                .captures(&out)
+            {
                 let idx = cap.get(1).unwrap().as_str();
                 let cols = cap.get(2).unwrap().as_str();
-                let table = out.split_whitespace().nth(2).unwrap_or("").trim_matches('`');
-                return Ok(format!("CREATE INDEX IF NOT EXISTS {} ON {} ({})", idx, table, cols));
+                let table = out
+                    .split_whitespace()
+                    .nth(2)
+                    .unwrap_or("")
+                    .trim_matches('`');
+                return Ok(format!(
+                    "CREATE INDEX IF NOT EXISTS {} ON {} ({})",
+                    idx, table, cols
+                ));
             }
         }
         if upper.contains("ADD UNIQUE INDEX") {
-            if let Some(cap) = Regex::new(r"(?i)ADD\s+UNIQUE\s+INDEX\s+(\w+)\s*\(([^)]+)\)").unwrap().captures(&out) {
+            if let Some(cap) = Regex::new(r"(?i)ADD\s+UNIQUE\s+INDEX\s+(\w+)\s*\(([^)]+)\)")
+                .unwrap()
+                .captures(&out)
+            {
                 let idx = cap.get(1).unwrap().as_str();
                 let cols = cap.get(2).unwrap().as_str();
-                let table = out.split_whitespace().nth(2).unwrap_or("").trim_matches('`');
-                return Ok(format!("CREATE UNIQUE INDEX IF NOT EXISTS {} ON {} ({})", idx, table, cols));
+                let table = out
+                    .split_whitespace()
+                    .nth(2)
+                    .unwrap_or("")
+                    .trim_matches('`');
+                return Ok(format!(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS {} ON {} ({})",
+                    idx, table, cols
+                ));
             }
         }
         // ADD FULLTEXT INDEX -> CREATE INDEX (plain, no fulltext in SQLite unless FTS5)
         if upper.contains("ADD FULLTEXT INDEX") {
-            if let Some(cap) = Regex::new(r"(?i)ADD\s+FULLTEXT\s+INDEX\s+(\w+)\s*\(([^)]+)\)").unwrap().captures(&out) {
+            if let Some(cap) = Regex::new(r"(?i)ADD\s+FULLTEXT\s+INDEX\s+(\w+)\s*\(([^)]+)\)")
+                .unwrap()
+                .captures(&out)
+            {
                 let idx = cap.get(1).unwrap().as_str();
                 let cols = cap.get(2).unwrap().as_str();
-                let table = out.split_whitespace().nth(2).unwrap_or("").trim_matches('`');
-                return Ok(format!("CREATE INDEX IF NOT EXISTS {} ON {} ({})", idx, table, cols));
+                let table = out
+                    .split_whitespace()
+                    .nth(2)
+                    .unwrap_or("")
+                    .trim_matches('`');
+                return Ok(format!(
+                    "CREATE INDEX IF NOT EXISTS {} ON {} ({})",
+                    idx, table, cols
+                ));
             }
         }
     }
 
     Ok(out)
+}
+
+/// Escapes a value for safe embedding inside a single-quoted SQL string
+/// literal. Doubles any embedded single quotes so client-supplied
+/// identifiers/patterns cannot break out of the surrounding `'...'` and
+/// inject additional SQL.
+fn sql_escape_literal(s: &str) -> String {
+    s.replace('\'', "''")
+}
+
+/// Quotes a client-derived identifier (table/column/index name) for safe use
+/// in an unquoted SQL position. Plain identifiers (letters/digits/underscore)
+/// pass through unchanged, preserving existing rewrite output. Anything else
+/// -- including control characters, quotes, or statement separators -- is
+/// wrapped in double quotes with any embedded double quote doubled, so it
+/// cannot break out of the identifier position and inject additional SQL.
+fn sql_quote_ident(s: &str) -> String {
+    if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        s.to_string()
+    } else {
+        let cleaned: String = s.chars().filter(|c| !c.is_control()).collect();
+        format!("\"{}\"", cleaned.replace('"', "\"\""))
+    }
 }
 
 /// Returns the primary/unique conflict column for known WordPress tables.
@@ -328,18 +437,18 @@ fn wp_conflict_column(table: &str) -> Option<&'static str> {
     // Strip common prefixes: wp_, wp_2_, wp_3_, etc.
     let bare = Regex::new(r"^wp_(\d+_)?").unwrap().replace(table, "");
     match bare.as_ref() {
-        "options"           => Some("option_name"),
-        "usermeta"          => Some("umeta_id"),
-        "postmeta"          => Some("meta_id"),
-        "termmeta"          => Some("meta_id"),
-        "commentmeta"       => Some("meta_id"),
-        "users"             => Some("user_login"),
-        "terms"             => Some("term_id"),
-        "term_taxonomy"     => Some("term_taxonomy_id"),
-        "links"             => Some("link_id"),
-        "site"              => Some("domain"),
-        "sitemeta"          => Some("meta_key"),
-        _                   => None,
+        "options" => Some("option_name"),
+        "usermeta" => Some("umeta_id"),
+        "postmeta" => Some("meta_id"),
+        "termmeta" => Some("meta_id"),
+        "commentmeta" => Some("meta_id"),
+        "users" => Some("user_login"),
+        "terms" => Some("term_id"),
+        "term_taxonomy" => Some("term_taxonomy_id"),
+        "links" => Some("link_id"),
+        "site" => Some("domain"),
+        "sitemeta" => Some("meta_key"),
+        _ => None,
     }
 }
 
@@ -356,7 +465,10 @@ mod tests {
     fn test_on_duplicate_known_table_single_set() {
         let sql = "INSERT INTO wp_options (option_name, option_value, autoload) VALUES ('siteurl', 'http://localhost', 'yes') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)";
         let out = rw(sql);
-        assert!(out.contains("ON CONFLICT(option_name) DO UPDATE SET"), "got: {out}");
+        assert!(
+            out.contains("ON CONFLICT(option_name) DO UPDATE SET"),
+            "got: {out}"
+        );
         assert!(out.contains("excluded.option_value"), "got: {out}");
         assert!(!out.contains("ON DUPLICATE KEY"), "got: {out}");
     }
@@ -366,7 +478,10 @@ mod tests {
     fn test_on_duplicate_known_table_multi_set() {
         let sql = "INSERT INTO `wp_options` (`option_name`,`option_value`,`autoload`) VALUES ('blogname','Test Site','yes') ON DUPLICATE KEY UPDATE `option_value` = VALUES(`option_value`), `autoload` = VALUES(`autoload`)";
         let out = rw(sql);
-        assert!(out.contains("ON CONFLICT(option_name) DO UPDATE SET"), "got: {out}");
+        assert!(
+            out.contains("ON CONFLICT(option_name) DO UPDATE SET"),
+            "got: {out}"
+        );
         assert!(!out.contains("ON DUPLICATE KEY"), "got: {out}");
     }
 
@@ -375,7 +490,10 @@ mod tests {
     fn test_on_duplicate_unknown_table_fallback() {
         let sql = "INSERT INTO wp_some_plugin_table (id, val) VALUES (1, 'x') ON DUPLICATE KEY UPDATE val = VALUES(val)";
         let out = rw(sql);
-        assert!(out.to_uppercase().contains("INSERT OR REPLACE INTO"), "got: {out}");
+        assert!(
+            out.to_uppercase().contains("INSERT OR REPLACE INTO"),
+            "got: {out}"
+        );
         assert!(!out.contains("ON DUPLICATE KEY"), "got: {out}");
     }
 
@@ -392,7 +510,10 @@ mod tests {
     fn test_on_duplicate_literal_assignment() {
         let sql = "INSERT INTO wp_options (option_name, option_value) VALUES ('active_plugins', 'a:0:{}') ON DUPLICATE KEY UPDATE option_value = 'a:0:{}'";
         let out = rw(sql);
-        assert!(out.contains("ON CONFLICT(option_name) DO UPDATE SET"), "got: {out}");
+        assert!(
+            out.contains("ON CONFLICT(option_name) DO UPDATE SET"),
+            "got: {out}"
+        );
         assert!(!out.contains("ON DUPLICATE KEY"), "got: {out}");
     }
 
@@ -401,7 +522,10 @@ mod tests {
     fn test_multisite_prefixed_table() {
         let sql = "INSERT INTO wp_2_options (option_name, option_value) VALUES ('siteurl', 'http://x') ON DUPLICATE KEY UPDATE option_value = VALUES(option_value)";
         let out = rw(sql);
-        assert!(out.contains("ON CONFLICT(option_name) DO UPDATE SET"), "got: {out}");
+        assert!(
+            out.contains("ON CONFLICT(option_name) DO UPDATE SET"),
+            "got: {out}"
+        );
     }
 
     // SHOW COLUMNS must return MySQL 6-column shape
@@ -437,7 +561,10 @@ mod tests {
     fn test_insert_ignore_unaffected() {
         let sql = "INSERT IGNORE INTO wp_options (option_name, option_value) VALUES ('test', '1')";
         let out = rw(sql);
-        assert!(out.to_uppercase().contains("INSERT OR IGNORE"), "got: {out}");
+        assert!(
+            out.to_uppercase().contains("INSERT OR IGNORE"),
+            "got: {out}"
+        );
         assert!(!out.contains("ON CONFLICT"), "got: {out}");
     }
 }

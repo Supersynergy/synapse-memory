@@ -15,7 +15,8 @@ Date: 2026-05-25
 | Package content scan | PASS | Extracted tarball contains source needed for Context OS install plus release docs/scripts/sample metadata; no maintainer home paths, `brain.db`, `.emb-cache`, session dirs, `node_modules`, or `file-history` |
 | Package checksum sidecar | PASS | `release/context-os/package.sh` writes `release/dist/synapse-context-os-1.0.1-rc.1.tar.gz.sha256` next to the tarball |
 | Package manifest/build smoke | PASS | Extracted tarball: `cargo metadata --no-deps --format-version 1` and `cargo check -p synapse-cli --bins` |
-| Clean-user smoke | PASS | `release/context-os/verify.sh` completed 12/12 |
+| Clean-user smoke | PASS | `release/context-os/verify.sh` completed 13/13 on 2026-07-13 |
+| Codex crash-safe resume | PASS | 6/6 focused tests: journal, recovery, no content/output capture, prompt-injection escaping, idempotent installer |
 | Package install smoke | PASS | `SYNAPSE_VERIFY_INSTALL=1 SYNAPSE_VERIFY_BUILD_PROFILE=dev release/context-os/verify.sh` built and installed from the extracted tarball into a temporary home/prefix |
 | Rust format | PASS | `cargo fmt -p synapse-cli --check` |
 | Rust check | PASS | `cargo check -p synapse-cli` |
@@ -41,6 +42,7 @@ Covered commands:
 - `synx doctor --json`
 - `synx doctor --fix`
 - `synx db-verify`
+- Codex `PreToolUse`/`PostToolUse`/`Stop` checkpoint lifecycle and `SessionStart` recovery
 
 The doctor smoke asserts:
 
@@ -57,6 +59,7 @@ Covered release tooling:
 - `package.sh` syntax and private-data guard
 - binary package target label and complete-binary requirement
 - `verify.sh` self-check
+- packaged `integrations/codex/` installer, hook, and focused tests
 
 ## Still Required Before Declaring The Whole Thread Goal Complete
 

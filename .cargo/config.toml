@@ -5,14 +5,12 @@
 # Enable incremental only in dev; release is lto=thin which ignores incremental.
 incremental = true
 
-# scale-100M optim #1 (SPEC §6.1): target-cpu=native unlocks NEON/AVX
-# autovectorization on the build host. +5-20% across hot paths per Chroma
-# research (docs/research_chroma_m4max_2026-04-23.md #5).
-# For portable CI artefacts: `CARGO_BUILD_RUSTFLAGS="" cargo build --release`.
-rustflags = ["-C", "target-cpu=native"]
+# Distributed artifacts must use Rust's portable architecture baseline. Local
+# benchmark work can opt in explicitly with
+# `RUSTFLAGS="-C target-cpu=native" cargo bench ...` and must label its result.
 
-# Cross-compile targets: per-target rustflags REPLACES [build] rustflags,
-# so target-cpu=native (which bricks cross-compile) is cleared here.
+# Keep cross-target flags explicit so machine-local Cargo configuration cannot
+# accidentally inject a host-only CPU target into release jobs.
 [target.aarch64-unknown-linux-gnu]
 rustflags = []
 
@@ -24,6 +22,21 @@ rustflags = []
 rustflags = []
 
 [target.x86_64-unknown-linux-musl]
+rustflags = []
+
+# Native macOS release targets must not inherit `target-cpu=native`; an artifact
+# built on a newer Apple/Intel CPU still has to run on older machines of the
+# same architecture.
+[target.aarch64-apple-darwin]
+rustflags = []
+
+[target.x86_64-apple-darwin]
+rustflags = []
+
+[target.aarch64-pc-windows-msvc]
+rustflags = []
+
+[target.x86_64-pc-windows-msvc]
 rustflags = []
 
 [target.'cfg(target_os = "linux")']

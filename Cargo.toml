@@ -45,6 +45,8 @@ members = [
     "crates/synapse-extract",
     "crates/synapse-temporal",
     "crates/synapse-graph",
+    # Ebbinghaus decay + interaction-graph for context retention (2026-07-22)
+    "crates/synapse-decay",
     # End-to-end LongMemEval benchmark runner (rule + optional MLX hooks)
     "bench/longmemeval",
     # Space concept hierarchy: Space → Wing → Room → Drawer
@@ -113,13 +115,20 @@ production-members = [
     "synapse-fts", "synapse-colbert", "synapse-splade", "synapse-multimodal",
     "synapse-cluster", "synapse-obs", "synapse-media", "synapse-fusion",
     "synapse-migrate", "synapse-spann", "synapse-js", "synapse-market",
-    "synapse-wal", "synapse-seg", "synapse-ultra",
+    "synapse-ultra",
     "synapse-mysql", "synapse-pg", "synapsql",
 ]
 # Experimental — moved to experimental/ (stubs, 0 tests, or standalone workspace)
 # Build opt-in: `cd experimental && cargo build -p <name>`
 experimental-members = [
     "synapse-edge", "synapse-rank", "synapse-embed-gpu",
+]
+# Stub crates — still compiled as part of the default workspace (in [workspace]
+# members above), but the implementation is a ~17-line TODO scaffold with no
+# real functionality yet. See KNOWN-ISSUES.md ("synapse-ann / synapse-wal /
+# synapse-seg — stub crates"). Do NOT treat these as production-ready.
+stub-members = [
+    "synapse-wal", "synapse-seg",
 ]
 
 [workspace.package]
@@ -135,6 +144,7 @@ thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sonic-rs = "0.5"
 rmp-serde = "1"
 rusqlite = { version = "0.39", features = ["bundled", "blob", "backup", "functions"] }
 sqlite-vec = "0.1"

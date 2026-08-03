@@ -15,6 +15,8 @@
   needed to build `synx`, `synapsed`, and `synapse-mcp` from source.
 - `python/migrations/add_rerank_log.sql` — build-time migration included by
   `synapse-rerank`.
+- `integrations/codex/` — reversible Codex hook installer, crash-safe
+  checkpoint journal, recovery injection, and focused tests.
 - Optional `bin/synx`, `bin/synapsed`, and `bin/synapse-mcp` only when building
   a target-labelled binary package with `SYNAPSE_PACKAGE_INCLUDE_BIN=1`.
 
@@ -23,6 +25,7 @@
 - `~/.synapse/brain.db`
 - `.synapse/.emb-cache`
 - Claude/Codex session logs
+- Synapse checkpoint journals from `~/.synapse/checkpoints/`
 - file-history snapshots
 - node_modules or generated benchmark dumps
 - private memories, decisions, or known-facts from the maintainer machine

@@ -14,6 +14,7 @@ Synapse is a local-first Context OS for coding agents:
 - `synx fresh-context` adds version/API freshness from local manifests.
 - `synx prime` creates a repo startup brief for a new agent session.
 - `synx doctor --fix` checks health, source hygiene, backup age, and performs safe FTS optimization.
+- Optional Codex hooks preserve a compact resume pointer across interrupted sessions without storing transcript or tool-output bodies.
 
 The core product line is: best context, not biggest context.
 
@@ -128,6 +129,21 @@ synx -f "$HOME/.synapse/brain.db" context "current repo task" --mode coding
 synx -f "$HOME/.synapse/brain.db" fresh-context --cwd . --prompt "latest package API changes"
 synx -f "$HOME/.synapse/brain.db" doctor --fix
 ```
+
+## Optional Codex Crash-Safe Resume
+
+Preview and install the reversible Codex hooks:
+
+```bash
+python3 integrations/codex/install.py --dry-run
+python3 integrations/codex/install.py install
+```
+
+Restart Codex once after installation. The hook keeps an append-only,
+`fsync`-ed journal under `~/.synapse/checkpoints/`. It stores execution state,
+Git HEAD, and changed path names—not transcript, tool output, file bodies, or
+command arguments. A later `SessionStart` injects only a recent unfinished
+checkpoint and tells the agent to inspect current state before replaying work.
 
 When a returned memory was useful:
 

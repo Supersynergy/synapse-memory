@@ -1,5 +1,5 @@
 use super::LiveTick;
-use serde_json::Value;
+use sonic_rs::{JsonContainerTrait, JsonValueTrait, Value};
 
 /// Wire format selector for `WebSocketTickStream`.
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ impl Parser {
 }
 
 fn parse_generic(raw: &str) -> Option<LiveTick> {
-    let v: Value = serde_json::from_str(raw).ok()?;
+    let v: Value = sonic_rs::from_str(raw).ok()?;
     let ts = v["ts"].as_i64()?;
     let price = v["price"].as_f64()?;
     let qty = v["qty"].as_f64().unwrap_or(0.0);
@@ -36,9 +36,9 @@ fn parse_generic(raw: &str) -> Option<LiveTick> {
 
 fn parse_polygon_v3(raw: &str) -> Option<LiveTick> {
     // Polygon sends an array: [{"ev":"T","sym":"AAPL","t":1234567890000,"p":150.0,"s":100,...}]
-    let v: Value = serde_json::from_str(raw).ok()?;
+    let v: Value = sonic_rs::from_str(raw).ok()?;
     let arr = v.as_array()?;
-    let obj = arr.first()?;
+    let obj = arr.iter().next()?;
     if obj["ev"].as_str() != Some("T") {
         return None;
     }
@@ -50,7 +50,7 @@ fn parse_polygon_v3(raw: &str) -> Option<LiveTick> {
 
 fn parse_tradier_v1(raw: &str) -> Option<LiveTick> {
     // Tradier: {"type":"trade","symbol":"AAPL","price":150.0,"size":100,"timestamp":1234567890}
-    let v: Value = serde_json::from_str(raw).ok()?;
+    let v: Value = sonic_rs::from_str(raw).ok()?;
     if v["type"].as_str() != Some("trade") {
         return None;
     }
@@ -62,12 +62,12 @@ fn parse_tradier_v1(raw: &str) -> Option<LiveTick> {
 
 fn parse_kraken_v2(raw: &str) -> Option<LiveTick> {
     // Kraken v2: {"channel":"trade","data":[{"price":50000.0,"qty":0.001,"timestamp":"2024-..."}]}
-    let v: Value = serde_json::from_str(raw).ok()?;
+    let v: Value = sonic_rs::from_str(raw).ok()?;
     if v["channel"].as_str() != Some("trade") {
         return None;
     }
     let data = v["data"].as_array()?;
-    let trade = data.first()?;
+    let trade = data.iter().next()?;
     // timestamp is ISO8601 string; parse as unix seconds via simple millis field fallback
     let ts = if let Some(ms) = trade["timestamp_ms"].as_i64() {
         ms / 1000

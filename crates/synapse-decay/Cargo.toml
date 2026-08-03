@@ -1,0 +1,11 @@
+[package]
+name = "synapse-decay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Ebbinghaus-style memory decay scoring + interaction-graph for context retention. Pure, no IO."
+
+[dependencies]
+serde = { workspace = true }

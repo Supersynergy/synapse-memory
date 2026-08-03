@@ -70,15 +70,17 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## Linux amd64 bench results" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "=== raw_ann_microbench ===" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/raw_ann_linux_amd64.txt >> $GITHUB_STEP_SUMMARY
-          echo "=== fts_compare ===" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/fts_compare_linux_amd64.txt >> $GITHUB_STEP_SUMMARY
-          echo "=== rrf_neon ===" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/rrf_neon_linux_amd64.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Linux amd64 bench results"
+            echo '```'
+            echo "=== raw_ann_microbench ==="
+            sed -n '1,200p' /tmp/raw_ann_linux_amd64.txt
+            echo "=== fts_compare ==="
+            sed -n '1,200p' /tmp/fts_compare_linux_amd64.txt
+            echo "=== rrf_neon ==="
+            sed -n '1,200p' /tmp/rrf_neon_linux_amd64.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   bench-linux-arm64:
     name: bench / linux-arm64
@@ -132,12 +134,14 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## Linux arm64 bench results" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "=== raw_ann_microbench ===" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/raw_ann_linux_arm64.txt >> $GITHUB_STEP_SUMMARY
-          echo "=== fts_compare ===" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/fts_compare_linux_arm64.txt >> $GITHUB_STEP_SUMMARY
-          echo "=== rrf_neon ===" >> $GITHUB_STEP_SUMMARY
-          cat /tmp/rrf_neon_linux_arm64.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Linux arm64 bench results"
+            echo '```'
+            echo "=== raw_ann_microbench ==="
+            sed -n '1,200p' /tmp/raw_ann_linux_arm64.txt
+            echo "=== fts_compare ==="
+            sed -n '1,200p' /tmp/fts_compare_linux_arm64.txt
+            echo "=== rrf_neon ==="
+            sed -n '1,200p' /tmp/rrf_neon_linux_arm64.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -16,8 +16,11 @@ Date: 2026-05-25
   against private local data, session logs, embedding caches, and brain database
   files. Local binaries are included only with `SYNAPSE_PACKAGE_INCLUDE_BIN=1`
   and produce target-labelled binary tarballs.
-- `release/context-os/verify.sh`: 12-step release smoke for clean-user Context
+- `release/context-os/verify.sh`: 13-step release smoke for clean-user Context
   OS behavior, including optional install-from-tarball verification.
+- `integrations/codex/`: reversible crash-safe resume hooks with append-only,
+  fsynced checkpoints, atomic latest snapshots, content-minimal recovery hints,
+  and prompt-injection coverage for untrusted path names.
 
 ## Verified
 
@@ -33,6 +36,8 @@ Date: 2026-05-25
   files without loading/enabling them.
 - Binary package dry-run is strict: all required binaries must exist and the
   package name includes the target label.
+- Codex recovery integration passes 6 focused tests and is included in the
+  source package without any local checkpoint journals.
 - LongMemEval-S no-download baseline is published:
   `cargo run -p longmemeval --no-default-features -- --rerank-top 0` reports
   R@5=0.640, R@10=0.640, and 0 errors on the 50-question subset.

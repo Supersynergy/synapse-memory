@@ -18,7 +18,7 @@
 - Per-customer-watermarked Binary mit BLAKE3 + minisign sidecar — traitor-tracing built-in.
 - MCP-native: drop-in für Claude Code, Cursor, Continue.
 
-> "Customer quote — placeholder" — <Customer Logo Strip Placeholder>
+> No customer references yet — seeking design partners.
 
 ## CTA
 

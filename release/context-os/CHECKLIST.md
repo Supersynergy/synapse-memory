@@ -22,6 +22,10 @@
 - [ ] `synx fresh-context --cwd <repo> --prompt <task> --no-registry` emits a freshness block from local manifests.
 - [ ] `synx doctor --json` reports private/stale source hit counts and backup age.
 - [ ] `synx doctor --fix` is safe on a temporary database.
+- [ ] `python3 integrations/codex/hooks/test_checkpoint.py` passes the
+      disconnect/recovery, content-minimization, prompt-injection, and installer gates.
+- [ ] Extracted package contains `integrations/codex/install.py`; install and
+      uninstall preserve unrelated Codex hooks.
 - [ ] Package scan rejects maintainer-only paths, brain databases, embedding caches, session logs, `file-history`, and `node_modules`.
 - [ ] Source package is buildable from an extracted tarball; binary package requires `SYNAPSE_PACKAGE_INCLUDE_BIN=1`, a target label, and complete binaries.
 
@@ -37,5 +41,6 @@
 - No bundled maintainer brain data.
 - No default graph/OLAP/TSDB/Surreal-parity path.
 - No Claude/Codex hook history in the package.
+- No local Synapse checkpoint journals in the package.
 - No root service install.
 - No MLX/LLM extraction claim until quality baseline exists.

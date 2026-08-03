@@ -7,6 +7,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 mod livequery;
 mod metrics;
 mod proto;
+mod wal_reader;
 
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -15,7 +16,7 @@ use rusqlite::params;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex as PlMutex;
@@ -28,6 +29,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tracing::{error, info, warn};
+use wal_reader::{DEFAULT_CACHE_KIB, DEFAULT_IDLE_MS, DEFAULT_MMAP_BYTES, ReaderBudget, SqlReader};
 
 /// Idle timeout between requests on a kept-alive socket. Prevents fd leaks
 /// from clients that connect but never send (or never disconnect cleanly).
@@ -85,6 +87,18 @@ struct Cli {
     /// If not set and onnx feature is active, BGE-reranker-v2-m3 is auto-downloaded on first use.
     #[arg(long)]
     rerank_model: Option<PathBuf>,
+    /// Emit a read-only WAL observation and exit. Never checkpoints or mutates the DB.
+    #[arg(long, default_value_t = false)]
+    wal_observe: bool,
+    /// SQL reader mmap budget in bytes (0..1 GiB).
+    #[arg(long, default_value_t = DEFAULT_MMAP_BYTES)]
+    sql_reader_mmap_bytes: u64,
+    /// SQL reader SQLite page-cache budget in KiB (1..65536).
+    #[arg(long, default_value_t = DEFAULT_CACHE_KIB)]
+    sql_reader_cache_kib: i64,
+    /// Drop the idle read-only SQL connection after this many milliseconds.
+    #[arg(long, default_value_t = DEFAULT_IDLE_MS)]
+    sql_reader_idle_ms: u64,
 }
 
 struct State {
@@ -100,8 +114,8 @@ struct State {
     cache_path: PathBuf,
     snap_dir: PathBuf,
     max_put_bytes: usize,
-    /// Read-only PRAGMA-tuned connection for Sql op. Avoid per-call open/PRAGMA overhead.
-    sql_conn: PlMutex<Option<rusqlite::Connection>>,
+    /// One lazy, read-only, budgeted SQL connection. It cannot write or checkpoint.
+    sql_reader: PlMutex<SqlReader>,
     /// Hot read-through cache for repeated user/agent queries. Cleared on writes.
     query_cache: PlMutex<QueryCacheMap>,
     /// TTL cache for stats; COUNT over docs_vec is measurable at 178k+ vecs.
@@ -252,6 +266,16 @@ async fn main() -> Result<()> {
         )
         .init();
     let cli = Cli::parse();
+    if cli.wal_observe {
+        let observation = wal_reader::observe(&cli.file)?;
+        println!("{}", serde_json::to_string(&observation)?);
+        return Ok(());
+    }
+    let reader_budget = ReaderBudget::new(
+        cli.sql_reader_mmap_bytes,
+        cli.sql_reader_cache_kib,
+        cli.sql_reader_idle_ms,
+    )?;
     if let Some(p) = cli.file.parent() {
         std::fs::create_dir_all(p).ok();
     }
@@ -285,25 +309,6 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(&snap_dir).ok();
     let reranker: Box<dyn Reranker> = build_reranker(&cli.rerank_model);
     let stats_ttl = env_duration_ms("SYNAPSE_STATS_TTL_MS", DEFAULT_STATS_TTL_MS);
-    // Pre-open PRAGMA-tuned read-only Sql conn for analytics ops.
-    let sql_conn = {
-        use rusqlite::{Connection, OpenFlags};
-        match Connection::open_with_flags(
-            &cli.file,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
-        ) {
-            Ok(c) => {
-                let _ = c.pragma_update(None, "mmap_size", 1_073_741_824_i64);
-                let _ = c.pragma_update(None, "cache_size", -262_144_i64);
-                let _ = c.pragma_update(None, "temp_store", 2_i64);
-                Some(c)
-            }
-            Err(e) => {
-                tracing::warn!("sql_conn pre-open failed: {e}");
-                None
-            }
-        }
-    };
     let state = Arc::new(State {
         store: PlMutex::new(store),
         ndarray_idx,
@@ -314,13 +319,14 @@ async fn main() -> Result<()> {
         cache_path,
         snap_dir,
         max_put_bytes: cli.max_put_bytes,
-        sql_conn: PlMutex::new(sql_conn),
+        sql_reader: PlMutex::new(SqlReader::new(cli.file.clone(), reader_budget)),
         query_cache: PlMutex::new(HashMap::new()),
         stats_cache: PlMutex::new(None),
         stats_ttl,
         embed_cache: PlMutex::new(HashMap::new()),
         live_broker: livequery::LiveBroker::new(256),
     });
+    spawn_sql_reader_reaper(Arc::downgrade(&state), reader_budget.reaper_period());
 
     // Spawn LiveQuery WebSocket server (P2.2).
     let live_broker_clone = state.live_broker.clone();
@@ -412,6 +418,33 @@ fn spawn_turbo_warm(state: Arc<State>, db_path: PathBuf) {
             }
             Ok(Err(e)) => warn!("background turbo warmup failed: {e}"),
             Err(e) => warn!("background turbo warmup task failed: {e}"),
+        }
+    });
+}
+
+/// A Weak-held task cannot keep the daemon State alive. It only drops an idle
+/// read-only connection; it never checkpoints or otherwise mutates SQLite.
+fn spawn_sql_reader_reaper(state: Weak<State>, period: Duration) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(period);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            let Some(state) = state.upgrade() else {
+                return;
+            };
+            let reaped = {
+                let mut reader = state.sql_reader.lock();
+                if reader.reap_if_idle() {
+                    Some(reader.snapshot())
+                } else {
+                    None
+                }
+            };
+            if let Some(snapshot) = reaped {
+                info!(?snapshot, "idle read-only SQL reader reaped");
+            }
         }
     });
 }
@@ -779,16 +812,16 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 return Response::Err(format!("tenant db not found: {path}"));
             }
             let result: std::result::Result<(), String> = tokio::task::block_in_place(|| {
-                let mut g = state.sql_conn.lock();
-                if let Some(conn) = g.as_mut() {
+                let mut reader = state.sql_reader.lock();
+                reader.with_connection_string("use_tenant", |conn| {
                     conn.execute("DETACH DATABASE tenant", []).ok();
                     conn.execute(
                         &format!("ATTACH DATABASE 'file:{}?mode=ro' AS tenant", path),
                         [],
                     )
                     .map_err(|e| e.to_string())?;
-                }
-                Ok(())
+                    Ok(())
+                })
             });
             match result {
                 Ok(()) => Response::Ok,
@@ -820,58 +853,60 @@ async fn dispatch(state: &State, req: Request) -> Response {
             // Read-only raw SQL via pooled PRAGMA-tuned conn (avoid per-call open + PRAGMA cost).
             let result: Result<SqlResultRows, String> = tokio::task::block_in_place(|| {
                 use rusqlite::types::ValueRef;
-                let guard = state.sql_conn.lock();
-                let conn = guard
-                    .as_ref()
-                    .ok_or_else(|| "sql_conn unavailable".to_string())?;
-                let mut stmt = conn.prepare_cached(&query).map_err(|e| e.to_string())?;
-                let cols: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
-                let n_cols = cols.len();
-                let rusq_params: Vec<rusqlite::types::Value> = params
-                    .iter()
-                    .map(|v| match v {
-                        serde_json::Value::Null => rusqlite::types::Value::Null,
-                        serde_json::Value::Bool(b) => rusqlite::types::Value::Integer(*b as i64),
-                        serde_json::Value::Number(n) => {
-                            if let Some(i) = n.as_i64() {
-                                rusqlite::types::Value::Integer(i)
-                            } else if let Some(f) = n.as_f64() {
-                                rusqlite::types::Value::Real(f)
-                            } else {
-                                rusqlite::types::Value::Null
+                let mut reader = state.sql_reader.lock();
+                reader.with_connection_string("raw_sql", |conn| {
+                    let mut stmt = conn.prepare_cached(&query).map_err(|e| e.to_string())?;
+                    let cols: Vec<String> =
+                        stmt.column_names().iter().map(|s| s.to_string()).collect();
+                    let n_cols = cols.len();
+                    let rusq_params: Vec<rusqlite::types::Value> = params
+                        .iter()
+                        .map(|v| match v {
+                            serde_json::Value::Null => rusqlite::types::Value::Null,
+                            serde_json::Value::Bool(b) => {
+                                rusqlite::types::Value::Integer(*b as i64)
                             }
+                            serde_json::Value::Number(n) => {
+                                if let Some(i) = n.as_i64() {
+                                    rusqlite::types::Value::Integer(i)
+                                } else if let Some(f) = n.as_f64() {
+                                    rusqlite::types::Value::Real(f)
+                                } else {
+                                    rusqlite::types::Value::Null
+                                }
+                            }
+                            serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
+                            _ => rusqlite::types::Value::Text(v.to_string()),
+                        })
+                        .collect();
+                    let param_refs: Vec<&dyn rusqlite::ToSql> = rusq_params
+                        .iter()
+                        .map(|v| v as &dyn rusqlite::ToSql)
+                        .collect();
+                    let mut rows_out = Vec::new();
+                    let mut rows_iter = stmt
+                        .query(rusqlite::params_from_iter(&param_refs))
+                        .map_err(|e| e.to_string())?;
+                    while let Some(row) = rows_iter.next().map_err(|e| e.to_string())? {
+                        let mut row_vals = Vec::with_capacity(n_cols);
+                        for i in 0..n_cols {
+                            let v = row.get_ref(i).map_err(|e| e.to_string())?;
+                            row_vals.push(match v {
+                                ValueRef::Null => serde_json::Value::Null,
+                                ValueRef::Integer(i) => serde_json::Value::from(i),
+                                ValueRef::Real(f) => serde_json::Value::from(f),
+                                ValueRef::Text(t) => serde_json::Value::String(
+                                    String::from_utf8_lossy(t).into_owned(),
+                                ),
+                                ValueRef::Blob(b) => {
+                                    serde_json::Value::String(format!("<blob:{}b>", b.len()))
+                                }
+                            });
                         }
-                        serde_json::Value::String(s) => rusqlite::types::Value::Text(s.clone()),
-                        _ => rusqlite::types::Value::Text(v.to_string()),
-                    })
-                    .collect();
-                let param_refs: Vec<&dyn rusqlite::ToSql> = rusq_params
-                    .iter()
-                    .map(|v| v as &dyn rusqlite::ToSql)
-                    .collect();
-                let mut rows_out = Vec::new();
-                let mut rows_iter = stmt
-                    .query(rusqlite::params_from_iter(&param_refs))
-                    .map_err(|e| e.to_string())?;
-                while let Some(row) = rows_iter.next().map_err(|e| e.to_string())? {
-                    let mut row_vals = Vec::with_capacity(n_cols);
-                    for i in 0..n_cols {
-                        let v = row.get_ref(i).map_err(|e| e.to_string())?;
-                        row_vals.push(match v {
-                            ValueRef::Null => serde_json::Value::Null,
-                            ValueRef::Integer(i) => serde_json::Value::from(i),
-                            ValueRef::Real(f) => serde_json::Value::from(f),
-                            ValueRef::Text(t) => {
-                                serde_json::Value::String(String::from_utf8_lossy(t).into_owned())
-                            }
-                            ValueRef::Blob(b) => {
-                                serde_json::Value::String(format!("<blob:{}b>", b.len()))
-                            }
-                        });
+                        rows_out.push(row_vals);
                     }
-                    rows_out.push(row_vals);
-                }
-                Ok((cols, rows_out))
+                    Ok((cols, rows_out))
+                })
             });
             match result {
                 Ok((cols, rows)) => Response::Rows { cols, rows },
@@ -1164,13 +1199,11 @@ fn scoped_lex_from_state(
     scope_value: &str,
     limit: usize,
 ) -> Result<Vec<Hit>> {
-    let guard = state.sql_conn.lock();
-    let conn = guard
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("sql_conn unavailable"))?;
-    let json_path = format!("$.{scope_key}");
-    let use_bm25 = should_rank_lex_with_bm25(q);
-    if let Some(fts_query) = fts5_loose_match_query(q) {
+    let mut reader = state.sql_reader.lock();
+    reader.with_connection("scoped_lex", |conn| {
+        let json_path = format!("$.{scope_key}");
+        let use_bm25 = should_rank_lex_with_bm25(q);
+        if let Some(fts_query) = fts5_loose_match_query(q) {
         let sql = if use_bm25 {
             format!(
                 "SELECT d.id,d.uri,d.title,substr(d.text,1,{SEARCH_SNIPPET_CHARS}),bm25(docs_fts) as score
@@ -1206,8 +1239,8 @@ fn scoped_lex_from_state(
                 })
             },
         )?;
-        return Ok(rows.collect::<rusqlite::Result<_>>()?);
-    }
+            return Ok(rows.collect::<rusqlite::Result<_>>()?);
+        }
 
     let sql = format!(
         "SELECT id,uri,title,substr(text,1,{SEARCH_SNIPPET_CHARS}),0.0 as score
@@ -1228,7 +1261,8 @@ fn scoped_lex_from_state(
             ts: None,
         })
     })?;
-    Ok(rows.collect::<rusqlite::Result<_>>()?)
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    })
 }
 
 fn filter_hits_by_meta(
@@ -1240,34 +1274,33 @@ fn filter_hits_by_meta(
     if hits.is_empty() {
         return Ok(Vec::new());
     }
-    let guard = state.sql_conn.lock();
-    let conn = guard
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("sql_conn unavailable"))?;
-    let json_path = format!("$.{scope_key}");
-    let ids: Vec<i64> = hits.iter().map(|h| h.id).collect();
-    let placeholders = (0..ids.len())
-        .map(|i| format!("?{}", i + 3))
-        .collect::<Vec<_>>()
-        .join(",");
-    let sql = format!(
-        "SELECT id FROM docs
+    let mut reader = state.sql_reader.lock();
+    reader.with_connection("filter_meta", |conn| {
+        let json_path = format!("$.{scope_key}");
+        let ids: Vec<i64> = hits.iter().map(|h| h.id).collect();
+        let placeholders = (0..ids.len())
+            .map(|i| format!("?{}", i + 3))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id FROM docs
          WHERE meta IS NOT NULL AND json_valid(meta)
            AND json_extract(meta, ?1) = ?2
            AND id IN ({placeholders})"
-    );
-    let mut params_vec: Vec<&dyn rusqlite::ToSql> = vec![&json_path, &scope_value];
-    for id in &ids {
-        params_vec.push(id);
-    }
-    let mut stmt = conn.prepare_cached(&sql)?;
-    let rows = stmt.query_map(params_vec.as_slice(), |r| r.get::<_, i64>(0))?;
-    let scoped_ids: std::collections::HashSet<i64> = rows.collect::<rusqlite::Result<_>>()?;
-    Ok(hits
-        .iter()
-        .filter(|hit| scoped_ids.contains(&hit.id))
-        .cloned()
-        .collect())
+        );
+        let mut params_vec: Vec<&dyn rusqlite::ToSql> = vec![&json_path, &scope_value];
+        for id in &ids {
+            params_vec.push(id);
+        }
+        let mut stmt = conn.prepare_cached(&sql)?;
+        let rows = stmt.query_map(params_vec.as_slice(), |r| r.get::<_, i64>(0))?;
+        let scoped_ids: std::collections::HashSet<i64> = rows.collect::<rusqlite::Result<_>>()?;
+        Ok(hits
+            .iter()
+            .filter(|hit| scoped_ids.contains(&hit.id))
+            .cloned()
+            .collect())
+    })
 }
 
 fn rank_scoped_hits(q: &str, hits: Vec<Hit>, limit: usize) -> Vec<Hit> {
@@ -1401,11 +1434,10 @@ fn adjust_stats_cache_after_batch(state: &State, ids: &[i64], reqs: &[PutRequest
 }
 
 fn current_max_doc_id(state: &State) -> Result<i64> {
-    let guard = state.sql_conn.lock();
-    let conn = guard
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("sql_conn unavailable"))?;
-    Ok(conn.query_row("SELECT COALESCE(MAX(id),0) FROM docs", [], |r| r.get(0))?)
+    let mut reader = state.sql_reader.lock();
+    reader.with_connection("max_doc_id", |conn| {
+        Ok(conn.query_row("SELECT COALESCE(MAX(id),0) FROM docs", [], |r| r.get(0))?)
+    })
 }
 
 fn fast_search_from_state(
@@ -1449,10 +1481,8 @@ fn fast_lex_from_state(state: &State, q: &str, limit: usize) -> Result<Option<Ve
     let Some(fts_query) = fts5_match_query(q) else {
         return Ok(Some(Vec::new()));
     };
-    let guard = state.sql_conn.lock();
-    let Some(conn) = guard.as_ref() else {
-        return Ok(None);
-    };
+    let mut reader = state.sql_reader.lock();
+    reader.with_connection("fast_lex", |conn| {
     let use_bm25 = should_rank_lex_with_bm25(q);
     let sql = if use_bm25 {
         format!(
@@ -1483,6 +1513,7 @@ fn fast_lex_from_state(state: &State, q: &str, limit: usize) -> Result<Option<Ve
         })
     })?;
     Ok(Some(rows.collect::<rusqlite::Result<_>>()?))
+    })
 }
 
 fn fts5_match_query(q: &str) -> Option<String> {
@@ -1597,10 +1628,8 @@ fn hydrate_pairs_from_state(state: &State, pairs: &[(i64, f32)]) -> Result<Vec<H
     if pairs.is_empty() {
         return Ok(Vec::new());
     }
-    let guard = state.sql_conn.lock();
-    let conn = guard
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("sql_conn unavailable"))?;
+    let mut reader = state.sql_reader.lock();
+    reader.with_connection("hydrate_pairs", |conn| {
     let placeholders = (0..pairs.len())
         .map(|i| format!("?{}", i + 1))
         .collect::<Vec<_>>()
@@ -1640,4 +1669,5 @@ fn hydrate_pairs_from_state(state: &State, pairs: &[(i64, f32)]) -> Result<Vec<H
         }
     }
     Ok(out)
+    })
 }

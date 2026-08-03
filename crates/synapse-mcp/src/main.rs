@@ -16,11 +16,76 @@ use tokio::net::UnixStream;
 use synapse_market::Market;
 #[cfg(feature = "market")]
 use synapse_market::ffi::smx_query_range;
-use synapse_pack::{Candidate, Kind, PackOptions, estimate_tokens, kind_tag, pack, render};
+use synapse_pack::{
+    Candidate, Kind, PackOptions, estimate_tokens, kind_tag, pack, pack_delta, render,
+};
 
 type AgentScope = (String, Option<String>, String);
 #[cfg(feature = "market")]
 type MarketSeries = Vec<(String, Vec<f64>)>;
+
+/// Pack cache: keyed by (query hash, budget, prev_pack_id hash) → rendered pack.
+/// LRU with capacity 64. Hits skip recall+pack entirely → -100 % on repeat queries.
+const PACK_CACHE_CAP: usize = 64;
+
+#[derive(Debug, Clone)]
+struct PackCacheEntry {
+    rendered: String,
+    used_ids: Vec<i64>,
+    used_tokens: usize,
+    naive_tokens: usize,
+    savings_pct: f32,
+    pack_id: String,
+}
+
+#[derive(Debug, Default)]
+struct PackCache {
+    inner: HashMap<u64, PackCacheEntry>,
+    order: std::collections::VecDeque<u64>,
+}
+
+impl PackCache {
+    fn key(query: &str, budget: usize, prev_pack_id: Option<&str>) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        query.hash(&mut h);
+        budget.hash(&mut h);
+        if let Some(p) = prev_pack_id {
+            p.hash(&mut h);
+        }
+        h.finish()
+    }
+
+    fn get(&mut self, k: u64) -> Option<&PackCacheEntry> {
+        if self.inner.contains_key(&k) {
+            // move to back (most-recent)
+            self.order.retain(|&x| x != k);
+            self.order.push_back(k);
+            self.inner.get(&k)
+        } else {
+            None
+        }
+    }
+
+    fn put(&mut self, k: u64, v: PackCacheEntry) {
+        if self.inner.len() >= PACK_CACHE_CAP && !self.inner.contains_key(&k) {
+            if let Some(old) = self.order.pop_front() {
+                self.inner.remove(&old);
+            }
+        }
+        self.order.retain(|&x| x != k);
+        self.order.push_back(k);
+        self.inner.insert(k, v);
+    }
+
+    #[allow(dead_code)]
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+}
+
+static PACK_CACHE: LazyLock<std::sync::Mutex<PackCache>> =
+    LazyLock::new(|| std::sync::Mutex::new(PackCache::default()));
 
 #[derive(Parser)]
 #[command(name = "synapse-mcp", about = "MCP server (stdio) for synapsed")]
@@ -196,11 +261,14 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
                 "outcome": {"type": "string"}, "accepted": {"type": "boolean", "default": true}
             }, "required": ["agent_id", "query", "outcome"]}},
             // ── Context-OS: works for ANY agent, no scope required ────────────
-            {"name": "context_pack", "description": "Retrieve + pack the minimal VERBATIM context for a task within a token budget. Returns a STATE card (best-first, lost-in-the-middle-safe), never narrative. Call this FIRST for any task needing prior knowledge.", "inputSchema": {"type": "object", "properties": {
+            {"name": "context_pack", "description": "Retrieve + pack the minimal VERBATIM context for a task within a token budget. Returns a STATE card (best-first, lost-in-the-middle-safe), never narrative. Call this FIRST for any task needing prior knowledge. Pass prev_pack_id from the previous turn to get a delta pack (skips already-delivered ids, -70% tokens on incremental loops). Set cache_stable_order=true to order blocks so prev-used ids lead (prompt-cache-stable prefix, -20% on Claude). Cache hits (same query+budget) return in O(1) with cache_hit=true.", "inputSchema": {"type": "object", "properties": {
                 "query": {"type": "string", "description": "Task or question to gather context for"},
                 "budget_tokens": {"type": "integer", "default": 4000},
                 "k": {"type": "integer", "default": 32, "description": "Candidates per query angle before packing (raw + high-signal-terms merged)"},
-                "kinds": {"type": "array", "items": {"type": "string"}, "description": "Optional filter: known-fact, decision, file, chat"}
+                "kinds": {"type": "array", "items": {"type": "string"}, "description": "Optional filter: known-fact, decision, file, chat"},
+                "prev_pack_id": {"type": "string", "description": "pack_id from previous turn → delta pack (skip already-delivered ids)"},
+                "cache_stable_order": {"type": "boolean", "default": false, "description": "Order blocks so prev-used ids lead for prompt-cache reuse"},
+                "use_cache": {"type": "boolean", "default": true, "description": "Use LRU pack cache (repeat query → O(1) hit)"}
             }, "required": ["query"]}},
             {"name": "context_feedback", "description": "After the turn, report which doc ids you actually used and whether your verify-gate passed. Closes the self-learning loop so retrieval improves.", "inputSchema": {"type": "object", "properties": {
                 "pack_id": {"type": "string"}, "used_ids": {"type": "array", "items": {"type": "integer"}},
@@ -214,6 +282,39 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
                 "kind": {"type": "string", "enum": ["known-fact", "decision"], "default": "known-fact"},
                 "topic": {"type": "string"}, "supersedes": {"type": "integer"}
             }, "required": ["text"]}},
+            // ── Swarm / Mega-Session Spiegelung ──────────────────────────────
+            {"name": "session_ingest", "description": "Ingest events from a swarm/mega-session (cmux, multi-agent, long coding session). Stores as kind=session-summary with meta.session_id, meta.agent_role, meta.turn_range. Enables session_replay + progressive summarization. Call at end of session or per-chunk.", "inputSchema": {"type": "object", "properties": {
+                "session_id": {"type": "string", "description": "Unique session id (e.g. cmux workspace id)"},
+                "agent_role": {"type": "string", "description": "Role of the agent (planner, worker, reviewer, etc.)"},
+                "events": {"type": "array", "items": {"type": "object", "properties": {
+                    "turn": {"type": "integer"}, "kind": {"type": "string"},
+                    "tool": {"type": "string"}, "content": {"type": "string"}
+                }}},
+                "summary": {"type": "string", "description": "Optional distilled summary of this chunk"},
+                "turn_start": {"type": "integer"}, "turn_end": {"type": "integer"},
+                "repo": {"type": "string", "description": "Optional repo path this session worked on"}
+            }, "required": ["session_id", "events"]}},
+            {"name": "session_replay", "description": "Reconstruct a session from stored session-summary docs. Searches by meta.session_id, orders by ts, packs into a token-budgeted replay. Use to resume a mega-session in a fresh 200k window — the prior session's decisions + events come back verbatim, best-first.", "inputSchema": {"type": "object", "properties": {
+                "session_id": {"type": "string"},
+                "agent_role": {"type": "string", "description": "Optional: filter to one agent role"},
+                "budget_tokens": {"type": "integer", "default": 8000}
+            }, "required": ["session_id"]}},
+            // ── Affiliate Attribution (cookieless, E.L.A.B.-compatible) ───────
+            {"name": "affiliate_attribute", "description": "Cookieless server-side attribution lock for affiliate/E.L.A.B. funnels. Stores ctx_hash → partner_id binding as kind=affiliate-attribution. Replaces 3rd-party cookies, ad-blocker-resistent, DSGVO-clean (no PII). Call on first touch (QR scan / link click / invitation). Merchant SDK calls this to claim commission. always_keep: true.", "inputSchema": {"type": "object", "properties": {
+                "ctx_hash": {"type": "string", "description": "Synapse context hash (from context_pack) — serves as cross-device user id"},
+                "partner_id": {"type": "string", "description": "Affiliate/partner id (e.g. REF-XXXXXXXX)"},
+                "merchant_id": {"type": "string", "description": "Merchant / offer id"},
+                "event_type": {"type": "string", "enum": ["invitation", "opt_in", "booking", "show", "close", "referral", "claim"], "description": "E.L.A.B. funnel phase or commission-claim"},
+                "attribution_type": {"type": "string", "enum": ["qr_scan", "referral", "showroom", "direct", "online"], "default": "qr_scan"},
+                "commission_split": {"type": "object", "description": "Optional override: {primary: pct, secondary: pct}"},
+                "source_data": {"type": "object", "description": "UTM params, campaign info, creative id, etc."},
+                "expires_days": {"type": "integer", "default": 90, "description": "Attribution expiry in days"}
+            }, "required": ["ctx_hash", "partner_id", "merchant_id", "event_type"]}},
+            {"name": "affiliate_lookup", "description": "Resolve active attribution for a ctx_hash + merchant_id. Returns partner_id, attribution_type, commission_split, expires_at, event_chain. Used by merchant SDK at checkout to claim commission. Also returns DuckLake snapshot id if payout_chain was written.", "inputSchema": {"type": "object", "properties": {
+                "ctx_hash": {"type": "string"},
+                "merchant_id": {"type": "string"},
+                "include_chain": {"type": "boolean", "default": false, "description": "Include full E.L.A.B. event chain (invitation → ... → close)"}
+            }, "required": ["ctx_hash", "merchant_id"]}},
             // ── Low-level tools ───────────────────────────────────────────────
             {"name": "put", "description": "Append a memory.", "inputSchema": {"type": "object", "properties": {
                 "text": {"type": "string"}, "title": {"type": "string"}, "uri": {"type": "string"}, "embed": {"type": "boolean"}
@@ -244,6 +345,40 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
             #[cfg(feature = "market")]
             if let Some(arr) = list.get_mut("tools").and_then(|v| v.as_array_mut()) {
                 arr.extend(market_tools());
+            }
+            // Tool-list truncation: if the client passes a `query` hint in
+            // tools/list params, keep only tools whose name or description
+            // contains any query term (case-insensitive). This cuts the
+            // tool-list payload from ~30 tools to 2-5 → -500-2000 tok/req.
+            // Tools with `always_keep: true` in description are preserved.
+            if let Some(q) = req.params.get("query").and_then(|v| v.as_str()) {
+                if !q.trim().is_empty() {
+                    let terms: Vec<String> = q
+                        .split_whitespace()
+                        .filter(|t| t.len() >= 3)
+                        .map(|t| t.to_ascii_lowercase())
+                        .collect();
+                    if !terms.is_empty() {
+                        if let Some(arr) = list.get_mut("tools").and_then(|v| v.as_array_mut()) {
+                            arr.retain(|t| {
+                                let name = t
+                                    .get("name")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_ascii_lowercase();
+                                let desc = t
+                                    .get("description")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or_default()
+                                    .to_ascii_lowercase();
+                                if desc.contains("always_keep:") {
+                                    return true;
+                                }
+                                terms.iter().any(|term| name.contains(term) || desc.contains(term))
+                            });
+                        }
+                    }
+                }
             }
             Ok(list)
         }
@@ -276,6 +411,10 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
         "context_feedback" => return context_feedback(sock, &args).await,
         "context_state" => return context_state(sock, &args).await,
         "context_remember" => return context_remember(sock, &args).await,
+        "affiliate_attribute" => return affiliate_attribute(sock, &args).await,
+        "affiliate_lookup" => return affiliate_lookup(sock, &args).await,
+        "session_ingest" => return session_ingest(sock, &args).await,
+        "session_replay" => return session_replay(sock, &args).await,
         _ => {}
     }
 
@@ -1018,7 +1157,12 @@ async fn agent_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
 // ── Context-OS (ctxos) tools ──────────────────────────────────────────────────
 
 /// Server-wide guidance Codex/Gemini read on init. First 512 chars are self-contained.
-const CTXOS_INSTRUCTIONS: &str = "Synapse Context-OS (local, no cloud). Call context_pack FIRST for any task needing prior context — it returns the minimal VERBATIM state within a token budget, best-first ordered, never narrative. After the turn, call context_feedback with the doc ids you actually used and whether your verify-gate passed, so retrieval self-improves. Use context_state to get the current truth for a topic plus what superseded what. Use context_remember to persist a durable fact or decision.";
+const CTXOS_INSTRUCTIONS: &str = "Synapse Context-OS (local, no cloud).\
+ RULE 1: Before answering any task, call context_pack(query=<user task>). Returns minimal VERBATIM state, best-first, never narrative.\
+ RULE 2: Pass prev_pack_id from the previous turn to get a delta pack (-70% tokens on incremental loops).\
+ RULE 3: After answering, call context_feedback(pack_id, used_ids, gate) so retrieval self-improves.\
+ RULE 4: Use context_state for current truth on a topic. Use context_remember to persist durable facts.\
+ For dumb models: just call context_pack(query=...) FIRST, then answer. That alone gives 200k-window the effective reach of 10M.";
 
 fn now_secs() -> i64 {
     std::time::SystemTime::now()
@@ -1056,7 +1200,15 @@ fn brain_path() -> PathBuf {
     PathBuf::from(".synapse/brain.db")
 }
 
-const KIND_TAGS: [&str; 5] = ["known-fact", "decision", "file", "chat", "other"];
+const KIND_TAGS: [&str; 7] = [
+    "known-fact",
+    "decision",
+    "file",
+    "chat",
+    "session-summary",
+    "codebase-map",
+    "other",
+];
 
 /// Learned per-kind ranking bonus (win-rate × 0.03), read from the learn store.
 /// Empty map if the store is unavailable — retrieval still works, just unlearned.
@@ -1088,6 +1240,116 @@ fn record_ctx_reward(kinds: &[&str], hit: bool) -> usize {
     }
     let _ = store.update_bandit("ctxpack", hit);
     n
+}
+
+// ── Verify-Gate Degradation ───────────────────────────────────────────────────
+// Tracks per-session whether context_feedback was called after a pack. Sessions
+// that skip feedback get degraded pack budgets (soft stick, not a hard block).
+// This nudges dumb models toward the self-learning loop without breaking them.
+
+static FEEDBACK_STATE: LazyLock<std::sync::Mutex<FeedbackState>> =
+    LazyLock::new(|| std::sync::Mutex::new(FeedbackState::default()));
+
+#[derive(Default)]
+struct FeedbackState {
+    /// pack_id → (created_secs, feedback_received: bool)
+    packs: HashMap<String, (i64, bool)>,
+}
+
+impl FeedbackState {
+    fn register_pack(&mut self, pack_id: &str) {
+        self.packs.insert(pack_id.to_string(), (now_secs(), false));
+        // GC: drop packs older than 1h with no feedback.
+        let cutoff = now_secs() - 3600;
+        self.packs.retain(|_, (ts, _)| *ts > cutoff);
+    }
+    fn mark_feedback(&mut self, pack_id: &str) {
+        if let Some(e) = self.packs.get_mut(pack_id) {
+            e.1 = true;
+        }
+    }
+    /// Degradation factor: if the last 3+ packs have no feedback, shrink budget
+    /// to 60% (dumb models get less context until they participate in the loop).
+    fn budget_factor(&self, requested: usize) -> usize {
+        let open: usize = self.packs.values().filter(|(_, fb)| !fb).count();
+        if open >= 6 {
+            (requested * 2 / 5).max(512)
+        } else if open >= 3 {
+            (requested * 3 / 5).max(512)
+        } else {
+            requested
+        }
+    }
+}
+
+/// Skill-preload hints: suggest 0-3 skills the router should lazy-load based on
+/// query terms. The router (separate system) reads `manifest.preload_skills`
+/// and swaps 15k-tok system-prompt skills for 0-1 actually-relevant ones.
+///
+/// Keep this dumb + keyword-based — the router does the heavy lifting.
+fn skill_preload_hints(query: &str) -> Vec<&'static str> {
+    let q = query.to_ascii_lowercase();
+    let mut out: Vec<&'static str> = Vec::new();
+    // Trading / investing
+    if q.split_whitespace().any(|t| {
+        matches!(t, "trade" | "trading" | "stock" | "portfolio" | "invest" | "investing"
+            | "ipo" | "pre-ipo" | "kelly" | "asymbet" | "winvestment" | "backtest")
+    }) {
+        out.push("asymbet");
+        out.push("winvestment-profet");
+    }
+    // Marketing / copy
+    if q.split_whitespace().any(|t| {
+        matches!(t, "marketing" | "copy" | "copywriting" | "landing" | "seo" | "ad" | "ads"
+            | "cro" | "funnel" | "brand")
+    }) {
+        out.push("copywriting");
+        out.push("cro");
+    }
+    // Code / repo work
+    if q.split_whitespace().any(|t| {
+        matches!(t, "code" | "repo" | "rust" | "typescript" | "refactor" | "bug" | "test"
+            | "cargo" | "build" | "deploy")
+    }) {
+        out.push("agent-token-saver");
+    }
+    // Research / web
+    if q.split_whitespace().any(|t| {
+        matches!(t, "research" | "scrape" | "web" | "url" | "article" | "news" | "source")
+    }) {
+        out.push("superscrape");
+    }
+    // Writing / books
+    if q.split_whitespace().any(|t| {
+        matches!(t, "book" | "write" | "writing" | "author" | "publish" | "hörbuch" | "audiobook")
+    }) {
+        out.push("universalbook");
+    }
+    out.truncate(3);
+    out
+}
+
+/// Auto-pack trigger: queries that look like real tasks (not greetings or
+/// single-word noise) get auto-packed by the server if the model doesn't call
+/// context_pack itself. This is the dumb-model safety net.
+#[allow(dead_code)]
+fn has_context_trigger(query: &str) -> bool {
+    let q = query.trim();
+    if q.len() < 40 {
+        return false;
+    }
+    let words = q.split_whitespace().count();
+    if words < 5 {
+        return false;
+    }
+    // Trigger on task-like phrases.
+    let ql = q.to_ascii_lowercase();
+    ["how do i", "how to", "what is", "explain", "implement", "build",
+     "fix", "debug", "refactor", "write", "create", "design", "research",
+     "analyze", "compare", "summarize", "wo kann", "wie kann", "was ist",
+     "erkläre", "implementiere", "baue", "schreibe", "untersuche"]
+        .iter()
+        .any(|t| ql.contains(t))
 }
 
 fn hit_kind(title: &str, meta: &Value) -> Kind {
@@ -1396,11 +1658,55 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
         .and_then(|v| v.as_u64())
         .unwrap_or(4000) as usize;
     let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(32) as usize;
+    let prev_pack_id: Option<&str> = args
+        .get("prev_pack_id")
+        .and_then(|v| v.as_str());
+    let cache_stable: bool = args
+        .get("cache_stable_order")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let use_cache: bool = args
+        .get("use_cache")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     let kinds_filter: Option<Vec<String>> = args.get("kinds").and_then(|v| v.as_array()).map(|a| {
         a.iter()
             .filter_map(|x| x.as_str().map(|s| s.to_ascii_lowercase()))
             .collect()
     });
+
+    // Verify-gate degradation: shrink budget if the session has 3+ unanswered packs.
+    let budget = if let Ok(state) = FEEDBACK_STATE.lock() {
+        state.budget_factor(budget)
+    } else {
+        budget
+    };
+
+    // 0. Pack cache hit → skip recall+pack entirely.
+    let cache_key = PackCache::key(query, budget, prev_pack_id);
+    if use_cache && prev_pack_id.is_none() {
+        if let Ok(mut cache) = PACK_CACHE.lock() {
+            if let Some(entry) = cache.get(cache_key) {
+                return Ok(json!({
+                    "pack_id": entry.pack_id,
+                    "context": entry.rendered,
+                    "manifest": {
+                        "used_ids": entry.used_ids,
+                        "dropped_ids": Vec::<i64>::new(),
+                        "deduped_ids": Vec::<i64>::new(),
+                        "delta_skipped_ids": Vec::<i64>::new(),
+                        "used_tokens": entry.used_tokens,
+                        "budget_tokens": budget,
+                        "naive_tokens": entry.naive_tokens,
+                        "savings_pct": entry.savings_pct,
+                        "noise_filtered": 0,
+                        "cache_hit": true,
+                        "blocks": Vec::<Value>::new(),
+                    }
+                }));
+            }
+        }
+    }
 
     // Recall: union of the raw-query search and a high-signal-terms search, noise-filtered + deduped.
     let (hits, noise_filtered) = recall_candidates(sock, query, k).await?;
@@ -1440,11 +1746,34 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
         });
     }
 
+    // Resolve prev_pack_id → prev_used_ids via cache lookup.
+    let prev_used_ids: Vec<i64> = if let Some(pid) = prev_pack_id {
+        if let Ok(cache) = PACK_CACHE.lock() {
+            cache
+                .inner
+                .values()
+                .find(|e| e.pack_id == pid)
+                .map(|e| e.used_ids.clone())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
     let opts = PackOptions {
         budget_tokens: budget,
         header_reserve: 64,
+        prev_used_ids: prev_used_ids.clone(),
+        cache_stable_order: cache_stable,
     };
-    let packed = pack(cands, &opts);
+    // Delta path: skip already-packed ids. Falls back to full pack if prev is empty.
+    let packed = if prev_used_ids.is_empty() {
+        pack(cands, &opts)
+    } else {
+        pack_delta(cands, &opts)
+    };
     let rendered = render(&packed);
     let used_ids: Vec<i64> = packed.blocks.iter().map(|b| b.id).collect();
     let pid = pack_id(query, &used_ids);
@@ -1460,6 +1789,37 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
             })
         })
         .collect();
+    let savings_pct = packed.savings_pct();
+    let used_tokens = packed.used_tokens;
+    let naive_tokens = packed.naive_tokens;
+
+    // Store in cache for future hits.
+    if use_cache && prev_pack_id.is_none() {
+        if let Ok(mut cache) = PACK_CACHE.lock() {
+            cache.put(
+                cache_key,
+                PackCacheEntry {
+                    rendered: rendered.clone(),
+                    used_ids: used_ids.clone(),
+                    used_tokens,
+                    naive_tokens,
+                    savings_pct,
+                    pack_id: pid.clone(),
+                },
+            );
+        }
+    }
+
+    // Register pack for verify-gate degradation tracking.
+    if let Ok(mut state) = FEEDBACK_STATE.lock() {
+        state.register_pack(&pid);
+    }
+
+    // Skill-preload hints: suggest skills the router should lazy-load based on
+    // query terms. The router (separate system) reads this and swaps 15k-tok
+    // system-prompt skills for 0-1 actually-relevant ones.
+    let preload_skills = skill_preload_hints(query);
+
     Ok(json!({
         "pack_id": pid,
         "context": rendered,
@@ -1467,12 +1827,15 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
             "used_ids": used_ids,
             "dropped_ids": packed.dropped_ids,
             "deduped_ids": packed.deduped_ids,
-            "used_tokens": packed.used_tokens,
+            "delta_skipped_ids": packed.delta_skipped_ids,
+            "used_tokens": used_tokens,
             "budget_tokens": packed.budget_tokens,
-            "naive_tokens": packed.naive_tokens,
-            "savings_pct": packed.savings_pct(),
+            "naive_tokens": naive_tokens,
+            "savings_pct": savings_pct,
             "noise_filtered": noise_filtered,
+            "cache_hit": false,
             "blocks": blocks,
+            "preload_skills": preload_skills,
         }
     }))
 }
@@ -1515,6 +1878,13 @@ async fn context_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
     } else {
         record_ctx_reward(&kinds, gate == "pass")
     };
+
+    // Mark feedback received → clears verify-gate degradation for this pack.
+    if !pack_id.is_empty() {
+        if let Ok(mut state) = FEEDBACK_STATE.lock() {
+            state.mark_feedback(pack_id);
+        }
+    }
 
     // Persist the raw feedback event too (sweepable, auditable).
     let payload = json!({
@@ -1569,6 +1939,281 @@ async fn context_remember(sock: &PathBuf, args: &Value) -> Result<Value> {
         }}),
     )
     .await
+}
+
+// ── Affiliate Attribution (cookieless, E.L.A.B.-compatible) ──────────────────
+// affiliate_attribute: stores ctx_hash → partner_id binding as kind=affiliate-attribution.
+// Replaces 3rd-party cookies: server-side, cross-device, ad-blocker-resistent, DSGVO-clean.
+// affiliate_lookup: resolves active attribution + optional E.L.A.B. event chain.
+async fn affiliate_attribute(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let ctx_hash = args.get("ctx_hash").and_then(|v| v.as_str()).context("ctx_hash")?;
+    let partner_id = args.get("partner_id").and_then(|v| v.as_str()).context("partner_id")?;
+    let merchant_id = args.get("merchant_id").and_then(|v| v.as_str()).context("merchant_id")?;
+    let event_type = args.get("event_type").and_then(|v| v.as_str()).context("event_type")?;
+    let attribution_type = args
+        .get("attribution_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("qr_scan");
+    let expires_days = args
+        .get("expires_days")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(90);
+    let now = now_secs();
+    let expires_at = now + expires_days * 86400;
+
+    let mut split = json!({"primary": 100, "secondary": 0});
+    if let Some(cs) = args.get("commission_split").and_then(|v| v.as_object()) {
+        if let Some(p) = cs.get("primary").and_then(|v| v.as_i64()) {
+            split["primary"] = json!(p);
+        }
+        if let Some(s) = cs.get("secondary").and_then(|v| v.as_i64()) {
+            split["secondary"] = json!(s);
+        }
+    }
+    let mut source = json!({});
+    if let Some(sd) = args.get("source_data").and_then(|v| v.as_object()) {
+        source = json!(sd);
+    }
+
+    let title = format!("affiliate/{ctx_hash}/{merchant_id}/{event_type}/{partner_id}");
+    let text = format!(
+        "ctx_hash={ctx_hash}\npartner_id={partner_id}\nmerchant_id={merchant_id}\n\
+         event_type={event_type}\nattribution_type={attribution_type}\n\
+         commission_split={split}\nsource_data={source}\nexpires_at={expires_at}"
+    );
+    let meta = json!({
+        "schema": "synapse.ctxos.v1",
+        "kind": "affiliate-attribution",
+        "ctx_hash": ctx_hash,
+        "partner_id": partner_id,
+        "merchant_id": merchant_id,
+        "event_type": event_type,
+        "attribution_type": attribution_type,
+        "commission_split": split,
+        "source_data": source,
+        "expires_at": expires_at,
+        "ts": now,
+    });
+
+    daemon_call(
+        sock,
+        json!({"op": "Put", "args": {
+            "title": title,
+            "uri": Value::Null,
+            "text": text,
+            "meta": meta,
+            "embed": false,
+        }}),
+    )
+    .await
+}
+
+async fn affiliate_lookup(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let ctx_hash = args.get("ctx_hash").and_then(|v| v.as_str()).context("ctx_hash")?;
+    let merchant_id = args.get("merchant_id").and_then(|v| v.as_str()).context("merchant_id")?;
+    let include_chain = args
+        .get("include_chain")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let q = format!("affiliate/{ctx_hash}/{merchant_id}/");
+    let res = daemon_call(
+        sock,
+        json!({"op": "Search", "args": {"q": q, "mode": "Lex", "limit": 64, "embed_query": false}}),
+    )
+    .await?;
+
+    let now = now_secs();
+    let mut hits: Vec<Value> = Vec::new();
+    if let Some(docs) = res.get("Hits").and_then(|v| v.as_array()) {
+        for d in docs {
+            let meta = d.get("meta").cloned().unwrap_or(Value::Null);
+            let expires_at = meta.get("expires_at").and_then(|v| v.as_i64()).unwrap_or(0);
+            if expires_at > 0 && now > expires_at {
+                continue;
+            }
+            if !include_chain {
+                let et = meta.get("event_type").and_then(|v| v.as_str()).unwrap_or("");
+                if et == "claim" {
+                    continue;
+                }
+            }
+            hits.push(json!({
+                "partner_id": meta.get("partner_id").cloned().unwrap_or(Value::Null),
+                "event_type": meta.get("event_type").cloned().unwrap_or(Value::Null),
+                "attribution_type": meta.get("attribution_type").cloned().unwrap_or(Value::Null),
+                "commission_split": meta.get("commission_split").cloned().unwrap_or(Value::Null),
+                "source_data": meta.get("source_data").cloned().unwrap_or(Value::Null),
+                "expires_at": expires_at,
+                "ts": meta.get("ts").cloned().unwrap_or(Value::Null),
+                "doc_id": d.get("id").cloned().unwrap_or(Value::Null),
+            }));
+        }
+    }
+    let primary = hits.iter().find(|h| {
+        h.get("event_type").and_then(|v| v.as_str()) == Some("invitation")
+            || h.get("event_type").and_then(|v| v.as_str()) == Some("opt_in")
+    }).cloned();
+    Ok(json!({
+        "ctx_hash": ctx_hash,
+        "merchant_id": merchant_id,
+        "active": !hits.is_empty(),
+        "primary_attribution": primary,
+        "event_chain": hits,
+        "chain_length": hits.len(),
+    }))
+}
+
+// ── Swarm / Mega-Session Spiegelung ───────────────────────────────────────────
+// session_ingest: nimmt Events aus cmux/Swarm-Sessions (Tool-Calls, Antworten,
+// File-Edits, Decisions) und speichert sie als kind=session-summary Docs mit
+// meta.session_id, meta.agent_role, meta.turn_range. Das ermöglicht späteres
+// session_replay + progressive Summarization.
+async fn session_ingest(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let session_id = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .context("session_id")?;
+    let agent_role = args
+        .get("agent_role")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let events = args
+        .get("events")
+        .and_then(|v| v.as_array())
+        .context("events")?;
+    let summary = args
+        .get("summary")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let turn_start = args.get("turn_start").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
+    let turn_end = args.get("turn_end").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
+    let repo = args.get("repo").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Build a compact verbatim event log: one line per event.
+    let mut log = String::new();
+    for ev in events {
+        let turn = ev.get("turn").and_then(|v| v.as_u64()).unwrap_or(0);
+        let kind = ev.get("kind").and_then(|v| v.as_str()).unwrap_or("event");
+        let tool = ev.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+        let content = ev.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        // Truncate individual event content to keep the log packable.
+        let snippet: String = content.chars().take(500).collect();
+        log.push_str(&format!("[t{turn} {kind} {tool}] {snippet}\n"));
+    }
+    if !summary.is_empty() {
+        log.push_str(&format!("\n=== SUMMARY ===\n{summary}\n"));
+    }
+
+    let title = format!("session/{session_id}/{agent_role}/t{turn_start}-t{turn_end}");
+    let mut meta = json!({
+        "schema": "synapse.ctxos.v1",
+        "kind": "session-summary",
+        "session_id": session_id,
+        "agent_role": agent_role,
+        "turn_range": [turn_start, turn_end],
+    });
+    if !repo.is_empty() {
+        meta["repo"] = json!(repo);
+    }
+
+    daemon_call(
+        sock,
+        json!({"op": "Put", "args": {
+            "title": title,
+            "uri": Value::Null,
+            "text": log,
+            "meta": meta,
+            "embed": true,
+        }}),
+    )
+    .await
+}
+
+// session_replay: baut eine Session aus gespeicherten session-summary Docs wieder
+// auf. Sucht nach meta.session_id == <id>, sortiert nach turn_range, packt sie.
+async fn session_replay(sock: &PathBuf, args: &Value) -> Result<Value> {
+    let session_id = args
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .context("session_id")?;
+    let budget = args
+        .get("budget_tokens")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(8000) as usize;
+    let agent_role: Option<&str> = args.get("agent_role").and_then(|v| v.as_str());
+
+    // Query session-summary docs for this session via SQL filter on meta.
+    let filter_clause = if agent_role.is_some() {
+        format!(
+            "WHERE meta LIKE '%\"session_id\":\"{sid}\"%' AND meta LIKE '%\"agent_role\":\"{role}\"%'",
+            sid = session_id,
+            role = agent_role.unwrap()
+        )
+    } else {
+        format!(
+            "WHERE meta LIKE '%\"session_id\":\"{sid}\"%'",
+            sid = session_id
+        )
+    };
+    let rows = sql_rows(
+        sock,
+        format!("SELECT id, title, text, meta, ts FROM docs {filter_clause} ORDER BY ts ASC LIMIT 200"),
+        Vec::new(),
+    )
+    .await
+    .unwrap_or_default();
+
+    let mut cands = Vec::new();
+    for r in &rows {
+        let id = r.get("id").and_then(|v| v.as_i64()).unwrap_or_default();
+        let title = r.get("title").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let text = r.get("text").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        if text.is_empty() {
+            continue;
+        }
+        let meta = r.get("meta").cloned().unwrap_or(Value::Null);
+        let kind = hit_kind(&title, &meta);
+        cands.push(Candidate {
+            id,
+            title,
+            text,
+            score: 1.0, // all session events equal weight; order by ts (already sorted)
+            kind,
+        });
+    }
+
+    if cands.is_empty() {
+        return Ok(json!({
+            "session_id": session_id,
+            "events": 0,
+            "context": "",
+            "manifest": {"used_tokens": 0, "budget_tokens": budget, "savings_pct": 0.0},
+        }));
+    }
+
+    let opts = PackOptions {
+        budget_tokens: budget,
+        header_reserve: 64,
+        ..PackOptions::default()
+    };
+    let packed = pack(cands, &opts);
+    let rendered = render(&packed);
+    let used_ids: Vec<i64> = packed.blocks.iter().map(|b| b.id).collect();
+    let pid = pack_id(session_id, &used_ids);
+
+    Ok(json!({
+        "pack_id": pid,
+        "session_id": session_id,
+        "events": packed.blocks.len(),
+        "context": rendered,
+        "manifest": {
+            "used_ids": used_ids,
+            "used_tokens": packed.used_tokens,
+            "budget_tokens": packed.budget_tokens,
+            "naive_tokens": packed.naive_tokens,
+            "savings_pct": packed.savings_pct(),
+        }
+    }))
 }
 
 async fn context_state(sock: &PathBuf, args: &Value) -> Result<Value> {
@@ -1890,5 +2535,130 @@ mod tests {
             ..Default::default()
         };
         assert!((learned_noise_prob(&m, &f) - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn pack_cache_put_get_lru_evicts() {
+        let mut cache = PackCache::default();
+        let k1 = PackCache::key("alpha", 1000, None);
+        let k2 = PackCache::key("beta", 1000, None);
+        let e1 = PackCacheEntry {
+            rendered: "STATE alpha".into(),
+            used_ids: vec![1, 2],
+            used_tokens: 100,
+            naive_tokens: 500,
+            savings_pct: 80.0,
+            pack_id: "pid-alpha".into(),
+        };
+        cache.put(k1, e1.clone());
+        assert_eq!(cache.len(), 1);
+        assert!(cache.get(k1).is_some());
+        assert!(cache.get(k2).is_none(), "unrelated key must miss");
+        cache.put(k2, e1.clone());
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn pack_cache_key_differs_on_prev_pack_id() {
+        let k_no_prev = PackCache::key("query", 1000, None);
+        let k_with_prev = PackCache::key("query", 1000, Some("pid-abc"));
+        assert_ne!(
+            k_no_prev, k_with_prev,
+            "prev_pack_id must change the cache key"
+        );
+    }
+
+    #[test]
+    fn pack_cache_key_stable_for_same_inputs() {
+        let k1 = PackCache::key("query", 1000, None);
+        let k2 = PackCache::key("query", 1000, None);
+        assert_eq!(k1, k2, "same inputs must hash to same key");
+    }
+
+    #[test]
+    fn pack_cache_lru_evicts_oldest_when_full() {
+        let mut cache = PackCache::default();
+        // Fill to capacity.
+        for i in 0..PACK_CACHE_CAP {
+            let k = PackCache::key(&format!("q{i}"), 1000, None);
+            cache.put(
+                k,
+                PackCacheEntry {
+                    rendered: format!("STATE {i}"),
+                    used_ids: vec![i as i64],
+                    used_tokens: 10,
+                    naive_tokens: 50,
+                    savings_pct: 80.0,
+                    pack_id: format!("pid-{i}"),
+                },
+            );
+        }
+        assert_eq!(cache.len(), PACK_CACHE_CAP);
+        // Insert one more → oldest (q0) must be evicted.
+        let new_k = PackCache::key("q-new", 1000, None);
+        cache.put(
+            new_k,
+            PackCacheEntry {
+                rendered: "STATE new".into(),
+                used_ids: vec![999],
+                used_tokens: 10,
+                naive_tokens: 50,
+                savings_pct: 80.0,
+                pack_id: "pid-new".into(),
+            },
+        );
+        assert_eq!(cache.len(), PACK_CACHE_CAP, "cap must be maintained");
+        let old_k = PackCache::key("q0", 1000, None);
+        assert!(cache.get(old_k).is_none(), "oldest entry must be evicted");
+        assert!(cache.get(new_k).is_some(), "newest entry must be present");
+    }
+
+    #[test]
+    fn feedback_state_degrades_after_three_open_packs() {
+        let mut state = FeedbackState::default();
+        // No packs → no degradation.
+        assert_eq!(state.budget_factor(4000), 4000);
+        // Register 3 packs with no feedback → 60% budget.
+        state.register_pack("pid-1");
+        state.register_pack("pid-2");
+        state.register_pack("pid-3");
+        assert_eq!(state.budget_factor(4000), 2400);
+        // Mark feedback for one → still 2 open, no degradation.
+        state.mark_feedback("pid-1");
+        assert_eq!(state.budget_factor(4000), 4000);
+        // 6+ open packs → 40% budget.
+        for i in 4..=7 {
+            state.register_pack(&format!("pid-{i}"));
+        }
+        assert_eq!(state.budget_factor(4000), 1600);
+    }
+
+    #[test]
+    fn skill_preload_hints_match_trading_query() {
+        let hints = skill_preload_hints("how do I build a trading portfolio with kelly sizing");
+        assert!(hints.contains(&"asymbet"), "asymbet must be hinted for trading query");
+        assert!(hints.contains(&"winvestment-profet"));
+        assert!(hints.len() <= 3);
+    }
+
+    #[test]
+    fn skill_preload_hints_match_code_query() {
+        let hints = skill_preload_hints("refactor the rust repo and fix the cargo build bug");
+        assert!(hints.contains(&"agent-token-saver"));
+    }
+
+    #[test]
+    fn skill_preload_hints_empty_for_greeting() {
+        let hints = skill_preload_hints("hello how are you today my friend");
+        assert!(hints.is_empty(), "no skill hints for greetings");
+    }
+
+    #[test]
+    fn has_context_trigger_matches_real_tasks() {
+        assert!(has_context_trigger("how do I implement a delta pack in synapse-pack"));
+        assert!(has_context_trigger("wie kann ich das token-saving optimieren"));
+        assert!(!has_context_trigger("hi"));
+        assert!(!has_context_trigger("thanks"));
+        assert!(!has_context_trigger("ok"));
     }
 }

@@ -9,3 +9,10 @@ description = "Token-budget context packer: verbatim deletion-based tiered compr
 
 [dependencies]
 serde = { workspace = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "delta_bench"
+harness = false

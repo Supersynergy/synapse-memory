@@ -19,6 +19,7 @@ fn run() -> Result<()> {
     match op {
         "help" | "--help" | "-h" => print_help(),
         "doctor" => run_doctor()?,
+        "wal-observe" => run_wal_observe(&args[1..])?,
         "ping" => print_response(&call(&json!({"op": "Ping"}), Duration::from_secs(2))?),
         "stats" => print_response(&call(&json!({"op": "Stats"}), Duration::from_secs(5))?),
         "sql" => {
@@ -101,13 +102,15 @@ Usage:\n  \
 synx-fast ping\n  \
 synx-fast stats\n  \
 synx-fast doctor\n  \
+synx-fast wal-observe [--file PATH]\n  \
 synx-fast find|hybrid|vec \"query\" [limit] [--scope PROJECT]\n  \
 synx-fast scoped --scope PROJECT \"query\" [--scope-key scope] [--mode hybrid] [--limit 8]\n  \
 synx-fast context --scope PROJECT \"query\" [--budget 900]\n  \
 printf 'q1\\nq2\\n' | synx-fast batch hybrid --limit 8 [--scope PROJECT]\n  \
 echo text | synx-fast put --title TITLE [--scope PROJECT]\n  \
 cat items.jsonl | synx-fast put-batch [--scope PROJECT]\n\n\
-Env:\n  SYNAPSE_SOCK   Unix socket path, default /tmp/synapse.sock\n\n\
+Env:\n  SYNAPSE_SOCK   Unix socket path, default /tmp/synapse.sock\n  \
+  SYNAPSED_BIN   daemon binary for wal-observe, default synapsed\n\n\
 Tip:\n  Use `doctor` first when hooks or Docker feel offline."
     );
 }
@@ -616,8 +619,27 @@ fn run_doctor() -> Result<()> {
         "env: SYNAPSE_SOCK={}",
         env::var("SYNAPSE_SOCK").unwrap_or_else(|_| "(unset)".to_string())
     );
+    println!("wal_observe: synx-fast wal-observe --file .synapse/brain.db");
     println!("status: OK");
     Ok(())
+}
+
+fn run_wal_observe(args: &[String]) -> Result<()> {
+    let file = match args {
+        [] => ".synapse/brain.db",
+        [flag, path] if flag == "--file" || flag == "-f" => path,
+        _ => return Err(anyhow!("usage: synx-fast wal-observe [--file PATH]")),
+    };
+    let binary = env::var("SYNAPSED_BIN").unwrap_or_else(|_| "synapsed".to_string());
+    let status = std::process::Command::new(binary)
+        .args(["--file", file, "--wal-observe"])
+        .status()
+        .context("run read-only synapsed WAL observation")?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(anyhow!("synapsed --wal-observe exited with {status}"))
+    }
 }
 
 fn compact_json(resp: &Value) -> String {

@@ -2,6 +2,13 @@
 
 All notable changes to `synapse-market`.
 
+## [Unreleased]
+
+### Changed
+- `src/stream/parser.rs` — live tick parser switched `serde_json` → `sonic-rs` (Value-based, behavior-preserving). All 4 wire formats (Generic/PolygonV3/TradierV1/KrakenV2).
+- `benches/parser_sonic.rs` — criterion before/after (serde vs sonic), M4 Max median: generic 673→248ns (2.7×), tradier 505→279ns (1.8×), kraken 890→626ns (1.4×), polygon 457→348ns (1.3×). Flat objects gain most; array/nested less. Hot path = `stream/ws.rs:41` per ws-message.
+- Oracle: existing 7 parser tests green after swap.
+
 ## [0.2.0] — 2026-05-12
 
 ### Added

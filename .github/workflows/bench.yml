@@ -6,7 +6,7 @@ on:
 
 jobs:
   bench:
-    runs-on: macos-15-arm64
+    runs-on: macos-15
     timeout-minutes: 180
     permissions:
       pull-requests: write
@@ -79,8 +79,8 @@ jobs:
           python3 pr/scripts/bench_compare.py \
             --pr-dir   pr/target/criterion \
             --base-dir base/target/criterion \
-            --baselines pr/$BASELINES_PATH \
-            --threshold $REGRESSION_THRESHOLD \
-            --pr        $PR_NUMBER \
-            --repo      $REPO \
-            --token     $GH_TOKEN
+            --baselines "pr/$BASELINES_PATH" \
+            --threshold "$REGRESSION_THRESHOLD" \
+            --pr        "$PR_NUMBER" \
+            --repo      "$REPO" \
+            --token     "$GH_TOKEN"

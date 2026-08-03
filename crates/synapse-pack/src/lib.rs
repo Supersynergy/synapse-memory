@@ -27,6 +27,14 @@ pub enum Kind {
     File,
     /// Chat / session transcript — may be cut to `OneLine`.
     Chat,
+    /// Distilled summary of a long agent session (swarm/mega-session).
+    /// Carries `meta.session_id`, `meta.agent_role`, `meta.turn_range`.
+    /// Floor `Signatures` so session decisions never collapse to a single line.
+    SessionSummary,
+    /// Repo-level map: file index, entry points, hot spots, architecture.
+    /// Built by `session_ingest` from repo scans + funcmap output.
+    /// Floor `Signatures` so the structure stays visible at any budget.
+    CodebaseMap,
     /// Anything else.
     Other,
 }
@@ -39,6 +47,14 @@ impl Kind {
             Kind::KnownFact
         } else if s.contains("decision") || s.contains("adr") {
             Kind::Decision
+        } else if s.contains("session-summary") || s.contains("session_summary")
+            || s.contains("mega-session") || s.contains("swarm-summary")
+        {
+            Kind::SessionSummary
+        } else if s.contains("codebase-map") || s.contains("codebase_map")
+            || s.contains("repo-map") || s.contains("funcmap")
+        {
+            Kind::CodebaseMap
         } else if s.contains("file") || s.contains("code") || s.contains("source") {
             Kind::File
         } else if s.contains("chat") || s.contains("session") || s.contains("transcript") {
@@ -51,7 +67,9 @@ impl Kind {
     /// Lowest tier this kind may be compressed to (never below).
     fn floor(self) -> Tier {
         match self {
-            Kind::KnownFact | Kind::Decision => Tier::Signatures,
+            Kind::KnownFact | Kind::Decision | Kind::SessionSummary | Kind::CodebaseMap => {
+                Tier::Signatures
+            }
             Kind::File | Kind::Chat | Kind::Other => Tier::OneLine,
         }
     }
@@ -61,6 +79,8 @@ impl Kind {
         match self {
             Kind::KnownFact => 0.05,
             Kind::Decision => 0.03,
+            Kind::SessionSummary => 0.02,
+            Kind::CodebaseMap => 0.02,
             Kind::File => 0.0,
             Kind::Chat => -0.01,
             Kind::Other => 0.0,
@@ -123,6 +143,10 @@ pub struct Pack {
     pub deduped_ids: Vec<i64>,
     /// Σ tokens if every candidate were included verbatim (the naive baseline).
     pub naive_tokens: usize,
+    /// Ids skipped by [`pack_delta`] because they were in `prev_used_ids`.
+    /// Empty for plain [`pack`].
+    #[serde(default)]
+    pub delta_skipped_ids: Vec<i64>,
 }
 
 impl Pack {
@@ -142,6 +166,13 @@ pub struct PackOptions {
     pub budget_tokens: usize,
     /// Tokens reserved for the rendered header / STATE card.
     pub header_reserve: usize,
+    /// Ids already packed in a previous turn. [`pack_delta`] skips them;
+    /// [`pack`] ignores this field. Empty by default → full pack.
+    pub prev_used_ids: Vec<i64>,
+    /// If true, [`pack`] orders blocks to maximize prompt-cache reuse:
+    /// blocks whose id is in `prev_used_ids` come first (stable prefix),
+    /// then new blocks. [`pack_delta`] ignores this flag.
+    pub cache_stable_order: bool,
 }
 
 impl Default for PackOptions {
@@ -149,6 +180,8 @@ impl Default for PackOptions {
         Self {
             budget_tokens: 4000,
             header_reserve: 48,
+            prev_used_ids: Vec::new(),
+            cache_stable_order: false,
         }
     }
 }
@@ -317,7 +350,13 @@ pub fn pack(mut cands: Vec<Candidate>, options: &PackOptions) -> Pack {
     }
 
     // 4. Serial-position order: rank0 first, rank1 last, rest (desc) in the middle.
-    let blocks = serial_position_order(chosen);
+    //    Cache-stable override: if requested, put prev-used ids first (stable prefix
+    //    for prompt-cache reuse), then apply serial-position on the remainder.
+    let blocks = if options.cache_stable_order && !options.prev_used_ids.is_empty() {
+        cache_stable_order(chosen, &options.prev_used_ids)
+    } else {
+        serial_position_order(chosen)
+    };
 
     Pack {
         blocks,
@@ -326,17 +365,54 @@ pub fn pack(mut cands: Vec<Candidate>, options: &PackOptions) -> Pack {
         dropped_ids,
         deduped_ids,
         naive_tokens,
+        delta_skipped_ids: Vec::new(),
     }
+}
+
+/// Incremental pack: skip candidates already packed in a previous turn
+/// (`prev_used_ids`), then pack the rest with the same pipeline as [`pack`].
+///
+/// The returned `Pack` carries the skipped ids in `delta_skipped_ids` so the
+/// caller can render a "since last pack" marker. `naive_tokens` still reflects
+/// the full candidate set (as if nothing was skipped), so `savings_pct()`
+/// reports the effective savings including the delta skip.
+pub fn pack_delta(mut cands: Vec<Candidate>, options: &PackOptions) -> Pack {
+    let prev: std::collections::HashSet<i64> = options.prev_used_ids.iter().copied().collect();
+    let naive_tokens: usize = cands.iter().map(|c| estimate_tokens(&c.text)).sum();
+
+    let mut skipped = Vec::new();
+    cands.retain(|c| {
+        if prev.contains(&c.id) {
+            skipped.push(c.id);
+            false
+        } else {
+            true
+        }
+    });
+
+    let mut opts = options.clone();
+    opts.prev_used_ids = Vec::new();
+    opts.cache_stable_order = false;
+    let mut p = pack(cands, &opts);
+    p.delta_skipped_ids = skipped;
+    p.naive_tokens = naive_tokens;
+    p
 }
 
 /// Render the pack to a single string: STATE-card header + ordered blocks.
 pub fn render(pack: &Pack) -> String {
     let mut out = String::new();
+    let delta_marker = if pack.delta_skipped_ids.is_empty() {
+        String::new()
+    } else {
+        format!(" · Δ{} skipped", pack.delta_skipped_ids.len())
+    };
     out.push_str(&format!(
-        "STATE [{} facts · {} dropped · {} deduped · {}/{} tok · {}% saved]\n",
+        "STATE [{} facts · {} dropped · {} deduped{} · {}/{} tok · {}% saved]\n",
         pack.blocks.len(),
         pack.dropped_ids.len(),
         pack.deduped_ids.len(),
+        delta_marker,
         pack.used_tokens,
         pack.budget_tokens,
         pack.savings_pct(),
@@ -361,6 +437,8 @@ pub fn kind_tag(k: Kind) -> &'static str {
         Kind::Decision => "decision",
         Kind::File => "file",
         Kind::Chat => "chat",
+        Kind::SessionSummary => "session-summary",
+        Kind::CodebaseMap => "codebase-map",
         Kind::Other => "other",
     }
 }
@@ -388,6 +466,31 @@ fn serial_position_order(blocks: Vec<PackedBlock>) -> Vec<PackedBlock> {
     out.push(first);
     out.extend(middle);
     out.push(last);
+    out
+}
+
+/// Cache-stable ordering: blocks whose id is in `prev_used_ids` come first
+/// (preserving their relative order from the previous pack → stable prefix
+/// for prompt-cache reuse), then the remaining new blocks in serial-position
+/// order. This maximizes the shared prefix with the previous render.
+fn cache_stable_order(blocks: Vec<PackedBlock>, prev_used_ids: &[i64]) -> Vec<PackedBlock> {
+    if prev_used_ids.is_empty() {
+        return serial_position_order(blocks);
+    }
+    let prev: std::collections::HashSet<i64> = prev_used_ids.iter().copied().collect();
+    let mut stable: Vec<PackedBlock> = Vec::new();
+    let mut fresh: Vec<PackedBlock> = Vec::new();
+    for b in blocks {
+        if prev.contains(&b.id) {
+            stable.push(b);
+        } else {
+            fresh.push(b);
+        }
+    }
+    let fresh_ordered = serial_position_order(fresh);
+    let mut out = Vec::with_capacity(stable.len() + fresh_ordered.len());
+    out.extend(stable);
+    out.extend(fresh_ordered);
     out
 }
 
@@ -538,6 +641,7 @@ mod tests {
         let opts = PackOptions {
             budget_tokens: 120,
             header_reserve: 16,
+            ..PackOptions::default()
         };
         let p = pack(cands, &opts);
         assert!(
@@ -557,6 +661,7 @@ mod tests {
             &PackOptions {
                 budget_tokens: 1000,
                 header_reserve: 16,
+                ..PackOptions::default()
             },
         );
         let out = render(&p);
@@ -590,6 +695,7 @@ mod tests {
             &PackOptions {
                 budget_tokens: 40,
                 header_reserve: 8,
+                ..PackOptions::default()
             },
         );
         if let Some(b) = p.blocks.first() {
@@ -623,6 +729,7 @@ mod tests {
             &PackOptions {
                 budget_tokens: 1000,
                 header_reserve: 8,
+                ..PackOptions::default()
             },
         );
         assert_eq!(p.blocks.len(), 3);
@@ -653,6 +760,7 @@ mod tests {
             &PackOptions {
                 budget_tokens: 24,
                 header_reserve: 64,
+                ..PackOptions::default()
             },
         );
         assert!(
@@ -737,9 +845,160 @@ mod tests {
             &PackOptions {
                 budget_tokens: 30,
                 header_reserve: 6,
+                ..PackOptions::default()
             },
         );
         assert!(p.used_tokens <= 30);
         assert!(p.savings_pct() > 0.0, "should report savings vs naive");
+    }
+
+    #[test]
+    fn pack_delta_skips_prev_used_ids() {
+        let cands = vec![
+            cand(1, "alpha fact one", 0.9, Kind::KnownFact),
+            cand(2, "beta fact two", 0.8, Kind::KnownFact),
+            cand(3, "gamma fact three", 0.7, Kind::KnownFact),
+        ];
+        let opts = PackOptions {
+            budget_tokens: 1000,
+            header_reserve: 16,
+            prev_used_ids: vec![1, 2],
+            cache_stable_order: false,
+        };
+        let p = pack_delta(cands, &opts);
+        assert_eq!(p.delta_skipped_ids, vec![1, 2]);
+        assert_eq!(p.blocks.len(), 1, "only the new candidate should remain");
+        assert_eq!(p.blocks[0].id, 3);
+        // naive_tokens still reflects all 3 candidates → savings_pct reports
+        // the effective delta savings, not just the post-skip pack ratio.
+        assert!(p.savings_pct() > 0.0);
+    }
+
+    #[test]
+    fn pack_delta_empty_prev_is_full_pack() {
+        let cands = vec![
+            cand(1, "alpha fact one", 0.9, Kind::KnownFact),
+            cand(2, "beta fact two", 0.8, Kind::KnownFact),
+        ];
+        let opts = PackOptions {
+            budget_tokens: 1000,
+            header_reserve: 16,
+            prev_used_ids: vec![],
+            cache_stable_order: false,
+        };
+        let p = pack_delta(cands, &opts);
+        assert!(p.delta_skipped_ids.is_empty());
+        assert_eq!(p.blocks.len(), 2);
+    }
+
+    #[test]
+    fn cache_stable_order_puts_prev_first() {
+        // 3 candidates, id 2 was in prev pack → must come first in cache-stable mode.
+        let cands = vec![
+            cand(1, "alpha fact one", 0.9, Kind::Other),
+            cand(2, "beta fact two", 0.8, Kind::Other),
+            cand(3, "gamma fact three", 0.7, Kind::Other),
+        ];
+        let opts = PackOptions {
+            budget_tokens: 1000,
+            header_reserve: 8,
+            prev_used_ids: vec![2],
+            cache_stable_order: true,
+        };
+        let p = pack(cands, &opts);
+        assert_eq!(p.blocks.len(), 3);
+        assert_eq!(
+            p.blocks[0].id, 2,
+            "prev-used id must lead the pack for prompt-cache reuse"
+        );
+    }
+
+    #[test]
+    fn cache_stable_order_empty_prev_falls_back_to_serial() {
+        let cands = vec![
+            cand(10, "aaa one", 0.9, Kind::Other),
+            cand(20, "bbb two", 0.8, Kind::Other),
+            cand(30, "ccc three", 0.7, Kind::Other),
+        ];
+        let opts = PackOptions {
+            budget_tokens: 1000,
+            header_reserve: 8,
+            prev_used_ids: vec![],
+            cache_stable_order: true,
+        };
+        let p = pack(cands, &opts);
+        // No prev → serial-position applies: best first, 2nd-best last.
+        assert_eq!(p.blocks[0].id, 10);
+        assert_eq!(p.blocks[2].id, 20);
+    }
+
+    #[test]
+    fn render_shows_delta_marker_when_skipped() {
+        let cands = vec![
+            cand(1, "alpha fact one", 0.9, Kind::KnownFact),
+            cand(2, "beta fact two", 0.8, Kind::KnownFact),
+            cand(3, "gamma fact three", 0.7, Kind::KnownFact),
+        ];
+        let opts = PackOptions {
+            budget_tokens: 1000,
+            header_reserve: 16,
+            prev_used_ids: vec![1],
+            cache_stable_order: false,
+        };
+        let p = pack_delta(cands, &opts);
+        let out = render(&p);
+        assert!(out.contains("Δ1 skipped"), "delta marker must appear: {out}");
+    }
+
+    #[test]
+    fn render_no_delta_marker_for_plain_pack() {
+        let cands = vec![cand(1, "alpha fact one", 0.9, Kind::KnownFact)];
+        let p = pack(cands, &PackOptions::default());
+        let out = render(&p);
+        assert!(!out.contains("Δ"), "plain pack must not show delta marker: {out}");
+    }
+
+    #[test]
+    fn kind_tag_covers_session_and_codebase_map() {
+        assert_eq!(kind_tag(Kind::SessionSummary), "session-summary");
+        assert_eq!(kind_tag(Kind::CodebaseMap), "codebase-map");
+    }
+
+    #[test]
+    fn from_meta_maps_session_summary_variants() {
+        assert_eq!(Kind::from_meta("session-summary"), Kind::SessionSummary);
+        assert_eq!(Kind::from_meta("mega-session"), Kind::SessionSummary);
+        assert_eq!(Kind::from_meta("swarm-summary"), Kind::SessionSummary);
+    }
+
+    #[test]
+    fn from_meta_maps_codebase_map_variants() {
+        assert_eq!(Kind::from_meta("codebase-map"), Kind::CodebaseMap);
+        assert_eq!(Kind::from_meta("repo-map"), Kind::CodebaseMap);
+        assert_eq!(Kind::from_meta("funcmap"), Kind::CodebaseMap);
+    }
+
+    #[test]
+    fn session_summary_floor_is_signatures() {
+        // Session summaries must not collapse to OneLine — decisions would be lost.
+        assert_eq!(Kind::SessionSummary.floor(), Tier::Signatures);
+        assert_eq!(Kind::CodebaseMap.floor(), Tier::Signatures);
+    }
+
+    #[test]
+    fn session_summary_has_positive_trust_prior() {
+        assert!(Kind::SessionSummary.trust_prior() > 0.0);
+        assert!(Kind::CodebaseMap.trust_prior() > 0.0);
+    }
+
+    #[test]
+    fn session_summary_pack_respects_signatures_floor() {
+        // Tiny budget: session-summary must still keep signatures (headings + numbered lines).
+        let text = "# Session Decisions\nplain narrative filler\nDECISION: use synapse-pack for packing\nfiller prose\nstep 1: ingest events\nstep 2: replay";
+        let cands = vec![cand(1, text, 0.9, Kind::SessionSummary)];
+        let p = pack(cands, &PackOptions { budget_tokens: 30, ..PackOptions::default() });
+        let out = render(&p);
+        assert!(out.contains("DECISION") || out.contains("Session") || out.contains("step"),
+            "session-summary must keep signal lines even at tiny budget: {out}");
     }
 }
