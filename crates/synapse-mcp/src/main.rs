@@ -1,6 +1,8 @@
 //! synapse-mcp: MCP (stdio JSON-RPC 2.0) bridge to synapsed.
 //! Translates MCP tool calls -> msgpack-rpc over unix socket.
 
+#![recursion_limit = "512"]
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -354,7 +356,36 @@ async fn handle(sock: &PathBuf, req: &JsonRpc) -> Result<Value> {
             }, "required": ["snapshot_path"]}},
             {"name": "synapse_verify", "description": "Verify Ed25519 signature on a doc by id. Returns ok or error.", "inputSchema": {"type": "object", "properties": {
                 "doc_id": {"type": "integer"}, "vk": {"type": "array", "items": {"type": "integer"}}
-            }, "required": ["doc_id", "vk"]}}
+            }, "required": ["doc_id", "vk"]}},
+            // ── Metacognitive / enterprise tools (Tag 7) ────────────────────
+            {"name": "meta_health", "description": "always_keep: true. Return metacognitive loop health: tick count, success rate, rules count, compaction threshold.", "inputSchema": {"type": "object", "properties": {}}},
+            {"name": "meta_route", "description": "Sample a model for a task shape from the Bandit. Returns model name.", "inputSchema": {"type": "object", "properties": {
+                "task_shape": {"type": "string", "enum": ["bulk_read", "code", "synthesis", "council"]},
+                "token_count": {"type": "integer", "default": 0}
+            }, "required": ["task_shape"]}},
+            {"name": "meta_record_outcome", "description": "Record a routing outcome (win/loss) for a task shape + model. Persists to router.toml.", "inputSchema": {"type": "object", "properties": {
+                "task_shape": {"type": "string"}, "model": {"type": "string"}, "success": {"type": "boolean"}
+            }, "required": ["task_shape", "model", "success"]}},
+            {"name": "compliance_export", "description": "Export memories with PII masking. Returns JSON/CSV/Markdown with sensitive data redacted.", "inputSchema": {"type": "object", "properties": {
+                "format": {"type": "string", "enum": ["json", "csv", "markdown"], "default": "json"},
+                "max_records": {"type": "integer", "default": 0},
+                "include_source": {"type": "boolean", "default": false}
+            }}},
+            {"name": "provenance_sign", "description": "Sign a memory with an Ed25519 agent identity. Records provenance chain entry.", "inputSchema": {"type": "object", "properties": {
+                "doc_id": {"type": "string"}, "agent_id": {"type": "string"},
+                "agent_version": {"type": "string"}, "source_uri": {"type": "string"},
+                "content": {"type": "string"}, "parent_doc_id": {"type": "string"}
+            }, "required": ["doc_id", "agent_id", "agent_version", "source_uri", "content"]}},
+            {"name": "provenance_verify", "description": "Verify all provenance signatures in the brain. Returns list of broken/invalid records.", "inputSchema": {"type": "object", "properties": {
+                "public_keys_b64": {"type": "object"}
+            }}},
+            {"name": "audit_query", "description": "Query the append-only hash-chained audit trail by time range. Returns events.", "inputSchema": {"type": "object", "properties": {
+                "from_ts": {"type": "integer"}, "to_ts": {"type": "integer"}, "limit": {"type": "integer", "default": 100}
+            }}},
+            {"name": "audit_verify", "description": "Verify the audit chain integrity. Returns ok or broken links.", "inputSchema": {"type": "object", "properties": {}}},
+            {"name": "rbac_check", "description": "Check if a user has a permission in a space. Returns allowed/denied.", "inputSchema": {"type": "object", "properties": {
+                "space": {"type": "string"}, "user": {"type": "string"}, "permission": {"type": "string"}
+            }, "required": ["space", "user", "permission"]}}
             ]});
             // Tool-list truncation: if the client passes a `query` hint in
             // tools/list params, keep only tools whose name or description
@@ -430,6 +461,15 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
         "session_timeline" => return session_timeline(&args).await,
         "list_sessions" => return list_sessions(&args).await,
         "ultra_search" => return ultra_search(&args).await,
+        "meta_health" => return meta_health(&args).await,
+        "meta_route" => return meta_route(&args).await,
+        "meta_record_outcome" => return meta_record_outcome(&args).await,
+        "compliance_export" => return compliance_export(&args).await,
+        "provenance_sign" => return provenance_sign(&args).await,
+        "provenance_verify" => return provenance_verify(&args).await,
+        "audit_query" => return audit_query(&args).await,
+        "audit_verify" => return audit_verify(&args).await,
+        "rbac_check" => return rbac_check(&args).await,
         _ => {}
     }
 
@@ -2590,6 +2630,269 @@ async fn ultra_search(args: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({"query": query, "hits": hits, "count": hits.len()}))
+}
+
+// ── Metacognitive / enterprise tool handlers (Tag 7) ──────────────────────
+
+fn router_toml_path() -> Result<std::path::PathBuf> {
+    let home = dirs_next::home_dir().context("no home dir")?;
+    Ok(home.join(".synapse/router.toml"))
+}
+
+async fn meta_health(_args: &Value) -> Result<Value> {
+    let path = router_toml_path()?;
+    if !path.exists() {
+        return Ok(json!({
+            "status": "not_initialized",
+            "path": path,
+            "note": "router.toml not yet created; meta-loop has not ticked"
+        }));
+    }
+    let meta = synapse_meta::MetaLoop::new(path)
+        .map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
+    let now = chrono::Utc::now().timestamp();
+    let h = meta.health(now);
+    Ok(json!({
+        "tick_count": h.tick_count,
+        "last_tick_age_secs": h.last_tick_age_secs,
+        "total_wins": h.total_wins,
+        "total_losses": h.total_losses,
+        "success_rate": h.success_rate,
+        "rules_count": h.rules_count,
+        "compaction_threshold": h.compaction_threshold
+    }))
+}
+
+async fn meta_route(args: &Value) -> Result<Value> {
+    let shape_s = args
+        .get("task_shape")
+        .and_then(|v| v.as_str())
+        .context("meta_route requires 'task_shape'")?;
+    let shape = synapse_meta::TaskShape::from_str(shape_s);
+    let path = router_toml_path()?;
+    let meta = synapse_meta::MetaLoop::new(path)
+        .map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
+    let model = meta.sample_model(&shape);
+    Ok(json!({"task_shape": shape_s, "model": model}))
+}
+
+async fn meta_record_outcome(args: &Value) -> Result<Value> {
+    let shape_s = args
+        .get("task_shape")
+        .and_then(|v| v.as_str())
+        .context("meta_record_outcome requires 'task_shape'")?;
+    let model = args
+        .get("model")
+        .and_then(|v| v.as_str())
+        .context("meta_record_outcome requires 'model'")?;
+    let success = args
+        .get("success")
+        .and_then(|v| v.as_bool())
+        .context("meta_record_outcome requires 'success' (boolean)")?;
+    let shape = synapse_meta::TaskShape::from_str(shape_s);
+    let path = router_toml_path()?;
+    let meta = synapse_meta::MetaLoop::new(path)
+        .map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
+    meta.record_outcome(&shape, model, success)
+        .map_err(|e| anyhow::anyhow!("persist: {e}"))?;
+    Ok(json!({"recorded": true, "task_shape": shape_s, "model": model, "success": success}))
+}
+
+async fn compliance_export(args: &Value) -> Result<Value> {
+    let format = args
+        .get("format")
+        .and_then(|v| v.as_str())
+        .unwrap_or("json");
+    let max_records = args
+        .get("max_records")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as usize;
+    let include_source = args
+        .get("include_source")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let path = ultra_brain_path()?;
+    if !path.exists() {
+        return Ok(json!({"error": "brain.db not found", "path": path}));
+    }
+    let conn = rusqlite::Connection::open(&path)
+        .with_context(|| format!("open brain.db: {}", path.display()))?;
+    let masker = synapse_compliance::PiiMasker::new()
+        .map_err(|e| anyhow::anyhow!("pii masker: {e}"))?;
+    let opts = synapse_compliance::ExportOptions {
+        include_pii_counts: true,
+        include_agent: true,
+        include_source,
+        max_records,
+    };
+    let records = synapse_compliance::export_memories(&conn, &masker, &opts)
+        .map_err(|e| anyhow::anyhow!("export: {e}"))?;
+    let output = match format {
+        "csv" => synapse_compliance::to_csv(&records)
+            .map_err(|e| anyhow::anyhow!("csv: {e}"))?,
+        "markdown" | "md" => synapse_compliance::to_markdown(&records)
+            .map_err(|e| anyhow::anyhow!("markdown: {e}"))?,
+        _ => synapse_compliance::to_json(&records)
+            .map_err(|e| anyhow::anyhow!("json: {e}"))?,
+    };
+    Ok(json!({
+        "format": format,
+        "records": records.len(),
+        "export": output
+    }))
+}
+
+async fn provenance_sign(args: &Value) -> Result<Value> {
+    let doc_id = args.get("doc_id").and_then(|v| v.as_str()).context("provenance_sign requires 'doc_id'")?;
+    let agent_id = args.get("agent_id").and_then(|v| v.as_str()).context("provenance_sign requires 'agent_id'")?;
+    let agent_version = args.get("agent_version").and_then(|v| v.as_str()).context("provenance_sign requires 'agent_version'")?;
+    let source_uri = args.get("source_uri").and_then(|v| v.as_str()).context("provenance_sign requires 'source_uri'")?;
+    let content = args.get("content").and_then(|v| v.as_str()).context("provenance_sign requires 'content'")?;
+    let parent_doc_id = args.get("parent_doc_id").and_then(|v| v.as_str());
+    let path = ultra_brain_path()?;
+    let conn = rusqlite::Connection::open(&path)
+        .with_context(|| format!("open brain.db: {}", path.display()))?;
+    synapse_provenance::init_schema(&conn)
+        .map_err(|e| anyhow::anyhow!("provenance schema: {e}"))?;
+    // Load or create agent identity from ~/.synapse/agents/{agent_id}.json
+    let home = dirs_next::home_dir().context("no home dir")?;
+    let agents_dir = home.join(".synapse/agents");
+    std::fs::create_dir_all(&agents_dir).ok();
+    let id_path = agents_dir.join(format!("{agent_id}.json"));
+    let identity = if id_path.exists() {
+        let text = std::fs::read_to_string(&id_path)?;
+        serde_json::from_str(&text)?
+    } else {
+        let id = synapse_provenance::AgentIdentity::new(agent_id);
+        std::fs::write(&id_path, serde_json::to_string_pretty(&id)?)?;
+        id
+    };
+    let rec = synapse_provenance::sign_and_append(
+        &conn, &identity, doc_id, agent_version, source_uri,
+        content.as_bytes(), parent_doc_id,
+    ).map_err(|e| anyhow::anyhow!("sign: {e}"))?;
+    Ok(json!({
+        "signed": true,
+        "doc_id": rec.doc_id,
+        "agent_id": rec.agent_id,
+        "ts": rec.ts
+    }))
+}
+
+async fn provenance_verify(args: &Value) -> Result<Value> {
+    let path = ultra_brain_path()?;
+    let conn = rusqlite::Connection::open(&path)
+        .with_context(|| format!("open brain.db: {}", path.display()))?;
+    // Load all agent identities from ~/.synapse/agents/*.json
+    let home = dirs_next::home_dir().context("no home dir")?;
+    let agents_dir = home.join(".synapse/agents");
+    let mut keys: std::collections::HashMap<String, ed25519_dalek::VerifyingKey> = Default::default();
+    if agents_dir.exists() {
+        for entry in std::fs::read_dir(&agents_dir)? {
+            let entry = entry?;
+            let p = entry.path();
+            if p.extension().and_then(|e| e.to_str()) == Some("json") {
+                if let Ok(text) = std::fs::read_to_string(&p) {
+                    if let Ok(id) = serde_json::from_str::<synapse_provenance::AgentIdentity>(&text) {
+                        if let Ok(vk) = id.verifying_key() {
+                            keys.insert(id.agent_id.clone(), vk);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Also accept inline keys from args.
+    if let Some(extra) = args.get("public_keys_b64").and_then(|v| v.as_object()) {
+        for (k, v) in extra {
+            if let Some(s) = v.as_str() {
+                use base64::Engine;
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(s) {
+                    if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
+                        if let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&arr) {
+                            keys.insert(k.clone(), vk);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let bad = synapse_provenance::verify_all(&conn, &keys)
+        .map_err(|e| anyhow::anyhow!("verify: {e}"))?;
+    Ok(json!({
+        "verified": bad.is_empty(),
+        "invalid_count": bad.len(),
+        "invalid": bad
+    }))
+}
+
+async fn audit_query(args: &Value) -> Result<Value> {
+    let from_ts = args.get("from_ts").and_then(|v| v.as_i64()).unwrap_or(0);
+    let to_ts = args.get("to_ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
+    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(100).clamp(1, 10000) as usize;
+    let path = ultra_brain_path()?;
+    let conn = rusqlite::Connection::open(&path)
+        .with_context(|| format!("open brain.db: {}", path.display()))?;
+    synapse_audit::init_schema(&conn)
+        .map_err(|e| anyhow::anyhow!("audit schema: {e}"))?;
+    let mut events = synapse_audit::query_range(&conn, from_ts, to_ts)
+        .map_err(|e| anyhow::anyhow!("audit query: {e}"))?;
+    events.truncate(limit);
+    let arr: Vec<Value> = events.iter().map(|e| json!({
+        "id": e.id,
+        "ts": e.ts,
+        "actor": e.actor,
+        "action": e.action,
+        "target": e.target,
+        "space": e.space,
+        "prev_hash": e.prev_hash.map(|h| h.to_vec()),
+        "hash": h_to_hex(&e.hash),
+    })).collect();
+    Ok(json!({"events": arr, "count": arr.len()}))
+}
+
+fn h_to_hex(h: &[u8; 32]) -> String {
+    h.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+async fn audit_verify(_args: &Value) -> Result<Value> {
+    let path = ultra_brain_path()?;
+    let conn = rusqlite::Connection::open(&path)
+        .with_context(|| format!("open brain.db: {}", path.display()))?;
+    synapse_audit::init_schema(&conn)
+        .map_err(|e| anyhow::anyhow!("audit schema: {e}"))?;
+    let result = synapse_audit::verify_chain(&conn);
+    match result {
+        Ok(()) => Ok(json!({"verified": true, "broken_count": 0})),
+        Err(e) => Ok(json!({"verified": false, "broken_count": 1, "error": e.to_string()})),
+    }
+}
+
+async fn rbac_check(args: &Value) -> Result<Value> {
+    let space = args.get("space").and_then(|v| v.as_str()).context("rbac_check requires 'space'")?;
+    let user = args.get("user").and_then(|v| v.as_str()).context("rbac_check requires 'user'")?;
+    let permission = args.get("permission").and_then(|v| v.as_str()).context("rbac_check requires 'permission'")?;
+    let perm = match permission {
+        "read" | "Read" => synapse_rbac::Permission::Read,
+        "write" | "Write" => synapse_rbac::Permission::Write,
+        "delete" | "Delete" => synapse_rbac::Permission::Delete,
+        "admin" | "Admin" => synapse_rbac::Permission::Admin,
+        other => anyhow::bail!("unknown permission '{other}', must be read|write|delete|admin"),
+    };
+    let path = ultra_brain_path()?;
+    let conn = rusqlite::Connection::open(&path)
+        .with_context(|| format!("open brain.db: {}", path.display()))?;
+    synapse_rbac::init_schema(&conn)
+        .map_err(|e| anyhow::anyhow!("rbac schema: {e}"))?;
+    let result = synapse_rbac::enforce(&conn, space, user, perm);
+    let allowed = result.is_ok();
+    Ok(json!({
+        "space": space,
+        "user": user,
+        "permission": permission,
+        "allowed": allowed,
+        "error": result.err().map(|e| e.to_string())
+    }))
 }
 
 #[cfg(test)]

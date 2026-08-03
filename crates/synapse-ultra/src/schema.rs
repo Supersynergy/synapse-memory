@@ -8,7 +8,7 @@ use crate::UltraResult;
 use rusqlite::Connection;
 
 /// Current Synapse Ultra schema version. Bump when adding new tables/columns.
-pub const ULTRA_SCHEMA_VERSION: u32 = 2;
+pub const ULTRA_SCHEMA_VERSION: u32 = 3;
 
 /// Run the idempotent migration. Creates all Ultra tables, indexes, views,
 /// and triggers. Safe to call on a fresh DB or an existing synapse-memory brain.db.
@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS meta (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(k, v) VALUES ('ultra_schema_version', '2');
+INSERT OR IGNORE INTO meta(k, v) VALUES ('ultra_schema_version', '3');
 "#,
     )?;
 
@@ -256,6 +256,93 @@ INSERT OR IGNORE INTO meta(k, v) VALUES ('ultra_schema_version', '2');
     // run at end of migration; no-op on versions that predate it.
     let _ = conn.pragma_update(None, "optimize", 0_i64);
 
+    // --- bi-temporal columns (v3): valid_time + transaction_time on decisions + events ---
+    migrate_bitemporal(conn)?;
+
+    Ok(())
+}
+
+/// Check whether a column exists on a table.
+fn column_exists(conn: &Connection, table: &str, col: &str) -> bool {
+    let mut stmt = match conn.prepare(&format!("PRAGMA table_info({table})")) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let mut rows = match stmt.query([]) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    while let Some(row) = rows.next().ok().flatten() {
+        let name: String = row.get(1).unwrap_or_default();
+        if name == col {
+            return true;
+        }
+    }
+    false
+}
+
+/// Add `valid_time` and `transaction_time` columns to `decisions` and
+/// `synapse_events`, plus a `why_at` view for bi-temporal queries. Idempotent.
+pub fn migrate_bitemporal(conn: &Connection) -> UltraResult<()> {
+    // decisions: valid_time (when the fact was true), transaction_time (when stored)
+    if !column_exists(conn, "decisions", "valid_time") {
+        conn.execute_batch(
+            "ALTER TABLE decisions ADD COLUMN valid_time INTEGER;",
+        )?;
+    }
+    if !column_exists(conn, "decisions", "transaction_time") {
+        conn.execute_batch(
+            "ALTER TABLE decisions ADD COLUMN transaction_time INTEGER;",
+        )?;
+    }
+    if !column_exists(conn, "synapse_events", "valid_time") {
+        conn.execute_batch(
+            "ALTER TABLE synapse_events ADD COLUMN valid_time INTEGER;",
+        )?;
+    }
+    if !column_exists(conn, "synapse_events", "transaction_time") {
+        conn.execute_batch(
+            "ALTER TABLE synapse_events ADD COLUMN transaction_time INTEGER;",
+        )?;
+    }
+    // Backfill: rows without valid_time/transaction_time default to ts.
+    conn.execute_batch(
+        "UPDATE decisions SET valid_time = ts WHERE valid_time IS NULL;
+         UPDATE decisions SET transaction_time = ts WHERE transaction_time IS NULL;
+         UPDATE synapse_events SET valid_time = ts WHERE valid_time IS NULL;
+         UPDATE synapse_events SET transaction_time = ts WHERE transaction_time IS NULL;",
+    )?;
+    // Indexes for temporal queries.
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_decisions_valid_time ON decisions(valid_time);
+         CREATE INDEX IF NOT EXISTS idx_decisions_tx_time ON decisions(transaction_time);
+         CREATE INDEX IF NOT EXISTS idx_events_valid_time ON synapse_events(valid_time);
+         CREATE INDEX IF NOT EXISTS idx_events_tx_time ON synapse_events(transaction_time);",
+    )?;
+    // why_at view: bi-temporal decision chain. Filter by `at` (valid_time <= at
+    // AND transaction_time <= at) to get decisions that were both true AND known
+    // at the given time.
+    conn.execute_batch(
+        r#"
+CREATE VIEW IF NOT EXISTS why_at AS
+WITH RECURSIVE chain(uri, kind, depth, path, valid_time, transaction_time) AS (
+    SELECT uri, kind, 0, uri, first_seen, first_seen
+    FROM graph_nodes
+    UNION ALL
+    SELECT e.from_uri, n.kind, c.depth + 1, c.path || ' <- ' || e.from_uri,
+           e.ts, e.ts
+    FROM chain c
+    JOIN graph_edges e ON e.to_uri = c.uri
+    JOIN graph_nodes n ON n.uri = e.from_uri
+    WHERE c.depth < 20 AND e.rel IN ('caused', 'derived_from', 'depends_on')
+)
+SELECT * FROM chain;
+"#,
+    )?;
+    // Update schema version.
+    conn.execute_batch(
+        "INSERT OR REPLACE INTO meta(k, v) VALUES ('ultra_schema_version', '3');",
+    )?;
     Ok(())
 }
 

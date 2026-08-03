@@ -1,0 +1,22 @@
+[package]
+name = "synapse-rbac"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Multi-Tenant Spaces + RBAC (owner/editor/reader) for synapse-memory."
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+doctest = false

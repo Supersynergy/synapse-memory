@@ -91,6 +91,50 @@ pub fn decay_order(metas: &[DecayMeta], now_secs: i64, half_life_secs: i64) -> V
     idx
 }
 
+/// Combined retrieval score: `importance × recency × interaction_count`.
+///
+/// This is the default ranking formula for synapse-memory retrieval. It
+/// blends an externally-supplied `importance` signal (e.g. from feedback or
+/// reranking) with the decay-derived recency/interaction boosts.
+///
+/// - `importance`: [0.0..1.0] — external importance signal (e.g. RRF score normalized).
+/// - `meta`: decay metadata (last_touched, strength, interactions).
+/// - `now_secs`: current time.
+/// - `half_life_secs`: decay half-life (default 24h).
+///
+/// Returns a score in [0.0..~2.7] (importance × recency_boost × interaction_boost × decayed_strength).
+pub fn retrieval_score(
+    importance: f32,
+    meta: &DecayMeta,
+    now_secs: i64,
+    half_life_secs: i64,
+) -> f32 {
+    let elapsed = (now_secs - meta.last_touched_secs).max(0);
+    let halvings = elapsed as f32 / half_life_secs as f32;
+    let decayed_strength = meta.strength * 0.5_f32.powf(halvings);
+    let recency_boost = if elapsed < 3600 { 1.2 } else { 1.0 };
+    let interaction_boost = 1.0 + (meta.interactions as f32 * 0.05).min(0.5);
+    importance * decayed_strength * recency_boost * interaction_boost
+}
+
+/// Rank candidates by `retrieval_score` (descending). Returns indices.
+/// `importances` must be the same length as `metas`.
+pub fn retrieval_order(
+    importances: &[f32],
+    metas: &[DecayMeta],
+    now_secs: i64,
+    half_life_secs: i64,
+) -> Vec<usize> {
+    assert_eq!(importances.len(), metas.len(), "importances and metas must have same length");
+    let mut idx: Vec<usize> = (0..metas.len()).collect();
+    idx.sort_by(|&a, &b| {
+        let sa = retrieval_score(importances[a], &metas[a], now_secs, half_life_secs);
+        let sb = retrieval_score(importances[b], &metas[b], now_secs, half_life_secs);
+        sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    idx
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,5 +230,42 @@ mod tests {
         m.strength = 0.7;
         m.decay(1000, DEFAULT_HALF_LIFE_SECS);
         assert!((m.strength - 0.7).abs() < 1e-6, "no decay when elapsed=0");
+    }
+
+    #[test]
+    fn retrieval_score_combines_importance_recency_interaction() {
+        let now = 10_000;
+        let m = DecayMeta {
+            id: 1,
+            last_touched_secs: now,
+            strength: 1.0,
+            interactions: 5,
+        };
+        // importance=0.8, fresh (recency_boost=1.2), 5 interactions (interaction_boost=1.25)
+        // score = 0.8 * 1.0 * 1.2 * 1.25 = 1.2
+        let s = retrieval_score(0.8, &m, now, DEFAULT_HALF_LIFE_SECS);
+        assert!((s - 1.2).abs() < 1e-5, "combined score: got {s}");
+    }
+
+    #[test]
+    fn retrieval_order_ranks_high_importance_first() {
+        let now = 10_000;
+        let metas = vec![
+            DecayMeta { id: 1, last_touched_secs: now, strength: 1.0, interactions: 0 },
+            DecayMeta { id: 2, last_touched_secs: now, strength: 1.0, interactions: 0 },
+            DecayMeta { id: 3, last_touched_secs: now, strength: 1.0, interactions: 0 },
+        ];
+        let importances = vec![0.5, 0.9, 0.1];
+        let order = retrieval_order(&importances, &metas, now, DEFAULT_HALF_LIFE_SECS);
+        assert_eq!(metas[order[0]].id, 2, "highest importance should come first");
+        assert_eq!(metas[order[2]].id, 3, "lowest importance should come last");
+    }
+
+    #[test]
+    fn retrieval_score_decays_with_time() {
+        let m = DecayMeta { id: 1, last_touched_secs: 1000, strength: 1.0, interactions: 0 };
+        let s_now = retrieval_score(1.0, &m, 1000, DEFAULT_HALF_LIFE_SECS);
+        let s_later = retrieval_score(1.0, &m, 1000 + DEFAULT_HALF_LIFE_SECS, DEFAULT_HALF_LIFE_SECS);
+        assert!(s_later < s_now, "retrieval score must decay with time");
     }
 }
