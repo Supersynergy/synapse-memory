@@ -18,8 +18,17 @@ clap.workspace = true
 synapse-pack = { path = "../synapse-pack" }
 synapse-learn = { path = "../synapse-learn" }
 synapse-ultra = { path = "../synapse-ultra" }
+synapse-meta = { path = "../synapse-meta" }
+synapse-compliance = { path = "../synapse-compliance" }
+synapse-provenance = { path = "../synapse-provenance" }
+synapse-audit = { path = "../synapse-audit" }
+synapse-rbac = { path = "../synapse-rbac" }
+rusqlite.workspace = true
+ed25519-dalek.workspace = true
+base64.workspace = true
 dirs-next = "2"
 chrono.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile = "3"

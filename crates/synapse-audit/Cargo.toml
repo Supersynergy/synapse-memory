@@ -1,0 +1,24 @@
+[package]
+name = "synapse-audit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Append-only hash-chained audit trail for synapse-memory. Tamper-evident."
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+rusqlite.workspace = true
+blake3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+doctest = false

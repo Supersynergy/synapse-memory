@@ -16,7 +16,7 @@ fn migrate_is_idempotent() {
     u.migrate().unwrap();
     u.migrate().unwrap(); // second call must not error
     let v = u.with_conn(|c| synapse_ultra::schema::schema_version(c));
-    assert_eq!(v, 2);
+    assert_eq!(v, 3);
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn brain_stats_returns_counts() {
     u.with_conn(|c| ingest_event(c, &e)).unwrap();
     let stats = u.with_conn(|c| synapse_ultra::observe::brain_stats(c)).unwrap();
     assert_eq!(stats.events, 1);
-    assert_eq!(stats.ultra_schema_version, 2);
+    assert_eq!(stats.ultra_schema_version, 3);
 }
 
 #[test]
@@ -399,4 +399,33 @@ fn ingest_events_batch_with_prepared_stmt() {
     // re-ingest → all dedup
     let n2 = u.with_conn(|c| ingest_events(c, &batch)).unwrap();
     assert_eq!(n2, 0);
+}
+
+#[test]
+fn why_at_filters_by_time() {
+    use synapse_ultra::graph::{upsert_edge, upsert_node, why, why_at};
+    let u = fresh();
+    u.with_conn(|c| {
+        // Two edges: one at t=1000, one at t=5000.
+        upsert_node(c, "file:a", "file", None, 1000).unwrap();
+        upsert_node(c, "file:b", "file", None, 1000).unwrap();
+        upsert_node(c, "file:c", "file", None, 1000).unwrap();
+        upsert_edge(c, "file:b", "file:a", "caused", 1.0, 1000, None, None).unwrap();
+        upsert_edge(c, "file:c", "file:a", "caused", 1.0, 5000, None, None).unwrap();
+    });
+    // why at t=2000: only file:b visible.
+    let chain_early = u.with_conn(|c| why_at(c, "file:a", 5, 2000)).unwrap();
+    let uris_early: Vec<String> = chain_early.iter().map(|s| s.uri.clone()).collect();
+    assert!(uris_early.contains(&"file:b".to_string()));
+    assert!(!uris_early.contains(&"file:c".to_string()));
+
+    // why at t=10000: both visible.
+    let chain_late = u.with_conn(|c| why_at(c, "file:a", 5, 10000)).unwrap();
+    let uris_late: Vec<String> = chain_late.iter().map(|s| s.uri.clone()).collect();
+    assert!(uris_late.contains(&"file:b".to_string()));
+    assert!(uris_late.contains(&"file:c".to_string()));
+
+    // Sanity: why() (no time filter) returns both.
+    let chain_all = u.with_conn(|c| why(c, "file:a", 5)).unwrap();
+    assert!(chain_all.len() >= 3);
 }

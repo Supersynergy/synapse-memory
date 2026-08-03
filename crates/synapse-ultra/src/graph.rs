@@ -158,6 +158,86 @@ pub fn why(conn: &Connection, uri: &str, max_depth: i64) -> UltraResult<Vec<WhyS
     Ok(out)
 }
 
+/// Bi-temporal `why`: like `why()` but only follows edges whose `ts` is <= `at`.
+/// Returns the decision chain as it was known at the given timestamp.
+///
+/// Requires schema v3 (bi-temporal columns). On older schemas falls back to
+/// `why()` (returns all edges regardless of time).
+pub fn why_at(conn: &Connection, uri: &str, max_depth: i64, at: i64) -> UltraResult<Vec<WhyStep>> {
+    if max_depth <= 0 {
+        return Ok(Vec::new());
+    }
+
+    let anchor: Option<(String, String)> = conn
+        .query_row(
+            "SELECT uri, kind FROM graph_nodes WHERE uri = ?1",
+            params![uri],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
+    let (start_uri, start_kind) = match anchor {
+        Some(v) => v,
+        None => return Ok(Vec::new()),
+    };
+
+    let mut visited: HashSet<String> = HashSet::new();
+    visited.insert(start_uri.clone());
+    let mut out = Vec::new();
+    out.push(WhyStep {
+        uri: start_uri.clone(),
+        kind: start_kind.clone(),
+        depth: 0,
+        path: start_uri.clone(),
+    });
+
+    let mut frontier: Vec<(String, String, i64, String)> =
+        vec![(start_uri.clone(), start_kind.clone(), 0, start_uri.clone())];
+
+    let edge_sql = r#"
+        SELECT e.from_uri, n.kind
+        FROM graph_edges e
+        JOIN graph_nodes n ON n.uri = e.from_uri
+        WHERE e.to_uri = ?1
+          AND e.rel IN ('caused', 'derived_from', 'depends_on')
+          AND e.ts <= ?2
+        ORDER BY e.from_uri ASC
+    "#;
+
+    while !frontier.is_empty() {
+        let mut next: Vec<(String, String, i64, String)> = Vec::new();
+        for (cur_uri, _cur_kind, depth, path) in &frontier {
+            if *depth >= max_depth - 1 {
+                continue;
+            }
+            let mut stmt = conn.prepare_cached(edge_sql)?;
+            let rows = stmt.query_map(params![cur_uri, at], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            for r in rows {
+                let (n_uri, n_kind) = r?;
+                if visited.insert(n_uri.clone()) {
+                    let new_path = format!("{path} <- {n_uri}");
+                    out.push(WhyStep {
+                        uri: n_uri.clone(),
+                        kind: n_kind.clone(),
+                        depth: depth + 1,
+                        path: new_path.clone(),
+                    });
+                    next.push((n_uri, n_kind, depth + 1, new_path));
+                }
+            }
+        }
+        frontier = next;
+    }
+
+    out.sort_by(|a, b| {
+        a.depth
+            .cmp(&b.depth)
+            .then_with(|| a.uri.cmp(&b.uri))
+    });
+    Ok(out)
+}
+
 /// `graph_expand(uri, max_depth)` — forward chain: what does this URI lead to?
 /// Rust-side BFS with `HashSet` visited-set (O(depth) cycle check).
 pub fn graph_expand(conn: &Connection, uri: &str, max_depth: i64) -> UltraResult<Vec<WhyStep>> {

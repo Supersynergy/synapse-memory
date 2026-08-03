@@ -1,0 +1,26 @@
+[package]
+name = "synapse-provenance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Ed25519 signed provenance chain for synapse-memory memories. Tamper-evident."
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+rusqlite.workspace = true
+ed25519-dalek.workspace = true
+rand.workspace = true
+blake3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+base64.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+doctest = false
