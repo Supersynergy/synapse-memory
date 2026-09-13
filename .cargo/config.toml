@@ -40,11 +40,12 @@ rustflags = []
 rustflags = []
 
 # sqlite-vec 0.1.9 vendored C typedefs u_intN_t without including sys/types.h —
-# glibc pulls it transitively, musl does not and also gates the aliases behind
-# _BSD_SOURCE. cc-rs reads CFLAGS_<target> for C compile flags.
+# glibc pulls it transitively, musl does not. Map the aliases to stdint types so
+# the typedefs become legal C11 self-typedefs. Plain -D flags (no -include, which
+# would also break .S assembler units in blake3/zstd-sys).
 [env]
-CFLAGS_x86_64_unknown_linux_musl = "-D_BSD_SOURCE -include sys/types.h"
-CFLAGS_aarch64_unknown_linux_musl = "-D_BSD_SOURCE -include sys/types.h"
+CFLAGS_x86_64_unknown_linux_musl = "-Du_int8_t=uint8_t -Du_int16_t=uint16_t -Du_int64_t=uint64_t"
+CFLAGS_aarch64_unknown_linux_musl = "-Du_int8_t=uint8_t -Du_int16_t=uint16_t -Du_int64_t=uint64_t"
 
 [target.'cfg(target_os = "linux")']
 # mold is 2–5x faster than ld/lld for Rust workspaces. Install: `cargo install --git https://github.com/rui314/mold`.
