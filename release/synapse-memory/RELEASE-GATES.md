@@ -45,6 +45,34 @@ No public tag until every P0 box is backed by a log or artifact.
 
 ## Current verified state
 
+### rc.2 evidence — 2026-09-13, commit `0c46bc7c`, tag `ctxos-v1.0.1-rc.2`
+
+- GitHub Actions run `34774802769` green end-to-end: preflight (script syntax,
+  locked fetch, license closure, deny, RustSec, portable tests+clippy) plus all
+  six native targets (aarch64/x86_64 × apple-darwin/pc-windows-msvc/
+  unknown-linux-musl) and the `release` publication job.
+- Published release carries 13 assets: 6 archives + 6 `.sha256` sidecars +
+  `SHA256SUMS`. Downloaded `synapse-memory-aarch64-apple-darwin.tar.gz`,
+  checksum verified (`shasum -c` OK), binary reports `synapse 1.0.1-rc.2`.
+- Local `verify.sh` re-run on the rc.2 portable binary: all 15 stages PASS
+  (licenses, deny, RustSec, native binary, init/typed memory, cited context,
+  feedback loop, offline freshness/doctor, backup/restore, packaging,
+  checksummed install, safe uninstall, Codex disconnect recovery).
+- Workspace `cargo nextest`: 802/802 pass. `cargo clippy --workspace
+  -D warnings` clean. `cargo fmt --check` clean.
+- New in rc.2: daemon-first CLI retrieval (synapsed unix socket → local store
+  fallback, `--no-daemon`/`SYNAPSE_NO_DAEMON`), launchd auto-install in
+  `synx onboard`, doctor `daemon=` status, retrieval-route Thompson bandit in
+  `context_pack` (`route`/`route_selected_by` in manifest), `maintain --json`
+  `open_ms`/`scan_ms`/`merge_ms` telemetry.
+- Fixes landed: aarch64-musl `c_char` typedef (was hardcoded `i8`), musl
+  `u_intN_t` via `-D` aliases (keeps blake3/zstd `.S` units compiling), Windows
+  smoke `-notmatch` array-filter bug (`Out-String`), release job artifact
+  ordering (checkout before `download-artifact`; default clean wiped `dist/`),
+  portable-clippy gating for macOS-only daemon helpers.
+
+### Earlier verified state (rc.1)
+
 - Portable `synapse-cli --no-default-features` checks and runs locally on macOS
   ARM64; its six-target union is 146 resolved packages.
 - `fresh-snapshot.sh` rebuilt and passed all 15 stages from detached clean `HEAD`
