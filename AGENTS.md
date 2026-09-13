@@ -70,6 +70,10 @@ cd ~/BASE/projects/synapse && grepgod --chain funcmap crates/synapse-pack crates
 | `Kind::SessionSummary` + `Kind::CodebaseMap` | synapse-pack | ✅ shipped + 6 tests |
 | `session_ingest` MCP tool (swarm/cmux event ingest) | synapse-mcp | ✅ shipped |
 | `session_replay` MCP tool (mega-session reconstruction) | synapse-mcp | ✅ shipped |
+| Daemon-first CLI hot path (context/prime/hook via synapsed socket) | synapse-cli | ✅ shipped — `context` ~56s→<1s warm; `--no-daemon`/`SYNAPSE_NO_DAEMON` opt-out; local-store fallback |
+| launchd auto-install in `synx onboard` + `daemon=` in `synx doctor` | synapse-cli | ✅ shipped (macOS) |
+| Retrieval-route bandit (Thompson over lexical/semantic/hybrid, 10% explore, 24-sample floor) | synapse-learn → synapse-mcp | ✅ shipped + 3 tests — `manifest.route`/`route_selected_by`, rewarded via `context_feedback` |
+| `maintain --json` telemetry (`open_ms`/`scan_ms`/`merge_ms`) | synapse-cli + synapse-learn | ✅ shipped |
 
 ### Agent Roles
 

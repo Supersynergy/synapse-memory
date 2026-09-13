@@ -9,7 +9,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [1.0.1-rc.2] - 2026-09-13
+
 ### Added
+- Daemon-first CLI hot path: `synx context`, `synx prime` and the
+  `context-hook` pack path query a running `synapsed` over the length-prefixed
+  MessagePack unix socket (`SYNAPSE_SOCK`, default `/tmp/synapse.sock`) before
+  paying `Store::open`. Ranking runs on `Hit.meta`/`Hit.ts` directly, so the
+  daemon path never opens the store. Missing/unresponsive daemons fall back to
+  the local store transparently; `--no-daemon` / `SYNAPSE_NO_DAEMON=1` opt out.
+  Measured on a ~330k-doc brain: `synx context` ~56s → ~0.8s warm,
+  `synx prime` ~54s → ~0.3s warm.
+- `synx onboard` now installs and starts the `synapsed` launchd agent when the
+  socket is absent (macOS), and `synx doctor` reports daemon availability.
+- Retrieval-route bandit (`synapse-learn::bandit::select_route`): Thompson
+  sampling over per-route Beta priors chooses lexical|semantic|hybrid for MCP
+  `context_pack` — 10% exploration floor, deterministic `hybrid` default below
+  24 observations. The chosen route is logged per `pack_id`
+  (`manifest.route` / `manifest.route_selected_by`) and `context_feedback`
+  rewards it via `route_reward`, closing the self-learning loop.
+- `synx maintain --json` reports `open_ms`/`scan_ms`/`merge_ms` timing fields.
 - `synx should-context <prompt>` / `synx context-hook` — zero-token auto-context
   gate for prompt hooks and routers: exit 0 when a task-like prompt warrants
   stored context, exit 1 (silent) for smalltalk. `context-hook` reads a
