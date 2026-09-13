@@ -5413,7 +5413,7 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "longmemeval"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -9557,7 +9557,7 @@ dependencies = [
 
 [[package]]
 name = "space-vs-chroma"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "criterion 0.5.1",
@@ -9791,7 +9791,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-ann"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "criterion 0.8.2",
  "libc",
@@ -9806,7 +9806,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-auth"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -9817,7 +9817,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-cli"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "arrow-array 54.3.1",
@@ -9842,7 +9842,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-cluster"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -9858,7 +9858,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-cms"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "async-trait",
  "once_cell",
@@ -9869,7 +9869,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-colbert"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "candle-core 0.10.2",
@@ -9889,7 +9889,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-core"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "age",
  "aho-corasick",
@@ -9960,14 +9960,14 @@ dependencies = [
 
 [[package]]
 name = "synapse-decay"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "synapse-e2e"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9989,14 +9989,14 @@ dependencies = [
 
 [[package]]
 name = "synapse-engine"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "obfstr",
 ]
 
 [[package]]
 name = "synapse-extract"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -10014,7 +10014,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-fts"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "criterion 0.5.1",
@@ -10026,7 +10026,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-fusion"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "rusqlite",
@@ -10036,7 +10036,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-graph"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "regex",
  "rusqlite",
@@ -10058,7 +10058,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-iouring"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -10077,7 +10077,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-jit"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -10092,7 +10092,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-js"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "napi",
@@ -10113,7 +10113,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-learn"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "rand 0.10.2",
@@ -10138,7 +10138,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-license"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -10160,7 +10160,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-market"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "accelerate-src",
  "anyhow",
@@ -10209,7 +10209,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-market-py"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "pyo3",
@@ -10218,14 +10218,14 @@ dependencies = [
 
 [[package]]
 name = "synapse-market-ts"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "synapse-market",
 ]
 
 [[package]]
 name = "synapse-mcp"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -10242,7 +10242,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-media"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -10262,7 +10262,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-migrate"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -10276,7 +10276,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-mlx-olap"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "candle-core 0.10.2",
@@ -10288,7 +10288,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-multimodal"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -10320,7 +10320,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-obs"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -10337,7 +10337,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-olap"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "duckdb",
@@ -10348,7 +10348,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-ops"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "async-trait",
  "serde",
@@ -10361,7 +10361,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-pack"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "criterion 0.5.1",
  "serde",
@@ -10382,7 +10382,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-quant"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "rand 0.10.2",
  "thiserror 2.0.18",
@@ -10401,7 +10401,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-rerank"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "fastembed",
@@ -10416,7 +10416,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-ring"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "criterion 0.5.1",
@@ -10430,7 +10430,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-seg"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "thiserror 2.0.18",
 ]
@@ -10464,7 +10464,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-space"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "blake3",
@@ -10482,7 +10482,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-spann"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "criterion 0.5.1",
@@ -10500,7 +10500,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-splade"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "hf-hub 0.3.2",
@@ -10515,7 +10515,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-stream"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -10533,7 +10533,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-temporal"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -10554,7 +10554,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-tsdb"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "arrow",
@@ -10573,7 +10573,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-tune"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -10583,7 +10583,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-ultra"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
@@ -10618,7 +10618,7 @@ dependencies = [
 
 [[package]]
 name = "synapse-vlog"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "criterion 0.5.1",
@@ -10630,14 +10630,14 @@ dependencies = [
 
 [[package]]
 name = "synapse-wal"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "synapsed"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -10663,7 +10663,7 @@ dependencies = [
 
 [[package]]
 name = "synapsql"
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 dependencies = [
  "async-trait",
  "blake3",

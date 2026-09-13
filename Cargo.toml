@@ -132,7 +132,7 @@ stub-members = [
 ]
 
 [workspace.package]
-version = "1.0.1-rc.1"
+version = "1.0.1-rc.2"
 edition = "2024"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"
