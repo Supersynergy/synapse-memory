@@ -39,11 +39,12 @@ rustflags = []
 [target.x86_64-pc-windows-msvc]
 rustflags = []
 
-# sqlite-vec 0.1.9 vendored C uses BSD u_intN_t aliases; musl only exposes them
-# under _BSD_SOURCE. cc-rs reads CFLAGS_<target> for C compile flags.
+# sqlite-vec 0.1.9 vendored C typedefs u_intN_t without including sys/types.h —
+# glibc pulls it transitively, musl does not and also gates the aliases behind
+# _BSD_SOURCE. cc-rs reads CFLAGS_<target> for C compile flags.
 [env]
-CFLAGS_x86_64_unknown_linux_musl = "-D_BSD_SOURCE"
-CFLAGS_aarch64_unknown_linux_musl = "-D_BSD_SOURCE"
+CFLAGS_x86_64_unknown_linux_musl = "-D_BSD_SOURCE -include sys/types.h"
+CFLAGS_aarch64_unknown_linux_musl = "-D_BSD_SOURCE -include sys/types.h"
 
 [target.'cfg(target_os = "linux")']
 # mold is 2–5x faster than ld/lld for Rust workspaces. Install: `cargo install --git https://github.com/rui314/mold`.
