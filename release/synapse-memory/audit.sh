@@ -43,8 +43,8 @@ done \
 # cargo-audit exits non-zero for advisories anywhere in the monorepo lockfile.
 # The release artifact is a narrower, feature-resolved graph, so intersect exact
 # package versions with that graph and fail on every vulnerability or warning in it.
-audit_cwd="${TMPDIR:-/tmp}"
-(cd "$audit_cwd" && cargo audit --file "$repo_root/Cargo.lock" --json) \
+# Runs from repo_root so .cargo/audit.toml policy ignores are discovered.
+(cd "$repo_root" && cargo audit --file "$repo_root/Cargo.lock" --json) \
   >"$audit_json" 2>/dev/null || true
 jq -e . "$audit_json" >/dev/null
 jq -r '

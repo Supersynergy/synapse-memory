@@ -12,4 +12,8 @@ ignore = [
     "RUSTSEC-2026-0099",
     # rustls-native-certs 0.7.3 -- same libsql optional dep chain only
     "RUSTSEC-2025-0134",
+    # smallstr 0.3.1 unmaintained (informational, not a vulnerability) —
+    # transitive dep of yrs 0.26 (CRDT merge); no maintained replacement exists
+    # in that dependency chain. Remove when yrs drops smallstr.
+    "RUSTSEC-2026-0215",
 ]
