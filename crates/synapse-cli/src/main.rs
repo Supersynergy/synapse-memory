@@ -1028,12 +1028,17 @@ fn main() -> Result<()> {
             let open_start = std::time::Instant::now();
             let store = Store::open(&cli.file)?;
             let open_ms = open_start.elapsed().as_millis() as u64;
+            let wal_path = cli.file.with_extension("db-wal");
+            let wal_bytes_before = std::fs::metadata(&wal_path).map(|m| m.len()).ok();
             let max = if limit == 0 { usize::MAX } else { limit };
             let merge = synapse_learn::consolidate::run_consolidate(&store.conn, max, offset)?;
             let learn_path = cli.file.with_extension("learn.db");
             let calibrated = LearnStore::open(&learn_path)
                 .ok()
                 .map(|ls| synapse_learn::calibrate::update_calibration(&ls).unwrap_or(0));
+            // autocheckpoint is off on every open — bound the WAL here.
+            let wal_ck = store.checkpoint_wal()?;
+            let wal_bytes_after = std::fs::metadata(&wal_path).map(|m| m.len()).ok();
             if json {
                 println!(
                     "{}",
@@ -1046,11 +1051,15 @@ fn main() -> Result<()> {
                         "open_ms": open_ms,
                         "scan_ms": merge.scan_ms,
                         "merge_ms": merge.merge_ms,
+                        "wal_bytes_before": wal_bytes_before,
+                        "wal_bytes_after": wal_bytes_after,
+                        "wal_checkpointed_frames": wal_ck.checkpointed_frames,
+                        "wal_truncated": wal_ck.truncated,
                     })
                 );
             } else {
                 println!(
-                    "maintain: scanned_limit={} pairs_found={} merged={} truncated={} calibration_buckets={:?} open_ms={} scan_ms={} merge_ms={}",
+                    "maintain: scanned_limit={} pairs_found={} merged={} truncated={} calibration_buckets={:?} open_ms={} scan_ms={} merge_ms={} wal={:?}→{:?}B ckpt_frames={} wal_truncated={}",
                     limit,
                     merge.pairs_found,
                     merge.merged,
@@ -1058,7 +1067,11 @@ fn main() -> Result<()> {
                     calibrated,
                     open_ms,
                     merge.scan_ms,
-                    merge.merge_ms
+                    merge.merge_ms,
+                    wal_bytes_before,
+                    wal_bytes_after,
+                    wal_ck.checkpointed_frames,
+                    wal_ck.truncated
                 );
             }
         }
@@ -3123,6 +3136,7 @@ struct DoctorReport {
     backup_path: Option<String>,
     backup_age_seconds: Option<i64>,
     daemon: bool,
+    wal_bytes: Option<u64>,
     fallbacks: Vec<&'static str>,
     warnings: Vec<String>,
 }
@@ -3254,6 +3268,18 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
     if semantic_enabled && embed_cache.is_none() {
         warnings.push("embedding cache missing; first semantic query may be slow".to_string());
     }
+    // wal_autocheckpoint is disabled at open; surface runaway WAL growth.
+    let wal_bytes = std::fs::metadata(file.with_extension("db-wal"))
+        .map(|m| m.len())
+        .ok();
+    if let Some(b) = wal_bytes
+        && b > 512 * 1024 * 1024
+    {
+        warnings.push(format!(
+            "WAL is {} MiB — run `synx maintain` or let the daemon checkpoint",
+            b / (1024 * 1024)
+        ));
+    }
     if stats.docs > 0 && backup.is_none() {
         warnings.push("no .synx/.brainpack backup found next to db or in backups/".to_string());
     }
@@ -3279,6 +3305,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
         backup_path,
         backup_age_seconds,
         daemon: daemon::available(),
+        wal_bytes,
         fallbacks: if semantic_enabled {
             vec!["hybrid", "lexical", "timeline", "fresh-context", "ground"]
         } else {

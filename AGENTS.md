@@ -74,6 +74,7 @@ cd ~/BASE/projects/synapse && grepgod --chain funcmap crates/synapse-pack crates
 | launchd auto-install in `synx onboard` + `daemon=` in `synx doctor` | synapse-cli | ✅ shipped (macOS) |
 | Retrieval-route bandit (Thompson over lexical/semantic/hybrid, 10% explore, 24-sample floor) | synapse-learn → synapse-mcp | ✅ shipped + 3 tests — `manifest.route`/`route_selected_by`, rewarded via `context_feedback` |
 | `maintain --json` telemetry (`open_ms`/`scan_ms`/`merge_ms`) | synapse-cli + synapse-learn | ✅ shipped |
+| Bounded WAL (`--wal-checkpoint-secs` passive checkpoint in synapsed; `maintain` truncates; `doctor` warns >512 MiB) | synapsed + synapse-cli + synapse-core | ✅ shipped + 1 test |
 
 ### Agent Roles
 

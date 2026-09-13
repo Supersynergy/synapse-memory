@@ -99,6 +99,11 @@ struct Cli {
     /// Drop the idle read-only SQL connection after this many milliseconds.
     #[arg(long, default_value_t = DEFAULT_IDLE_MS)]
     sql_reader_idle_ms: u64,
+    /// Passive WAL checkpoint period in seconds (0 disables). wal_autocheckpoint
+    /// is off for write throughput, so the daemon must checkpoint periodically
+    /// or the WAL grows unbounded. Env: SYNAPSE_WAL_CHECKPOINT_SECS.
+    #[arg(long, env = "SYNAPSE_WAL_CHECKPOINT_SECS", default_value_t = 300)]
+    wal_checkpoint_secs: u64,
 }
 
 struct State {
@@ -327,6 +332,12 @@ async fn main() -> Result<()> {
         live_broker: livequery::LiveBroker::new(256),
     });
     spawn_sql_reader_reaper(Arc::downgrade(&state), reader_budget.reaper_period());
+    if cli.wal_checkpoint_secs > 0 {
+        spawn_wal_checkpointer(
+            Arc::downgrade(&state),
+            Duration::from_secs(cli.wal_checkpoint_secs),
+        );
+    }
 
     // Spawn LiveQuery WebSocket server (P2.2).
     let live_broker_clone = state.live_broker.clone();
@@ -418,6 +429,43 @@ fn spawn_turbo_warm(state: Arc<State>, db_path: PathBuf) {
             }
             Ok(Err(e)) => warn!("background turbo warmup failed: {e}"),
             Err(e) => warn!("background turbo warmup task failed: {e}"),
+        }
+    });
+}
+
+/// Periodic passive WAL checkpoint on the daemon's store connection.
+/// `wal_autocheckpoint` is disabled on open for write throughput; without a
+/// periodic checkpoint the WAL grows unbounded under a long-lived daemon.
+/// PASSIVE never blocks queries; when the WAL fully drains (no reader pins),
+/// `Store::checkpoint_wal` also resets the file via TRUNCATE.
+fn spawn_wal_checkpointer(state: Weak<State>, period: Duration) {
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(period);
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            ticker.tick().await;
+            let Some(state) = state.upgrade() else {
+                return;
+            };
+            let res = tokio::task::spawn_blocking(move || {
+                let store = state.store.lock();
+                store.checkpoint_wal()
+            })
+            .await;
+            match res {
+                Ok(Ok(ck)) => {
+                    if ck.checkpointed_frames > 0 || ck.busy > 0 {
+                        info!(
+                            checkpointed = ck.checkpointed_frames,
+                            log_frames = ck.log_frames,
+                            truncated = ck.truncated,
+                            "wal checkpoint"
+                        );
+                    }
+                }
+                Ok(Err(e)) => warn!("wal checkpoint failed: {e}"),
+                Err(e) => warn!("wal checkpoint task failed: {e}"),
+            }
         }
     });
 }

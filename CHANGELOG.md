@@ -9,6 +9,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+- Unbounded WAL growth: `wal_autocheckpoint` is disabled on every
+  `Store::open` for write throughput, but nothing ever checkpointed — a
+  long-lived `synapsed` grew `brain.db-wal` to ~35 GiB, and cold opens spent
+  minutes rebuilding the wal-index. `synapsed` now runs a passive
+  `wal_checkpoint` every `--wal-checkpoint-secs` (default 300, env
+  `SYNAPSE_WAL_CHECKPOINT_SECS`, 0 disables) and truncates the file once it
+  fully drains; `synx maintain` checkpoints and reports
+  `wal_bytes_before`/`wal_bytes_after`/`wal_checkpointed_frames`/
+  `wal_truncated` in `--json`; `synx doctor` reports `wal_bytes` and warns
+  above 512 MiB.
+
 ## [1.0.1-rc.2] - 2026-09-13
 
 ### Added

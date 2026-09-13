@@ -451,6 +451,45 @@ impl Store {
         Ok(s)
     }
 
+    /// Bounded WAL maintenance.
+    ///
+    /// `wal_autocheckpoint` is disabled on every open for write throughput, so
+    /// a long-lived writer grows the WAL without bound (observed: 35 GiB,
+    /// cold opens walking the whole wal-index for minutes). PASSIVE never
+    /// blocks or waits; when it drains the WAL fully, a TRUNCATE attempt with
+    /// `busy_timeout=0` resets the file to zero — instant success or instant
+    /// busy, never a wait. The connection's 10 s busy_timeout is restored.
+    pub fn checkpoint_wal(&self) -> Result<WalCheckpoint> {
+        let (busy, log_frames, checkpointed): (i64, i64, i64) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })?;
+        let mut truncated = false;
+        if busy == 0 {
+            self.conn.pragma_update(None, "busy_timeout", 0_i64).ok();
+            let t = self
+                .conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, i64>(2)?,
+                    ))
+                });
+            self.conn
+                .pragma_update(None, "busy_timeout", 10000_i64)
+                .ok();
+            truncated = matches!(t, Ok((0, _, _)));
+        }
+        Ok(WalCheckpoint {
+            busy,
+            log_frames,
+            checkpointed_frames: checkpointed,
+            truncated,
+        })
+    }
+
     /// Touch all in-memory HNSW/ndarray pages and SQLite page-cache to ensure
     /// warm residency before the first query.  Call once at startup.
     pub fn warm_cache(&self) {
@@ -2196,6 +2235,19 @@ pub struct Stats {
     pub vecs: i64,
 }
 
+/// Result of a bounded WAL checkpoint (`Store::checkpoint_wal`).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WalCheckpoint {
+    /// Non-zero when a reader pinned WAL frames (PASSIVE ran out early).
+    pub busy: i64,
+    /// Frames in the WAL log at checkpoint time.
+    pub log_frames: i64,
+    /// Frames written back to the main db file.
+    pub checkpointed_frames: i64,
+    /// True when a follow-up TRUNCATE reset the WAL file to zero bytes.
+    pub truncated: bool,
+}
+
 fn map_doc(r: &rusqlite::Row) -> rusqlite::Result<Doc> {
     let meta: Option<String> = r.get(4)?;
     Ok(Doc {
@@ -2943,5 +2995,24 @@ mod tests {
                 f64::INFINITY
             }
         );
+    }
+
+    #[test]
+    fn checkpoint_wal_truncates_idle_store() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let mut s = Store::open(tmp.path()).unwrap();
+        s.put(&PutRequest {
+            text: "wal checkpoint smoke doc".into(),
+            embedding: None,
+            ..Default::default()
+        })
+        .unwrap();
+        let ck = s.checkpoint_wal().unwrap();
+        assert!(ck.checkpointed_frames >= 0);
+        // Sole connection → nothing pins the WAL → truncate must succeed.
+        assert!(ck.truncated, "expected WAL truncate, got {ck:?}");
+        // Idempotent on an already-empty WAL.
+        let ck2 = s.checkpoint_wal().unwrap();
+        assert!(ck2.truncated);
     }
 }
