@@ -10,6 +10,7 @@ mod synx_io;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::time::Duration;
 #[cfg(any(feature = "static-ort", feature = "cross-linux"))]
 use synapse_core::corpus::set_corpus_chunk_embedding;
@@ -2813,6 +2814,7 @@ fn run_onboard(
 }
 
 /// Locate a `synapsed` binary next to the running synx or on PATH.
+#[cfg(target_os = "macos")]
 fn find_synapsed_bin() -> Option<PathBuf> {
     if let Ok(exe) = std::env::current_exe()
         && let Some(dir) = exe.parent()
