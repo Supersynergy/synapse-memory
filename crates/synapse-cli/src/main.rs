@@ -4,11 +4,13 @@
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
+mod daemon;
 mod synx_io;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use std::time::Duration;
 #[cfg(any(feature = "static-ort", feature = "cross-linux"))]
 use synapse_core::corpus::set_corpus_chunk_embedding;
 #[cfg(any(feature = "static-ort", feature = "cross-linux"))]
@@ -112,6 +114,9 @@ fn optional_document_embedding(
 struct Cli {
     #[arg(short = 'f', long, default_value = ".synapse/brain.db", global = true)]
     file: PathBuf,
+    /// Skip the synapsed socket and always use the local store path
+    #[arg(long, global = true)]
+    no_daemon: bool,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -859,6 +864,7 @@ fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
     let mut cli = Cli::parse();
+    daemon::set_disabled(cli.no_daemon);
     cli.file = resolve_db_path(cli.file);
     if let Some(p) = cli.file.parent() {
         std::fs::create_dir_all(p).ok();
@@ -1018,7 +1024,9 @@ fn main() -> Result<()> {
             limit,
             offset,
         } => {
+            let open_start = std::time::Instant::now();
             let store = Store::open(&cli.file)?;
+            let open_ms = open_start.elapsed().as_millis() as u64;
             let max = if limit == 0 { usize::MAX } else { limit };
             let merge = synapse_learn::consolidate::run_consolidate(&store.conn, max, offset)?;
             let learn_path = cli.file.with_extension("learn.db");
@@ -1034,12 +1042,22 @@ fn main() -> Result<()> {
                         "merged": merge.merged,
                         "truncated": merge.truncated,
                         "calibration_buckets": calibrated,
+                        "open_ms": open_ms,
+                        "scan_ms": merge.scan_ms,
+                        "merge_ms": merge.merge_ms,
                     })
                 );
             } else {
                 println!(
-                    "maintain: scanned_limit={} pairs_found={} merged={} truncated={} calibration_buckets={:?}",
-                    limit, merge.pairs_found, merge.merged, merge.truncated, calibrated
+                    "maintain: scanned_limit={} pairs_found={} merged={} truncated={} calibration_buckets={:?} open_ms={} scan_ms={} merge_ms={}",
+                    limit,
+                    merge.pairs_found,
+                    merge.merged,
+                    merge.truncated,
+                    calibrated,
+                    open_ms,
+                    merge.scan_ms,
+                    merge.merge_ms
                 );
             }
         }
@@ -1100,8 +1118,7 @@ fn main() -> Result<()> {
             limit,
             json,
         } => {
-            let store = Store::open(&cli.file).ok();
-            let report = build_prime_report(&path, store.as_ref(), &cli.file, &mode, limit)?;
+            let report = build_prime_report(&path, None, &cli.file, &mode, limit)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -2260,10 +2277,28 @@ fn build_prime_report(
         "{} {} decision fact bugfix benchmark preference research verified context",
         project, mode
     );
-    let (memories, memory_route) = if let Some(store) = store {
-        let (hits, route) = search_best_effort(store, brain_file, &query, limit)
-            .unwrap_or_else(|_| (Vec::new(), "unavailable".to_string()));
-        let ranked = rank_context_hits(store, None, hits).unwrap_or_default();
+    let (memories, memory_route) = {
+        // Warm daemon first; else the passed store; else lazy local open.
+        let daemon_result = daemon_search(&query, limit);
+        let owned_store;
+        let (hits, route) = match daemon_result {
+            Some(res) => res,
+            None => {
+                owned_store = match store {
+                    Some(_) => None,
+                    None => Store::open(brain_file).ok(),
+                };
+                let s = store.or(owned_store.as_ref());
+                match s {
+                    Some(s) => search_best_effort(s, brain_file, &query, limit)
+                        .unwrap_or_else(|_| (Vec::new(), "unavailable".to_string())),
+                    None => (Vec::new(), "unavailable".to_string()),
+                }
+            }
+        };
+        let learn_path = brain_file.with_extension("learn.db");
+        let lstore = LearnStore::open(&learn_path).ok();
+        let ranked = rank_context_hits(lstore.as_ref(), hits).unwrap_or_default();
         (
             ranked
                 .into_iter()
@@ -2278,8 +2313,6 @@ fn build_prime_report(
                 .collect(),
             route,
         )
-    } else {
-        (Vec::new(), "unavailable".to_string())
     };
 
     let prompt = format!("latest package API version notes for {}", project);
@@ -2553,6 +2586,23 @@ fn search_best_effort(
     ))
 }
 
+/// Warm path: query a running synapsed first; fall back to opening the local
+/// store (which pays the HNSW load) only when the daemon is absent or errors.
+fn daemon_search(query: &str, limit: usize) -> Option<SearchBestEffortResult> {
+    if daemon::disabled() {
+        return None;
+    }
+    match daemon::search_best_effort(query, limit) {
+        Ok(res) => Some(res),
+        Err(e) => {
+            if std::env::var_os("SYNAPSE_DEBUG").is_some() {
+                eprintln!("synx: daemon path failed, using local store: {e:#}");
+            }
+            None
+        }
+    }
+}
+
 fn run_context(
     file: &std::path::Path,
     query: &str,
@@ -2561,11 +2611,16 @@ fn run_context(
     budget: usize,
     json: bool,
 ) -> Result<()> {
-    let store = Store::open(file)?;
     let learn_path = file.with_extension("learn.db");
     let lstore = LearnStore::open(&learn_path).ok();
-    let (hits, route) = search_best_effort(&store, file, query, limit)?;
-    let ranked = rank_context_hits(&store, lstore.as_ref(), hits)?;
+    let (hits, route) = match daemon_search(query, limit) {
+        Some(res) => res,
+        None => {
+            let store = Store::open(file)?;
+            search_best_effort(&store, file, query, limit)?
+        }
+    };
+    let ranked = rank_context_hits(lstore.as_ref(), hits)?;
     let context_id = context_id(query, mode, &ranked);
     if let Some(ls) = lstore.as_ref() {
         let ids: Vec<i64> = ranked.iter().map(|h| h.id).collect();
@@ -2718,6 +2773,16 @@ fn run_onboard(
         }
     }
 
+    // 5. daemon — install + start launchd service so context stays warm.
+    match (dry_run, daemon::available()) {
+        (true, _) => steps.push(onboard_step("daemon", true, "dry-run")),
+        (false, true) => steps.push(onboard_step("daemon", true, "running (socket live)")),
+        (false, false) => match ensure_launchd_daemon(file) {
+            Ok(detail) => steps.push(onboard_step("daemon", true, detail)),
+            Err(e) => steps.push(onboard_step("daemon", false, format!("{e:#}"))),
+        },
+    }
+
     let ok_all = steps.iter().all(|s| s.ok);
     if json {
         let steps_json: Vec<serde_json::Value> = steps
@@ -2747,18 +2812,116 @@ fn run_onboard(
     Ok(())
 }
 
+/// Locate a `synapsed` binary next to the running synx or on PATH.
+fn find_synapsed_bin() -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let cand = dir.join("synapsed");
+        if cand.is_file() {
+            return Some(cand);
+        }
+    }
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in path.split(':') {
+            let cand = PathBuf::from(dir).join("synapsed");
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+/// Install + start the synapsed launchd agent (macOS). Idempotent: an already
+/// loaded agent is kickstarted instead of re-bootstrapped.
+#[cfg(target_os = "macos")]
+fn ensure_launchd_daemon(brain: &std::path::Path) -> Result<String> {
+    let synapsed =
+        find_synapsed_bin().context("synapsed binary not found next to synx or on PATH")?;
+    let home = std::env::var("HOME").context("HOME not set")?;
+    let uid = std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .context("id -u failed")?;
+    let agents = PathBuf::from(&home).join("Library/LaunchAgents");
+    std::fs::create_dir_all(&agents)?;
+    let label = "com.supersynergy.synapsed";
+    let plist_path = agents.join(format!("{label}.plist"));
+    let log = PathBuf::from(&home).join(".synapse/synapsed.log");
+    if let Some(parent) = log.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let brain = std::fs::canonicalize(brain).unwrap_or_else(|_| brain.to_path_buf());
+    let plist = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+        <string>--sock</string><string>/tmp/synapse.sock</string>
+        <string>--db</string><string>{}</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>{}</string>
+    <key>StandardErrorPath</key><string>{}</string>
+</dict>
+</plist>
+"#,
+        synapsed.display(),
+        brain.display(),
+        log.display(),
+        log.display()
+    );
+    std::fs::write(&plist_path, plist)?;
+
+    let domain = format!("gui/{uid}/{label}");
+    let bootstrap = std::process::Command::new("launchctl")
+        .args(["bootstrap", &format!("gui/{uid}")])
+        .arg(&plist_path)
+        .status();
+    match bootstrap {
+        Ok(s) if s.success() => {}
+        _ => {
+            // Already loaded or needs a kick — force restart.
+            let _ = std::process::Command::new("launchctl")
+                .args(["kickstart", "-k", &domain])
+                .status();
+        }
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    if daemon::available() {
+        Ok(format!("launchd {label} → /tmp/synapse.sock"))
+    } else {
+        anyhow::bail!("installed {label} but socket is not answering yet")
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ensure_launchd_daemon(_brain: &std::path::Path) -> Result<String> {
+    anyhow::bail!("no daemon installer on this platform; start synapsed manually")
+}
+
 fn rank_context_hits(
-    store: &Store,
     learn: Option<&LearnStore>,
     hits: Vec<synapse_core::Hit>,
 ) -> Result<Vec<synapse_core::Hit>> {
     let now = now_secs();
     let mut ranked = Vec::with_capacity(hits.len());
     for mut hit in hits {
-        let doc = store.get(hit.id).ok();
-        let kind = doc
+        // Hit rows already carry meta + ts (hydrated by the store/daemon) —
+        // no extra store.get needed, so ranking works on the daemon path too.
+        let kind = hit
+            .meta
             .as_ref()
-            .and_then(|d| d.meta.as_ref())
             .and_then(|m| m.get("kind"))
             .and_then(|v| v.as_str())
             .unwrap_or("note");
@@ -2769,7 +2932,7 @@ fn rank_context_hits(
             interactions = learn.accept_count(hit.id).unwrap_or(0);
         }
         // Ebbinghaus decay: fresh + feedback-accepted memories resist decay.
-        hit.score *= recall_multiplier(kind, doc.as_ref().map(|d| d.ts), interactions, now);
+        hit.score *= recall_multiplier(kind, hit.ts, interactions, now);
         ranked.push(hit);
     }
     ranked.sort_by(|a, b| {
@@ -2957,6 +3120,7 @@ struct DoctorReport {
     embed_cache: Option<String>,
     backup_path: Option<String>,
     backup_age_seconds: Option<i64>,
+    daemon: bool,
     fallbacks: Vec<&'static str>,
     warnings: Vec<String>,
 }
@@ -3112,6 +3276,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
         embed_cache,
         backup_path,
         backup_age_seconds,
+        daemon: daemon::available(),
         fallbacks: if semantic_enabled {
             vec!["hybrid", "lexical", "timeline", "fresh-context", "ground"]
         } else {
@@ -3128,6 +3293,7 @@ fn print_doctor_report(report: &DoctorReport) {
     println!("docs={} vectors={}", report.docs, report.vectors);
     println!("duplicate_hash_groups={}", report.duplicate_hash_groups);
     println!("missing_vectors={}", report.missing_vectors);
+    println!("daemon={}", report.daemon);
     println!("private_source_hits={}", report.private_source_hits);
     println!(
         "stale_or_generated_source_hits={}",

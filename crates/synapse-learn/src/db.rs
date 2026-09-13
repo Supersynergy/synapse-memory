@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
+use std::collections::HashMap;
 use std::path::Path;
 
 pub struct LearnStore {
@@ -201,6 +202,25 @@ impl LearnStore {
             )?;
         }
         Ok(())
+    }
+
+    /// Beta priors (wins, losses) for every route seen so far.
+    /// Missing arms are handled by the caller as (1, 1).
+    pub fn route_priors(&self) -> Result<crate::bandit::RoutePriors> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT route, wins, losses FROM route_reward")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                (r.get::<_, u32>(1)?, r.get::<_, u32>(2)?),
+            ))
+        })?;
+        let mut out = HashMap::new();
+        for row in rows.flatten() {
+            out.insert(row.0, row.1);
+        }
+        Ok(out)
     }
 
     pub fn update_route_reward(&self, route: &str, hit: bool) -> Result<()> {

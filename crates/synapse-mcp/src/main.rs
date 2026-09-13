@@ -39,6 +39,7 @@ struct PackCacheEntry {
     naive_tokens: usize,
     savings_pct: f32,
     pack_id: String,
+    route: String,
 }
 
 #[derive(Debug, Default)]
@@ -1619,15 +1620,28 @@ fn drop_as_noise(h: &Value) -> bool {
     false
 }
 
-/// Recall booster: union the raw-query hybrid search with a high-signal-terms search,
+/// Recall booster: union the raw-query search with a high-signal-terms search,
 /// drop noise (via negativa), dedup by id (keeping the higher daemon score).
+/// `route` picks the daemon search mode: lexical|semantic|hybrid.
 /// Returns the clean candidates and the number of noise docs filtered out.
-async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<(Vec<Value>, usize)> {
-    let raw = hybrid_hits(sock, query, k).await?;
+async fn recall_candidates(
+    sock: &PathBuf,
+    query: &str,
+    k: usize,
+    route: &str,
+) -> Result<(Vec<Value>, usize)> {
+    let (mode, embed) = match route {
+        "lexical" => ("Lex", false),
+        "semantic" => ("Vec", true),
+        _ => ("Hybrid", true),
+    };
+    let raw = search_hits(sock, mode, query, k, embed).await?;
     let terms = query_terms(query);
     let term_query = terms.join(" ");
     let extra = if !terms.is_empty() && term_query != query {
-        hybrid_hits(sock, &term_query, k).await.unwrap_or_default()
+        search_hits(sock, mode, &term_query, k, embed)
+            .await
+            .unwrap_or_default()
     } else {
         Vec::new()
     };
@@ -1665,11 +1679,17 @@ async fn recall_candidates(sock: &PathBuf, query: &str, k: usize) -> Result<(Vec
     Ok((clean, noise))
 }
 
-async fn hybrid_hits(sock: &PathBuf, query: &str, limit: usize) -> Result<Vec<Value>> {
+async fn search_hits(
+    sock: &PathBuf,
+    mode: &str,
+    query: &str,
+    limit: usize,
+    embed: bool,
+) -> Result<Vec<Value>> {
     let resp = daemon_call(
         sock,
         json!({"op": "Search", "args": {
-            "mode": "Hybrid", "q": query, "limit": limit, "embed_query": true
+            "mode": mode, "q": query, "limit": limit, "embed_query": embed
         }}),
     )
     .await?;
@@ -1734,16 +1754,26 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
                 "savings_pct": entry.savings_pct,
                 "noise_filtered": 0,
                 "cache_hit": true,
+                "route": entry.route,
+                "route_selected_by": "cache",
                 "blocks": Vec::<Value>::new(),
             }
         }));
     }
 
+    // Route bandit: below the sample floor the deterministic hybrid default
+    // serves; past it, Thompson sampling picks lexical|semantic|hybrid and the
+    // choice is logged per pack_id so context_feedback can reward the route.
+    let lstore = synapse_learn::LearnStore::open(brain_path().with_extension("learn.db")).ok();
+    let (route, route_by) = lstore
+        .as_ref()
+        .map(synapse_learn::bandit::select_route_from_store)
+        .unwrap_or_else(|| (synapse_learn::bandit::ROUTE_DEFAULT.to_string(), "default"));
+
     // Recall: union of the raw-query search and a high-signal-terms search, noise-filtered + deduped.
-    let (hits, noise_filtered) = recall_candidates(sock, query, k).await?;
+    let (hits, noise_filtered) = recall_candidates(sock, query, k, &route).await?;
     let terms = query_terms(query);
     let learned = learn_bonus_map();
-    let lstore = synapse_learn::LearnStore::open(brain_path().with_extension("learn.db")).ok();
     let mut cands = Vec::new();
     for h in &hits {
         let text = h.get("text").and_then(|v| v.as_str()).unwrap_or_default();
@@ -1859,6 +1889,7 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
                 naive_tokens,
                 savings_pct,
                 pack_id: pid.clone(),
+                route: route.clone(),
             },
         );
     }
@@ -1866,6 +1897,12 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
     // Register pack for verify-gate degradation tracking.
     if let Ok(mut state) = FEEDBACK_STATE.lock() {
         state.register_pack(&pid);
+    }
+
+    // Route log per pack_id — context_feedback rewards this route via
+    // reward_context → route_reward, closing the bandit's learning loop.
+    if let Some(ls) = lstore.as_ref() {
+        let _ = ls.log_context_query(&pid, now_secs(), query, "mcp", &route, &used_ids);
     }
 
     // Skill-preload hints: suggest skills the router should lazy-load based on
@@ -1888,6 +1925,8 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
             "noise_filtered": noise_filtered,
             "cache_hit": false,
             "implicit_feedback_rewards": implicit_rewards,
+            "route": route,
+            "route_selected_by": route_by,
             "blocks": blocks,
             "preload_skills": preload_skills,
         }
@@ -1941,9 +1980,20 @@ async fn context_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
     }
 
     // Close the self-learning loop: gate=pass rewards the used kinds, fail dampens.
+    // Also reward the route that produced this pack so the bandit converges.
     let rewarded = if gate == "unknown" {
         0
     } else {
+        let lp = brain_path().with_extension("learn.db");
+        if !pack_id.is_empty()
+            && let Ok(ls) = synapse_learn::LearnStore::open(&lp)
+        {
+            let _ = ls.reward_context(
+                pack_id,
+                used_ids.first().copied().unwrap_or(0),
+                gate == "pass",
+            );
+        }
         record_ctx_reward(&kinds, gate == "pass")
     };
 
@@ -2320,7 +2370,7 @@ async fn context_state(sock: &PathBuf, args: &Value) -> Result<Value> {
         .and_then(|v| v.as_str())
         .context("topic")?;
     let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(12) as usize;
-    let hits = hybrid_hits(sock, topic, k * 2).await?;
+    let hits = search_hits(sock, "Hybrid", topic, k * 2, true).await?;
 
     // Keep verified knowledge only (facts + decisions); collect supersession edges.
     let mut superseded: HashSet<i64> = HashSet::new();
@@ -2648,6 +2698,7 @@ mod tests {
             naive_tokens: 500,
             savings_pct: 80.0,
             pack_id: "pid-alpha".into(),
+            route: "hybrid".into(),
         };
         cache.put(k1, e1.clone());
         assert_eq!(cache.len(), 1);
@@ -2690,6 +2741,7 @@ mod tests {
                     naive_tokens: 50,
                     savings_pct: 80.0,
                     pack_id: format!("pid-{i}"),
+                    route: "hybrid".into(),
                 },
             );
         }
@@ -2706,6 +2758,7 @@ mod tests {
                 naive_tokens: 50,
                 savings_pct: 80.0,
                 pack_id: "pid-new".into(),
+                route: "hybrid".into(),
             },
         );
         assert_eq!(cache.len(), PACK_CACHE_CAP, "cap must be maintained");

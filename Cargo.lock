@@ -9817,6 +9817,7 @@ dependencies = [
  "csv",
  "parquet 54.3.1",
  "reqwest 0.13.4",
+ "rmp-serde",
  "rusqlite",
  "serde",
  "serde_json",

@@ -21,6 +21,10 @@ pub struct MergeReport {
     /// True when the comparison budget cut the sweep short — re-run later to
     /// continue converging instead of one unbounded pass.
     pub truncated: bool,
+    /// Wall time for the scan+simhash+band+pair pass.
+    pub scan_ms: u64,
+    /// Wall time for the merge transaction.
+    pub merge_ms: u64,
 }
 
 /// Hard cap on pairwise comparisons per run — bounds wall time no matter how
@@ -34,6 +38,7 @@ pub fn run_consolidate(
     max_docs: usize,
     offset: usize,
 ) -> Result<MergeReport> {
+    let scan_start = std::time::Instant::now();
     let mut stmt = conn.prepare("SELECT id, text FROM docs ORDER BY id LIMIT ? OFFSET ?")?;
     let rows: Vec<(i64, String)> = stmt
         .query_map(
@@ -51,6 +56,8 @@ pub fn run_consolidate(
             pairs_found: 0,
             merged: 0,
             truncated: false,
+            scan_ms: scan_start.elapsed().as_millis() as u64,
+            merge_ms: 0,
         });
     }
 
@@ -93,6 +100,8 @@ pub fn run_consolidate(
         }
     }
 
+    let scan_ms = scan_start.elapsed().as_millis() as u64;
+    let merge_start = std::time::Instant::now();
     // One transaction — autocommitted UPDATEs cost a WAL fsync each.
     conn.execute_batch("BEGIN")?;
     let mut merged = 0usize;
@@ -113,6 +122,8 @@ pub fn run_consolidate(
         pairs_found,
         merged,
         truncated,
+        scan_ms,
+        merge_ms: merge_start.elapsed().as_millis() as u64,
     })
 }
 
