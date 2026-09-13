@@ -541,14 +541,14 @@ fn run_question<H: PipelineHooks>(
                 .and_then(|u| u.strip_prefix('s'))
                 .and_then(|r| r.split(':').next())
                 .and_then(|x| x.parse::<usize>().ok());
-            if let Some(idx) = idx {
-                if seen.insert(idx) {
-                    if let Some(id) = session_ids.get(idx) {
-                        out.push(id.clone());
-                    }
-                    if out.len() == n {
-                        break;
-                    }
+            if let Some(idx) = idx
+                && seen.insert(idx)
+            {
+                if let Some(id) = session_ids.get(idx) {
+                    out.push(id.clone());
+                }
+                if out.len() == n {
+                    break;
                 }
             }
         }
