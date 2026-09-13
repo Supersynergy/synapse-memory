@@ -116,7 +116,14 @@ verify_out="$(HOME="$home" "$bin" -f "$restored" db-verify)"
 require_text "$verify_out" "1 docs clean" "restored db verify"
 
 echo "12/15 package native archive"
+# install.sh detects Linux as musl; the packaged asset name must match that.
 target="$(rustc -vV | sed -n 's/^host: //p')"
+if [ "$(uname -s)" = "Linux" ]; then
+  case "$(uname -m)" in
+    x86_64|amd64) target="x86_64-unknown-linux-musl" ;;
+    aarch64|arm64) target="aarch64-unknown-linux-musl" ;;
+  esac
+fi
 dist="$tmp/dist"
 if SYNAPSE_BIN="$script_dir/install.sh" SYNAPSE_TARGET="$target" SYNAPSE_RELEASE_OUT="$dist" SYNAPSE_ALLOW_DIRTY=1 "$script_dir/package.sh" >/dev/null 2>&1; then
   fail "package accepted a script wrapper"

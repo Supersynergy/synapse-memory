@@ -22,6 +22,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # pinned 2026-06-20
         with:
           toolchain: "1.95.0"
+          targets: "x86_64-unknown-linux-musl"
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
       - name: Tag equals workspace version
         shell: bash
         run: |
@@ -67,8 +70,9 @@ jobs:
       - name: Full portable release proof
         run: |
           cargo build --locked --profile release-hardened \
+            --target x86_64-unknown-linux-musl \
             -p synapse-cli --no-default-features
-          SYNX_BIN=target/release-hardened/synx \
+          SYNX_BIN=target/x86_64-unknown-linux-musl/release-hardened/synx \
             release/synapse-memory/verify.sh
 
   unix:
