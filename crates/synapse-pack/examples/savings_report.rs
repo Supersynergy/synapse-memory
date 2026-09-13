@@ -45,7 +45,11 @@ fn main() {
             ..PackOptions::default()
         },
     );
-    println!("FULL pack:    {:>5} tokens used  (savings {:>5.1}% vs naive)", p_full.used_tokens, p_full.savings_pct());
+    println!(
+        "FULL pack:    {:>5} tokens used  (savings {:>5.1}% vs naive)",
+        p_full.used_tokens,
+        p_full.savings_pct()
+    );
 
     // 2. Delta pack — 40 of 50 already delivered.
     let prev_ids: Vec<i64> = (0..40).collect();

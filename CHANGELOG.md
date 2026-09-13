@@ -10,7 +10,38 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- `synx should-context <prompt>` / `synx context-hook` — zero-token auto-context
+  gate for prompt hooks and routers: exit 0 when a task-like prompt warrants
+  stored context, exit 1 (silent) for smalltalk. `context-hook` reads a
+  UserPromptSubmit-style JSON or raw text on stdin and prints a cited context
+  pack only when triggered; version/API-sensitive prompts additionally get the
+  lockfile-grounded `<fresh_context>` guard (`--no-fresh` to disable).
+- Claude Code hooks (`integrations/claude-code/hooks/` + product mirrors) now
+  prefer the native `synx context-hook` / `synx prime` fast path and fall back
+  to the Python pipeline only when no capable `synx` binary is installed.
+- MCP tool `context_needed` — the trigger predicate exposed to routers
+  (closes the Phase-3 "wire to router" gap for `has_context_trigger`; the
+  predicate itself moved to `synapse-pack::trigger` so CLI and MCP share it).
+- `synx onboard` — idempotent one-shot onboarding: init → doctor+fix → prime →
+  optional MCP registration (`--with-mcp`), with `--dry-run` and `--json`.
+- `synx maintain` — bounded idle maintenance in one command: text-SimHash
+  near-dup consolidation (`--limit`/`--offset` sweep windows, one transaction,
+  pair-budget truncation) + reward-bucket calibration. On a 330k-doc brain a
+  20k-doc window completes in ~1s of consolidation work (plus store-open
+  overhead), instead of 10+ minutes of unbounded vec0 scans.
+- Ebbinghaus decay wired into recall ranking (`synapse-decay`
+  `recall_multiplier`): kind-aware half-life (decisions 90d, chats 2d),
+  accepted-feedback count resists decay, clamped to a [0.25, 1.2] nudge —
+  applied in both `synx context` and MCP `context_pack` candidate scoring.
+- Implicit feedback: continuing from a pack via `prev_pack_id` rewards the
+  kinds it delivered (`manifest.implicit_feedback_rewards`), so the learning
+  loop closes even when agents never call `context_feedback`.
 - Codex crash-safe resume integration: content-minimal `PreToolUse`/`PostToolUse` checkpoints, append-only fsynced journals, atomic per-project snapshots, and `SessionStart` recovery hints without transcript or tool-output storage.
+
+### Fixed
+- New-clippy lint closure: collapsible-if and needless-unwrap/return cleanups
+  in `synapse-mcp`, `synapse-cli`, and `synapse-core::embed` so
+  `clippy -D warnings` passes on current toolchains.
 - LongMemEval benchmark runner now accepts the official JSON shape (`haystack_sessions` + `answer_session_ids`), reports Evidence-R@5/R@10, and reranks the full candidate pool before truncating to top-10.
 - **Context-OS** — cross-CLI MCP server for token-budget-bounded, self-learning, verbatim context.
   - `synapse-pack` crate: pure token-budget packer (deletion-based tiers `full → signatures → fact-delta → one-line`, SimHash near-dup collapse, greedy budget knapsack, serial-position ordering). 9 unit tests.

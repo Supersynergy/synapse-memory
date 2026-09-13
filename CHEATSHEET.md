@@ -132,6 +132,16 @@ cargo run -p synapse-mcp
 
 # Smoke-Test Context-Pack
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"context_pack","arguments":{"query":"neocortex mcp","budget_tokens":2000}}}' | cargo run -p synapse-mcp
+
+# Onboarding (idempotent): init → doctor+fix → prime → [--with-mcp]
+synx onboard --dry-run && synx onboard
+
+# Hook-Gate: 0 = Context nötig, 1 = skip (Smalltalk kostet 0 Tokens)
+synx should-context "wie optimiere ich den recall"   # → true, exit 0
+echo '{"prompt":"hi"}' | synx context-hook           # → silent
+
+# Wartung im Leerlauf: Dedup-Consolidate + Kalibrierung
+synx maintain
 ```
 
 ## Anti-Patterns (nicht tun)

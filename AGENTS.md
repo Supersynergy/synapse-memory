@@ -61,8 +61,12 @@ cd ~/BASE/projects/synapse && grepgod --chain funcmap crates/synapse-pack crates
 | Imperative `instructions` (4 RULEs) for dumb models | synapse-mcp | ✅ shipped |
 | Verify-Gate Degradation (budget shrinks without feedback) | synapse-mcp | ✅ shipped + 1 test |
 | Skill-Preload-Hints in pack manifest | synapse-mcp → router | ✅ shipped + 3 tests |
-| `has_context_trigger` — auto-pack trigger predicate | synapse-mcp | ✅ shipped + 1 test (Phase 3: wire to router) |
-| `synapse-decay` crate (Ebbinghaus + interaction-graph) | new crate | ✅ scaffold + 8 tests (Phase 3: wire to recall) |
+| `has_context_trigger` — auto-pack trigger predicate | synapse-pack::trigger (shared) | ✅ shipped — wired to `context_needed` MCP tool + `synx should-context` / `synx context-hook` |
+| `synapse-decay` crate (Ebbinghaus + interaction-graph) | new crate | ✅ shipped — `recall_multiplier` in CLI `rank_context_hits` + MCP `context_pack` scoring; accepted-feedback resists decay |
+| Implicit feedback via `prev_pack_id` continuation | synapse-mcp | ✅ shipped — `manifest.implicit_feedback_rewards` |
+| `synx should-context` + `synx context-hook` | synapse-cli | ✅ shipped — zero-token hook gate |
+| `synx onboard` (init→doctor→prime→mcp) | synapse-cli | ✅ shipped — idempotent, `--dry-run`/`--json` |
+| `synx maintain` (consolidate + calibrate) | synapse-cli | ✅ shipped |
 | `Kind::SessionSummary` + `Kind::CodebaseMap` | synapse-pack | ✅ shipped + 6 tests |
 | `session_ingest` MCP tool (swarm/cmux event ingest) | synapse-mcp | ✅ shipped |
 | `session_replay` MCP tool (mega-session reconstruction) | synapse-mcp | ✅ shipped |

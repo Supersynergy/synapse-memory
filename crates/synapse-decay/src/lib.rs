@@ -91,6 +91,30 @@ pub fn decay_order(metas: &[DecayMeta], now_secs: i64, half_life_secs: i64) -> V
     idx
 }
 
+/// Per-kind half-life for recall decay. Durable knowledge decays slowly;
+/// ephemeral session/chat dumps decay fast.
+pub fn half_life_for_kind(kind: &str) -> i64 {
+    const DAY: i64 = 86_400;
+    match kind {
+        "decision" | "adr" | "preference" | "known-fact" | "knownfact" => 90 * DAY,
+        "fact" | "bugfix" | "benchmark" | "command" | "codebase-map" => 30 * DAY,
+        "research" | "note" | "file" | "session-summary" => 14 * DAY,
+        "chat" | "session" => 2 * DAY,
+        _ => 7 * DAY,
+    }
+}
+
+/// Score multiplier for recall ranking. Decayed strength clamped to
+/// `[0.25, 1.2]` — a nudge, never a hard filter, so a high-relevance old
+/// decision still surfaces. `ts = None` → 1.0 (no penalty for unknown age).
+/// `interactions` = accepted-feedback count; accepted memories resist decay.
+pub fn recall_multiplier(kind: &str, ts: Option<i64>, interactions: u32, now_secs: i64) -> f64 {
+    let Some(ts) = ts else { return 1.0 };
+    let mut meta = DecayMeta::new(0, ts);
+    meta.interactions = interactions;
+    decay_score(&meta, now_secs, half_life_for_kind(kind)).clamp(0.25, 1.2) as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,7 +124,10 @@ mod tests {
         let m = DecayMeta::new(1, 1000);
         let s = decay_score(&m, 1000, DEFAULT_HALF_LIFE_SECS);
         // Fresh memory: strength=1.0, recency_boost=1.2 (elapsed < 3600), no interactions.
-        assert!((s - 1.2).abs() < 1e-6, "fresh memory score should be 1.2 (recency boost)");
+        assert!(
+            (s - 1.2).abs() < 1e-6,
+            "fresh memory score should be 1.2 (recency boost)"
+        );
     }
 
     #[test]
@@ -151,9 +178,24 @@ mod tests {
     fn decay_order_puts_fresh_first() {
         let now = 10_000;
         let metas = vec![
-            DecayMeta { id: 1, last_touched_secs: now, strength: 1.0, interactions: 0 },
-            DecayMeta { id: 2, last_touched_secs: now - 100_000, strength: 1.0, interactions: 0 },
-            DecayMeta { id: 3, last_touched_secs: now - 1000, strength: 1.0, interactions: 5 },
+            DecayMeta {
+                id: 1,
+                last_touched_secs: now,
+                strength: 1.0,
+                interactions: 0,
+            },
+            DecayMeta {
+                id: 2,
+                last_touched_secs: now - 100_000,
+                strength: 1.0,
+                interactions: 0,
+            },
+            DecayMeta {
+                id: 3,
+                last_touched_secs: now - 1000,
+                strength: 1.0,
+                interactions: 5,
+            },
         ];
         let order = decay_order(&metas, now, DEFAULT_HALF_LIFE_SECS);
         // id=3 has interaction boost → highest score, then id=1 (fresh), then id=2 (old).
@@ -168,5 +210,37 @@ mod tests {
         m.strength = 0.7;
         m.decay(1000, DEFAULT_HALF_LIFE_SECS);
         assert!((m.strength - 0.7).abs() < 1e-6, "no decay when elapsed=0");
+    }
+
+    #[test]
+    fn half_life_is_kind_aware() {
+        assert!(half_life_for_kind("decision") > half_life_for_kind("chat"));
+        assert_eq!(half_life_for_kind("unknown-kind"), 7 * 86_400);
+    }
+
+    #[test]
+    fn recall_multiplier_neutral_without_ts() {
+        assert_eq!(recall_multiplier("decision", None, 0, 1_000), 1.0);
+    }
+
+    #[test]
+    fn recall_multiplier_fresh_boosts_old_decays() {
+        let now = 1_000_000;
+        let fresh = recall_multiplier("chat", Some(now - 60), 0, now);
+        let old = recall_multiplier("chat", Some(now - 10 * 86_400), 0, now);
+        assert!(fresh > 1.0, "fresh chat gets recency boost");
+        assert!(
+            old <= 0.25,
+            "10-day-old chat decays to the floor, got {old}"
+        );
+    }
+
+    #[test]
+    fn recall_multiplier_interactions_resist_decay() {
+        let now = 1_000_000;
+        let ts = now - 4 * 86_400;
+        let plain = recall_multiplier("note", Some(ts), 0, now);
+        let accepted = recall_multiplier("note", Some(ts), 10, now);
+        assert!(accepted > plain, "accepted memories resist decay");
     }
 }

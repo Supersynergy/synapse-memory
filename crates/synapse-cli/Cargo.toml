@@ -20,6 +20,8 @@ rusqlite.workspace = true
 reqwest = { workspace = true, optional = true }
 synapse-learn = { path = "../synapse-learn" }
 synapse-graph = { path = "../synapse-graph" }
+synapse-pack = { path = "../synapse-pack" }
+synapse-decay = { path = "../synapse-decay" }
 # synapse-core base (no embed features) — embed variant selected via [features] below.
 synapse-core = { path = "../synapse-core", default-features = false, features = ["backend-rusqlite"] }
 tempfile = "3"

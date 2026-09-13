@@ -27,10 +27,15 @@ use synapse_core::{
         verify_promotion, youtube_video_id,
     },
     federate::{Addr, Federation},
-    fresh::{FreshMode, FreshOptions, build_fresh_report, render_fresh_context_xml},
+    fresh::{
+        FreshEvidence, FreshMode, FreshOptions, build_fresh_report, check_fresh_evidence,
+        freshness_needed, render_fresh_context_xml,
+    },
     sign, snap,
 };
+use synapse_decay::recall_multiplier;
 use synapse_learn::LearnStore;
+use synapse_pack::{has_context_trigger, hook_prompt};
 
 type VerifyRow = (i64, String, Vec<u8>);
 type FreshInput = (String, Option<PathBuf>, Option<String>);
@@ -91,7 +96,7 @@ fn optional_document_embedding(
     }
     #[cfg(any(feature = "static-ort", feature = "cross-linux"))]
     {
-        return semantic_embedding(_file, _text).map(Some);
+        semantic_embedding(_file, _text).map(Some)
     }
     #[cfg(not(any(feature = "static-ort", feature = "cross-linux")))]
     {
@@ -151,6 +156,8 @@ enum Cmd {
         #[arg(long)]
         vk: PathBuf,
     },
+    /// Delete a document and its search/vector index rows by id
+    Delete { id: i64 },
     /// Generate an Ed25519 keypair
     Keygen {
         /// Output secret key path
@@ -276,6 +283,80 @@ enum Cmd {
         /// Override number of deps checked against registries.
         #[arg(long)]
         max_registry: Option<usize>,
+    },
+    /// Validate a source-backed freshness evidence JSON record
+    FreshEvidence {
+        /// JSON file containing a FreshEvidence record.
+        path: PathBuf,
+        /// Earliest accepted observation time (Unix seconds; default 2024-06-01 UTC).
+        #[arg(long, default_value_t = 1_717_200_000)]
+        cutoff: u64,
+        /// Override current time for deterministic checks (Unix seconds).
+        #[arg(long)]
+        now: Option<u64>,
+        /// Return a non-zero exit when evidence is not currently verified.
+        #[arg(long, default_value_t = false)]
+        require_current: bool,
+    },
+    /// Predicate for hooks/routers: does this prompt warrant stored context?
+    /// Exit 0 = pull context, exit 1 = skip (zero token cost). Reads stdin when
+    /// no query argument is given.
+    ShouldContext {
+        query: Option<String>,
+        /// Emit {"trigger": bool} JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+    },
+    /// Prompt-hook entrypoint: reads a UserPromptSubmit-style JSON (or raw text)
+    /// on stdin and prints a context pack only when the prompt warrants it.
+    /// Silent exit otherwise — zero tokens spent on smalltalk.
+    ContextHook {
+        /// coding|research|decision|debug|daily|auto
+        #[arg(long, default_value = "auto")]
+        mode: String,
+        #[arg(long, default_value_t = 12)]
+        limit: usize,
+        /// Character budget for retrieved snippets
+        #[arg(long, default_value_t = 2400)]
+        budget: usize,
+        /// Emit machine-readable JSON instead of Markdown
+        #[arg(long, default_value_t = false)]
+        json: bool,
+        /// Skip the lockfile/manifest freshness report for version-sensitive prompts
+        #[arg(long, default_value_t = false)]
+        no_fresh: bool,
+    },
+    /// One-shot onboarding: init the brain, doctor check+fix, prime the current
+    /// directory, then print the first-session commands. Idempotent.
+    Onboard {
+        /// Report what would run without changing anything
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        /// Emit machine-readable JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+        /// Also register the MCP server into installed agent CLIs
+        /// (runs scripts/install-ctxos.sh when found next to the checkout)
+        #[arg(long, default_value_t = false)]
+        with_mcp: bool,
+        /// Directory to prime (default: current directory)
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// Idle maintenance over the learn store: consolidate duplicate memories
+    /// and recalibrate reward buckets. Safe to run repeatedly.
+    Maintain {
+        /// Emit machine-readable JSON
+        #[arg(long, default_value_t = false)]
+        json: bool,
+        /// Max embedded docs to scan for near-dup merge
+        /// (0 = full sweep — expensive on large brains, use in idle windows)
+        #[arg(long, default_value_t = 20_000)]
+        limit: usize,
+        /// Row offset into the embedding scan — advance it across runs to sweep
+        /// the whole brain in bounded windows
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
     },
     /// Export to .brainpack
     Snap {
@@ -832,6 +913,10 @@ fn main() -> Result<()> {
             store.verify(id, &vk)?;
             println!("ok verified id={}", id);
         }
+        Cmd::Delete { id } => {
+            let mut store = Store::open(&cli.file)?;
+            println!("deleted={}", store.delete(id)?);
+        }
         Cmd::Keygen { sk, vk } => {
             sign::keygen(&sk, &vk).context("keygen")?;
             println!("ok sk={} vk={}", sk.display(), vk.display());
@@ -876,21 +961,86 @@ fn main() -> Result<()> {
             limit,
             budget,
             json,
+        } => run_context(&cli.file, &query, &mode, limit, budget, json)?,
+        Cmd::ShouldContext { query, json } => {
+            let q = match query {
+                Some(q) => q,
+                None => {
+                    let mut s = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)?;
+                    s
+                }
+            };
+            let triggered = has_context_trigger(&q);
+            if json {
+                println!("{}", serde_json::json!({"trigger": triggered}));
+            } else {
+                println!("{}", triggered);
+            }
+            std::process::exit(if triggered { 0 } else { 1 });
+        }
+        Cmd::ContextHook {
+            mode,
+            limit,
+            budget,
+            json,
+            no_fresh,
+        } => {
+            let mut raw = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw)?;
+            let prompt = hook_prompt(&raw);
+            // Freshness guard fires even when the prompt doesn't warrant a
+            // memory pack — version/API claims need lockfile-grounded evidence.
+            if !no_fresh && freshness_needed(&prompt, FreshMode::Prompt) {
+                let opts = FreshOptions::from_env(FreshMode::Prompt);
+                let cwd = std::env::current_dir().ok();
+                if let Ok(Some(report)) =
+                    build_fresh_report(&prompt, FreshMode::Prompt, cwd.as_deref(), None, &opts)
+                {
+                    println!("{}", render_fresh_context_xml(&report));
+                }
+            }
+            if !has_context_trigger(&prompt) {
+                return Ok(());
+            }
+            run_context(&cli.file, &prompt, &mode, limit, budget, json)?;
+        }
+        Cmd::Onboard {
+            dry_run,
+            json,
+            with_mcp,
+            path,
+        } => {
+            run_onboard(&cli.file, &path, dry_run, with_mcp, json)?;
+        }
+        Cmd::Maintain {
+            json,
+            limit,
+            offset,
         } => {
             let store = Store::open(&cli.file)?;
+            let max = if limit == 0 { usize::MAX } else { limit };
+            let merge = synapse_learn::consolidate::run_consolidate(&store.conn, max, offset)?;
             let learn_path = cli.file.with_extension("learn.db");
-            let lstore = LearnStore::open(&learn_path).ok();
-            let (hits, route) = search_best_effort(&store, &cli.file, &query, limit)?;
-            let ranked = rank_context_hits(&store, lstore.as_ref(), hits)?;
-            let context_id = context_id(&query, &mode, &ranked);
-            if let Some(ls) = lstore.as_ref() {
-                let ids: Vec<i64> = ranked.iter().map(|h| h.id).collect();
-                let _ = ls.log_context_query(&context_id, now_secs(), &query, &mode, &route, &ids);
-            }
+            let calibrated = LearnStore::open(&learn_path)
+                .ok()
+                .map(|ls| synapse_learn::calibrate::update_calibration(&ls).unwrap_or(0));
             if json {
-                print_context_json(&context_id, &query, &mode, budget, &route, &ranked)?;
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "scanned_limit": limit,
+                        "pairs_found": merge.pairs_found,
+                        "merged": merge.merged,
+                        "truncated": merge.truncated,
+                        "calibration_buckets": calibrated,
+                    })
+                );
             } else {
-                print_context_pack(&context_id, &query, &mode, budget, &route, &ranked);
+                println!(
+                    "maintain: scanned_limit={} pairs_found={} merged={} truncated={} calibration_buckets={:?}",
+                    limit, merge.pairs_found, merge.merged, merge.truncated, calibrated
+                );
             }
         }
         Cmd::Remember {
@@ -1001,6 +1151,28 @@ fn main() -> Result<()> {
                 } else {
                     println!("{}", render_fresh_context_xml(&report));
                 }
+            }
+        }
+        Cmd::FreshEvidence {
+            path,
+            cutoff,
+            now,
+            require_current,
+        } => {
+            let raw = std::fs::read_to_string(&path)
+                .with_context(|| format!("read freshness evidence {}", path.display()))?;
+            let evidence: FreshEvidence = serde_json::from_str(&raw)
+                .with_context(|| format!("parse freshness evidence {}", path.display()))?;
+            let checked_at = now.unwrap_or_else(|| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+            });
+            let check = check_fresh_evidence(&evidence, checked_at, cutoff);
+            println!("{}", serde_json::to_string_pretty(&check)?);
+            if require_current && !check.current {
+                anyhow::bail!("freshness evidence is not currently verified");
             }
         }
         Cmd::Snap { out, level } => {
@@ -1126,10 +1298,13 @@ fn main() -> Result<()> {
                 }
                 LearnCmd::Consolidate => {
                     let store = Store::open(&cli.file)?;
-                    let report = synapse_learn::consolidate::run_consolidate(&store.conn)?;
+                    // Explicit deep sweep stays unbounded; `synx maintain` is
+                    // the bounded idle-window variant.
+                    let report =
+                        synapse_learn::consolidate::run_consolidate(&store.conn, usize::MAX, 0)?;
                     println!(
-                        "pairs_found={} merged={}",
-                        report.pairs_found, report.merged
+                        "pairs_found={} merged={} truncated={}",
+                        report.pairs_found, report.merged, report.truncated
                     );
                 }
                 LearnCmd::DriftCheck => {
@@ -2378,11 +2553,206 @@ fn search_best_effort(
     ))
 }
 
+fn run_context(
+    file: &std::path::Path,
+    query: &str,
+    mode: &str,
+    limit: usize,
+    budget: usize,
+    json: bool,
+) -> Result<()> {
+    let store = Store::open(file)?;
+    let learn_path = file.with_extension("learn.db");
+    let lstore = LearnStore::open(&learn_path).ok();
+    let (hits, route) = search_best_effort(&store, file, query, limit)?;
+    let ranked = rank_context_hits(&store, lstore.as_ref(), hits)?;
+    let context_id = context_id(query, mode, &ranked);
+    if let Some(ls) = lstore.as_ref() {
+        let ids: Vec<i64> = ranked.iter().map(|h| h.id).collect();
+        let _ = ls.log_context_query(&context_id, now_secs(), query, mode, &route, &ids);
+    }
+    if json {
+        print_context_json(&context_id, query, mode, budget, &route, &ranked)?;
+    } else {
+        print_context_pack(&context_id, query, mode, budget, &route, &ranked);
+    }
+    Ok(())
+}
+
+struct OnboardStep {
+    name: &'static str,
+    ok: bool,
+    detail: String,
+}
+
+fn onboard_step(name: &'static str, ok: bool, detail: impl Into<String>) -> OnboardStep {
+    OnboardStep {
+        name,
+        ok,
+        detail: detail.into(),
+    }
+}
+
+/// Find a repo-relative script by walking ancestors of cwd and the exe.
+fn find_repo_script(rel: &str) -> Option<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        roots.push(dir.to_path_buf());
+    }
+    for root in roots {
+        for dir in root.ancestors() {
+            let cand = dir.join(rel);
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+fn run_onboard(
+    file: &std::path::Path,
+    path: &std::path::Path,
+    dry_run: bool,
+    with_mcp: bool,
+    json: bool,
+) -> Result<()> {
+    let mut steps: Vec<OnboardStep> = Vec::new();
+
+    // 1. init — idempotent, creates ~/.synapse/brain.db if missing.
+    let store = if dry_run {
+        steps.push(onboard_step("init", true, "dry-run"));
+        None
+    } else {
+        match Store::open(file) {
+            Ok(s) => {
+                steps.push(onboard_step("init", true, file.display().to_string()));
+                Some(s)
+            }
+            Err(e) => {
+                steps.push(onboard_step("init", false, format!("{e:#}")));
+                None
+            }
+        }
+    };
+
+    // 2. doctor — report + fix (fts optimize, re-embed missing vectors).
+    match (dry_run, store.as_ref()) {
+        (true, _) => steps.push(onboard_step("doctor", true, "dry-run")),
+        (false, Some(s)) => match doctor_report(s, file) {
+            Ok(rep) => {
+                let _ = s
+                    .conn
+                    .execute_batch("INSERT INTO docs_fts(docs_fts) VALUES('optimize');");
+                let _ = reembed_missing_vectors(s, file);
+                steps.push(onboard_step(
+                    "doctor",
+                    true,
+                    format!(
+                        "docs={} vectors={} missing_vectors={}",
+                        rep.docs, rep.vectors, rep.missing_vectors
+                    ),
+                ));
+            }
+            Err(e) => steps.push(onboard_step("doctor", false, format!("{e:#}"))),
+        },
+        (false, None) => steps.push(onboard_step("doctor", false, "skipped: init failed")),
+    }
+
+    // 3. prime — repo state + relevant memory in one startup brief.
+    match (dry_run, store.as_ref()) {
+        (true, _) => steps.push(onboard_step("prime", true, "dry-run")),
+        (false, Some(s)) => match build_prime_report(path, Some(s), file, "auto", 12) {
+            Ok(rep) => steps.push(onboard_step(
+                "prime",
+                true,
+                format!(
+                    "{} docs={} commands={}",
+                    rep.project,
+                    rep.source_docs.len(),
+                    rep.commands.len()
+                ),
+            )),
+            Err(e) => steps.push(onboard_step("prime", false, format!("{e:#}"))),
+        },
+        (false, None) => steps.push(onboard_step("prime", false, "skipped: init failed")),
+    }
+
+    // 4. mcp — optional registration into installed agent CLIs.
+    if !with_mcp {
+        steps.push(onboard_step(
+            "mcp",
+            true,
+            "skipped (re-run with --with-mcp to register agent CLIs)",
+        ));
+    } else if dry_run {
+        steps.push(onboard_step("mcp", true, "dry-run"));
+    } else {
+        match find_repo_script("scripts/install-ctxos.sh") {
+            Some(script) => {
+                let status = std::process::Command::new("sh")
+                    .arg(&script)
+                    .arg("install")
+                    .arg("--all")
+                    .status();
+                match status {
+                    Ok(s) if s.success() => {
+                        steps.push(onboard_step("mcp", true, script.display().to_string()))
+                    }
+                    Ok(s) => {
+                        steps.push(onboard_step("mcp", false, format!("installer exited {s}")))
+                    }
+                    Err(e) => steps.push(onboard_step("mcp", false, format!("{e:#}"))),
+                }
+            }
+            None => steps.push(onboard_step(
+                "mcp",
+                false,
+                "scripts/install-ctxos.sh not found; run it from a synapse checkout",
+            )),
+        }
+    }
+
+    let ok_all = steps.iter().all(|s| s.ok);
+    if json {
+        let steps_json: Vec<serde_json::Value> = steps
+            .iter()
+            .map(|s| serde_json::json!({"name": s.name, "ok": s.ok, "detail": s.detail}))
+            .collect();
+        println!(
+            "{}",
+            serde_json::json!({"ok": ok_all, "brain": file.display().to_string(), "steps": steps_json})
+        );
+    } else {
+        for s in &steps {
+            println!(
+                "{} {:<7} {}",
+                if s.ok { "ok  " } else { "FAIL" },
+                s.name,
+                s.detail
+            );
+        }
+        println!(
+            "\nnext:\n  synx remember --kind decision \"<durable decision>\"\n  synx context \"<your task>\" --mode coding\n  synx feedback context:<context_id> <doc_id>"
+        );
+    }
+    if !ok_all {
+        anyhow::bail!("onboard finished with failed steps");
+    }
+    Ok(())
+}
+
 fn rank_context_hits(
     store: &Store,
     learn: Option<&LearnStore>,
     hits: Vec<synapse_core::Hit>,
 ) -> Result<Vec<synapse_core::Hit>> {
+    let now = now_secs();
     let mut ranked = Vec::with_capacity(hits.len());
     for mut hit in hits {
         let doc = store.get(hit.id).ok();
@@ -2393,9 +2763,13 @@ fn rank_context_hits(
             .and_then(|v| v.as_str())
             .unwrap_or("note");
         hit.score += memory_kind_prior(kind);
+        let mut interactions = 0u32;
         if let Some(learn) = learn {
             hit.score += learn.memory_type_bonus(kind).unwrap_or(0.0);
+            interactions = learn.accept_count(hit.id).unwrap_or(0);
         }
+        // Ebbinghaus decay: fresh + feedback-accepted memories resist decay.
+        hit.score *= recall_multiplier(kind, doc.as_ref().map(|d| d.ts), interactions, now);
         ranked.push(hit);
     }
     ranked.sort_by(|a, b| {

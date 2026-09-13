@@ -16,6 +16,10 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod trigger;
+
+pub use trigger::{has_context_trigger, hook_prompt};
+
 /// Source class of a candidate. Drives the trust prior and the floor tier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Kind {
@@ -47,12 +51,16 @@ impl Kind {
             Kind::KnownFact
         } else if s.contains("decision") || s.contains("adr") {
             Kind::Decision
-        } else if s.contains("session-summary") || s.contains("session_summary")
-            || s.contains("mega-session") || s.contains("swarm-summary")
+        } else if s.contains("session-summary")
+            || s.contains("session_summary")
+            || s.contains("mega-session")
+            || s.contains("swarm-summary")
         {
             Kind::SessionSummary
-        } else if s.contains("codebase-map") || s.contains("codebase_map")
-            || s.contains("repo-map") || s.contains("funcmap")
+        } else if s.contains("codebase-map")
+            || s.contains("codebase_map")
+            || s.contains("repo-map")
+            || s.contains("funcmap")
         {
             Kind::CodebaseMap
         } else if s.contains("file") || s.contains("code") || s.contains("source") {
@@ -578,7 +586,7 @@ fn first_nonblank(text: &str) -> String {
 }
 
 /// 64-bit SimHash over whitespace tokens (lowercased).
-fn simhash(text: &str) -> u64 {
+pub fn simhash(text: &str) -> u64 {
     let mut v = [0i32; 64];
     let mut any = false;
     for tok in text.split_whitespace() {
@@ -604,7 +612,7 @@ fn simhash(text: &str) -> u64 {
     out
 }
 
-fn hamming(a: u64, b: u64) -> u32 {
+pub fn hamming(a: u64, b: u64) -> u32 {
     (a ^ b).count_ones()
 }
 
@@ -947,7 +955,10 @@ mod tests {
         };
         let p = pack_delta(cands, &opts);
         let out = render(&p);
-        assert!(out.contains("Δ1 skipped"), "delta marker must appear: {out}");
+        assert!(
+            out.contains("Δ1 skipped"),
+            "delta marker must appear: {out}"
+        );
     }
 
     #[test]
@@ -955,7 +966,10 @@ mod tests {
         let cands = vec![cand(1, "alpha fact one", 0.9, Kind::KnownFact)];
         let p = pack(cands, &PackOptions::default());
         let out = render(&p);
-        assert!(!out.contains("Δ"), "plain pack must not show delta marker: {out}");
+        assert!(
+            !out.contains("Δ"),
+            "plain pack must not show delta marker: {out}"
+        );
     }
 
     #[test]
@@ -996,9 +1010,17 @@ mod tests {
         // Tiny budget: session-summary must still keep signatures (headings + numbered lines).
         let text = "# Session Decisions\nplain narrative filler\nDECISION: use synapse-pack for packing\nfiller prose\nstep 1: ingest events\nstep 2: replay";
         let cands = vec![cand(1, text, 0.9, Kind::SessionSummary)];
-        let p = pack(cands, &PackOptions { budget_tokens: 30, ..PackOptions::default() });
+        let p = pack(
+            cands,
+            &PackOptions {
+                budget_tokens: 30,
+                ..PackOptions::default()
+            },
+        );
         let out = render(&p);
-        assert!(out.contains("DECISION") || out.contains("Session") || out.contains("step"),
-            "session-summary must keep signal lines even at tiny budget: {out}");
+        assert!(
+            out.contains("DECISION") || out.contains("Session") || out.contains("step"),
+            "session-summary must keep signal lines even at tiny budget: {out}"
+        );
     }
 }

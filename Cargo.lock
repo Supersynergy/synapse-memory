@@ -9831,8 +9831,10 @@ dependencies = [
  "serde",
  "serde_json",
  "synapse-core",
+ "synapse-decay",
  "synapse-graph",
  "synapse-learn",
+ "synapse-pack",
  "tempfile",
  "tikv-jemallocator",
  "tracing-subscriber",
@@ -10118,6 +10120,7 @@ dependencies = [
  "rusqlite",
  "serde_json",
  "synapse-core",
+ "synapse-pack",
  "tempfile",
 ]
 
@@ -10230,6 +10233,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "synapse-decay",
  "synapse-learn",
  "synapse-market",
  "synapse-pack",
@@ -10361,6 +10365,7 @@ version = "1.0.1-rc.1"
 dependencies = [
  "criterion 0.5.1",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "openai-api-changelog",
+      "title": "OpenAI API changelog",
+      "url": "https://developers.openai.com/api/docs/changelog",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 21600
+    },
+    {
+      "id": "openai-codex-changelog",
+      "title": "OpenAI Codex changelog",
+      "url": "https://developers.openai.com/codex/changelog",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 21600
+    },
+    {
+      "id": "mcp-specification",
+      "title": "Model Context Protocol specification",
+      "url": "https://modelcontextprotocol.io/specification/latest",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "obsidian-changelog",
+      "title": "Obsidian changelog",
+      "url": "https://obsidian.md/changelog/",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "openai-codex-releases",
+      "title": "openai/codex releases",
+      "url": "https://github.com/openai/codex/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "mcp-releases",
+      "title": "modelcontextprotocol releases",
+      "url": "https://github.com/modelcontextprotocol/modelcontextprotocol/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "obsidian-releases",
+      "title": "obsidianmd/obsidian-releases releases",
+      "url": "https://github.com/obsidianmd/obsidian-releases/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "context7-releases",
+      "title": "upstash/context7 releases",
+      "url": "https://github.com/upstash/context7/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "qdrant-releases",
+      "title": "qdrant/qdrant releases",
+      "url": "https://github.com/qdrant/qdrant/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "graphiti-releases",
+      "title": "getzep/graphiti releases",
+      "url": "https://github.com/getzep/graphiti/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "mem0-releases",
+      "title": "mem0ai/mem0 releases",
+      "url": "https://github.com/mem0ai/mem0/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "ragflow-releases",
+      "title": "infiniflow/ragflow releases",
+      "url": "https://github.com/infiniflow/ragflow/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "lightrag-releases",
+      "title": "HKUDS/LightRAG releases",
+      "url": "https://github.com/HKUDS/LightRAG/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "llama-index-releases",
+      "title": "run-llama/llama_index releases",
+      "url": "https://github.com/run-llama/llama_index/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "ragas-releases",
+      "title": "explodinggradients/ragas releases",
+      "url": "https://github.com/explodinggradients/ragas/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    },
+    {
+      "id": "synapse-agent-memory-releases",
+      "title": "Supersynergy/synapse-agent-memory releases",
+      "url": "https://github.com/Supersynergy/synapse-agent-memory/releases",
+      "kind": "web",
+      "authority": "primary",
+      "tier": 1,
+      "interval_seconds": 43200
+    }
+  ]
+}

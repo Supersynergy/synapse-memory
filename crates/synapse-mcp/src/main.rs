@@ -12,12 +12,14 @@ use std::sync::LazyLock;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
+use synapse_decay::recall_multiplier;
 #[cfg(feature = "market")]
 use synapse_market::Market;
 #[cfg(feature = "market")]
 use synapse_market::ffi::smx_query_range;
 use synapse_pack::{
-    Candidate, Kind, PackOptions, estimate_tokens, kind_tag, pack, pack_delta, render,
+    Candidate, Kind, PackOptions, estimate_tokens, has_context_trigger, kind_tag, pack, pack_delta,
+    render,
 };
 
 type AgentScope = (String, Option<String>, String);
@@ -32,6 +34,7 @@ const PACK_CACHE_CAP: usize = 64;
 struct PackCacheEntry {
     rendered: String,
     used_ids: Vec<i64>,
+    used_kinds: Vec<String>,
     used_tokens: usize,
     naive_tokens: usize,
     savings_pct: f32,
@@ -68,10 +71,11 @@ impl PackCache {
     }
 
     fn put(&mut self, k: u64, v: PackCacheEntry) {
-        if self.inner.len() >= PACK_CACHE_CAP && !self.inner.contains_key(&k) {
-            if let Some(old) = self.order.pop_front() {
-                self.inner.remove(&old);
-            }
+        if self.inner.len() >= PACK_CACHE_CAP
+            && !self.inner.contains_key(&k)
+            && let Some(old) = self.order.pop_front()
+        {
+            self.inner.remove(&old);
         }
         self.order.retain(|&x| x != k);
         self.order.push_back(k);
@@ -299,6 +303,10 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
                 "agent_role": {"type": "string", "description": "Optional: filter to one agent role"},
                 "budget_tokens": {"type": "integer", "default": 8000}
             }, "required": ["session_id"]}},
+            {"name": "context_needed", "description": "Zero-cost predicate: does this prompt warrant a context pack? Returns {trigger: bool}. Routers and prompt hooks call this FIRST — smalltalk spends zero tokens, no retrieval runs.", "inputSchema": {"type": "object", "properties": {
+                "query": {"type": "string", "description": "The raw user prompt to classify"},
+                "task": {"type": "string", "description": "Alias for query"}
+            }, "required": []}},
             // ── Affiliate Attribution (cookieless, E.L.A.B.-compatible) ───────
             {"name": "affiliate_attribute", "description": "Cookieless server-side attribution lock for affiliate/E.L.A.B. funnels. Stores ctx_hash → partner_id binding as kind=affiliate-attribution. Replaces 3rd-party cookies, ad-blocker-resistent, DSGVO-clean (no PII). Call on first touch (QR scan / link click / invitation). Merchant SDK calls this to claim commission. always_keep: true.", "inputSchema": {"type": "object", "properties": {
                 "ctx_hash": {"type": "string", "description": "Synapse context hash (from context_pack) — serves as cross-device user id"},
@@ -351,33 +359,35 @@ async fn handle(sock: &PathBuf, market_db: &PathBuf, req: &JsonRpc) -> Result<Va
             // contains any query term (case-insensitive). This cuts the
             // tool-list payload from ~30 tools to 2-5 → -500-2000 tok/req.
             // Tools with `always_keep: true` in description are preserved.
-            if let Some(q) = req.params.get("query").and_then(|v| v.as_str()) {
-                if !q.trim().is_empty() {
-                    let terms: Vec<String> = q
-                        .split_whitespace()
-                        .filter(|t| t.len() >= 3)
-                        .map(|t| t.to_ascii_lowercase())
-                        .collect();
-                    if !terms.is_empty() {
-                        if let Some(arr) = list.get_mut("tools").and_then(|v| v.as_array_mut()) {
-                            arr.retain(|t| {
-                                let name = t
-                                    .get("name")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_ascii_lowercase();
-                                let desc = t
-                                    .get("description")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or_default()
-                                    .to_ascii_lowercase();
-                                if desc.contains("always_keep:") {
-                                    return true;
-                                }
-                                terms.iter().any(|term| name.contains(term) || desc.contains(term))
-                            });
+            if let Some(q) = req.params.get("query").and_then(|v| v.as_str())
+                && !q.trim().is_empty()
+            {
+                let terms: Vec<String> = q
+                    .split_whitespace()
+                    .filter(|t| t.len() >= 3)
+                    .map(|t| t.to_ascii_lowercase())
+                    .collect();
+                if !terms.is_empty()
+                    && let Some(arr) = list.get_mut("tools").and_then(|v| v.as_array_mut())
+                {
+                    arr.retain(|t| {
+                        let name = t
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        let desc = t
+                            .get("description")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_ascii_lowercase();
+                        if desc.contains("always_keep:") {
+                            return true;
                         }
-                    }
+                        terms
+                            .iter()
+                            .any(|term| name.contains(term) || desc.contains(term))
+                    });
                 }
             }
             Ok(list)
@@ -415,6 +425,7 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
         "affiliate_lookup" => return affiliate_lookup(sock, &args).await,
         "session_ingest" => return session_ingest(sock, &args).await,
         "session_replay" => return session_replay(sock, &args).await,
+        "context_needed" => return context_needed(&args),
         _ => {}
     }
 
@@ -1292,36 +1303,77 @@ fn skill_preload_hints(query: &str) -> Vec<&'static str> {
     let mut out: Vec<&'static str> = Vec::new();
     // Trading / investing
     if q.split_whitespace().any(|t| {
-        matches!(t, "trade" | "trading" | "stock" | "portfolio" | "invest" | "investing"
-            | "ipo" | "pre-ipo" | "kelly" | "asymbet" | "winvestment" | "backtest")
+        matches!(
+            t,
+            "trade"
+                | "trading"
+                | "stock"
+                | "portfolio"
+                | "invest"
+                | "investing"
+                | "ipo"
+                | "pre-ipo"
+                | "kelly"
+                | "asymbet"
+                | "winvestment"
+                | "backtest"
+        )
     }) {
         out.push("asymbet");
         out.push("winvestment-profet");
     }
     // Marketing / copy
     if q.split_whitespace().any(|t| {
-        matches!(t, "marketing" | "copy" | "copywriting" | "landing" | "seo" | "ad" | "ads"
-            | "cro" | "funnel" | "brand")
+        matches!(
+            t,
+            "marketing"
+                | "copy"
+                | "copywriting"
+                | "landing"
+                | "seo"
+                | "ad"
+                | "ads"
+                | "cro"
+                | "funnel"
+                | "brand"
+        )
     }) {
         out.push("copywriting");
         out.push("cro");
     }
     // Code / repo work
     if q.split_whitespace().any(|t| {
-        matches!(t, "code" | "repo" | "rust" | "typescript" | "refactor" | "bug" | "test"
-            | "cargo" | "build" | "deploy")
+        matches!(
+            t,
+            "code"
+                | "repo"
+                | "rust"
+                | "typescript"
+                | "refactor"
+                | "bug"
+                | "test"
+                | "cargo"
+                | "build"
+                | "deploy"
+        )
     }) {
         out.push("agent-token-saver");
     }
     // Research / web
     if q.split_whitespace().any(|t| {
-        matches!(t, "research" | "scrape" | "web" | "url" | "article" | "news" | "source")
+        matches!(
+            t,
+            "research" | "scrape" | "web" | "url" | "article" | "news" | "source"
+        )
     }) {
         out.push("superscrape");
     }
     // Writing / books
     if q.split_whitespace().any(|t| {
-        matches!(t, "book" | "write" | "writing" | "author" | "publish" | "hörbuch" | "audiobook")
+        matches!(
+            t,
+            "book" | "write" | "writing" | "author" | "publish" | "hörbuch" | "audiobook"
+        )
     }) {
         out.push("universalbook");
     }
@@ -1333,25 +1385,6 @@ fn skill_preload_hints(query: &str) -> Vec<&'static str> {
 /// single-word noise) get auto-packed by the server if the model doesn't call
 /// context_pack itself. This is the dumb-model safety net.
 #[allow(dead_code)]
-fn has_context_trigger(query: &str) -> bool {
-    let q = query.trim();
-    if q.len() < 40 {
-        return false;
-    }
-    let words = q.split_whitespace().count();
-    if words < 5 {
-        return false;
-    }
-    // Trigger on task-like phrases.
-    let ql = q.to_ascii_lowercase();
-    ["how do i", "how to", "what is", "explain", "implement", "build",
-     "fix", "debug", "refactor", "write", "create", "design", "research",
-     "analyze", "compare", "summarize", "wo kann", "wie kann", "was ist",
-     "erkläre", "implementiere", "baue", "schreibe", "untersuche"]
-        .iter()
-        .any(|t| ql.contains(t))
-}
-
 fn hit_kind(title: &str, meta: &Value) -> Kind {
     let s = meta
         .get("kind")
@@ -1658,9 +1691,7 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
         .and_then(|v| v.as_u64())
         .unwrap_or(4000) as usize;
     let k = args.get("k").and_then(|v| v.as_u64()).unwrap_or(32) as usize;
-    let prev_pack_id: Option<&str> = args
-        .get("prev_pack_id")
-        .and_then(|v| v.as_str());
+    let prev_pack_id: Option<&str> = args.get("prev_pack_id").and_then(|v| v.as_str());
     let cache_stable: bool = args
         .get("cache_stable_order")
         .and_then(|v| v.as_bool())
@@ -1684,34 +1715,35 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
 
     // 0. Pack cache hit → skip recall+pack entirely.
     let cache_key = PackCache::key(query, budget, prev_pack_id);
-    if use_cache && prev_pack_id.is_none() {
-        if let Ok(mut cache) = PACK_CACHE.lock() {
-            if let Some(entry) = cache.get(cache_key) {
-                return Ok(json!({
-                    "pack_id": entry.pack_id,
-                    "context": entry.rendered,
-                    "manifest": {
-                        "used_ids": entry.used_ids,
-                        "dropped_ids": Vec::<i64>::new(),
-                        "deduped_ids": Vec::<i64>::new(),
-                        "delta_skipped_ids": Vec::<i64>::new(),
-                        "used_tokens": entry.used_tokens,
-                        "budget_tokens": budget,
-                        "naive_tokens": entry.naive_tokens,
-                        "savings_pct": entry.savings_pct,
-                        "noise_filtered": 0,
-                        "cache_hit": true,
-                        "blocks": Vec::<Value>::new(),
-                    }
-                }));
+    if use_cache
+        && prev_pack_id.is_none()
+        && let Ok(mut cache) = PACK_CACHE.lock()
+        && let Some(entry) = cache.get(cache_key)
+    {
+        return Ok(json!({
+            "pack_id": entry.pack_id,
+            "context": entry.rendered,
+            "manifest": {
+                "used_ids": entry.used_ids,
+                "dropped_ids": Vec::<i64>::new(),
+                "deduped_ids": Vec::<i64>::new(),
+                "delta_skipped_ids": Vec::<i64>::new(),
+                "used_tokens": entry.used_tokens,
+                "budget_tokens": budget,
+                "naive_tokens": entry.naive_tokens,
+                "savings_pct": entry.savings_pct,
+                "noise_filtered": 0,
+                "cache_hit": true,
+                "blocks": Vec::<Value>::new(),
             }
-        }
+        }));
     }
 
     // Recall: union of the raw-query search and a high-signal-terms search, noise-filtered + deduped.
     let (hits, noise_filtered) = recall_candidates(sock, query, k).await?;
     let terms = query_terms(query);
     let learned = learn_bonus_map();
+    let lstore = synapse_learn::LearnStore::open(brain_path().with_extension("learn.db")).ok();
     let mut cands = Vec::new();
     for h in &hits {
         let text = h.get("text").and_then(|v| v.as_str()).unwrap_or_default();
@@ -1732,6 +1764,18 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
         // recall: a candidate matching more query terms ranks higher (survives the budget)
         score += term_overlap_boost(&terms, text);
         score += term_overlap_boost(&terms, &title);
+        // Ebbinghaus decay: fresh + feedback-accepted memories resist decay;
+        // stale session dumps sink. Nudge, never a hard filter.
+        let interactions = lstore
+            .as_ref()
+            .and_then(|s| s.accept_count(id).ok())
+            .unwrap_or(0);
+        score *= recall_multiplier(
+            kind_tag(kind),
+            h.get("ts").and_then(|v| v.as_i64()),
+            interactions,
+            now_secs(),
+        ) as f32;
         if let Some(filter) = &kinds_filter
             && !filter.iter().any(|f| kind_tag(kind).contains(f.as_str()))
         {
@@ -1746,21 +1790,24 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
         });
     }
 
-    // Resolve prev_pack_id → prev_used_ids via cache lookup.
-    let prev_used_ids: Vec<i64> = if let Some(pid) = prev_pack_id {
-        if let Ok(cache) = PACK_CACHE.lock() {
-            cache
-                .inner
-                .values()
-                .find(|e| e.pack_id == pid)
-                .map(|e| e.used_ids.clone())
-                .unwrap_or_default()
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
-    };
+    // Resolve prev_pack_id → prev pack entry (ids + kinds) via cache lookup.
+    let prev_entry = prev_pack_id.and_then(|pid| {
+        PACK_CACHE
+            .lock()
+            .ok()
+            .and_then(|c| c.inner.values().find(|e| e.pack_id == pid).cloned())
+    });
+    // Implicit feedback: continuing from a pack is a weak acceptance signal for
+    // the kinds it delivered — closes the learning loop even when the agent
+    // never calls context_feedback.
+    let implicit_rewards = prev_entry
+        .as_ref()
+        .map(|e| {
+            let kinds: Vec<&str> = e.used_kinds.iter().map(String::as_str).collect();
+            record_ctx_reward(&kinds, true)
+        })
+        .unwrap_or(0);
+    let prev_used_ids: Vec<i64> = prev_entry.map(|e| e.used_ids).unwrap_or_default();
 
     let opts = PackOptions {
         budget_tokens: budget,
@@ -1794,20 +1841,26 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
     let naive_tokens = packed.naive_tokens;
 
     // Store in cache for future hits.
-    if use_cache && prev_pack_id.is_none() {
-        if let Ok(mut cache) = PACK_CACHE.lock() {
-            cache.put(
-                cache_key,
-                PackCacheEntry {
-                    rendered: rendered.clone(),
-                    used_ids: used_ids.clone(),
-                    used_tokens,
-                    naive_tokens,
-                    savings_pct,
-                    pack_id: pid.clone(),
-                },
-            );
-        }
+    if use_cache
+        && prev_pack_id.is_none()
+        && let Ok(mut cache) = PACK_CACHE.lock()
+    {
+        cache.put(
+            cache_key,
+            PackCacheEntry {
+                rendered: rendered.clone(),
+                used_ids: used_ids.clone(),
+                used_kinds: packed
+                    .blocks
+                    .iter()
+                    .map(|b| kind_tag(b.kind).to_string())
+                    .collect(),
+                used_tokens,
+                naive_tokens,
+                savings_pct,
+                pack_id: pid.clone(),
+            },
+        );
     }
 
     // Register pack for verify-gate degradation tracking.
@@ -1834,9 +1887,24 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
             "savings_pct": savings_pct,
             "noise_filtered": noise_filtered,
             "cache_hit": false,
+            "implicit_feedback_rewards": implicit_rewards,
             "blocks": blocks,
             "preload_skills": preload_skills,
         }
+    }))
+}
+
+/// Zero-cost trigger predicate — the Phase-3 wiring for the router: hooks and
+/// routers ask this before paying for a pack.
+fn context_needed(args: &Value) -> Result<Value> {
+    let query = args
+        .get("query")
+        .or_else(|| args.get("task"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    Ok(json!({
+        "trigger": has_context_trigger(query),
+        "hint": "if trigger=true, call context_pack(query, budget_tokens) next"
     }))
 }
 
@@ -1880,10 +1948,10 @@ async fn context_feedback(sock: &PathBuf, args: &Value) -> Result<Value> {
     };
 
     // Mark feedback received → clears verify-gate degradation for this pack.
-    if !pack_id.is_empty() {
-        if let Ok(mut state) = FEEDBACK_STATE.lock() {
-            state.mark_feedback(pack_id);
-        }
+    if !pack_id.is_empty()
+        && let Ok(mut state) = FEEDBACK_STATE.lock()
+    {
+        state.mark_feedback(pack_id);
     }
 
     // Persist the raw feedback event too (sweepable, auditable).
@@ -1946,10 +2014,22 @@ async fn context_remember(sock: &PathBuf, args: &Value) -> Result<Value> {
 // Replaces 3rd-party cookies: server-side, cross-device, ad-blocker-resistent, DSGVO-clean.
 // affiliate_lookup: resolves active attribution + optional E.L.A.B. event chain.
 async fn affiliate_attribute(sock: &PathBuf, args: &Value) -> Result<Value> {
-    let ctx_hash = args.get("ctx_hash").and_then(|v| v.as_str()).context("ctx_hash")?;
-    let partner_id = args.get("partner_id").and_then(|v| v.as_str()).context("partner_id")?;
-    let merchant_id = args.get("merchant_id").and_then(|v| v.as_str()).context("merchant_id")?;
-    let event_type = args.get("event_type").and_then(|v| v.as_str()).context("event_type")?;
+    let ctx_hash = args
+        .get("ctx_hash")
+        .and_then(|v| v.as_str())
+        .context("ctx_hash")?;
+    let partner_id = args
+        .get("partner_id")
+        .and_then(|v| v.as_str())
+        .context("partner_id")?;
+    let merchant_id = args
+        .get("merchant_id")
+        .and_then(|v| v.as_str())
+        .context("merchant_id")?;
+    let event_type = args
+        .get("event_type")
+        .and_then(|v| v.as_str())
+        .context("event_type")?;
     let attribution_type = args
         .get("attribution_type")
         .and_then(|v| v.as_str())
@@ -2009,8 +2089,14 @@ async fn affiliate_attribute(sock: &PathBuf, args: &Value) -> Result<Value> {
 }
 
 async fn affiliate_lookup(sock: &PathBuf, args: &Value) -> Result<Value> {
-    let ctx_hash = args.get("ctx_hash").and_then(|v| v.as_str()).context("ctx_hash")?;
-    let merchant_id = args.get("merchant_id").and_then(|v| v.as_str()).context("merchant_id")?;
+    let ctx_hash = args
+        .get("ctx_hash")
+        .and_then(|v| v.as_str())
+        .context("ctx_hash")?;
+    let merchant_id = args
+        .get("merchant_id")
+        .and_then(|v| v.as_str())
+        .context("merchant_id")?;
     let include_chain = args
         .get("include_chain")
         .and_then(|v| v.as_bool())
@@ -2032,7 +2118,10 @@ async fn affiliate_lookup(sock: &PathBuf, args: &Value) -> Result<Value> {
                 continue;
             }
             if !include_chain {
-                let et = meta.get("event_type").and_then(|v| v.as_str()).unwrap_or("");
+                let et = meta
+                    .get("event_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if et == "claim" {
                     continue;
                 }
@@ -2049,10 +2138,13 @@ async fn affiliate_lookup(sock: &PathBuf, args: &Value) -> Result<Value> {
             }));
         }
     }
-    let primary = hits.iter().find(|h| {
-        h.get("event_type").and_then(|v| v.as_str()) == Some("invitation")
-            || h.get("event_type").and_then(|v| v.as_str()) == Some("opt_in")
-    }).cloned();
+    let primary = hits
+        .iter()
+        .find(|h| {
+            h.get("event_type").and_then(|v| v.as_str()) == Some("invitation")
+                || h.get("event_type").and_then(|v| v.as_str()) == Some("opt_in")
+        })
+        .cloned();
     Ok(json!({
         "ctx_hash": ctx_hash,
         "merchant_id": merchant_id,
@@ -2081,10 +2173,7 @@ async fn session_ingest(sock: &PathBuf, args: &Value) -> Result<Value> {
         .get("events")
         .and_then(|v| v.as_array())
         .context("events")?;
-    let summary = args
-        .get("summary")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let summary = args.get("summary").and_then(|v| v.as_str()).unwrap_or("");
     let turn_start = args.get("turn_start").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
     let turn_end = args.get("turn_end").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
     let repo = args.get("repo").and_then(|v| v.as_str()).unwrap_or("");
@@ -2143,11 +2232,10 @@ async fn session_replay(sock: &PathBuf, args: &Value) -> Result<Value> {
     let agent_role: Option<&str> = args.get("agent_role").and_then(|v| v.as_str());
 
     // Query session-summary docs for this session via SQL filter on meta.
-    let filter_clause = if agent_role.is_some() {
+    let filter_clause = if let Some(role) = agent_role {
         format!(
             "WHERE meta LIKE '%\"session_id\":\"{sid}\"%' AND meta LIKE '%\"agent_role\":\"{role}\"%'",
             sid = session_id,
-            role = agent_role.unwrap()
         )
     } else {
         format!(
@@ -2157,7 +2245,9 @@ async fn session_replay(sock: &PathBuf, args: &Value) -> Result<Value> {
     };
     let rows = sql_rows(
         sock,
-        format!("SELECT id, title, text, meta, ts FROM docs {filter_clause} ORDER BY ts ASC LIMIT 200"),
+        format!(
+            "SELECT id, title, text, meta, ts FROM docs {filter_clause} ORDER BY ts ASC LIMIT 200"
+        ),
         Vec::new(),
     )
     .await
@@ -2166,8 +2256,16 @@ async fn session_replay(sock: &PathBuf, args: &Value) -> Result<Value> {
     let mut cands = Vec::new();
     for r in &rows {
         let id = r.get("id").and_then(|v| v.as_i64()).unwrap_or_default();
-        let title = r.get("title").and_then(|v| v.as_str()).unwrap_or_default().to_string();
-        let text = r.get("text").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+        let title = r
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let text = r
+            .get("text")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
         if text.is_empty() {
             continue;
         }
@@ -2545,6 +2643,7 @@ mod tests {
         let e1 = PackCacheEntry {
             rendered: "STATE alpha".into(),
             used_ids: vec![1, 2],
+            used_kinds: vec!["decision".into()],
             used_tokens: 100,
             naive_tokens: 500,
             savings_pct: 80.0,
@@ -2586,6 +2685,7 @@ mod tests {
                 PackCacheEntry {
                     rendered: format!("STATE {i}"),
                     used_ids: vec![i as i64],
+                    used_kinds: vec!["chat".into()],
                     used_tokens: 10,
                     naive_tokens: 50,
                     savings_pct: 80.0,
@@ -2601,6 +2701,7 @@ mod tests {
             PackCacheEntry {
                 rendered: "STATE new".into(),
                 used_ids: vec![999],
+                used_kinds: vec!["other".into()],
                 used_tokens: 10,
                 naive_tokens: 50,
                 savings_pct: 80.0,
@@ -2636,7 +2737,10 @@ mod tests {
     #[test]
     fn skill_preload_hints_match_trading_query() {
         let hints = skill_preload_hints("how do I build a trading portfolio with kelly sizing");
-        assert!(hints.contains(&"asymbet"), "asymbet must be hinted for trading query");
+        assert!(
+            hints.contains(&"asymbet"),
+            "asymbet must be hinted for trading query"
+        );
         assert!(hints.contains(&"winvestment-profet"));
         assert!(hints.len() <= 3);
     }
@@ -2655,8 +2759,12 @@ mod tests {
 
     #[test]
     fn has_context_trigger_matches_real_tasks() {
-        assert!(has_context_trigger("how do I implement a delta pack in synapse-pack"));
-        assert!(has_context_trigger("wie kann ich das token-saving optimieren"));
+        assert!(has_context_trigger(
+            "how do I implement a delta pack in synapse-pack"
+        ));
+        assert!(has_context_trigger(
+            "wie kann ich das token-saving optimieren"
+        ));
         assert!(!has_context_trigger("hi"));
         assert!(!has_context_trigger("thanks"));
         assert!(!has_context_trigger("ok"));

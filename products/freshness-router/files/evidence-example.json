@@ -1,0 +1,12 @@
+{
+  "id": "openai-api-changelog-2026-08-03",
+  "source_uri": "https://developers.openai.com/api/docs/changelog",
+  "source_kind": "official_changelog",
+  "observed_at": 1785756570,
+  "content_hash": "blake3:7242d665d3ca9fd54fe8608eb783711383b145292344af6244db3e954bb6c27a",
+  "valid_from": 1785756570,
+  "ttl_sec": 86400,
+  "status": "verified",
+  "review_verdict": "Official page fetched into the Synapse corpus; hash matches the stored document content.",
+  "supersedes": []
+}

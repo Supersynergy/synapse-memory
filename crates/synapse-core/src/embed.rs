@@ -79,10 +79,10 @@ fn select_model() -> EmbeddingModel {
 /// dir. Honor the daemon's env first, else a stable abs path under $HOME.
 fn embed_cache_dir() -> std::path::PathBuf {
     for key in ["FASTEMBED_CACHE_PATH", "HF_HOME"] {
-        if let Some(v) = std::env::var_os(key) {
-            if !v.is_empty() {
-                return std::path::PathBuf::from(v);
-            }
+        if let Some(v) = std::env::var_os(key)
+            && !v.is_empty()
+        {
+            return std::path::PathBuf::from(v);
         }
     }
     if let Some(home) = std::env::var_os("HOME") {

@@ -119,6 +119,140 @@ pub struct FreshReport {
     pub deps: Vec<FreshDepStatus>,
 }
 
+/// Generic, source-backed freshness state for facts that are not package dependencies.
+///
+/// The record is intentionally append-oriented: callers persist a new record and use
+/// `supersedes` instead of overwriting evidence in place.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceStatus {
+    Candidate,
+    Verified,
+    Stale,
+    Superseded,
+    Blocked,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FreshEvidence {
+    pub id: String,
+    pub source_uri: String,
+    pub source_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub published_at: Option<u64>,
+    pub observed_at: u64,
+    pub content_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<u64>,
+    pub ttl_sec: u64,
+    pub status: EvidenceStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub review_verdict: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub supersedes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EvidenceCheck {
+    pub id: String,
+    pub declared_status: EvidenceStatus,
+    pub effective_status: EvidenceStatus,
+    pub current: bool,
+    pub checked_at: u64,
+    pub errors: Vec<String>,
+}
+
+/// Validate an evidence record and derive its effective state at `now`.
+pub fn check_fresh_evidence(evidence: &FreshEvidence, now: u64, cutoff: u64) -> EvidenceCheck {
+    let mut errors = Vec::new();
+    if evidence.id.trim().is_empty() {
+        errors.push("id is required".to_string());
+    }
+    if evidence.source_kind.trim().is_empty() {
+        errors.push("source_kind is required".to_string());
+    }
+    if !(evidence.source_uri.starts_with("https://") || evidence.source_uri.starts_with("file://"))
+    {
+        errors.push("source_uri must use https:// or file://".to_string());
+    }
+    if evidence.observed_at < cutoff {
+        errors.push(format!("observed_at predates cutoff {cutoff}"));
+    }
+    if evidence.observed_at > now {
+        errors.push("observed_at is in the future".to_string());
+    }
+    if evidence
+        .published_at
+        .is_some_and(|published| published > evidence.observed_at)
+    {
+        errors.push("published_at is after observed_at".to_string());
+    }
+    if !valid_blake3_hash(&evidence.content_hash) {
+        errors.push("content_hash must be blake3:<64 hex characters>".to_string());
+    }
+    if evidence.ttl_sec == 0 || evidence.ttl_sec > 31_536_000 {
+        errors.push("ttl_sec must be between 1 and 31536000".to_string());
+    }
+    if evidence.status == EvidenceStatus::Verified
+        && evidence
+            .review_verdict
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+    {
+        errors.push("verified evidence requires review_verdict".to_string());
+    }
+    if evidence.supersedes.iter().any(|id| id == &evidence.id) {
+        errors.push("evidence cannot supersede itself".to_string());
+    }
+
+    let expired = evidence
+        .observed_at
+        .checked_add(evidence.ttl_sec)
+        .is_none_or(|expires_at| expires_at <= now);
+    let valid_now = evidence
+        .valid_from
+        .is_none_or(|valid_from| valid_from <= now);
+    let effective_status = if !errors.is_empty() {
+        EvidenceStatus::Blocked
+    } else {
+        match evidence.status {
+            EvidenceStatus::Verified if expired => EvidenceStatus::Stale,
+            ref status => status.clone(),
+        }
+    };
+    let current = effective_status == EvidenceStatus::Verified && valid_now;
+
+    EvidenceCheck {
+        id: evidence.id.clone(),
+        declared_status: evidence.status.clone(),
+        effective_status,
+        current,
+        checked_at: now,
+        errors,
+    }
+}
+
+/// State changes are explicit so evidence can be audited rather than silently replaced.
+pub fn evidence_transition_allowed(from: EvidenceStatus, to: EvidenceStatus) -> bool {
+    matches!(
+        (from, to),
+        (EvidenceStatus::Candidate, EvidenceStatus::Verified)
+            | (EvidenceStatus::Candidate, EvidenceStatus::Blocked)
+            | (EvidenceStatus::Verified, EvidenceStatus::Stale)
+            | (EvidenceStatus::Verified, EvidenceStatus::Superseded)
+            | (EvidenceStatus::Stale, EvidenceStatus::Verified)
+            | (EvidenceStatus::Stale, EvidenceStatus::Blocked)
+            | (EvidenceStatus::Stale, EvidenceStatus::Superseded)
+            | (EvidenceStatus::Blocked, EvidenceStatus::Candidate)
+    )
+}
+
+fn valid_blake3_hash(value: &str) -> bool {
+    value
+        .strip_prefix("blake3:")
+        .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit()))
+}
+
 pub fn freshness_needed(prompt: &str, mode: FreshMode) -> bool {
     if std::env::var("SYNAPSE_FRESH_CONTEXT").ok().as_deref() == Some("0") {
         return false;
@@ -1140,5 +1274,89 @@ version = "1.0.228"
         unsafe { std::env::set_var("SYNAPSE_FRESH_CONTEXT", "0") };
         assert!(!freshness_needed("latest serde", FreshMode::Prompt));
         unsafe { std::env::remove_var("SYNAPSE_FRESH_CONTEXT") };
+    }
+
+    fn evidence(status: EvidenceStatus) -> FreshEvidence {
+        FreshEvidence {
+            id: "openai-api-changelog-2026-07-30".to_string(),
+            source_uri: "https://developers.openai.com/api/docs/changelog".to_string(),
+            source_kind: "official_changelog".to_string(),
+            published_at: Some(1_775_001_600),
+            observed_at: 1_775_088_000,
+            content_hash: format!("blake3:{}", "a".repeat(64)),
+            valid_from: Some(1_775_001_600),
+            ttl_sec: 86_400,
+            status,
+            review_verdict: Some("official page fetched and content hash recorded".to_string()),
+            supersedes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn verified_evidence_is_current_inside_ttl() {
+        let check = check_fresh_evidence(
+            &evidence(EvidenceStatus::Verified),
+            1_775_100_000,
+            1_717_200_000,
+        );
+        assert!(check.current);
+        assert_eq!(check.effective_status, EvidenceStatus::Verified);
+        assert!(check.errors.is_empty());
+    }
+
+    #[test]
+    fn verified_evidence_becomes_stale_after_ttl() {
+        let check = check_fresh_evidence(
+            &evidence(EvidenceStatus::Verified),
+            1_775_200_000,
+            1_717_200_000,
+        );
+        assert!(!check.current);
+        assert_eq!(check.effective_status, EvidenceStatus::Stale);
+    }
+
+    #[test]
+    fn invalid_evidence_is_blocked_with_reasons() {
+        let mut record = evidence(EvidenceStatus::Verified);
+        record.source_uri = "http://example.test".to_string();
+        record.content_hash = "sha256:not-blake3".to_string();
+        record.review_verdict = None;
+        record.observed_at = 1;
+        let check = check_fresh_evidence(&record, 1_775_100_000, 1_717_200_000);
+        assert!(!check.current);
+        assert_eq!(check.effective_status, EvidenceStatus::Blocked);
+        assert_eq!(check.errors.len(), 5);
+    }
+
+    #[test]
+    fn candidate_is_valid_but_not_current() {
+        let check = check_fresh_evidence(
+            &evidence(EvidenceStatus::Candidate),
+            1_775_100_000,
+            1_717_200_000,
+        );
+        assert!(!check.current);
+        assert!(check.errors.is_empty());
+        assert_eq!(check.effective_status, EvidenceStatus::Candidate);
+    }
+
+    #[test]
+    fn transitions_prevent_silent_replacement() {
+        assert!(evidence_transition_allowed(
+            EvidenceStatus::Candidate,
+            EvidenceStatus::Verified
+        ));
+        assert!(evidence_transition_allowed(
+            EvidenceStatus::Verified,
+            EvidenceStatus::Superseded
+        ));
+        assert!(!evidence_transition_allowed(
+            EvidenceStatus::Verified,
+            EvidenceStatus::Candidate
+        ));
+        assert!(!evidence_transition_allowed(
+            EvidenceStatus::Superseded,
+            EvidenceStatus::Verified
+        ));
     }
 }

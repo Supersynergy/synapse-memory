@@ -175,6 +175,17 @@ impl LearnStore {
         Ok(())
     }
 
+    /// How often a doc was accepted via feedback. Feeds `DecayMeta.interactions`
+    /// so accepted memories resist decay in recall ranking.
+    pub fn accept_count(&self, doc_id: i64) -> Result<u32> {
+        let n = self.conn.query_row(
+            "SELECT COUNT(*) FROM feedback WHERE accepted_doc_id=?1",
+            params![doc_id],
+            |r| r.get::<_, i64>(0),
+        )?;
+        Ok(n.max(0) as u32)
+    }
+
     pub fn update_memory_type_reward(&self, kind: &str, hit: bool) -> Result<()> {
         if hit {
             self.conn.execute(
