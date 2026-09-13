@@ -136,7 +136,7 @@ version = "1.0.1-rc.2"
 edition = "2024"
 authors = ["Maxim Supersynergy <true@supersynergy.de>"]
 license = "MIT"
-repository = "https://github.com/Supersynergy/synapse"
+repository = "https://github.com/Supersynergy/synapse-memory"
 rust-version = "1.95"
 [workspace.dependencies]
 anyhow = "1"

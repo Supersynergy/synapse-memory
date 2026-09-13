@@ -8,7 +8,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $DefaultVersion = "1.0.1-rc.2"
-$Repo = if ($env:SYNAPSE_REPO) { $env:SYNAPSE_REPO } else { "https://github.com/Supersynergy/synapse" }
+$Repo = if ($env:SYNAPSE_REPO) { $env:SYNAPSE_REPO } else { "https://github.com/Supersynergy/synapse-memory" }
 $Arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 $Target = switch ($Arch) {
     "X64" { "x86_64-pc-windows-msvc" }

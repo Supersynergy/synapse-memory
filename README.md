@@ -2,7 +2,7 @@
 
 ![Synapse — local Rust memory for coding agents that survives disconnects.](docs/assets/social-preview.png)
 
-[![Synapse Memory CI](https://github.com/Supersynergy/synapse/actions/workflows/synapse-memory-ci.yml/badge.svg)](https://github.com/Supersynergy/synapse/actions/workflows/synapse-memory-ci.yml)
+[![Synapse Memory CI](https://github.com/Supersynergy/synapse-memory/actions/workflows/synapse-memory-ci.yml/badge.svg)](https://github.com/Supersynergy/synapse-memory/actions/workflows/synapse-memory-ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/synapse-core.svg)](https://crates.io/crates/synapse-core)
 [![License: FSL-1.1-ALv2 + MIT](https://img.shields.io/badge/license-FSL--1.1--ALv2%20%2B%20MIT-orange.svg)](LICENSE-CORE.md)
 
@@ -35,13 +35,13 @@ path. Portable release = one native Rust CLI; MCP and daemon stay optional.
 Install a checksummed `ctxos-v*` release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-memory/install.sh | sh
 ```
 
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.ps1 | iex
+irm https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-memory/install.ps1 | iex
 ```
 
 This installs only the portable native `synx` memory CLI. No Rust toolchain, Python,

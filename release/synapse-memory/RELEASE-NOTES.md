@@ -1,6 +1,7 @@
-# Synapse Memory 1.0.1-rc.1
+# Synapse Memory 1.0.1-rc.2
 
-First portable release candidate for local coding-agent memory.
+Portable release candidate for local coding-agent memory — now with a
+daemon-warm CLI hot path and self-learning retrieval routes.
 
 ## What ships
 
@@ -9,6 +10,19 @@ First portable release candidate for local coding-agent memory.
 - Local SQLite memory, typed capture, lexical retrieval, bounded cited context,
   feedback, integrity checks, backup/restore, signatures, graph basics, and
   offline local-manifest freshness.
+- Zero-token trigger gate: `synx should-context` / `synx context-hook` spend no
+  context tokens on smalltalk; task-like prompts get a cited pack (~0.1s).
+- Daemon-warm retrieval: when a `synapsed` socket is live (`/tmp/synapse.sock`,
+  or `SYNAPSE_SOCK`), `synx context`/`prime` answer in under a second on large
+  brains instead of paying a full index load per invocation. Without a daemon
+  every command still works against the local store; `--no-daemon` or
+  `SYNAPSE_NO_DAEMON=1` forces the local path. `synx onboard` installs and
+  starts the background agent on macOS.
+- Self-learning routes: `context_pack` picks lexical/semantic/hybrid retrieval
+  via Thompson sampling once enough feedback exists, and reports
+  `route`/`route_selected_by` in every pack manifest.
+- Maintenance telemetry: `synx maintain --json` reports `open_ms`, `scan_ms`,
+  and `merge_ms` so large brains stay observable.
 - Checksummed archives with build metadata, exact first-party terms, and the
   locked portable dependency-license report.
 - Optional Codex checkpoint adapter. Journals are append-only and fsynced;
@@ -27,7 +41,7 @@ First portable release candidate for local coding-agent memory.
 After the tagged GitHub Actions matrix has published all six checksummed assets:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse/main/release/synapse-memory/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-memory/install.sh | sh
 ```
 
 The installer selects the native target, pins this release version, verifies its
