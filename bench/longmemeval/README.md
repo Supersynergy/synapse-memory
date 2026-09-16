@@ -8,7 +8,7 @@ Evaluates Synapse SOTA pipeline on the LongMemEval-S-50 subset (50 questions).
 cargo run -p longmemeval --no-default-features -- --rerank-top 0
 ```
 
-Current verified result on 2026-05-25:
+Current verified result (2026-05-25, reproduced identically 2026-09-16):
 
 - N = 50
 - Errors = 0
@@ -18,7 +18,7 @@ Current verified result on 2026-05-25:
 - Fuzzy-R@10 = 0.620 (31/50)
 - Latency avg = 0.97 ms recall-only
 
-Report: `docs/LONGMEMEVAL_RESULTS_2026-05-25.md`
+Report: `docs/LONGMEMEVAL_RESULTS_2026-09-16.md` (latest; identical metrics to 2026-05-25)
 
 ## Optional Model Config
 
