@@ -851,6 +851,12 @@ fn resolve_db_path(p: std::path::PathBuf) -> std::path::PathBuf {
     if p.is_absolute() || p.exists() {
         return p;
     }
+    // Only the built-in default may fall back to $HOME — an explicit relative
+    // `-f` is honored literally, otherwise `-f proj/brain.db` could silently
+    // create/read `~/proj/brain.db` instead of the path the user typed.
+    if p != std::path::PathBuf::from(".synapse/brain.db") {
+        return p;
+    }
     if let Some(home) = std::env::var_os("HOME") {
         let h = std::path::PathBuf::from(home).join(&p);
         if h.exists() {
@@ -1028,7 +1034,7 @@ fn main() -> Result<()> {
             let open_start = std::time::Instant::now();
             let store = Store::open(&cli.file)?;
             let open_ms = open_start.elapsed().as_millis() as u64;
-            let wal_path = cli.file.with_extension("db-wal");
+            let wal_path = std::path::PathBuf::from(format!("{}-wal", cli.file.display()));
             let wal_bytes_before = std::fs::metadata(&wal_path).map(|m| m.len()).ok();
             let max = if limit == 0 { usize::MAX } else { limit };
             let merge = synapse_learn::consolidate::run_consolidate(&store.conn, max, offset)?;
@@ -2293,7 +2299,7 @@ fn build_prime_report(
     );
     let (memories, memory_route) = {
         // Warm daemon first; else the passed store; else lazy local open.
-        let daemon_result = daemon_search(&query, limit);
+        let daemon_result = daemon_search(&query, limit, brain_file);
         let owned_store;
         let (hits, route) = match daemon_result {
             Some(res) => res,
@@ -2602,11 +2608,15 @@ fn search_best_effort(
 
 /// Warm path: query a running synapsed first; fall back to opening the local
 /// store (which pays the HNSW load) only when the daemon is absent or errors.
-fn daemon_search(query: &str, limit: usize) -> Option<SearchBestEffortResult> {
+fn daemon_search(
+    query: &str,
+    limit: usize,
+    file: &std::path::Path,
+) -> Option<SearchBestEffortResult> {
     if daemon::disabled() {
         return None;
     }
-    match daemon::search_best_effort(query, limit) {
+    match daemon::search_best_effort(query, limit, file) {
         Ok(res) => Some(res),
         Err(e) => {
             if std::env::var_os("SYNAPSE_DEBUG").is_some() {
@@ -2627,7 +2637,7 @@ fn run_context(
 ) -> Result<()> {
     let learn_path = file.with_extension("learn.db");
     let lstore = LearnStore::open(&learn_path).ok();
-    let (hits, route) = match daemon_search(query, limit) {
+    let (hits, route) = match daemon_search(query, limit, file) {
         Some(res) => res,
         None => {
             let store = Store::open(file)?;
@@ -2882,7 +2892,7 @@ fn ensure_launchd_daemon(brain: &std::path::Path) -> Result<String> {
     <array>
         <string>{}</string>
         <string>--sock</string><string>/tmp/synapse.sock</string>
-        <string>--db</string><string>{}</string>
+        <string>--file</string><string>{}</string>
     </array>
     <key>RunAtLoad</key><true/>
     <key>KeepAlive</key><true/>
@@ -3269,7 +3279,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
         warnings.push("embedding cache missing; first semantic query may be slow".to_string());
     }
     // wal_autocheckpoint is disabled at open; surface runaway WAL growth.
-    let wal_bytes = std::fs::metadata(file.with_extension("db-wal"))
+    let wal_bytes = std::fs::metadata(format!("{}-wal", file.display()))
         .map(|m| m.len())
         .ok();
     if let Some(b) = wal_bytes

@@ -30,10 +30,9 @@ pub fn set_disabled(v: bool) {
 
 pub fn disabled() -> bool {
     DISABLED.load(std::sync::atomic::Ordering::Relaxed)
-        || matches!(
-            std::env::var("SYNAPSE_NO_DAEMON").as_deref(),
-            Ok("1" | "true" | "yes")
-        )
+        || std::env::var("SYNAPSE_NO_DAEMON")
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false)
 }
 
 #[cfg(unix)]
@@ -51,11 +50,31 @@ fn roundtrip(stream: &mut std::os::unix::net::UnixStream, req: &Value) -> Result
     Ok(rmp_serde::from_slice(&buf)?)
 }
 
+/// std's `UnixStream::connect` has no timeout knob — a wedged listener (full
+/// accept backlog) would block the CLI forever instead of failing fast to the
+/// local-store fallback. Bound it by connecting on a helper thread; if the
+/// deadline passes we abandon the attempt (the thread unblocks when the
+/// listener drains or dies).
+#[cfg(unix)]
+fn connect_bounded(
+    path: &std::path::Path,
+    dur: Duration,
+) -> Result<std::os::unix::net::UnixStream> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let p = path.to_path_buf();
+    std::thread::spawn(move || {
+        let _ = tx.send(std::os::unix::net::UnixStream::connect(&p));
+    });
+    match rx.recv_timeout(dur) {
+        Ok(res) => res.with_context(|| format!("connect {}", path.display())),
+        Err(_) => anyhow::bail!("connect {} timed out", path.display()),
+    }
+}
+
 #[cfg(unix)]
 fn call(req: &Value) -> Result<Value> {
     let path = sock_path();
-    let mut stream = std::os::unix::net::UnixStream::connect(&path)
-        .with_context(|| format!("connect {}", path.display()))?;
+    let mut stream = connect_bounded(&path, Duration::from_secs(10))?;
     stream.set_read_timeout(Some(Duration::from_secs(30)))?;
     stream.set_write_timeout(Some(Duration::from_secs(10)))?;
     if let Some(token) = std::env::var("SYNAPSE_API_KEY")
@@ -83,8 +102,11 @@ pub fn available() -> bool {
     if !path.exists() {
         return false;
     }
+    // `Response::Pong` is a unit variant: it encodes as a bare msgpack string
+    // `"Pong"`, not a `{"Pong": ...}` map — accept both so daemon upgrades
+    // never silently flip this check.
     call(&json!({"op": "Ping"}))
-        .map(|v| v.get("Pong").is_some())
+        .map(|v| v == json!("Pong") || v.get("Pong").is_some())
         .unwrap_or(false)
 }
 
@@ -103,8 +125,53 @@ fn hits(resp: Value) -> Result<Vec<Hit>> {
 
 /// Daemon search mirroring `search_best_effort`: lexical → hybrid → timeline.
 /// Returns (hits, route). Any failure propagates so callers can fall back.
+///
+/// One daemon serves exactly one brain: refuse the socket when `db_file` is
+/// not the file the daemon was started with — otherwise `-f other.db` would
+/// silently return hits from the wrong brain. Daemons too old to report their
+/// file are only trusted for the default `~/.synapse/brain.db`.
 #[cfg(unix)]
-pub fn search_best_effort(query: &str, limit: usize) -> Result<SearchBestEffortResult> {
+pub fn search_best_effort(
+    query: &str,
+    limit: usize,
+    db_file: &std::path::Path,
+) -> Result<SearchBestEffortResult> {
+    let stats = call(&json!({"op": "Stats"}))?;
+    if let Some(err) = stats.get("Err").and_then(|v| v.as_str()) {
+        anyhow::bail!("daemon error: {err}");
+    }
+    let served = stats
+        .get("Stats")
+        .and_then(|s| s.get("file"))
+        .and_then(|v| v.as_str());
+    let canon = |p: &std::path::Path| std::fs::canonicalize(p).ok();
+    match served {
+        Some(served) => {
+            let same = canon(std::path::Path::new(served))
+                .zip(canon(db_file))
+                .map(|(a, b)| a == b)
+                .unwrap_or_else(|| served == db_file.to_string_lossy());
+            if !same {
+                anyhow::bail!("daemon serves {served}, not {}", db_file.display());
+            }
+        }
+        None => {
+            let default =
+                std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".synapse/brain.db"));
+            let is_default = default
+                .as_deref()
+                .and_then(canon)
+                .zip(canon(db_file))
+                .map(|(a, b)| a == b)
+                .unwrap_or(false);
+            if !is_default {
+                anyhow::bail!(
+                    "daemon does not report its db; only serving the default brain via socket"
+                );
+            }
+        }
+    }
+
     let lex = hits(call(&json!({"op": "Search", "args": {
         "mode": "Lex", "q": query, "limit": limit, "embed_query": false,
     }}))?)?;
@@ -142,7 +209,11 @@ pub fn search_best_effort(query: &str, limit: usize) -> Result<SearchBestEffortR
 }
 
 #[cfg(not(unix))]
-pub fn search_best_effort(_query: &str, _limit: usize) -> Result<SearchBestEffortResult> {
+pub fn search_best_effort(
+    _query: &str,
+    _limit: usize,
+    _db_file: &std::path::Path,
+) -> Result<SearchBestEffortResult> {
     anyhow::bail!("synapsed socket is unix-only; use the local store path")
 }
 
@@ -185,13 +256,15 @@ mod tests {
             a.read_exact(&mut buf).unwrap();
             let req: Value = rmp_serde::from_slice(&buf).unwrap();
             assert_eq!(req["op"], "Ping");
-            let body = rmp_serde::to_vec_named(&json!({"Pong": true})).unwrap();
+            // Mirror the real wire format: `Response::Pong` is a unit variant
+            // and encodes as a bare msgpack string, not a map.
+            let body = rmp_serde::to_vec_named(&json!("Pong")).unwrap();
             a.write_all(&(body.len() as u32).to_le_bytes()).unwrap();
             a.write_all(&body).unwrap();
         });
         let resp = roundtrip(&mut b, &json!({"op": "Ping"})).unwrap();
         handle.join().unwrap();
-        assert_eq!(resp["Pong"], true);
+        assert_eq!(resp, json!("Pong"));
     }
 
     #[cfg(unix)]

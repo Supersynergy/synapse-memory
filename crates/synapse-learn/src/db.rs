@@ -76,15 +76,17 @@ impl LearnStore {
     }
 
     pub fn update_bandit(&self, shard_id: &str, hit: bool) -> Result<()> {
+        // The INSERT branch must record the observation too — seeding (1,1)
+        // would silently drop the first feedback event per arm.
         if hit {
             self.conn.execute(
-                "INSERT INTO learn_bandit(shard_id,wins,losses) VALUES(?1,1,1)
+                "INSERT INTO learn_bandit(shard_id,wins,losses) VALUES(?1,2,1)
                  ON CONFLICT(shard_id) DO UPDATE SET wins=wins+1",
                 params![shard_id],
             )?;
         } else {
             self.conn.execute(
-                "INSERT INTO learn_bandit(shard_id,wins,losses) VALUES(?1,1,1)
+                "INSERT INTO learn_bandit(shard_id,wins,losses) VALUES(?1,1,2)
                  ON CONFLICT(shard_id) DO UPDATE SET losses=losses+1",
                 params![shard_id],
             )?;
@@ -114,13 +116,13 @@ impl LearnStore {
     pub fn update_rrf(&self, shape_hash: u8, bucket: usize, hit: bool) -> Result<()> {
         if hit {
             self.conn.execute(
-                "INSERT INTO learn_rrf_alpha(shape_hash,bucket,wins,losses) VALUES(?1,?2,1,1)
+                "INSERT INTO learn_rrf_alpha(shape_hash,bucket,wins,losses) VALUES(?1,?2,2,1)
                  ON CONFLICT(shape_hash) DO UPDATE SET wins=wins+1, bucket=?2",
                 params![shape_hash as i64, bucket as i64],
             )?;
         } else {
             self.conn.execute(
-                "INSERT INTO learn_rrf_alpha(shape_hash,bucket,wins,losses) VALUES(?1,?2,1,1)
+                "INSERT INTO learn_rrf_alpha(shape_hash,bucket,wins,losses) VALUES(?1,?2,1,2)
                  ON CONFLICT(shape_hash) DO UPDATE SET losses=losses+1",
                 params![shape_hash as i64, bucket as i64],
             )?;
@@ -161,10 +163,15 @@ impl LearnStore {
     }
 
     pub fn reward_context(&self, context_id: &str, accepted_doc_id: i64, hit: bool) -> Result<()> {
-        self.conn.execute(
-            "UPDATE context_query_log SET accepted_doc_id=?1, reward=?2 WHERE context_id=?3",
+        // Idempotent: a second feedback event for the same context_id must not
+        // count twice against the route bandit — only reward once per pack.
+        let changed = self.conn.execute(
+            "UPDATE context_query_log SET accepted_doc_id=?1, reward=?2 WHERE context_id=?3 AND reward IS NULL",
             params![accepted_doc_id, if hit { 1 } else { 0 }, context_id],
         )?;
+        if changed == 0 {
+            return Ok(());
+        }
         let row = self.conn.query_row(
             "SELECT route FROM context_query_log WHERE context_id=?1",
             params![context_id],
@@ -190,13 +197,13 @@ impl LearnStore {
     pub fn update_memory_type_reward(&self, kind: &str, hit: bool) -> Result<()> {
         if hit {
             self.conn.execute(
-                "INSERT INTO memory_type_reward(kind,wins,losses) VALUES(?1,1,1)
+                "INSERT INTO memory_type_reward(kind,wins,losses) VALUES(?1,2,1)
                  ON CONFLICT(kind) DO UPDATE SET wins=wins+1",
                 params![kind],
             )?;
         } else {
             self.conn.execute(
-                "INSERT INTO memory_type_reward(kind,wins,losses) VALUES(?1,1,1)
+                "INSERT INTO memory_type_reward(kind,wins,losses) VALUES(?1,1,2)
                  ON CONFLICT(kind) DO UPDATE SET losses=losses+1",
                 params![kind],
             )?;
@@ -226,13 +233,13 @@ impl LearnStore {
     pub fn update_route_reward(&self, route: &str, hit: bool) -> Result<()> {
         if hit {
             self.conn.execute(
-                "INSERT INTO route_reward(route,wins,losses) VALUES(?1,1,1)
+                "INSERT INTO route_reward(route,wins,losses) VALUES(?1,2,1)
                  ON CONFLICT(route) DO UPDATE SET wins=wins+1",
                 params![route],
             )?;
         } else {
             self.conn.execute(
-                "INSERT INTO route_reward(route,wins,losses) VALUES(?1,1,1)
+                "INSERT INTO route_reward(route,wins,losses) VALUES(?1,1,2)
                  ON CONFLICT(route) DO UPDATE SET losses=losses+1",
                 params![route],
             )?;

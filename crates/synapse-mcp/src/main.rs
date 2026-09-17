@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
+use tokio::time::{Duration, timeout};
 
 use synapse_decay::recall_multiplier;
 #[cfg(feature = "market")]
@@ -533,8 +534,9 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
 }
 
 async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
-    let mut stream = UnixStream::connect(sock)
+    let mut stream = timeout(Duration::from_secs(10), UnixStream::connect(sock))
         .await
+        .context("connect synapsed timed out")?
         .context("connect synapsed")?;
     if let Ok(token) = std::env::var("SYNAPSE_API_KEY")
         && !token.is_empty()
@@ -549,6 +551,15 @@ async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
 }
 
 async fn daemon_roundtrip(stream: &mut UnixStream, req: Value) -> Result<Value> {
+    // A stalled daemon must not hang MCP tool calls forever — bound the whole
+    // roundtrip; callers degrade to local handling on error.
+    timeout(Duration::from_secs(30), daemon_roundtrip_inner(stream, req))
+        .await
+        .context("synapsed roundtrip timed out")?
+}
+
+async fn daemon_roundtrip_inner(stream: &mut UnixStream, req: Value) -> Result<Value> {
+    const MAX_FRAME: usize = 256 * 1024 * 1024;
     let body = rmp_serde::to_vec_named(&req)?;
     use tokio::io::AsyncReadExt;
     stream.write_all(&(body.len() as u32).to_le_bytes()).await?;
@@ -557,6 +568,7 @@ async fn daemon_roundtrip(stream: &mut UnixStream, req: Value) -> Result<Value> 
     let mut hdr = [0u8; 4];
     stream.read_exact(&mut hdr).await?;
     let n = u32::from_le_bytes(hdr) as usize;
+    anyhow::ensure!(n <= MAX_FRAME, "daemon frame too large: {n} bytes");
     let mut buf = vec![0u8; n];
     stream.read_exact(&mut buf).await?;
     let v: Value = rmp_serde::from_slice(&buf)?;
@@ -1183,10 +1195,17 @@ fn now_secs() -> i64 {
         .as_secs() as i64
 }
 
-/// Stable short id for a pack (query + selected ids), so feedback can reference it.
-fn pack_id(query: &str, ids: &[i64]) -> String {
+/// Stable short id for a pack (query + route + selected ids), so feedback can
+/// reference it. Route is part of the hash: the same query/ids served via two
+/// different routes must not collide — `INSERT OR REPLACE` would overwrite the
+/// first pack's logged route and reward the wrong arm.
+fn pack_id(query: &str, route: &str, ids: &[i64]) -> String {
     let mut h: u64 = 0xcbf29ce484222325;
     for b in query.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    for b in route.as_bytes() {
         h ^= *b as u64;
         h = h.wrapping_mul(0x100000001b3);
     }
@@ -1853,7 +1872,7 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
     };
     let rendered = render(&packed);
     let used_ids: Vec<i64> = packed.blocks.iter().map(|b| b.id).collect();
-    let pid = pack_id(query, &used_ids);
+    let pid = pack_id(query, &route, &used_ids);
     let blocks: Vec<Value> = packed
         .blocks
         .iter()
@@ -2347,7 +2366,7 @@ async fn session_replay(sock: &PathBuf, args: &Value) -> Result<Value> {
     let packed = pack(cands, &opts);
     let rendered = render(&packed);
     let used_ids: Vec<i64> = packed.blocks.iter().map(|b| b.id).collect();
-    let pid = pack_id(session_id, &used_ids);
+    let pid = pack_id(session_id, "", &used_ids);
 
     Ok(json!({
         "pack_id": pid,

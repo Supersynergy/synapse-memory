@@ -94,7 +94,7 @@ pub fn select_route(priors: &RoutePriors) -> (String, &'static str) {
     let mut rng = rand::rng();
     if rng.random::<f64>() < ROUTE_EXPLORE_FLOOR {
         let idx = rng.random_range(0..ROUTE_ARMS.len());
-        return (ROUTE_ARMS[idx].to_string(), "bandit");
+        return (ROUTE_ARMS[idx].to_string(), "explore");
     }
 
     let mut best = ROUTE_DEFAULT;
@@ -171,7 +171,10 @@ mod tests {
         let mut counts: HashMap<String, usize> = HashMap::new();
         for _ in 0..300 {
             let (route, by) = select_route(&priors);
-            assert_eq!(by, "bandit");
+            assert!(
+                by == "bandit" || by == "explore",
+                "unexpected selector label: {by}"
+            );
             *counts.entry(route).or_default() += 1;
         }
         let lex = *counts.get("lexical").unwrap_or(&0);

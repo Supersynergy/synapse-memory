@@ -433,11 +433,13 @@ fn spawn_turbo_warm(state: Arc<State>, db_path: PathBuf) {
     });
 }
 
-/// Periodic passive WAL checkpoint on the daemon's store connection.
+/// Periodic passive WAL checkpoint on a dedicated connection — deliberately
+/// NOT the store mutex: a multi-GiB PASSIVE copy would otherwise stall every
+/// op that locks `state.store` (search logging, puts, stats).
 /// `wal_autocheckpoint` is disabled on open for write throughput; without a
 /// periodic checkpoint the WAL grows unbounded under a long-lived daemon.
 /// PASSIVE never blocks queries; when the WAL fully drains (no reader pins),
-/// `Store::checkpoint_wal` also resets the file via TRUNCATE.
+/// the TRUNCATE attempt resets the file via `busy_timeout=0` — never a wait.
 fn spawn_wal_checkpointer(state: Weak<State>, period: Duration) {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(period);
@@ -447,11 +449,10 @@ fn spawn_wal_checkpointer(state: Weak<State>, period: Duration) {
             let Some(state) = state.upgrade() else {
                 return;
             };
-            let res = tokio::task::spawn_blocking(move || {
-                let store = state.store.lock();
-                store.checkpoint_wal()
-            })
-            .await;
+            let path = state.db_path.clone();
+            let res =
+                tokio::task::spawn_blocking(move || synapse_core::db::checkpoint_wal_file(&path))
+                    .await;
             match res {
                 Ok(Ok(ck)) => {
                     if ck.checkpointed_frames > 0 || ck.busy > 0 {
@@ -513,7 +514,12 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
             return Err(anyhow::anyhow!("bad frame len {len}"));
         }
         let mut buf = vec![0u8; len];
-        stream.read_exact(&mut buf).await?;
+        // A dribbling client must not pin this task forever — bound the body
+        // read too, not just the header.
+        match timeout(IDLE_TIMEOUT, stream.read_exact(&mut buf)).await {
+            Ok(Ok(_)) => {}
+            _ => return Ok(()),
+        }
         let req: Request = rmp_serde::from_slice(&buf).context("decode request")?;
         // P2.4 auth gate: require Auth before any op except Ping/Stats/Auth itself.
         let resp = if !authed {
@@ -522,11 +528,7 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
                 _ => {
                     let r = Response::Err("auth required: send Auth{token}".into());
                     let encoded = rmp_serde::to_vec_named(&r)?;
-                    stream
-                        .write_all(&(encoded.len() as u32).to_le_bytes())
-                        .await?;
-                    stream.write_all(&encoded).await?;
-                    stream.flush().await?;
+                    write_frame(&mut stream, &encoded).await?;
                     continue;
                 }
             }
@@ -541,12 +543,21 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
             dispatch(&state, req).await
         };
         let encoded = rmp_serde::to_vec_named(&resp)?;
-        stream
-            .write_all(&(encoded.len() as u32).to_le_bytes())
-            .await?;
-        stream.write_all(&encoded).await?;
-        stream.flush().await?;
+        write_frame(&mut stream, &encoded).await?;
     }
+}
+
+/// Length-prefixed write bounded by IDLE_TIMEOUT — a stalled reader must not
+/// hold this connection's task (and fd) open indefinitely.
+async fn write_frame(stream: &mut UnixStream, encoded: &[u8]) -> Result<()> {
+    timeout(
+        IDLE_TIMEOUT,
+        stream.write_all(&(encoded.len() as u32).to_le_bytes()),
+    )
+    .await??;
+    timeout(IDLE_TIMEOUT, stream.write_all(encoded)).await??;
+    timeout(IDLE_TIMEOUT, stream.flush()).await??;
+    Ok(())
 }
 
 async fn dispatch(state: &State, req: Request) -> Response {
@@ -656,10 +667,11 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
         }
         Request::Stats => {
+            let file = state.db_path.display().to_string();
             if let Some((at, docs, vecs, _max_id)) = *state.stats_cache.lock()
                 && at.elapsed() < state.stats_ttl
             {
-                return Response::Stats { docs, vecs };
+                return Response::Stats { docs, vecs, file };
             }
             match state.store.lock().stats() {
                 Ok(s) => {
@@ -669,6 +681,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
                     Response::Stats {
                         docs: s.docs,
                         vecs: s.vecs,
+                        file,
                     }
                 }
                 Err(e) => Response::Err(e.to_string()),
@@ -788,7 +801,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 let guard = state.ndarray_idx.read();
                 if let Some(ref idx) = *guard {
                     if !idx.is_empty() {
-                        let binary_k = 4096usize.max(limit * 64).min(idx.len());
+                        let binary_k = 4096usize.max(limit.saturating_mul(64)).min(idx.len());
                         if binary_k < idx.len() {
                             Some(idx.search_cascade(&embedding, limit, binary_k))
                         } else {
@@ -1659,7 +1672,7 @@ fn fast_vec_from_state(state: &State, emb: &[f32], limit: usize) -> Result<Optio
         if idx.is_empty() {
             return Ok(None);
         }
-        let binary_k = 4096usize.max(limit * 64).min(idx.len());
+        let binary_k = 4096usize.max(limit.saturating_mul(64)).min(idx.len());
         if binary_k < idx.len() {
             idx.search_cascade(emb, limit, binary_k)
         } else {

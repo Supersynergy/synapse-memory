@@ -44,18 +44,24 @@ cleanup() {
 trap cleanup EXIT
 
 # Median of N runs in milliseconds (python3: portable sub-second timing).
+# A failed run is reported as FAIL, never silently median'd like a success.
 t_ms() {
   python3 - "$REPS" "$@" <<'PY'
 import subprocess, sys, time, statistics
 reps, cmd = int(sys.argv[1]), sys.argv[2:]
-ts = []
+ts, fails = [], 0
 for _ in range(reps):
     t0 = time.monotonic()
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    rc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
     ts.append((time.monotonic() - t0) * 1000)
-print(int(statistics.median(ts)))
+    if rc != 0:
+        fails += 1
+print("FAIL" if fails else int(statistics.median(ts)))
 PY
 }
+
+# File size, BSD + GNU stat.
+fsize() { stat -f%z "$1" 2>/dev/null || stat -c%s "$1" 2>/dev/null || echo 0; }
 
 echo "== brain: $DOCS docs --no-embed =="
 python3 - "$SYNX" "$BRAIN" "$DOCS" <<'PY'
@@ -109,7 +115,7 @@ time.sleep(600)                 # hold conn open → WAL cannot collapse
 PY
 PAD_PID=$!
 for _ in $(seq 1 120); do [ -f "$WORK/pad.ready" ] && break; sleep 0.25; done
-WAL_BEFORE=$(stat -f%z "$BRAIN-wal" 2>/dev/null || echo 0)
+WAL_BEFORE=$(fsize "$BRAIN-wal")
 # The real cliff is crash recovery, not routine opens: kill -9 the holder and
 # drop the shared wal-index so the next open rebuilds it over the full WAL.
 kill -9 "$PAD_PID" 2>/dev/null || true
@@ -118,7 +124,7 @@ rm -f "$BRAIN-shm"
 OPEN_FAT="$(t_ms env SYNAPSE_NO_DAEMON=1 "$SYNX" -f "$BRAIN" context "$Q" --limit 5)"
 
 MAINT_JSON="$(env SYNAPSE_NO_DAEMON=1 "$SYNX" -f "$BRAIN" maintain --json 2>/dev/null || echo '{}')"
-WAL_AFTER=$(stat -f%z "$BRAIN-wal" 2>/dev/null || echo 0)
+WAL_AFTER=$(fsize "$BRAIN-wal")
 OPEN_LEAN="$(t_ms env SYNAPSE_NO_DAEMON=1 "$SYNX" -f "$BRAIN" context "$Q" --limit 5)"
 
 RESULT="$(python3 - <<PY

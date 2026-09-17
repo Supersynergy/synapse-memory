@@ -20,6 +20,42 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   `wal_bytes_before`/`wal_bytes_after`/`wal_checkpointed_frames`/
   `wal_truncated` in `--json`; `synx doctor` reports `wal_bytes` and warns
   above 512 MiB.
+- Foreign-review round on the rc.2 daemon path (3 HIGH + 5 MED):
+  - `daemon::available()` decoded `Response::Pong` as a `{"Pong": ..}` map, but
+    a unit variant serializes as a bare msgpack string — `doctor` always
+    showed `daemon=false` and `onboard` always bailed on a healthy daemon.
+    The unit test mocked the wrong wire format; it now sends real msgpack.
+  - The generated launchd plist passed `--db`; synapsed's flag is `--file` —
+    fresh installs would crash-loop under `KeepAlive`.
+  - `synx -f other.db` queried the daemon socket anyway and got hits from the
+    daemon's brain; the daemon now reports its db path via `Stats.file` and
+    the client refuses mismatches (older daemons only serve the default
+    brain).
+  - The periodic WAL checkpoint held the store mutex for the whole PASSIVE
+    copy — it now runs on a dedicated connection (`checkpoint_wal_file`).
+  - `handle_conn` bounded only the 4-byte header read; body reads and all
+    writes are now under `IDLE_TIMEOUT` too.
+  - The CLI socket `connect()` could block forever on a wedged listener; now
+    bounded to 10 s so the local-store fallback stays reachable.
+  - `synapse-mcp`'s daemon roundtrip had no timeout and no frame cap; both
+    added (30 s, 256 MiB).
+  - Bandit upserts (`learn_bandit`, `learn_rrf_alpha`, `route_reward`,
+    `memory_type_reward`) seeded (1,1) on INSERT without recording the
+    observation — the first feedback event per arm was silently dropped.
+  - `context_feedback` double-counted route rewards on duplicate feedback for
+    one `context_id`; the reward write is now idempotent.
+  - `pack_id` hashes the route too, so a route change can't overwrite a
+    logged pack's route.
+  - WAL path derivation used `with_extension("db-wal")` (wrong for
+    extension-less or `.db3` brains); now appends `-wal` like `wal_reader`.
+  - `resolve_db_path` only falls back to `$HOME` for the built-in default —
+    an explicit relative `-f` is honored literally.
+  - `hotpath.sh` records failing runs as `FAIL` instead of median-timing
+    them, and `stat` works on GNU + BSD.
+- `synapse-market-py` no longer enables `extension-module` unconditionally —
+  `cargo build --workspace` links it as a normal cdylib again (maturin still
+  passes the feature via `[tool.maturin]`); fixes the long-standing red
+  `ci` macOS link failure.
 
 ## [1.0.1-rc.2] - 2026-09-13
 

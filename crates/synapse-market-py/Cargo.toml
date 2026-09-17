@@ -12,6 +12,8 @@ name = "synapse_market_py"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.24", features = ["extension-module", "abi3-py39"] }
+# extension-module comes from [tool.maturin].features in pyproject.toml;
+# enabling it unconditionally breaks `cargo build --workspace` (no libpython link).
+pyo3 = { version = "0.24", features = ["abi3-py39"] }
 synapse-market = { path = "../synapse-market" }
 anyhow.workspace = true

@@ -460,34 +460,7 @@ impl Store {
     /// `busy_timeout=0` resets the file to zero — instant success or instant
     /// busy, never a wait. The connection's 10 s busy_timeout is restored.
     pub fn checkpoint_wal(&self) -> Result<WalCheckpoint> {
-        let (busy, log_frames, checkpointed): (i64, i64, i64) =
-            self.conn
-                .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |r| {
-                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-                })?;
-        let mut truncated = false;
-        if busy == 0 {
-            self.conn.pragma_update(None, "busy_timeout", 0_i64).ok();
-            let t = self
-                .conn
-                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
-                    Ok((
-                        r.get::<_, i64>(0)?,
-                        r.get::<_, i64>(1)?,
-                        r.get::<_, i64>(2)?,
-                    ))
-                });
-            self.conn
-                .pragma_update(None, "busy_timeout", 10000_i64)
-                .ok();
-            truncated = matches!(t, Ok((0, _, _)));
-        }
-        Ok(WalCheckpoint {
-            busy,
-            log_frames,
-            checkpointed_frames: checkpointed,
-            truncated,
-        })
+        wal_checkpoint_on(&self.conn)
     }
 
     /// Touch all in-memory HNSW/ndarray pages and SQLite page-cache to ensure
@@ -2246,6 +2219,54 @@ pub struct WalCheckpoint {
     pub checkpointed_frames: i64,
     /// True when a follow-up TRUNCATE reset the WAL file to zero bytes.
     pub truncated: bool,
+    /// TRUNCATE error text when the attempt failed — `None` when the WAL was
+    /// truncated or a pinned reader made TRUNCATE unnecessary to attempt.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncate_error: Option<String>,
+}
+
+/// PASSIVE checkpoint + opportunistic TRUNCATE on an open connection.
+/// `busy_timeout` is dropped to 0 around TRUNCATE (never a wait) and restored
+/// to the store default of 10 s afterwards.
+fn wal_checkpoint_on(conn: &Connection) -> Result<WalCheckpoint> {
+    let (busy, log_frames, checkpointed): (i64, i64, i64) =
+        conn.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })?;
+    let mut truncated = false;
+    let mut truncate_error = None;
+    if busy == 0 {
+        conn.pragma_update(None, "busy_timeout", 0_i64)?;
+        let t = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
+        });
+        conn.pragma_update(None, "busy_timeout", 10000_i64)?;
+        match t {
+            Ok((0, _, _)) => truncated = true,
+            Ok(_) => {}
+            Err(e) => truncate_error = Some(e.to_string()),
+        }
+    }
+    Ok(WalCheckpoint {
+        busy,
+        log_frames,
+        checkpointed_frames: checkpointed,
+        truncated,
+        truncate_error,
+    })
+}
+
+/// Checkpoint a database file without a `Store`: opens a short-lived dedicated
+/// connection so a long PASSIVE copy never holds the store mutex. synapsed's
+/// periodic task uses this — concurrent readers/writers are unaffected.
+pub fn checkpoint_wal_file(path: &Path) -> Result<WalCheckpoint> {
+    let conn = Connection::open(path)?;
+    conn.pragma_update(None, "busy_timeout", 0_i64)?;
+    wal_checkpoint_on(&conn)
 }
 
 fn map_doc(r: &rusqlite::Row) -> rusqlite::Result<Doc> {

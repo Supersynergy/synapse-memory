@@ -154,6 +154,9 @@ pub enum Response {
     Stats {
         docs: i64,
         vecs: i64,
+        /// Absolute path of the db this daemon serves, so clients can refuse
+        /// cross-brain reads when their `-f` points elsewhere.
+        file: String,
     },
     Ok,
     Err(String),
