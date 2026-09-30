@@ -61,6 +61,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - `synapse-router`: `tempfile` was declared as a dev-dependency but used in the
   production `route()` path — the lib target never compiled standalone
   (introduced in 79e1ebe). Moved to `[dependencies]`.
+- `compliance_export` queried `docs.agent`/`docs.content` — columns that never
+  existed in the real schema (`text` + `meta` JSON), so the export failed on
+  every real brain. Now maps `agent` via `json_extract(meta,'$.agent')` and
+  reads `text`; both test fixtures were rebuilt to the real schema (the fake
+  schema had masked the bug).
 - `synapse-cli` `import-parquet` feature never compiled: `parquet` lacked the
   `arrow` feature and `synx_io.rs` missed the `Array` trait import.
 - `synapse-core` `fts` bench guarded on a never-existing `fts-tantivy` feature
