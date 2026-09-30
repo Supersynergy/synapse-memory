@@ -60,15 +60,19 @@ impl TaskShape {
             TaskShape::Other(s) => s.as_str(),
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for TaskShape {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "bulk_read" => TaskShape::BulkRead,
             "code" => TaskShape::Code,
             "synthesis" => TaskShape::Synthesis,
             "council" => TaskShape::Council,
             other => TaskShape::Other(other.to_string()),
-        }
+        })
     }
 }
 
@@ -161,8 +165,7 @@ impl RouterConfig {
 
     /// Save to a TOML file atomically (tempfile + rename).
     pub fn save(&self, path: &Path) -> Result<()> {
-        let text = toml::to_string(self)
-            .map_err(|e| MetaError::TomlSerialize(e.to_string()))?;
+        let text = toml::to_string(self).map_err(|e| MetaError::TomlSerialize(e.to_string()))?;
         let tmp = path.with_extension("toml.tmp");
         std::fs::write(&tmp, text)?;
         std::fs::rename(&tmp, path)?;
@@ -207,7 +210,11 @@ impl RouterConfig {
     pub fn sample_model(&self, shape: &TaskShape) -> String {
         use rand::RngExt;
         let shape_s = shape.as_str();
-        let candidates: Vec<&RoutingRule> = self.rules.iter().filter(|r| r.task_shape == shape_s).collect();
+        let candidates: Vec<&RoutingRule> = self
+            .rules
+            .iter()
+            .filter(|r| r.task_shape == shape_s)
+            .collect();
         if candidates.is_empty() {
             return self.fallback_model.clone();
         }
@@ -232,7 +239,8 @@ impl RouterConfig {
                 best = Some((rule, sample));
             }
         }
-        best.map(|(r, _)| r.model.clone()).unwrap_or_else(|| self.fallback_model.clone())
+        best.map(|(r, _)| r.model.clone())
+            .unwrap_or_else(|| self.fallback_model.clone())
     }
 
     /// Total wins across all rules.
@@ -249,11 +257,7 @@ impl RouterConfig {
     pub fn success_rate(&self) -> f64 {
         let w = self.total_wins() as f64;
         let l = self.total_losses() as f64;
-        if w + l == 0.0 {
-            0.0
-        } else {
-            w / (w + l)
-        }
+        if w + l == 0.0 { 0.0 } else { w / (w + l) }
     }
 }
 
@@ -472,7 +476,10 @@ mod tests {
                 kimi_count += 1;
             }
         }
-        assert!(kimi_count > 50, "kimi should win majority, got {kimi_count}");
+        assert!(
+            kimi_count > 50,
+            "kimi should win majority, got {kimi_count}"
+        );
     }
 
     #[test]
@@ -503,7 +510,9 @@ mod tests {
     fn meta_loop_record_outcome_persists() {
         let (_dir, path) = tmp_path();
         let loop_ = MetaLoop::new(path.clone()).unwrap();
-        loop_.record_outcome(&TaskShape::Code, "codex", true).unwrap();
+        loop_
+            .record_outcome(&TaskShape::Code, "codex", true)
+            .unwrap();
         let cfg = RouterConfig::load(&path).unwrap();
         let rule = cfg.rules.iter().find(|r| r.task_shape == "code").unwrap();
         assert_eq!(rule.wins, 2);
@@ -513,8 +522,12 @@ mod tests {
     fn meta_loop_health_returns_stats() {
         let (_dir, path) = tmp_path();
         let loop_ = MetaLoop::new(path).unwrap();
-        loop_.record_outcome(&TaskShape::Code, "codex", true).unwrap();
-        loop_.record_outcome(&TaskShape::Code, "codex", false).unwrap();
+        loop_
+            .record_outcome(&TaskShape::Code, "codex", true)
+            .unwrap();
+        loop_
+            .record_outcome(&TaskShape::Code, "codex", false)
+            .unwrap();
         let h = loop_.health(1000);
         assert!(h.total_wins >= 2);
         assert!(h.total_losses >= 1);
@@ -524,7 +537,7 @@ mod tests {
     #[test]
     fn task_shape_roundtrip() {
         for s in ["bulk_read", "code", "synthesis", "council", "custom"] {
-            let shape = TaskShape::from_str(s);
+            let shape = s.parse::<TaskShape>().unwrap();
             assert_eq!(shape.as_str(), s);
         }
     }

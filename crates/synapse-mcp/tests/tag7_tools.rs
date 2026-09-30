@@ -9,7 +9,7 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use std::process::{Command, Stdio, Child};
+use std::process::{Child, Command, Stdio};
 
 use tempfile::TempDir;
 
@@ -22,7 +22,12 @@ impl McpHandle {
         let bin = env!("CARGO_BIN_EXE_synapse-mcp");
         let sock = brain.with_file_name("nonexistent-test.sock");
         let child = Command::new(bin)
-            .args(["--sock", sock.to_str().unwrap(), "--brain", brain.to_str().unwrap()])
+            .args([
+                "--sock",
+                sock.to_str().unwrap(),
+                "--brain",
+                brain.to_str().unwrap(),
+            ])
             .env("SYNAPSE_BRAIN", brain)
             .env("HOME", home)
             .stdin(Stdio::piped())
@@ -38,7 +43,9 @@ impl McpHandle {
         writeln!(stdin, "{req}").expect("write req");
         let stdout = self.child.stdout.as_mut().unwrap();
         let mut line = String::new();
-        BufReader::new(stdout).read_line(&mut line).expect("read response");
+        BufReader::new(stdout)
+            .read_line(&mut line)
+            .expect("read response");
         serde_json::from_str(line.trim()).expect("parse JSON response")
     }
 
@@ -204,7 +211,8 @@ fn provenance_sign_then_verify_roundtrip() {
     let sign_text = sign_resp["result"]["content"][0]["text"]
         .as_str()
         .unwrap_or_else(|| panic!("provenance_sign resp: {sign_resp}"));
-    let sign_payload: serde_json::Value = serde_json::from_str(sign_text).expect("parse sign payload");
+    let sign_payload: serde_json::Value =
+        serde_json::from_str(sign_text).expect("parse sign payload");
     assert_eq!(sign_payload["signed"], true);
     assert_eq!(sign_payload["doc_id"], "doc-test-001");
 
@@ -261,13 +269,11 @@ fn audit_query_returns_empty_array_on_fresh_brain() {
 fn meta_route_reports_init_error_without_router_toml() {
     let (_tmp, brain, home) = fresh_env();
     let mut mcp = McpHandle::spawn(&brain, &home);
-    let resp = mcp.call_tool(
-        9,
-        "meta_route",
-        serde_json::json!({"task_shape": "code"}),
-    );
+    let resp = mcp.call_tool(9, "meta_route", serde_json::json!({"task_shape": "code"}));
     // Without router.toml the handler returns an error result — MCP wraps it.
-    assert!(resp["result"].is_object() || resp["error"].is_object(), "resp: {resp}");
+    assert!(
+        resp["result"].is_object() || resp["error"].is_object(),
+        "resp: {resp}"
+    );
     mcp.shutdown();
 }
-

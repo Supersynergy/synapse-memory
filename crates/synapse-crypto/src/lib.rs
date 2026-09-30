@@ -19,8 +19,8 @@
 //! - Nonce is random per encryption (never reused with same key).
 
 use aes_gcm::{
-    aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
+    aead::{Aead, KeyInit, Payload},
 };
 use anyhow::{Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -107,10 +107,13 @@ impl Drop for MasterKey {
     }
 }
 
+/// Per-Space DEK map cached in the keyring.
+type DekMap = HashMap<String, [u8; KEY_LEN]>;
+
 /// Keyring: caches per-Space DEKs in memory. Thread-safe.
 pub struct Keyring {
     master: MasterKey,
-    deks: RwLock<HashMap<String, [u8; KEY_LEN]>>,
+    deks: RwLock<DekMap>,
 }
 
 impl Keyring {
@@ -149,7 +152,13 @@ pub fn encrypt(dek: &[u8; KEY_LEN], plaintext: &[u8]) -> Result<Vec<u8>> {
     rand::rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
     let ct = cipher
-        .encrypt(nonce, Payload { msg: plaintext, aad: &[] })
+        .encrypt(
+            nonce,
+            Payload {
+                msg: plaintext,
+                aad: &[],
+            },
+        )
         .map_err(|e| CryptoError::Encrypt(format!("aes-gcm encrypt: {e}")))?;
     let mut out = Vec::with_capacity(NONCE_LEN + ct.len());
     out.extend_from_slice(&nonce_bytes);
@@ -172,7 +181,11 @@ pub fn decrypt(dek: &[u8; KEY_LEN], blob: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Convenience: encrypt under a Keyring's Space DEK.
-pub fn encrypt_for_space(keyring: &Arc<Keyring>, space_id: &str, plaintext: &[u8]) -> Result<Vec<u8>> {
+pub fn encrypt_for_space(
+    keyring: &Arc<Keyring>,
+    space_id: &str,
+    plaintext: &[u8],
+) -> Result<Vec<u8>> {
     let dek = keyring.dek(space_id)?;
     encrypt(&dek, plaintext)
 }
@@ -255,7 +268,10 @@ mod tests {
     #[test]
     fn passphrase_derive_deterministic_given_salt() {
         let mk1 = MasterKey::from_passphrase("hunter2").unwrap();
-        let mk2 = MasterKey { bytes: mk1.bytes, salt: mk1.salt };
+        let mk2 = MasterKey {
+            bytes: mk1.bytes,
+            salt: mk1.salt,
+        };
         let d1 = mk1.derive_space_dek("acme").unwrap();
         let d2 = mk2.derive_space_dek("acme").unwrap();
         assert_eq!(d1, d2);

@@ -24,6 +24,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   build and built on demand. Default `cargo check --workspace` dropped 50s -> 20s.
   See `docs/adr/0001-context-os-product-boundary.md`.
 - Clippy now runs with `-D warnings` in the `just check` gate and CI (warning-free bar).
+- `synapse-ultra` ingestion API: `ingest_decision`, `ingest_token_cost`, and
+  `add_edge` now take structured input structs (`DecisionInput`, `TokenCostInput`,
+  `EdgeInput`) instead of 8+ positional args. `EventKind`, RBAC and audit event
+  enums implement `std::str::FromStr`.
 
 ### Removed
 - Stale `MarketSeries` type alias in `synapse-mcp` (leftover from the market cut).
@@ -37,6 +41,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   now dedups hits by id (bumps `vendor/synapse-db`).
 - Clippy warnings: `manual_range_contains` in `synapse-extract`, `type_complexity`
   in `synapse-cli` IO round-trip tests.
+- `synapse-router`: `tempfile` was declared as a dev-dependency but used in the
+  production `route()` path — the lib target never compiled standalone
+  (introduced in 79e1ebe). Moved to `[dependencies]`.
+- `synapse-cli` `import-parquet` feature never compiled: `parquet` lacked the
+  `arrow` feature and `synx_io.rs` missed the `Array` trait import.
+- `synapse-core` `fts` bench guarded on a never-existing `fts-tantivy` feature
+  (correct: `tantivy-fts`) — the BM25 bench body was dead code.
+- Workspace-wide clippy/format drift across benches, examples, and tests
+  (`criterion::black_box` deprecation, `type_complexity`, `needless_update`,
+  `useless_vec`, `approx_constant`, dead test helpers) — `just check` and
+  `cargo nextest` are green again (472 tests).
 
 ---
 

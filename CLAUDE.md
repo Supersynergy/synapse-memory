@@ -3,7 +3,7 @@
 Local-first **Context OS** for AI agents: bounded, cited, freshness-aware context with feedback. One SQLite-backed local brain — no Docker, no cloud. CLI + daemon + MCP tooling. Core promise: **best context, not biggest context.**
 
 - Crate: `synapse-core` (crates.io) · MIT · Repo: https://github.com/Supersynergy/synapse-agent-memory
-- Local: `~/BASE/projects/synapse-memory` · current branch: **`split-memory`** (WIP)
+- Local: `~/BASE/projects/synapse-memory` · current branch: **`main`** (split-memory gemergt 2026-07)
 - Runtime socket: `/tmp/synapse.sock` :9477 (SQLite fallback `~/.synapse/brain.db`)
 
 ## Stack
@@ -26,7 +26,7 @@ Direct: `cargo clippy --all-targets --all-features -- -D warnings` · `cargo nex
 Vendored code (`vendor/synapse-db`) MUST carry provenance (upstream URL + commit SHA + sync-date) and stay visible to `cargo audit` — invisible copies are un-patchable CVEs (xz/CVE-2024-3094 era). Correctness-critical surface (vectors, SQLite, parsers) → KEEP maintained deps, never self-roll. Apply `/leancode` before adding crates.
 
 ## Release flow
-`CHANGELOG.md` newest-first (currently `Unreleased`). Merge `split-memory` → cut a tagged version before claiming release.
+`CHANGELOG.md` newest-first (currently `Unreleased`). Tag auf `main` schneiden vor Release-Claim.
 
 Inherits global rules `~/.claude/CLAUDE.md` + workspace `~/BASE/projects/CLAUDE.md`.
 <!-- BEGIN EVIDENCE-LOOP v:1 -->

@@ -388,19 +388,6 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn make_random_embedding() -> Vec<f32> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        (0..EMBED_DIM)
-            .map(|i| {
-                let mut h = DefaultHasher::new();
-                i.hash(&mut h);
-                let v = h.finish() as f32 / u64::MAX as f32;
-                v * 2.0 - 1.0
-            })
-            .collect()
-    }
-
     fn make_seeded_embedding(seed: u64) -> Vec<f32> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};

@@ -70,7 +70,7 @@ fn main() {
         hits_rerank += res.iter().filter(|(id, _)| t_set.contains(id)).count();
     }
 
-    fn percentile(v: &mut Vec<u128>, p: usize) -> u128 {
+    fn percentile(v: &mut [u128], p: usize) -> u128 {
         v.sort();
         let idx = (v.len() * p / 100).min(v.len() - 1);
         v[idx]

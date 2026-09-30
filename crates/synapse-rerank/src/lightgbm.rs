@@ -81,7 +81,7 @@ impl Reranker for LightGbmReranker {
         )?;
 
         for (hit, &lgb_score) in candidates.iter_mut().zip(scores.iter()) {
-            hit.score = crate::blend(lgb_score as f64, hit.score);
+            hit.score = crate::blend(lgb_score, hit.score);
         }
 
         candidates.sort_by(|a, b| {

@@ -1,12 +1,14 @@
 /// Smoke: 100k synth docs, build SPANN, query, check R@10 >= 0.7.
-use rand::{Rng, RngExt};
+use rand::RngExt;
 use synapse_spann::{SpannConfig, SpannIndex};
 
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b).map(|(x, y)| x * y).sum()
 }
 
-fn brute_top_k(docs: &[(u64, Vec<f32>)], query: &[f32], k: usize) -> Vec<u64> {
+type DocVec = (u64, Vec<f32>);
+
+fn brute_top_k(docs: &[DocVec], query: &[f32], k: usize) -> Vec<u64> {
     let mut scores: Vec<(u64, f32)> = docs.iter().map(|(id, v)| (*id, dot(v, query))).collect();
     scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     scores.truncate(k);
@@ -18,7 +20,7 @@ fn spann_recall_10() {
     let n = 10_000; // 10k fast in CI; 100k in manual bench
     let dim = 64;
     let mut rng = rand::rng();
-    let docs: Vec<(u64, Vec<f32>)> = (0..n)
+    let docs: Vec<DocVec> = (0..n)
         .map(|i| {
             let v: Vec<f32> = (0..dim).map(|_| rng.random::<f32>()).collect();
             (i as u64, v)
@@ -70,7 +72,7 @@ fn spann_load_roundtrip() {
     let n = 500;
     let dim = 32;
     let mut rng = rand::rng();
-    let docs: Vec<(u64, Vec<f32>)> = (0..n)
+    let docs: Vec<DocVec> = (0..n)
         .map(|i| {
             let v: Vec<f32> = (0..dim).map(|_| rng.random::<f32>()).collect();
             (i as u64, v)

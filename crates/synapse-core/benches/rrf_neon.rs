@@ -3,7 +3,7 @@
 //! Run:
 //!   cargo bench -p synapse-core --bench rrf_neon
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use synapse_core::types::Hit;
 
 fn make_hits(n: usize, id_offset: i64) -> Vec<Hit> {
@@ -59,7 +59,11 @@ fn bench_rrf(c: &mut Criterion) {
             b.iter(|| {
                 let lex = make_hits(n, 0);
                 let vec = make_hits(n, n as i64);
-                rrf_merge_scalar(black_box(lex), black_box(vec), black_box(n / 2))
+                rrf_merge_scalar(
+                    std::hint::black_box(lex),
+                    std::hint::black_box(vec),
+                    std::hint::black_box(n / 2),
+                )
             })
         });
 
@@ -67,7 +71,11 @@ fn bench_rrf(c: &mut Criterion) {
             b.iter(|| {
                 let lex = make_hits(n, 0);
                 let vec = make_hits(n, n as i64);
-                synapse_core::db::rrf_merge_neon(black_box(lex), black_box(vec), black_box(n / 2))
+                synapse_core::db::rrf_merge_neon(
+                    std::hint::black_box(lex),
+                    std::hint::black_box(vec),
+                    std::hint::black_box(n / 2),
+                )
             })
         });
     }

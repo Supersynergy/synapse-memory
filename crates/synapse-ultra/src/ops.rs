@@ -6,10 +6,10 @@
 //! - `metrics::json` — JSON metrics for dashboards
 
 use crate::UltraResult;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::Serialize;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 // ── Health ─────────────────────────────────────────────────────────────────
 
@@ -63,7 +63,13 @@ pub fn health_check(conn: &Connection) -> UltraResult<HealthReport> {
     checks.push(HealthCheck {
         name: "synchronous".into(),
         ok: sync_ok,
-        detail: if synchronous == 1 { "NORMAL".into() } else if synchronous == 2 { "FULL".into() } else { format!("{}", synchronous) },
+        detail: if synchronous == 1 {
+            "NORMAL".into()
+        } else if synchronous == 2 {
+            "FULL".into()
+        } else {
+            format!("{}", synchronous)
+        },
     });
 
     // 4. Foreign keys ON
@@ -121,7 +127,11 @@ pub fn health_check(conn: &Connection) -> UltraResult<HealthReport> {
     checks.push(HealthCheck {
         name: "blake3_dedup_index".into(),
         ok: blake3_idx == 1,
-        detail: if blake3_idx == 1 { "present".into() } else { "missing".into() },
+        detail: if blake3_idx == 1 {
+            "present".into()
+        } else {
+            "missing".into()
+        },
     });
 
     // 9. Schema version
@@ -153,7 +163,11 @@ pub fn health_check(conn: &Connection) -> UltraResult<HealthReport> {
     checks.push(HealthCheck {
         name: "query_planner_stats".into(),
         ok: stat1 == 1,
-        detail: if stat1 == 1 { "present".into() } else { "run PRAGMA optimize".into() },
+        detail: if stat1 == 1 {
+            "present".into()
+        } else {
+            "run PRAGMA optimize".into()
+        },
     });
 
     let page_count: i64 = conn.query_row("PRAGMA page_count", [], |row| row.get(0))?;
@@ -204,10 +218,7 @@ pub fn create_backup(brain_db: &Path, dest_dir: &Path) -> UltraResult<BackupRepo
         let src = rusqlite::Connection::open(brain_db)?;
         // VACUUM INTO produces a consistent snapshot without locking writers
         // for the full duration — uses online backup internally.
-        src.execute(
-            &format!("VACUUM INTO '{}'", tmp_snapshot.display()),
-            [],
-        )?;
+        src.execute(&format!("VACUUM INTO '{}'", tmp_snapshot.display()), [])?;
     }
 
     let original_bytes = fs::metadata(&tmp_snapshot)?.len();
@@ -276,17 +287,13 @@ pub fn prometheus(conn: &Connection) -> UltraResult<String> {
     out.push_str("# HELP synapse_cost_usd_total Cumulative cost in USD\n");
     out.push_str("# TYPE synapse_cost_usd_total counter\n");
     out.push_str(&format!("synapse_cost_usd_total {:.4}\n", s.total_cost_usd));
-    out.push_str(
-        "# HELP synapse_input_tokens_total Cumulative input tokens\n",
-    );
+    out.push_str("# HELP synapse_input_tokens_total Cumulative input tokens\n");
     out.push_str("# TYPE synapse_input_tokens_total counter\n");
     out.push_str(&format!(
         "synapse_input_tokens_total {}\n",
         s.total_input_tokens
     ));
-    out.push_str(
-        "# HELP synapse_output_tokens_total Cumulative output tokens\n",
-    );
+    out.push_str("# HELP synapse_output_tokens_total Cumulative output tokens\n");
     out.push_str("# TYPE synapse_output_tokens_total counter\n");
     out.push_str(&format!(
         "synapse_output_tokens_total {}\n",
@@ -294,13 +301,8 @@ pub fn prometheus(conn: &Connection) -> UltraResult<String> {
     ));
     out.push_str("# HELP synapse_db_size_bytes Size of brain.db in bytes\n");
     out.push_str("# TYPE synapse_db_size_bytes gauge\n");
-    out.push_str(&format!(
-        "synapse_db_size_bytes {}\n",
-        s.db_size_bytes
-    ));
-    out.push_str(
-        "# HELP synapse_ultra_schema_version Ultra schema version\n",
-    );
+    out.push_str(&format!("synapse_db_size_bytes {}\n", s.db_size_bytes));
+    out.push_str("# HELP synapse_ultra_schema_version Ultra schema version\n");
     out.push_str("# TYPE synapse_ultra_schema_version gauge\n");
     out.push_str(&format!(
         "synapse_ultra_schema_version {}\n",
@@ -312,9 +314,7 @@ pub fn prometheus(conn: &Connection) -> UltraResult<String> {
         out.push_str("# HELP synapse_tags_total Total tags\n");
         out.push_str("# TYPE synapse_tags_total gauge\n");
         out.push_str(&format!("synapse_tags_total {}\n", tag_stats.total_tags));
-        out.push_str(
-            "# HELP synapse_tag_associations_total Total tag associations\n",
-        );
+        out.push_str("# HELP synapse_tag_associations_total Total tag associations\n");
         out.push_str("# TYPE synapse_tag_associations_total gauge\n");
         out.push_str(&format!(
             "synapse_tag_associations_total {}\n",
@@ -362,7 +362,10 @@ pub fn metrics_json(conn: &Connection) -> UltraResult<serde_json::Value> {
     }))
 }
 
-fn top_agents_by_cost(conn: &Connection, limit: i64) -> UltraResult<Vec<(String, f64)>> {
+/// (name, total_cost) row for cost aggregates.
+type NameCost = (String, f64);
+
+fn top_agents_by_cost(conn: &Connection, limit: i64) -> UltraResult<Vec<NameCost>> {
     let mut stmt = conn.prepare(
         "SELECT agent, SUM(cost_usd) AS total FROM token_cost
          GROUP BY agent ORDER BY total DESC LIMIT ?1",
@@ -395,7 +398,11 @@ mod tests {
             let report = health_check(c)?;
             assert!(report.checks.len() >= 11);
             // In-memory DB may report "ok" or "ok (N rows)" from integrity_check
-            let integrity = report.checks.iter().find(|c| c.name == "integrity").unwrap();
+            let integrity = report
+                .checks
+                .iter()
+                .find(|c| c.name == "integrity")
+                .unwrap();
             assert!(integrity.ok, "integrity check failed: {}", integrity.detail);
             Ok(())
         })

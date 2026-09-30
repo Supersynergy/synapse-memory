@@ -1,9 +1,11 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use rand::{Rng, RngExt};
+use criterion::{Criterion, criterion_group, criterion_main};
+use rand::RngExt;
 use std::time::Instant;
 use synapse_spann::{SpannConfig, SpannIndex};
 
-fn gen_docs(n: usize, dim: usize) -> Vec<(u64, Vec<f32>)> {
+type DocVec = (u64, Vec<f32>);
+
+fn gen_docs(n: usize, dim: usize) -> Vec<DocVec> {
     let mut rng = rand::rng();
     (0..n)
         .map(|i| {
@@ -33,7 +35,7 @@ fn bench_spann(c: &mut Criterion) {
     let query: Vec<f32> = (0..dim).map(|_| rng.random::<f32>()).collect();
 
     c.bench_function("spann_search_nprobe8", |b| {
-        b.iter(|| black_box(index.search(&query, 10, 8)));
+        b.iter(|| std::hint::black_box(index.search(&query, 10, 8)));
     });
 
     // Flat baseline: brute-force dot-product
@@ -48,7 +50,7 @@ fn bench_spann(c: &mut Criterion) {
                 .collect();
             scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             scores.truncate(10);
-            black_box(scores)
+            std::hint::black_box(scores)
         });
     });
 }

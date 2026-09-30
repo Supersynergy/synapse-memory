@@ -5,8 +5,10 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use synapse_core::turbo::inmem_f16_index::InMemoryF16Index;
 
+type IdVec = (i64, Vec<f32>);
+
 fn build_index(n: usize, dim: usize) -> InMemoryF16Index {
-    let rows: Vec<(i64, Vec<f32>)> = (0..n as i64)
+    let rows: Vec<IdVec> = (0..n as i64)
         .map(|i| {
             let v: Vec<f32> = (0..dim)
                 .map(|d| {

@@ -26,7 +26,7 @@ use blake3::Hasher;
 use chrono::Utc;
 use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
 use rand::Rng;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -342,8 +342,8 @@ pub fn verify_chain(
             }
             .into());
         }
-        let rec = get_record(conn, &doc_id)?
-            .ok_or_else(|| ProvenanceError::NotFound(doc_id.clone()))?;
+        let rec =
+            get_record(conn, &doc_id)?.ok_or_else(|| ProvenanceError::NotFound(doc_id.clone()))?;
         let pk = public_keys
             .get(&rec.agent_id)
             .ok_or_else(|| ProvenanceError::BrokenChain {
@@ -528,7 +528,16 @@ mod tests {
     fn get_record_returns_stored() {
         let conn = fresh_conn();
         let id = AgentIdentity::new("cascade-2.1");
-        sign_and_append(&conn, &id, "doc-1", "2.1.0", "file:///foo.rs", b"hello", None).unwrap();
+        sign_and_append(
+            &conn,
+            &id,
+            "doc-1",
+            "2.1.0",
+            "file:///foo.rs",
+            b"hello",
+            None,
+        )
+        .unwrap();
         let rec = get_record(&conn, "doc-1").unwrap();
         assert!(rec.is_some());
         assert_eq!(rec.unwrap().agent_id, "cascade-2.1");
@@ -538,7 +547,16 @@ mod tests {
     fn verify_all_finds_bad_signatures() {
         let conn = fresh_conn();
         let id = AgentIdentity::new("cascade-2.1");
-        sign_and_append(&conn, &id, "doc-1", "2.1.0", "file:///foo.rs", b"hello", None).unwrap();
+        sign_and_append(
+            &conn,
+            &id,
+            "doc-1",
+            "2.1.0",
+            "file:///foo.rs",
+            b"hello",
+            None,
+        )
+        .unwrap();
         // Tamper in DB
         conn.execute(
             "UPDATE provenance SET content_hash = zeroblob(32) WHERE doc_id = 'doc-1'",

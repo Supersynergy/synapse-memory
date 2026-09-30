@@ -216,7 +216,9 @@ mod tests {
     use super::*;
     use rusqlite::Connection;
 
-    fn setup(edges: &[(i64, i64, f64)]) -> Connection {
+    type Edge = (i64, i64, f64);
+
+    fn setup(edges: &[Edge]) -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         crate::ensure_schema(&conn).unwrap();
         for &(f, t, w) in edges {

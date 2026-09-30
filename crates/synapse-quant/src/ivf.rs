@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn ivf_train_assign() {
-        let raw = vec![
+        let raw = [
             norm(vec![1.0, 0.0]),
             norm(vec![0.95, 0.05]),
             norm(vec![0.9, 0.1]),
@@ -180,7 +180,14 @@ mod tests {
     #[test]
     fn topk_centroids_works() {
         let mut ivf = Ivf::new(2, 3);
-        ivf.centroids = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.7071, 0.7071]];
+        ivf.centroids = vec![
+            vec![1.0, 0.0],
+            vec![0.0, 1.0],
+            vec![
+                std::f32::consts::FRAC_1_SQRT_2,
+                std::f32::consts::FRAC_1_SQRT_2,
+            ],
+        ];
         let top = ivf.topk_centroids(&[1.0, 0.0], 2);
         assert_eq!(top[0], 0); // exact match
     }

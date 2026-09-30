@@ -48,15 +48,15 @@ fn main() {
 
     // Warm up
     for q in &queries {
-        let _ = black_box(naive.search(q, TOP_K).unwrap());
-        let _ = black_box(bmp.search_topk(q, TOP_K));
+        let _ = std::hint::black_box(naive.search(q, TOP_K).unwrap());
+        let _ = std::hint::black_box(bmp.search_topk(q, TOP_K));
     }
 
     // Bench naive
     let t0 = Instant::now();
     for _ in 0..5 {
         for q in &queries {
-            black_box(naive.search(q, TOP_K).unwrap());
+            std::hint::black_box(naive.search(q, TOP_K).unwrap());
         }
     }
     let naive_ms = t0.elapsed().as_secs_f64() * 1000.0 / 5.0;
@@ -65,7 +65,7 @@ fn main() {
     let t1 = Instant::now();
     for _ in 0..5 {
         for q in &queries {
-            black_box(bmp.search_topk(q, TOP_K));
+            std::hint::black_box(bmp.search_topk(q, TOP_K));
         }
     }
     let bmp_ms = t1.elapsed().as_secs_f64() * 1000.0 / 5.0;

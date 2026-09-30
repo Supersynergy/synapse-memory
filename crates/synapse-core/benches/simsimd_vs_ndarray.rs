@@ -52,7 +52,7 @@ fn ndarray_cosine_batch(query: &[f32], db: &[f32], dim: usize) -> Vec<f32> {
     let q = arr1(query);
     let q_norm = q.dot(&q).sqrt().max(1e-10);
     let q_n = &q / q_norm;
-    matrix.dot(&q_n).into_raw_vec()
+    matrix.dot(&q_n).into_raw_vec_and_offset().0
 }
 
 fn bench_ndarray(c: &mut Criterion) {
@@ -72,7 +72,7 @@ fn bench_ndarray(c: &mut Criterion) {
                 let sims = ndarray_cosine_batch(q, &db, DIM);
                 top.push(top_k_indices(&sims, K));
             }
-            criterion::black_box(top)
+            std::hint::black_box(top)
         })
     });
 
@@ -103,7 +103,7 @@ fn bench_simsimd(c: &mut Criterion) {
                 let sims = cos_f32_batch(q, &db, DIM);
                 top.push(top_k_indices(&sims, K));
             }
-            criterion::black_box(top)
+            std::hint::black_box(top)
         })
     });
 
@@ -118,7 +118,7 @@ fn bench_simsimd(c: &mut Criterion) {
                     top_k_indices(&sims, K)
                 })
                 .collect();
-            criterion::black_box(top)
+            std::hint::black_box(top)
         })
     });
 

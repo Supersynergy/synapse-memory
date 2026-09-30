@@ -24,7 +24,7 @@
 use anyhow::Result;
 use blake3::Hasher;
 use chrono::Utc;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -62,15 +62,19 @@ impl Action {
             Action::Revoke => "revoke",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Option<Self> {
+impl std::str::FromStr for Action {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "read" => Some(Action::Read),
-            "write" => Some(Action::Write),
-            "delete" => Some(Action::Delete),
-            "grant" => Some(Action::Grant),
-            "revoke" => Some(Action::Revoke),
-            _ => None,
+            "read" => Ok(Action::Read),
+            "write" => Ok(Action::Write),
+            "delete" => Ok(Action::Delete),
+            "grant" => Ok(Action::Grant),
+            "revoke" => Ok(Action::Revoke),
+            _ => Err(()),
         }
     }
 }
@@ -218,7 +222,7 @@ pub fn query_range(conn: &Connection, since: i64, until: i64) -> Result<Vec<Audi
             id: r.get(0)?,
             ts: r.get(1)?,
             actor: r.get(2)?,
-            action: Action::from_str(&action_s).unwrap_or(Action::Read),
+            action: action_s.parse::<Action>().unwrap_or(Action::Read),
             target: r.get(4)?,
             space,
             meta,
@@ -263,12 +267,7 @@ pub fn verify_chain(conn: &Connection) -> Result<()> {
             prev.as_ref(),
         );
         if expected != got {
-            return Err(AuditError::BrokenChain {
-                id,
-                expected,
-                got,
-            }
-            .into());
+            return Err(AuditError::BrokenChain { id, expected, got }.into());
         }
         let stored_prev = prev_blob.map(|b| {
             let mut h = [0u8; 32];
@@ -329,11 +328,8 @@ mod tests {
         append(&conn, "alice", Action::Write, "doc1", Some("acme"), None).unwrap();
         append(&conn, "bob", Action::Read, "doc1", Some("acme"), None).unwrap();
         // Tamper: change actor of first event.
-        conn.execute(
-            "UPDATE audit_events SET actor = 'eve' WHERE id = 1",
-            [],
-        )
-        .unwrap();
+        conn.execute("UPDATE audit_events SET actor = 'eve' WHERE id = 1", [])
+            .unwrap();
         let r = verify_chain(&conn);
         assert!(matches!(r, Err(e) if e.to_string().contains("broken")));
     }
@@ -361,7 +357,15 @@ mod tests {
     #[test]
     fn meta_is_hashed() {
         let conn = fresh_conn();
-        append(&conn, "alice", Action::Write, "doc1", Some("acme"), Some("{\"k\":1}")).unwrap();
+        append(
+            &conn,
+            "alice",
+            Action::Write,
+            "doc1",
+            Some("acme"),
+            Some("{\"k\":1}"),
+        )
+        .unwrap();
         // Tamper meta
         conn.execute(
             "UPDATE audit_events SET meta = '{\"k\":2}' WHERE id = 1",
@@ -374,8 +378,14 @@ mod tests {
 
     #[test]
     fn action_roundtrip() {
-        for a in [Action::Read, Action::Write, Action::Delete, Action::Grant, Action::Revoke] {
-            assert_eq!(Action::from_str(a.as_str()), Some(a));
+        for a in [
+            Action::Read,
+            Action::Write,
+            Action::Delete,
+            Action::Grant,
+            Action::Revoke,
+        ] {
+            assert_eq!(a.as_str().parse::<Action>().unwrap(), a);
         }
     }
 }
