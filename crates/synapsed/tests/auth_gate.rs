@@ -151,6 +151,34 @@ fn socket_is_0600_and_auth_is_default_on() {
         t.elapsed()
     );
 
+    // 3b. Audit trail (oracle for -5dm): a Put over the socket must append
+    // to audit_events in the same brain.
+    let r = frame(
+        &mut s,
+        &json!({
+            "op": "Put",
+            "args": {
+                "text": "audit trail test doc",
+                "title": "audit-test",
+                "uri": "test://audit",
+                "embed": false,
+            }
+        }),
+    );
+    assert!(r.get("Err").is_none(), "authed Put failed: {r}");
+    let r = frame(
+        &mut s,
+        &json!({"op": "Sql", "args": {
+            "query": "SELECT COUNT(*) FROM audit_events WHERE action='write'", "params": []}}),
+    );
+    let rows = r
+        .get("Rows")
+        .and_then(|v| v.get("rows"))
+        .and_then(Value::as_array)
+        .expect("rows response");
+    let n = rows[0][0].as_i64().unwrap_or(0);
+    assert!(n >= 1, "expected audit_events after Put, got {n} ({r})");
+
     // 4. SnapMerge must refuse paths outside --snap-dir (arbitrary file write).
     let r = frame(
         &mut s,

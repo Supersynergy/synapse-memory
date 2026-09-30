@@ -7030,6 +7030,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "synapse-audit",
  "synapse-core 1.0.1-rc.1",
  "synapse-license",
  "synapse-rerank",
