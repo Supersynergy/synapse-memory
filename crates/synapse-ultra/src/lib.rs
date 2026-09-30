@@ -42,8 +42,8 @@ pub use observe::{
     AgentSummary, AgentTraceRow, BrainStats, CostRow, DailySummary, DecisionRow, ReplayEntry,
     SessionRow, SessionTimelineRow,
 };
-pub use ops::{health_check, HealthCheck, HealthReport};
-pub use tags::{Tag, DocTag, TagRule, TagStats, TagExport};
+pub use ops::{HealthCheck, HealthReport, health_check};
+pub use tags::{DocTag, Tag, TagExport, TagRule, TagStats};
 
 use parking_lot::Mutex;
 use rusqlite::Connection;

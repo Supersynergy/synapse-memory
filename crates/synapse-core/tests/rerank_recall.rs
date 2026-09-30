@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
 use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
 
+type IdVec = (i64, Vec<f32>);
+
 fn xorshift(state: &mut u64) -> f32 {
     *state ^= *state << 13;
     *state ^= *state >> 7;
@@ -17,7 +19,7 @@ fn xorshift(state: &mut u64) -> f32 {
     (*state as i64 as f32) / (i64::MAX as f32)
 }
 
-fn gen_corpus(n: usize, dim: usize, seed: u64) -> Vec<(i64, Vec<f32>)> {
+fn gen_corpus(n: usize, dim: usize, seed: u64) -> Vec<IdVec> {
     let mut s = seed;
     (0..n)
         .map(|i| {
@@ -32,7 +34,7 @@ fn gen_corpus(n: usize, dim: usize, seed: u64) -> Vec<(i64, Vec<f32>)> {
         .collect()
 }
 
-fn f32_top10(corpus: &[(i64, Vec<f32>)], query: &[f32]) -> HashSet<i64> {
+fn f32_top10(corpus: &[IdVec], query: &[f32]) -> HashSet<i64> {
     let mut scored: Vec<(i64, f32)> = corpus
         .iter()
         .map(|(id, v)| {

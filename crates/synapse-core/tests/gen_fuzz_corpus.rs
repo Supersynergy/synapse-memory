@@ -5,6 +5,8 @@ use synapse_core::synx::{
     writer::SynxWriter,
 };
 
+type SeedChunk<'a> = (ChunkKind, Codec, &'a [u8]);
+
 fn corpus_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -14,7 +16,7 @@ fn corpus_dir() -> PathBuf {
         .join("fuzz/corpus/synx_deserialize")
 }
 
-fn write_seed(name: &str, chunks: &[(ChunkKind, Codec, &[u8])]) {
+fn write_seed(name: &str, chunks: &[SeedChunk<'_>]) {
     let dir = corpus_dir();
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join(name);

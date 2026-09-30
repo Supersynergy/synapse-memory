@@ -208,26 +208,17 @@ enum TagsCmd {
         source: String,
     },
     /// Remove a tag from a doc.
-    Untag {
-        doc_id: i64,
-        tag_name: String,
-    },
+    Untag { doc_id: i64, tag_name: String },
     /// List tags applied to a doc.
     For { doc_id: i64 },
     /// List docs with a given tag.
     Docs { tag_name: String },
     /// Add an auto-tag rule (keyword → tag).
-    Rule {
-        keyword: String,
-        tag_name: String,
-    },
+    Rule { keyword: String, tag_name: String },
     /// List all auto-tag rules.
     Rules,
     /// Merge two tags (repoints doc_tags, deletes source).
-    Merge {
-        from: String,
-        into: String,
-    },
+    Merge { from: String, into: String },
     /// Delete tags with no associations.
     Cleanup,
     /// Tag statistics.
@@ -235,9 +226,7 @@ enum TagsCmd {
     /// Export all tags + associations + rules as JSON.
     Export,
     /// Import tags from a JSON file.
-    Import {
-        path: std::path::PathBuf,
-    },
+    Import { path: std::path::PathBuf },
 }
 
 #[derive(Subcommand)]
@@ -268,10 +257,10 @@ fn default_db() -> std::path::PathBuf {
 }
 
 fn open_ultra(db: &std::path::Path) -> UltraResult<Ultra> {
-    if let Some(parent) = db.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).ok();
-        }
+    if let Some(parent) = db.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent).ok();
     }
     Ultra::open(db)
 }
@@ -301,20 +290,29 @@ fn run() -> Result<()> {
             })?;
             println!("ultra: ingested {count} events");
         }
-        Cmd::Decision { uri, agent, rationale, source, target, session } => {
+        Cmd::Decision {
+            uri,
+            agent,
+            rationale,
+            source,
+            target,
+            session,
+        } => {
             ultra.migrate()?;
             let ts = chrono::Utc::now().timestamp();
             let id = ultra.with_conn(|c| {
                 synapse_ultra::events::ingest_decision(
                     c,
-                    ts,
-                    session.as_deref(),
-                    &agent,
-                    &uri,
-                    rationale.as_deref(),
-                    source.as_deref(),
-                    target.as_deref(),
-                    None,
+                    &synapse_ultra::events::DecisionInput {
+                        ts,
+                        session_id: session.as_deref(),
+                        agent: &agent,
+                        uri: &uri,
+                        rationale: rationale.as_deref(),
+                        source_uri: source.as_deref(),
+                        target_uri: target.as_deref(),
+                        meta: None,
+                    },
                 )
             })?;
             println!("ultra: decision {id} ingested (uri={uri})");
@@ -362,10 +360,7 @@ fn run() -> Result<()> {
                 println!("ultra: no chain found for {uri}");
             } else {
                 for s in steps {
-                    println!(
-                        "[d{}] {} ({})  path: {}",
-                        s.depth, s.uri, s.kind, s.path
-                    );
+                    println!("[d{}] {} ({})  path: {}", s.depth, s.uri, s.kind, s.path);
                 }
             }
         }
@@ -375,7 +370,8 @@ fn run() -> Result<()> {
                 let dot_str = ultra.with_conn(|c| synapse_ultra::graph::to_dot(c, &uri, depth))?;
                 print!("{dot_str}");
             } else {
-                let steps = ultra.with_conn(|c| synapse_ultra::graph::graph_expand(c, &uri, depth))?;
+                let steps =
+                    ultra.with_conn(|c| synapse_ultra::graph::graph_expand(c, &uri, depth))?;
                 if steps.is_empty() {
                     println!("ultra: no forward chain found for {uri}");
                 } else {
@@ -387,7 +383,8 @@ fn run() -> Result<()> {
         }
         Cmd::Replay { session, limit } => {
             ultra.migrate()?;
-            let entries = ultra.with_conn(|c| synapse_ultra::observe::replay(c, &session, limit))?;
+            let entries =
+                ultra.with_conn(|c| synapse_ultra::observe::replay(c, &session, limit))?;
             if entries.is_empty() {
                 println!("ultra: no events for session {session}");
             } else {
@@ -410,21 +407,45 @@ fn run() -> Result<()> {
             if rows.is_empty() {
                 println!("ultra: no token_cost rows in the last {days} days");
             } else {
-                println!("{:<12} {:<14} {:<28} {:>6} {:>10} {:>10} {:>10}",
-                    "day", "agent", "model", "calls", "in_tok", "out_tok", "usd");
+                println!(
+                    "{:<12} {:<14} {:<28} {:>6} {:>10} {:>10} {:>10}",
+                    "day", "agent", "model", "calls", "in_tok", "out_tok", "usd"
+                );
                 for r in rows {
-                    println!("{:<12} {:<14} {:<28} {:>6} {:>10} {:>10} {:>10.4}",
-                        r.bucket, r.agent, r.model, r.calls, r.input_tokens, r.output_tokens, r.cost_usd);
+                    println!(
+                        "{:<12} {:<14} {:<28} {:>6} {:>10} {:>10} {:>10.4}",
+                        r.bucket,
+                        r.agent,
+                        r.model,
+                        r.calls,
+                        r.input_tokens,
+                        r.output_tokens,
+                        r.cost_usd
+                    );
                 }
             }
         }
-        Cmd::Events { agent, kind, session, uri, limit } => {
+        Cmd::Events {
+            agent,
+            kind,
+            session,
+            uri,
+            limit,
+        } => {
             ultra.migrate()?;
             let mut filter = synapse_ultra::EventFilter::new().limit(limit);
-            if let Some(a) = agent { filter = filter.agent(a); }
-            if let Some(k) = kind { filter = filter.kind(k); }
-            if let Some(s) = session { filter = filter.session(s); }
-            if let Some(u) = uri { filter = filter.uri(u); }
+            if let Some(a) = agent {
+                filter = filter.agent(a);
+            }
+            if let Some(k) = kind {
+                filter = filter.kind(k);
+            }
+            if let Some(s) = session {
+                filter = filter.session(s);
+            }
+            if let Some(u) = uri {
+                filter = filter.uri(u);
+            }
             let rows = ultra.with_conn(|c| synapse_ultra::events::query_events(c, &filter))?;
             if rows.is_empty() {
                 println!("ultra: no events match");
@@ -436,38 +457,58 @@ fn run() -> Result<()> {
                     } else {
                         content
                     };
-                    println!("[{}] {} {} uri={} {}", r.ts, r.agent, r.kind, r.uri.unwrap_or_default(), preview);
+                    println!(
+                        "[{}] {} {} uri={} {}",
+                        r.ts,
+                        r.agent,
+                        r.kind,
+                        r.uri.unwrap_or_default(),
+                        preview
+                    );
                 }
             }
         }
-        Cmd::Lake(lc) => {
-            match lc {
-                LakeCmd::Init { catalog } => {
-                    let cfg = synapse_ultra::lake::LakeConfig {
-                        catalog_path: catalog.clone(),
-                        data_dir: catalog.parent().unwrap_or(std::path::Path::new(".")).join("lake-data"),
-                    };
-                    synapse_ultra::lake::init(&cfg)?;
-                    println!("ultra: ducklake catalog initialized at {}", catalog.display());
-                }
-                LakeCmd::Archive { older_than, catalog } => {
-                    let cfg = synapse_ultra::lake::LakeConfig {
-                        catalog_path: catalog.clone(),
-                        data_dir: catalog.parent().unwrap_or(std::path::Path::new(".")).join("lake-data"),
-                    };
-                    let cutoff = chrono::Utc::now().timestamp() - older_than * 86400;
-                    let n = synapse_ultra::lake::archive(&db, &cfg, cutoff)?;
-                    println!("ultra: archived {n} events older than {older_than} days");
-                }
-                LakeCmd::Analytics { catalog } => {
-                    let cfg = synapse_ultra::lake::LakeConfig {
-                        catalog_path: catalog.clone(),
-                        data_dir: catalog.parent().unwrap_or(std::path::Path::new(".")).join("lake-data"),
-                    };
-                    synapse_ultra::lake::analytics_shell(&db, &cfg)?;
-                }
+        Cmd::Lake(lc) => match lc {
+            LakeCmd::Init { catalog } => {
+                let cfg = synapse_ultra::lake::LakeConfig {
+                    catalog_path: catalog.clone(),
+                    data_dir: catalog
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .join("lake-data"),
+                };
+                synapse_ultra::lake::init(&cfg)?;
+                println!(
+                    "ultra: ducklake catalog initialized at {}",
+                    catalog.display()
+                );
             }
-        }
+            LakeCmd::Archive {
+                older_than,
+                catalog,
+            } => {
+                let cfg = synapse_ultra::lake::LakeConfig {
+                    catalog_path: catalog.clone(),
+                    data_dir: catalog
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .join("lake-data"),
+                };
+                let cutoff = chrono::Utc::now().timestamp() - older_than * 86400;
+                let n = synapse_ultra::lake::archive(&db, &cfg, cutoff)?;
+                println!("ultra: archived {n} events older than {older_than} days");
+            }
+            LakeCmd::Analytics { catalog } => {
+                let cfg = synapse_ultra::lake::LakeConfig {
+                    catalog_path: catalog.clone(),
+                    data_dir: catalog
+                        .parent()
+                        .unwrap_or(std::path::Path::new("."))
+                        .join("lake-data"),
+                };
+                synapse_ultra::lake::analytics_shell(&db, &cfg)?;
+            }
+        },
         Cmd::Doctor => {
             ultra.migrate()?;
             let report = ultra.with_conn(synapse_ultra::ops::health_check)?;
@@ -482,19 +523,25 @@ fn run() -> Result<()> {
             ultra.migrate()?;
             let now = chrono::Utc::now().timestamp();
             let since = now - days * 86400;
-            let rows = ultra.with_conn(|c| {
-                synapse_ultra::observe::agent_trace(c, &agent, since, now, limit)
-            })?;
+            let rows = ultra
+                .with_conn(|c| synapse_ultra::observe::agent_trace(c, &agent, since, now, limit))?;
             if rows.is_empty() {
                 println!("ultra: trace — no events for agent '{agent}' in last {days}d");
                 return Ok(());
             }
-            println!("# agent trace: {agent} (last {days}d, {} events)", rows.len());
+            println!(
+                "# agent trace: {agent} (last {days}d, {} events)",
+                rows.len()
+            );
             for r in rows {
                 let sess = r.session_id.as_deref().unwrap_or("-");
                 let uri = r.uri.as_deref().unwrap_or("-");
                 let preview = r.content_preview.as_deref().unwrap_or("");
-                let preview = if preview.len() > 80 { &preview[..80] } else { preview };
+                let preview = if preview.len() > 80 {
+                    &preview[..80]
+                } else {
+                    preview
+                };
                 println!("{}\t{}\t{}\t{}\t{}", r.ts, sess, r.kind, uri, preview);
             }
         }
@@ -503,29 +550,50 @@ fn run() -> Result<()> {
             let now = chrono::Utc::now().timestamp();
             let day_end = now - days_back * 86400;
             let day_start = day_end - 86400;
-            let s = ultra.with_conn(|c| {
-                synapse_ultra::observe::daily_summary(c, day_start, day_end)
-            })?;
-            println!("# daily summary — day -{}d  [{} .. {}]", days_back, day_start, day_end);
+            let s = ultra
+                .with_conn(|c| synapse_ultra::observe::daily_summary(c, day_start, day_end))?;
+            println!(
+                "# daily summary — day -{}d  [{} .. {}]",
+                days_back, day_start, day_end
+            );
             println!("events:       {}", s.total_events);
             println!("decisions:    {}", s.total_decisions);
             println!("sessions:     {}", s.total_sessions);
             println!("cost_usd:     {:.4}", s.total_cost_usd);
-            println!("tokens:       in={} out={}", s.total_input_tokens, s.total_output_tokens);
-            println!("graph_growth: +{} nodes +{} edges", s.new_graph_nodes, s.new_graph_edges);
+            println!(
+                "tokens:       in={} out={}",
+                s.total_input_tokens, s.total_output_tokens
+            );
+            println!(
+                "graph_growth: +{} nodes +{} edges",
+                s.new_graph_nodes, s.new_graph_edges
+            );
             println!();
             println!("## agents ({}):", s.agents.len());
             for a in &s.agents {
                 println!("  {}:", a.agent);
-                println!("    events={} decisions={} sessions={} cost=${:.4}", a.events, a.decisions, a.sessions, a.cost_usd);
+                println!(
+                    "    events={} decisions={} sessions={} cost=${:.4}",
+                    a.events, a.decisions, a.sessions, a.cost_usd
+                );
                 println!("    tokens: in={} out={}", a.input_tokens, a.output_tokens);
                 println!("    first_ts={} last_ts={}", a.first_ts, a.last_ts);
                 if !a.top_kinds.is_empty() {
-                    let kinds = a.top_kinds.iter().map(|(k, c)| format!("{k}={c}")).collect::<Vec<_>>().join(" ");
+                    let kinds = a
+                        .top_kinds
+                        .iter()
+                        .map(|(k, c)| format!("{k}={c}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
                     println!("    top_kinds: {kinds}");
                 }
                 if !a.top_uris.is_empty() {
-                    let uris = a.top_uris.iter().map(|(u, c)| format!("{u}={c}")).collect::<Vec<_>>().join(" ");
+                    let uris = a
+                        .top_uris
+                        .iter()
+                        .map(|(u, c)| format!("{u}={c}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
                     println!("    top_uris:  {uris}");
                 }
             }
@@ -536,17 +604,20 @@ fn run() -> Result<()> {
                     let rat = d.rationale.as_deref().unwrap_or("-");
                     let rat = if rat.len() > 80 { &rat[..80] } else { rat };
                     println!("  {}d#{}  agent={}  uri={}", d.ts, d.id, d.agent, d.uri);
-                    if let Some(src) = &d.source_uri { println!("    source: {src}"); }
-                    if let Some(tgt) = &d.target_uri { println!("    target: {tgt}"); }
+                    if let Some(src) = &d.source_uri {
+                        println!("    source: {src}");
+                    }
+                    if let Some(tgt) = &d.target_uri {
+                        println!("    target: {tgt}");
+                    }
                     println!("    rationale: {rat}");
                 }
             }
         }
         Cmd::Timeline { session, limit } => {
             ultra.migrate()?;
-            let rows = ultra.with_conn(|c| {
-                synapse_ultra::observe::session_timeline(c, &session, limit)
-            })?;
+            let rows = ultra
+                .with_conn(|c| synapse_ultra::observe::session_timeline(c, &session, limit))?;
             if rows.is_empty() {
                 println!("ultra: timeline — no events for session '{session}'");
                 return Ok(());
@@ -556,15 +627,21 @@ fn run() -> Result<()> {
                 let marker = if r.is_decision { "DECISION" } else { "event" };
                 let uri = r.uri.as_deref().unwrap_or("-");
                 let preview = r.content_preview.as_deref().unwrap_or("");
-                let preview = if preview.len() > 80 { &preview[..80] } else { preview };
-                println!("{}\t{}\t{}\t{}\t{}\t{}", r.ts, marker, r.agent, r.kind, uri, preview);
+                let preview = if preview.len() > 80 {
+                    &preview[..80]
+                } else {
+                    preview
+                };
+                println!(
+                    "{}\t{}\t{}\t{}\t{}\t{}",
+                    r.ts, marker, r.agent, r.kind, uri, preview
+                );
             }
         }
         Cmd::Sessions { agent, limit } => {
             ultra.migrate()?;
-            let rows = ultra.with_conn(|c| {
-                synapse_ultra::observe::list_sessions(c, agent.as_deref(), limit)
-            })?;
+            let rows = ultra
+                .with_conn(|c| synapse_ultra::observe::list_sessions(c, agent.as_deref(), limit))?;
             if rows.is_empty() {
                 println!("ultra: sessions — no sessions found");
                 return Ok(());
@@ -572,14 +649,16 @@ fn run() -> Result<()> {
             println!("# sessions ({}):", rows.len());
             println!("session_id\tagent\tevents\tdecisions\tfirst_ts\tlast_ts\tcost_usd");
             for r in rows {
-                println!("{}\t{}\t{}\t{}\t{}\t{}\t{:.4}", r.session_id, r.agent, r.events, r.decisions, r.first_ts, r.last_ts, r.cost_usd);
+                println!(
+                    "{}\t{}\t{}\t{}\t{}\t{}\t{:.4}",
+                    r.session_id, r.agent, r.events, r.decisions, r.first_ts, r.last_ts, r.cost_usd
+                );
             }
         }
         Cmd::Search { query, limit } => {
             ultra.migrate()?;
-            let rows = ultra.with_conn(|c| {
-                synapse_ultra::events::search_events(c, &query, Some(limit))
-            })?;
+            let rows = ultra
+                .with_conn(|c| synapse_ultra::events::search_events(c, &query, Some(limit)))?;
             if rows.is_empty() {
                 println!("ultra: search — no hits for '{query}'");
                 return Ok(());
@@ -592,7 +671,14 @@ fn run() -> Result<()> {
                 } else {
                     content
                 };
-                println!("[{}] {} {} uri={} {}", r.ts, r.agent, r.kind, r.uri.unwrap_or_default(), preview);
+                println!(
+                    "[{}] {} {} uri={} {}",
+                    r.ts,
+                    r.agent,
+                    r.kind,
+                    r.uri.unwrap_or_default(),
+                    preview
+                );
             }
         }
         Cmd::Health { json } => {
@@ -603,8 +689,14 @@ fn run() -> Result<()> {
             } else {
                 println!("# ultra health — {}", db.display());
                 println!("overall: {}", if report.overall_ok { "OK" } else { "FAIL" });
-                println!("db_size: {} bytes ({} pages × {} bytes)", report.db_size_bytes, report.page_count, report.page_size);
-                println!("journal_mode: {}  synchronous: {}  foreign_keys: {}", report.journal_mode, report.synchronous, report.foreign_keys);
+                println!(
+                    "db_size: {} bytes ({} pages × {} bytes)",
+                    report.db_size_bytes, report.page_count, report.page_size
+                );
+                println!(
+                    "journal_mode: {}  synchronous: {}  foreign_keys: {}",
+                    report.journal_mode, report.synchronous, report.foreign_keys
+                );
                 println!("ultra_schema: v{}", report.ultra_schema_version);
                 println!();
                 for c in &report.checks {
@@ -625,7 +717,11 @@ fn run() -> Result<()> {
             println!("  path:        {}", report.backup_path.display());
             println!("  original:    {} bytes", report.original_bytes);
             println!("  compressed:  {} bytes", report.compressed_bytes);
-            println!("  ratio:       {:.2} ({:.0}% compression)", report.compression_ratio, (1.0 - report.compression_ratio) * 100.0);
+            println!(
+                "  ratio:       {:.2} ({:.0}% compression)",
+                report.compression_ratio,
+                (1.0 - report.compression_ratio) * 100.0
+            );
             println!("  sha256:      {}", report.sha256);
             println!("  ts:          {}", report.ts);
         }
@@ -647,8 +743,17 @@ fn run() -> Result<()> {
             ultra.with_conn(|c| -> Result<()> {
                 synapse_ultra::tags::migrate(c)?;
                 match cmd {
-                    TagsCmd::Add { name, color, description } => {
-                        let id = synapse_ultra::tags::create_tag(c, &name, color.as_deref(), description.as_deref())?;
+                    TagsCmd::Add {
+                        name,
+                        color,
+                        description,
+                    } => {
+                        let id = synapse_ultra::tags::create_tag(
+                            c,
+                            &name,
+                            color.as_deref(),
+                            description.as_deref(),
+                        )?;
                         println!("ultra: tag '{name}' → id={id}");
                     }
                     TagsCmd::List => {
@@ -659,16 +764,33 @@ fn run() -> Result<()> {
                             println!("# tags ({})", tags.len());
                             println!("id\tname\tcolor\tdescription");
                             for t in tags {
-                                println!("{}\t{}\t{}\t{}", t.id, t.name, t.color.unwrap_or_default(), t.description.unwrap_or_default());
+                                println!(
+                                    "{}\t{}\t{}\t{}",
+                                    t.id,
+                                    t.name,
+                                    t.color.unwrap_or_default(),
+                                    t.description.unwrap_or_default()
+                                );
                             }
                         }
                     }
-                    TagsCmd::Tag { doc_id, tag_name, source } => {
+                    TagsCmd::Tag {
+                        doc_id,
+                        tag_name,
+                        source,
+                    } => {
                         synapse_ultra::tags::tag_doc(c, doc_id, &tag_name, &source)?;
                         println!("ultra: doc {doc_id} tagged '{tag_name}' (source={source})");
                     }
-                    TagsCmd::Bulk { tag_name, ids, source } => {
-                        let doc_ids: Vec<i64> = ids.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                    TagsCmd::Bulk {
+                        tag_name,
+                        ids,
+                        source,
+                    } => {
+                        let doc_ids: Vec<i64> = ids
+                            .split(',')
+                            .filter_map(|s| s.trim().parse().ok())
+                            .collect();
                         let n = synapse_ultra::tags::bulk_tag(c, &doc_ids, &tag_name, &source)?;
                         println!("ultra: bulk-tagged {n} docs with '{tag_name}'");
                     }
@@ -716,7 +838,9 @@ fn run() -> Result<()> {
                     }
                     TagsCmd::Merge { from, into } => {
                         let n = synapse_ultra::tags::merge_tags(c, &from, &into)?;
-                        println!("ultra: merged '{from}' into '{into}' — {n} associations repointed");
+                        println!(
+                            "ultra: merged '{from}' into '{into}' — {n} associations repointed"
+                        );
                     }
                     TagsCmd::Cleanup => {
                         let n = synapse_ultra::tags::cleanup_orphans(c)?;

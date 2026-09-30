@@ -189,7 +189,7 @@ fn write_npy_f32_2d(path: &str, data: &[Vec<f32>], dim: usize) {
     let prefix_len = 10usize; // magic(6)+ver(2)+len(2)
     let pad_len = (64 - (prefix_len + header_bytes.len() + 1) % 64) % 64;
     let mut hdr = header_bytes.to_vec();
-    hdr.extend(std::iter::repeat(b' ').take(pad_len));
+    hdr.extend(std::iter::repeat_n(b' ', pad_len));
     hdr.push(b'\n');
     let hdr_len = hdr.len() as u16;
 
@@ -275,7 +275,9 @@ print(f"FLAT_P50={{pct(flat_lats,50)}} FLAT_P99={{pct(flat_lats,99)}} "
 }
 
 #[cfg(feature = "ann-usearch")]
-fn run_faiss_script(py_path: &str) -> (String, String, String, String, String, String) {
+type FaissRow = (String, String, String, String, String, String);
+
+fn run_faiss_script(py_path: &str) -> FaissRow {
     let na = || "N/A".to_string();
     let out = match std::process::Command::new("python3").arg(py_path).output() {
         Ok(o) => o,

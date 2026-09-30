@@ -2618,7 +2618,6 @@ mod tests {
                 value: serde_json::json!("A"),
             }),
             ef_multiplier: None,
-            ..Default::default()
         };
         let filtered_hits = s.search_vec_filtered(&query_emb, k, &opts).unwrap();
 
@@ -2677,7 +2676,6 @@ mod tests {
                 value: serde_json::json!("A"),
             }),
             ef_multiplier: None,
-            ..Default::default()
         };
         let t1 = std::time::Instant::now();
         for _ in 0..iters {
@@ -2817,7 +2815,7 @@ mod tests {
         ]);
         for i in 0..1000usize {
             let meta = serde_json::json!({ "price": i });
-            assert_eq!(pred.matches(Some(&meta)), i >= 50 && i <= 200, "i={i}");
+            assert_eq!(pred.matches(Some(&meta)), (50..=200).contains(&i), "i={i}");
         }
         let opts = SearchOptions {
             filter: Some(pred),
@@ -2827,7 +2825,7 @@ mod tests {
         for h in &hits {
             let meta = s.get(h.id).unwrap().meta.unwrap();
             let p = meta["price"].as_f64().unwrap();
-            assert!(p >= 50.0 && p <= 200.0, "price={p} out of range");
+            assert!((50.0..=200.0).contains(&p), "price={p} out of range");
         }
     }
 

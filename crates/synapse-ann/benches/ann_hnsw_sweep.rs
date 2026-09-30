@@ -37,6 +37,7 @@ fn ground_truth(corpus: &[Vec<f32>], queries: &[Vec<f32>], k: usize) -> Vec<Vec<
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bench_config(
     c: &mut Criterion,
     name: &str,
@@ -69,7 +70,7 @@ fn bench_config(
 
     let q0 = &queries[0];
     c.bench_function(&format!("hnsw_{name}_M{m}_ec{ef_c}_es{ef_s}"), |b| {
-        b.iter(|| black_box(idx.search(q0, K).unwrap()))
+        b.iter(|| std::hint::black_box(idx.search(q0, K).unwrap()))
     });
 }
 

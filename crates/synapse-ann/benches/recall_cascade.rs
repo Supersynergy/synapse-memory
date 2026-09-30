@@ -6,7 +6,7 @@
 //! Compares recall@10 of plain `search` vs cascade `search_with_rerank(mult=4)`
 //! against brute-force ground truth on a 5k × 128d synthetic set.
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 #[cfg(feature = "ann-usearch")]
 fn vector(seed: u64, dim: usize) -> Vec<f32> {
@@ -78,12 +78,12 @@ fn measure_recall(c: &mut Criterion) {
 
     let mut g = c.benchmark_group("recall_cascade");
     g.bench_function("search_plain", |b| {
-        b.iter(|| black_box(idx.search(black_box(&queries[0]), K).unwrap()));
+        b.iter(|| std::hint::black_box(idx.search(std::hint::black_box(&queries[0]), K).unwrap()));
     });
     g.bench_function("search_with_rerank_4x", |b| {
         b.iter(|| {
-            black_box(
-                idx.search_with_rerank(black_box(&queries[0]), K, 4)
+            std::hint::black_box(
+                idx.search_with_rerank(std::hint::black_box(&queries[0]), K, 4)
                     .unwrap(),
             )
         });

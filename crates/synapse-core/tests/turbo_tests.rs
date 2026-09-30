@@ -14,6 +14,9 @@ use synapse_core::turbo::ndarray_search::{HybridSearch, NdArraySearch};
 use synapse_core::types::EMBED_DIM;
 use synapse_core::{PutRequest, Store};
 
+type IdVec = (i64, Vec<f32>);
+type NamedVec = (&'static str, Vec<f32>);
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // Helpers
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -54,7 +57,7 @@ fn build_test_store(n: usize) -> (tempfile::NamedTempFile, Store) {
 }
 
 /// Brute-force kNN ground truth (for recall@k verification).
-fn ground_truth_knn(embeddings: &[(i64, Vec<f32>)], query: &[f32], k: usize) -> Vec<i64> {
+fn ground_truth_knn(embeddings: &[IdVec], query: &[f32], k: usize) -> Vec<i64> {
     let q_norm: f32 = query.iter().map(|x| x * x).sum::<f32>().sqrt();
     if q_norm < 1e-10 {
         return Vec::new();
@@ -107,7 +110,7 @@ fn turbo_ndarray_recall_at_k() {
     assert_eq!(search.len(), n);
 
     // Collect all embeddings for ground truth.
-    let embeddings: Vec<(i64, Vec<f32>)> = (1..=n).map(|i| (i as i64, fake_emb(i as u8))).collect();
+    let embeddings: Vec<IdVec> = (1..=n).map(|i| (i as i64, fake_emb(i as u8))).collect();
 
     // Test recall@5 for multiple queries
     let test_queries = [7u8, 42, 99, 1, 50];
@@ -275,12 +278,12 @@ fn turbo_cache_stats_accurate() {
 #[test]
 fn turbo_cache_prewarm() {
     let cache = HybridCache::new().unwrap();
-    let queries = vec![
+    let queries = [
         ("query a", norm_emb(1)),
         ("query b", norm_emb(2)),
         ("query c", norm_emb(3)),
     ];
-    let refs: Vec<(&str, Vec<f32>)> = queries.iter().map(|(q, e)| (*q, e.clone())).collect();
+    let refs: Vec<NamedVec> = queries.iter().map(|(q, e)| (*q, e.clone())).collect();
     cache.prewarm(&refs);
 
     assert_eq!(cache.stats().emb_t1_memory, 3);

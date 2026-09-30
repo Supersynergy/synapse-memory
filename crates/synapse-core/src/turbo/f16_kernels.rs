@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn cos_f16_dim_mismatch_returns_none() {
         let q = vec![1.0_f32; 4];
-        let r = pack_f16(&vec![1.0_f32; 2]); // different dim
+        let r = pack_f16(&[1.0_f32; 2]); // different dim
         assert!(cos_f16_row(&q, &r).is_none());
     }
 }

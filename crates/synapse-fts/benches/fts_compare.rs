@@ -1,6 +1,5 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rusqlite::Connection;
-use std::path::Path;
 use synapse_fts::FtsIndex;
 use tempfile::TempDir;
 
@@ -47,8 +46,8 @@ fn bench_tantivy(c: &mut Criterion) {
     c.bench_function("tantivy_search_10k_docs_100q", |b| {
         b.iter(|| {
             for q in &queries {
-                let r = idx.search(black_box(q), 10).unwrap();
-                black_box(r);
+                let r = idx.search(std::hint::black_box(q), 10).unwrap();
+                std::hint::black_box(r);
             }
         })
     });
@@ -85,13 +84,13 @@ fn bench_sqlite_fts5(c: &mut Criterion) {
                     )
                     .unwrap();
                 let rows: Vec<(i64, f64)> = stmt
-                    .query_map(rusqlite::params![black_box(q)], |r| {
+                    .query_map(rusqlite::params![std::hint::black_box(q)], |r| {
                         Ok((r.get(0)?, r.get(1)?))
                     })
                     .unwrap()
                     .map(|r| r.unwrap())
                     .collect();
-                black_box(rows);
+                std::hint::black_box(rows);
             }
         })
     });

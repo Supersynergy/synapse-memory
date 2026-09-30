@@ -27,7 +27,7 @@ fn percentile(mut xs: Vec<f64>, p: f64) -> f64 {
 
 fn bench_embedder(label: &str, e: &dyn TextEmbedder, texts: &[String], iters: usize) {
     // Warmup
-    let _ = e.embed_batch(&texts[..1.min(texts.len())].to_vec());
+    let _ = e.embed_batch(&texts[..1.min(texts.len())]);
 
     // Single-doc
     let mut singles = Vec::with_capacity(iters);

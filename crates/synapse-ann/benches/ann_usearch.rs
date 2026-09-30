@@ -5,7 +5,7 @@
 //!
 //! Reports ms/query and build wall-time for each N.
 
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 #[cfg(feature = "ann-usearch")]
 fn vector(seed: u64, dim: usize) -> Vec<f32> {
@@ -29,8 +29,8 @@ fn bench_ann(c: &mut Criterion) {
         g.throughput(Throughput::Elements(1));
         g.bench_with_input(BenchmarkId::from_parameter(n), &q, |b, qv| {
             b.iter(|| {
-                let r = idx.search(black_box(qv), 10).unwrap();
-                black_box(r);
+                let r = idx.search(std::hint::black_box(qv), 10).unwrap();
+                std::hint::black_box(r);
             });
         });
     }

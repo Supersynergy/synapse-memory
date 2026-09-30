@@ -1,8 +1,8 @@
 //! Verify pool concurrency: N threads doing why() in parallel.
-use synapse_ultra::{Ultra, UltraError};
-use synapse_ultra::graph::{upsert_node, upsert_edge, why};
 use std::sync::Arc;
 use std::thread;
+use synapse_ultra::graph::{EdgeInput, upsert_edge, upsert_node, why};
+use synapse_ultra::{Ultra, UltraError};
 
 fn main() -> Result<(), UltraError> {
     let u = Arc::new(Ultra::open_memory()?);
@@ -12,7 +12,10 @@ fn main() -> Result<(), UltraError> {
         for i in 0..1000 {
             upsert_node(c, &format!("n{i}"), "d", None, i)?;
             if i > 0 {
-                upsert_edge(c, &format!("n{}", i-1), &format!("n{i}"), "caused", 1.0, i, None, None)?;
+                upsert_edge(
+                    c,
+                    &EdgeInput::new(&format!("n{}", i - 1), &format!("n{i}"), "caused", i),
+                )?;
             }
         }
         Ok::<(), UltraError>(())

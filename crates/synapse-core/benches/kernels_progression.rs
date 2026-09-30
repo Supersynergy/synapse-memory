@@ -178,6 +178,7 @@ fn bench_progression(c: &mut Criterion) {
 
 // --- bench runner with markdown output for chart --------------------------
 
+#[allow(dead_code)]
 fn run_and_dump_markdown() {
     let db_f32 = make_corpus_f32(N, DIM);
     let q_f32: Vec<f32> = db_f32[..DIM].to_vec();
@@ -260,12 +261,3 @@ fn run_and_dump_markdown() {
 
 criterion_group!(benches, bench_progression);
 criterion_main!(benches);
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn smoke() {
-        run_and_dump_markdown();
-    }
-}

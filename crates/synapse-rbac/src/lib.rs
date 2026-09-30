@@ -26,7 +26,7 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -67,22 +67,26 @@ impl Role {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "owner" => Some(Role::Owner),
-            "editor" => Some(Role::Editor),
-            "reader" => Some(Role::Reader),
-            _ => None,
-        }
-    }
-
     /// True if this role grants the given permission.
     pub fn grants(&self, perm: Permission) -> bool {
-        match (self, perm) {
-            (Role::Owner, _) => true,
-            (Role::Editor, Permission::Read) | (Role::Editor, Permission::Write) => true,
-            (Role::Reader, Permission::Read) => true,
-            _ => false,
+        matches!(
+            (self, perm),
+            (Role::Owner, _)
+                | (Role::Editor, Permission::Read | Permission::Write)
+                | (Role::Reader, Permission::Read)
+        )
+    }
+}
+
+impl std::str::FromStr for Role {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "owner" => Ok(Role::Owner),
+            "editor" => Ok(Role::Editor),
+            "reader" => Ok(Role::Reader),
+            _ => Err(()),
         }
     }
 }
@@ -158,9 +162,8 @@ pub fn create_space(conn: &Connection, name: &str, owner: &str) -> Result<Space>
 
 /// Look up a Space by name.
 pub fn lookup_space(conn: &Connection, name: &str) -> Result<Option<Space>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, owner, created_at FROM spaces WHERE name = ?1",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, name, owner, created_at FROM spaces WHERE name = ?1")?;
     let mut rows = stmt.query(params![name])?;
     if let Some(r) = rows.next()? {
         Ok(Some(Space {
@@ -207,7 +210,7 @@ pub fn lookup_role(conn: &Connection, space_id: i64, user_id: &str) -> Result<Op
     let mut rows = stmt.query(params![space_id, user_id])?;
     if let Some(r) = rows.next()? {
         let s: String = r.get(0)?;
-        Ok(Role::from_str(&s))
+        Ok(s.parse::<Role>().ok())
     } else {
         Ok(None)
     }
@@ -224,7 +227,7 @@ pub fn list_roles(conn: &Connection, space_id: i64) -> Result<Vec<RbacRole>> {
         Ok(RbacRole {
             space_id: r.get(0)?,
             user_id: r.get(1)?,
-            role: Role::from_str(&role_s).ok_or_else(|| {
+            role: role_s.parse::<Role>().map_err(|_| {
                 rusqlite::Error::FromSqlConversionFailure(
                     2,
                     rusqlite::types::Type::Text,
@@ -246,12 +249,7 @@ pub fn list_roles(conn: &Connection, space_id: i64) -> Result<Vec<RbacRole>> {
 }
 
 /// Guard: check that a user has a permission on a Space. Returns Err if denied.
-pub fn enforce(
-    conn: &Connection,
-    space_name: &str,
-    user_id: &str,
-    perm: Permission,
-) -> Result<()> {
+pub fn enforce(conn: &Connection, space_name: &str, user_id: &str, perm: Permission) -> Result<()> {
     let space = lookup_space(conn, space_name)?
         .ok_or_else(|| RbacError::SpaceNotFound(space_name.to_string()))?;
     let role = lookup_role(conn, space.id, user_id)?;
@@ -267,10 +265,13 @@ pub fn enforce(
     }
 }
 
+/// (space_name, user_id) -> Role map behind the cache lock.
+type RoleKeyMap = HashMap<(String, String), Role>;
+
 /// In-memory role cache for hot-path enforcement (avoids SQLite hits per read).
 pub struct RoleCache {
     /// (space_name, user_id) -> Role
-    cache: parking_lot::RwLock<HashMap<(String, String), Role>>,
+    cache: parking_lot::RwLock<RoleKeyMap>,
 }
 
 impl RoleCache {
@@ -411,7 +412,7 @@ mod tests {
         let conn = fresh_conn();
         create_space(&conn, "acme", "alice").unwrap();
         let r = enforce(&conn, "acme", "eve", Permission::Read);
-        assert!(matches!(r, Err(_)));
+        assert!(r.is_err());
     }
 
     #[test]
@@ -462,6 +463,6 @@ mod tests {
 
     #[test]
     fn invalid_role_returns_none() {
-        assert_eq!(Role::from_str("superuser"), None);
+        assert!("superuser".parse::<Role>().is_err());
     }
 }

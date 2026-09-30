@@ -130,11 +130,7 @@ pub fn state(cfg: &LakeConfig) -> UltraResult<LakeState> {
 ///
 /// Single duckdb invocation exports to Parquet + ingests into DuckLake. The
 /// brain.db cleanup is a separate `DELETE` on the source connection.
-pub fn archive(
-    brain_db: &Path,
-    cfg: &LakeConfig,
-    cutoff_ts: i64,
-) -> UltraResult<i64> {
+pub fn archive(brain_db: &Path, cfg: &LakeConfig, cutoff_ts: i64) -> UltraResult<i64> {
     if !cfg.catalog_path.exists() {
         init(cfg)?;
     }

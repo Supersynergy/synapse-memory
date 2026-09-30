@@ -14,6 +14,8 @@ use std::time::Instant;
 
 use rayon::prelude::*;
 
+type IdVec = (i64, Vec<f32>);
+
 const N: usize = 100_000;
 const DIM: usize = 384;
 const ITERS: usize = 15;
@@ -76,7 +78,7 @@ fn main() {
     #[cfg(feature = "simsimd")]
     let int8_us = {
         use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
-        let rows: Vec<(i64, Vec<f32>)> = db
+        let rows: Vec<IdVec> = db
             .chunks(DIM)
             .enumerate()
             .map(|(i, r)| (i as i64, r.to_vec()))
@@ -93,7 +95,7 @@ fn main() {
     let pipeline_us = {
         use synapse_core::turbo::inmem_hamming_index::InMemoryHammingIndex;
         use synapse_core::turbo::inmem_i8_index::InMemoryI8Index;
-        let rows: Vec<(i64, Vec<f32>)> = db
+        let rows: Vec<IdVec> = db
             .chunks(DIM)
             .enumerate()
             .map(|(i, r)| (i as i64, r.to_vec()))

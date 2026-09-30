@@ -2482,9 +2482,8 @@ async fn agent_trace(args: &Value) -> Result<Value> {
     ultra.migrate().ok();
     let now = chrono::Utc::now().timestamp();
     let since = now - days * 86400;
-    let rows = ultra.with_conn(|c| {
-        synapse_ultra::observe::agent_trace(c, agent, since, now, limit)
-    })?;
+    let rows =
+        ultra.with_conn(|c| synapse_ultra::observe::agent_trace(c, agent, since, now, limit))?;
     let trace: Vec<Value> = rows
         .iter()
         .map(|r| {
@@ -2497,7 +2496,9 @@ async fn agent_trace(args: &Value) -> Result<Value> {
             })
         })
         .collect();
-    Ok(json!({"agent": agent, "since_ts": since, "until_ts": now, "trace": trace, "count": trace.len()}))
+    Ok(
+        json!({"agent": agent, "since_ts": since, "until_ts": now, "trace": trace, "count": trace.len()}),
+    )
 }
 
 async fn daily_summary(args: &Value) -> Result<Value> {
@@ -2516,9 +2517,7 @@ async fn daily_summary(args: &Value) -> Result<Value> {
     let now = chrono::Utc::now().timestamp();
     let day_end = now - days_back * 86400;
     let day_start = day_end - 86400;
-    let s = ultra.with_conn(|c| {
-        synapse_ultra::observe::daily_summary(c, day_start, day_end)
-    })?;
+    let s = ultra.with_conn(|c| synapse_ultra::observe::daily_summary(c, day_start, day_end))?;
     // Serialize via serde_json::to_value to preserve nested structure
     let v = serde_json::to_value(&s).unwrap_or_else(|_| json!({}));
     Ok(json!({"day_start_ts": day_start, "day_end_ts": day_end, "summary": v}))
@@ -2541,9 +2540,7 @@ async fn session_timeline(args: &Value) -> Result<Value> {
     let ultra = synapse_ultra::Ultra::open(&path)
         .with_context(|| format!("open brain.db failed: {}", path.display()))?;
     ultra.migrate().ok();
-    let rows = ultra.with_conn(|c| {
-        synapse_ultra::observe::session_timeline(c, session, limit)
-    })?;
+    let rows = ultra.with_conn(|c| synapse_ultra::observe::session_timeline(c, session, limit))?;
     let timeline: Vec<Value> = rows
         .iter()
         .map(|r| {
@@ -2574,9 +2571,7 @@ async fn list_sessions(args: &Value) -> Result<Value> {
     let ultra = synapse_ultra::Ultra::open(&path)
         .with_context(|| format!("open brain.db failed: {}", path.display()))?;
     ultra.migrate().ok();
-    let rows = ultra.with_conn(|c| {
-        synapse_ultra::observe::list_sessions(c, agent, limit)
-    })?;
+    let rows = ultra.with_conn(|c| synapse_ultra::observe::list_sessions(c, agent, limit))?;
     let sessions: Vec<Value> = rows
         .iter()
         .map(|r| {
@@ -2611,9 +2606,7 @@ async fn ultra_search(args: &Value) -> Result<Value> {
     let ultra = synapse_ultra::Ultra::open(&path)
         .with_context(|| format!("open brain.db failed: {}", path.display()))?;
     ultra.migrate().ok();
-    let rows = ultra.with_conn(|c| {
-        synapse_ultra::events::search_events(c, query, Some(limit))
-    })?;
+    let rows = ultra.with_conn(|c| synapse_ultra::events::search_events(c, query, Some(limit)))?;
     let hits: Vec<Value> = rows
         .iter()
         .map(|r| {
@@ -2648,8 +2641,8 @@ async fn meta_health(_args: &Value) -> Result<Value> {
             "note": "router.toml not yet created; meta-loop has not ticked"
         }));
     }
-    let meta = synapse_meta::MetaLoop::new(path)
-        .map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
+    let meta =
+        synapse_meta::MetaLoop::new(path).map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
     let now = chrono::Utc::now().timestamp();
     let h = meta.health(now);
     Ok(json!({
@@ -2668,10 +2661,10 @@ async fn meta_route(args: &Value) -> Result<Value> {
         .get("task_shape")
         .and_then(|v| v.as_str())
         .context("meta_route requires 'task_shape'")?;
-    let shape = synapse_meta::TaskShape::from_str(shape_s);
+    let shape = shape_s.parse::<synapse_meta::TaskShape>().unwrap();
     let path = router_toml_path()?;
-    let meta = synapse_meta::MetaLoop::new(path)
-        .map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
+    let meta =
+        synapse_meta::MetaLoop::new(path).map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
     let model = meta.sample_model(&shape);
     Ok(json!({"task_shape": shape_s, "model": model}))
 }
@@ -2689,10 +2682,10 @@ async fn meta_record_outcome(args: &Value) -> Result<Value> {
         .get("success")
         .and_then(|v| v.as_bool())
         .context("meta_record_outcome requires 'success' (boolean)")?;
-    let shape = synapse_meta::TaskShape::from_str(shape_s);
+    let shape = shape_s.parse::<synapse_meta::TaskShape>().unwrap();
     let path = router_toml_path()?;
-    let meta = synapse_meta::MetaLoop::new(path)
-        .map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
+    let meta =
+        synapse_meta::MetaLoop::new(path).map_err(|e| anyhow::anyhow!("meta-loop init: {e}"))?;
     meta.record_outcome(&shape, model, success)
         .map_err(|e| anyhow::anyhow!("persist: {e}"))?;
     Ok(json!({"recorded": true, "task_shape": shape_s, "model": model, "success": success}))
@@ -2717,8 +2710,8 @@ async fn compliance_export(args: &Value) -> Result<Value> {
     }
     let conn = rusqlite::Connection::open(&path)
         .with_context(|| format!("open brain.db: {}", path.display()))?;
-    let masker = synapse_compliance::PiiMasker::new()
-        .map_err(|e| anyhow::anyhow!("pii masker: {e}"))?;
+    let masker =
+        synapse_compliance::PiiMasker::new().map_err(|e| anyhow::anyhow!("pii masker: {e}"))?;
     let opts = synapse_compliance::ExportOptions {
         include_pii_counts: true,
         include_agent: true,
@@ -2728,12 +2721,10 @@ async fn compliance_export(args: &Value) -> Result<Value> {
     let records = synapse_compliance::export_memories(&conn, &masker, &opts)
         .map_err(|e| anyhow::anyhow!("export: {e}"))?;
     let output = match format {
-        "csv" => synapse_compliance::to_csv(&records)
-            .map_err(|e| anyhow::anyhow!("csv: {e}"))?,
+        "csv" => synapse_compliance::to_csv(&records).map_err(|e| anyhow::anyhow!("csv: {e}"))?,
         "markdown" | "md" => synapse_compliance::to_markdown(&records)
             .map_err(|e| anyhow::anyhow!("markdown: {e}"))?,
-        _ => synapse_compliance::to_json(&records)
-            .map_err(|e| anyhow::anyhow!("json: {e}"))?,
+        _ => synapse_compliance::to_json(&records).map_err(|e| anyhow::anyhow!("json: {e}"))?,
     };
     Ok(json!({
         "format": format,
@@ -2743,11 +2734,26 @@ async fn compliance_export(args: &Value) -> Result<Value> {
 }
 
 async fn provenance_sign(args: &Value) -> Result<Value> {
-    let doc_id = args.get("doc_id").and_then(|v| v.as_str()).context("provenance_sign requires 'doc_id'")?;
-    let agent_id = args.get("agent_id").and_then(|v| v.as_str()).context("provenance_sign requires 'agent_id'")?;
-    let agent_version = args.get("agent_version").and_then(|v| v.as_str()).context("provenance_sign requires 'agent_version'")?;
-    let source_uri = args.get("source_uri").and_then(|v| v.as_str()).context("provenance_sign requires 'source_uri'")?;
-    let content = args.get("content").and_then(|v| v.as_str()).context("provenance_sign requires 'content'")?;
+    let doc_id = args
+        .get("doc_id")
+        .and_then(|v| v.as_str())
+        .context("provenance_sign requires 'doc_id'")?;
+    let agent_id = args
+        .get("agent_id")
+        .and_then(|v| v.as_str())
+        .context("provenance_sign requires 'agent_id'")?;
+    let agent_version = args
+        .get("agent_version")
+        .and_then(|v| v.as_str())
+        .context("provenance_sign requires 'agent_version'")?;
+    let source_uri = args
+        .get("source_uri")
+        .and_then(|v| v.as_str())
+        .context("provenance_sign requires 'source_uri'")?;
+    let content = args
+        .get("content")
+        .and_then(|v| v.as_str())
+        .context("provenance_sign requires 'content'")?;
     let parent_doc_id = args.get("parent_doc_id").and_then(|v| v.as_str());
     let path = ultra_brain_path()?;
     let conn = rusqlite::Connection::open(&path)
@@ -2768,9 +2774,15 @@ async fn provenance_sign(args: &Value) -> Result<Value> {
         id
     };
     let rec = synapse_provenance::sign_and_append(
-        &conn, &identity, doc_id, agent_version, source_uri,
-        content.as_bytes(), parent_doc_id,
-    ).map_err(|e| anyhow::anyhow!("sign: {e}"))?;
+        &conn,
+        &identity,
+        doc_id,
+        agent_version,
+        source_uri,
+        content.as_bytes(),
+        parent_doc_id,
+    )
+    .map_err(|e| anyhow::anyhow!("sign: {e}"))?;
     Ok(json!({
         "signed": true,
         "doc_id": rec.doc_id,
@@ -2786,19 +2798,18 @@ async fn provenance_verify(args: &Value) -> Result<Value> {
     // Load all agent identities from ~/.synapse/agents/*.json
     let home = dirs_next::home_dir().context("no home dir")?;
     let agents_dir = home.join(".synapse/agents");
-    let mut keys: std::collections::HashMap<String, ed25519_dalek::VerifyingKey> = Default::default();
+    let mut keys: std::collections::HashMap<String, ed25519_dalek::VerifyingKey> =
+        Default::default();
     if agents_dir.exists() {
         for entry in std::fs::read_dir(&agents_dir)? {
             let entry = entry?;
             let p = entry.path();
-            if p.extension().and_then(|e| e.to_str()) == Some("json") {
-                if let Ok(text) = std::fs::read_to_string(&p) {
-                    if let Ok(id) = serde_json::from_str::<synapse_provenance::AgentIdentity>(&text) {
-                        if let Ok(vk) = id.verifying_key() {
-                            keys.insert(id.agent_id.clone(), vk);
-                        }
-                    }
-                }
+            if p.extension().and_then(|e| e.to_str()) == Some("json")
+                && let Ok(text) = std::fs::read_to_string(&p)
+                && let Ok(id) = serde_json::from_str::<synapse_provenance::AgentIdentity>(&text)
+                && let Ok(vk) = id.verifying_key()
+            {
+                keys.insert(id.agent_id.clone(), vk);
             }
         }
     }
@@ -2807,18 +2818,17 @@ async fn provenance_verify(args: &Value) -> Result<Value> {
         for (k, v) in extra {
             if let Some(s) = v.as_str() {
                 use base64::Engine;
-                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(s) {
-                    if let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice()) {
-                        if let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&arr) {
-                            keys.insert(k.clone(), vk);
-                        }
-                    }
+                if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(s)
+                    && let Ok(arr) = <[u8; 32]>::try_from(bytes.as_slice())
+                    && let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&arr)
+                {
+                    keys.insert(k.clone(), vk);
                 }
             }
         }
     }
-    let bad = synapse_provenance::verify_all(&conn, &keys)
-        .map_err(|e| anyhow::anyhow!("verify: {e}"))?;
+    let bad =
+        synapse_provenance::verify_all(&conn, &keys).map_err(|e| anyhow::anyhow!("verify: {e}"))?;
     Ok(json!({
         "verified": bad.is_empty(),
         "invalid_count": bad.len(),
@@ -2828,26 +2838,37 @@ async fn provenance_verify(args: &Value) -> Result<Value> {
 
 async fn audit_query(args: &Value) -> Result<Value> {
     let from_ts = args.get("from_ts").and_then(|v| v.as_i64()).unwrap_or(0);
-    let to_ts = args.get("to_ts").and_then(|v| v.as_i64()).unwrap_or(i64::MAX);
-    let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(100).clamp(1, 10000) as usize;
+    let to_ts = args
+        .get("to_ts")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(i64::MAX);
+    let limit = args
+        .get("limit")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(100)
+        .clamp(1, 10000) as usize;
     let path = ultra_brain_path()?;
     let conn = rusqlite::Connection::open(&path)
         .with_context(|| format!("open brain.db: {}", path.display()))?;
-    synapse_audit::init_schema(&conn)
-        .map_err(|e| anyhow::anyhow!("audit schema: {e}"))?;
+    synapse_audit::init_schema(&conn).map_err(|e| anyhow::anyhow!("audit schema: {e}"))?;
     let mut events = synapse_audit::query_range(&conn, from_ts, to_ts)
         .map_err(|e| anyhow::anyhow!("audit query: {e}"))?;
     events.truncate(limit);
-    let arr: Vec<Value> = events.iter().map(|e| json!({
-        "id": e.id,
-        "ts": e.ts,
-        "actor": e.actor,
-        "action": e.action,
-        "target": e.target,
-        "space": e.space,
-        "prev_hash": e.prev_hash.map(|h| h.to_vec()),
-        "hash": h_to_hex(&e.hash),
-    })).collect();
+    let arr: Vec<Value> = events
+        .iter()
+        .map(|e| {
+            json!({
+                "id": e.id,
+                "ts": e.ts,
+                "actor": e.actor,
+                "action": e.action,
+                "target": e.target,
+                "space": e.space,
+                "prev_hash": e.prev_hash.map(|h| h.to_vec()),
+                "hash": h_to_hex(&e.hash),
+            })
+        })
+        .collect();
     Ok(json!({"events": arr, "count": arr.len()}))
 }
 
@@ -2859,8 +2880,7 @@ async fn audit_verify(_args: &Value) -> Result<Value> {
     let path = ultra_brain_path()?;
     let conn = rusqlite::Connection::open(&path)
         .with_context(|| format!("open brain.db: {}", path.display()))?;
-    synapse_audit::init_schema(&conn)
-        .map_err(|e| anyhow::anyhow!("audit schema: {e}"))?;
+    synapse_audit::init_schema(&conn).map_err(|e| anyhow::anyhow!("audit schema: {e}"))?;
     let result = synapse_audit::verify_chain(&conn);
     match result {
         Ok(()) => Ok(json!({"verified": true, "broken_count": 0})),
@@ -2869,9 +2889,18 @@ async fn audit_verify(_args: &Value) -> Result<Value> {
 }
 
 async fn rbac_check(args: &Value) -> Result<Value> {
-    let space = args.get("space").and_then(|v| v.as_str()).context("rbac_check requires 'space'")?;
-    let user = args.get("user").and_then(|v| v.as_str()).context("rbac_check requires 'user'")?;
-    let permission = args.get("permission").and_then(|v| v.as_str()).context("rbac_check requires 'permission'")?;
+    let space = args
+        .get("space")
+        .and_then(|v| v.as_str())
+        .context("rbac_check requires 'space'")?;
+    let user = args
+        .get("user")
+        .and_then(|v| v.as_str())
+        .context("rbac_check requires 'user'")?;
+    let permission = args
+        .get("permission")
+        .and_then(|v| v.as_str())
+        .context("rbac_check requires 'permission'")?;
     let perm = match permission {
         "read" | "Read" => synapse_rbac::Permission::Read,
         "write" | "Write" => synapse_rbac::Permission::Write,
@@ -2882,8 +2911,7 @@ async fn rbac_check(args: &Value) -> Result<Value> {
     let path = ultra_brain_path()?;
     let conn = rusqlite::Connection::open(&path)
         .with_context(|| format!("open brain.db: {}", path.display()))?;
-    synapse_rbac::init_schema(&conn)
-        .map_err(|e| anyhow::anyhow!("rbac schema: {e}"))?;
+    synapse_rbac::init_schema(&conn).map_err(|e| anyhow::anyhow!("rbac schema: {e}"))?;
     let result = synapse_rbac::enforce(&conn, space, user, perm);
     let allowed = result.is_ok();
     Ok(json!({

@@ -77,10 +77,10 @@ fn pct(xs: &mut [f64], p: f64) -> f64 {
 
 fn dir_size(p: &std::path::Path) -> u64 {
     let mut total = 0;
-    if let Ok(md) = std::fs::metadata(p) {
-        if md.is_file() {
-            return md.len();
-        }
+    if let Ok(md) = std::fs::metadata(p)
+        && md.is_file()
+    {
+        return md.len();
     }
     if let Ok(rd) = std::fs::read_dir(p) {
         for e in rd.flatten() {

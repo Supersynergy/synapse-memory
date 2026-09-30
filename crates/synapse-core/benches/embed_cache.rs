@@ -11,7 +11,7 @@
 //!   BASELINE  — serial hash (pre-PR-D1): checkout HEAD~1 to compare
 //!   PARALLEL  — rayon par_iter hash (PR-D1): current HEAD
 
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 #[cfg(feature = "embed")]
 fn bench_hash_only(c: &mut Criterion) {
@@ -26,7 +26,7 @@ fn bench_hash_only(c: &mut Criterion) {
                     .iter()
                     .map(|s| *blake3::hash(s.as_bytes()).as_bytes())
                     .collect();
-                black_box(hashes);
+                std::hint::black_box(hashes);
             });
         });
         g.bench_with_input(BenchmarkId::new("rayon_par", n), &texts, |b, t| {
@@ -36,7 +36,7 @@ fn bench_hash_only(c: &mut Criterion) {
                     .par_iter()
                     .map(|s| *blake3::hash(s.as_bytes()).as_bytes())
                     .collect();
-                black_box(hashes);
+                std::hint::black_box(hashes);
             });
         });
     }
@@ -59,7 +59,7 @@ fn bench_pack_only(c: &mut Criterion) {
                     .iter()
                     .map(|v| v.iter().flat_map(|f| f.to_le_bytes()).collect())
                     .collect();
-                black_box(packed);
+                std::hint::black_box(packed);
             });
         });
         g.bench_with_input(BenchmarkId::new("rayon_par", n), &embs, |b, e| {
@@ -69,7 +69,7 @@ fn bench_pack_only(c: &mut Criterion) {
                     .par_iter()
                     .map(|v| v.iter().flat_map(|f| f.to_le_bytes()).collect())
                     .collect();
-                black_box(packed);
+                std::hint::black_box(packed);
             });
         });
     }

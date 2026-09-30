@@ -21,7 +21,7 @@ fn bench_knn(c: &mut Criterion) {
 
     c.bench_function("hnsw knn k=10 · 2k × 64d", |b| {
         b.iter(|| {
-            let _ = idx.search(black_box(&q), 10);
+            let _ = idx.search(std::hint::black_box(&q), 10);
         })
     });
 }

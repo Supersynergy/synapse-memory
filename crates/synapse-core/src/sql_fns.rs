@@ -68,7 +68,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert!(s >= 0.0 && s <= 1.0, "score out of range: {s}");
+        assert!((0.0..=1.0).contains(&s), "score out of range: {s}");
     }
 
     #[test]

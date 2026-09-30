@@ -2,7 +2,7 @@
 //!
 //! Run with: `cargo bench -p synapse-pack --bench delta_bench`.
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use synapse_pack::{Candidate, Kind, PackOptions, estimate_tokens, pack, pack_delta, render};
 
 fn make_candidates(n: usize, tokens_each: usize) -> Vec<Candidate> {
@@ -47,8 +47,8 @@ fn bench_pack_scenarios(c: &mut Criterion) {
                     header_reserve: 64,
                     ..PackOptions::default()
                 };
-                let p = pack(black_box(cands.clone()), &opts);
-                black_box(p.used_tokens);
+                let p = pack(std::hint::black_box(cands.clone()), &opts);
+                std::hint::black_box(p.used_tokens);
             })
         },
     );
@@ -67,8 +67,8 @@ fn bench_pack_scenarios(c: &mut Criterion) {
                     prev_used_ids: prev_ids.clone(),
                     cache_stable_order: false,
                 };
-                let p = pack_delta(black_box(cands.clone()), &opts);
-                black_box(p.used_tokens);
+                let p = pack_delta(std::hint::black_box(cands.clone()), &opts);
+                std::hint::black_box(p.used_tokens);
             })
         },
     );
@@ -86,8 +86,8 @@ fn bench_pack_scenarios(c: &mut Criterion) {
                     prev_used_ids: prev_ids_cs.clone(),
                     cache_stable_order: true,
                 };
-                let p = pack(black_box(cands.clone()), &opts);
-                black_box(p.used_tokens);
+                let p = pack(std::hint::black_box(cands.clone()), &opts);
+                std::hint::black_box(p.used_tokens);
             })
         },
     );
@@ -100,7 +100,7 @@ fn bench_pack_scenarios(c: &mut Criterion) {
     };
     let packed = pack(cands_a.clone(), &opts);
     group.bench_function("render_50", |b| {
-        b.iter(|| black_box(render(black_box(&packed))))
+        b.iter(|| std::hint::black_box(render(std::hint::black_box(&packed))))
     });
 
     group.finish();

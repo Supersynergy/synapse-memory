@@ -22,7 +22,6 @@
 //! implementing both lock variants here and selecting via env var.
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use std::hint::black_box;
 use std::sync::Arc;
 use std::thread;
 use synapse_core::turbo::adaptive_router::{AdaptiveRouter, QueryHints};
@@ -79,10 +78,10 @@ fn run_concurrent(router: &Arc<dyn RouterLock>, threads: usize, iters: u64) -> u
                 s.spawn(move || {
                     let mut acc: u8 = 0;
                     for _ in 0..per_thread {
-                        acc = acc.wrapping_add(r.choose(black_box(&HINTS)));
+                        acc = acc.wrapping_add(r.choose(std::hint::black_box(&HINTS)));
                     }
                     // prevent dead-code elim
-                    black_box(acc);
+                    std::hint::black_box(acc);
                     per_thread
                 })
             })

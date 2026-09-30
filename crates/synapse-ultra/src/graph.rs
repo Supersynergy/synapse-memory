@@ -7,7 +7,7 @@
 //! chain (what does this URI lead to?).
 
 use crate::UltraResult;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::collections::HashSet;
 
 /// A node in the graph.
@@ -56,22 +56,48 @@ pub fn upsert_node(
     Ok(())
 }
 
+/// Input for [`upsert_edge`].
+#[derive(Debug, Clone)]
+pub struct EdgeInput<'a> {
+    pub from_uri: &'a str,
+    pub to_uri: &'a str,
+    pub rel: &'a str,
+    pub weight: f64,
+    pub ts: i64,
+    pub session_id: Option<&'a str>,
+    pub agent: Option<&'a str>,
+}
+
+impl<'a> EdgeInput<'a> {
+    /// Minimal constructor — `weight` defaults to 1.0, session/agent to `None`.
+    pub fn new(from_uri: &'a str, to_uri: &'a str, rel: &'a str, ts: i64) -> Self {
+        Self {
+            from_uri,
+            to_uri,
+            rel,
+            weight: 1.0,
+            ts,
+            session_id: None,
+            agent: None,
+        }
+    }
+}
+
 /// Insert or update an edge. On conflict (same from/to/rel), update weight + ts.
-pub fn upsert_edge(
-    conn: &Connection,
-    from_uri: &str,
-    to_uri: &str,
-    rel: &str,
-    weight: f64,
-    ts: i64,
-    session_id: Option<&str>,
-    agent: Option<&str>,
-) -> UltraResult<()> {
+pub fn upsert_edge(conn: &Connection, e: &EdgeInput<'_>) -> UltraResult<()> {
     conn.execute(
         "INSERT INTO graph_edges (from_uri, to_uri, rel, weight, ts, session_id, agent)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(from_uri, to_uri, rel) DO UPDATE SET weight = ?4, ts = ?5",
-        params![from_uri, to_uri, rel, weight, ts, session_id, agent],
+        params![
+            e.from_uri,
+            e.to_uri,
+            e.rel,
+            e.weight,
+            e.ts,
+            e.session_id,
+            e.agent
+        ],
     )?;
     Ok(())
 }
@@ -101,17 +127,17 @@ pub fn why(conn: &Connection, uri: &str, max_depth: i64) -> UltraResult<Vec<WhyS
 
     let mut visited: HashSet<String> = HashSet::new();
     visited.insert(start_uri.clone());
-    let mut out = Vec::new();
-    out.push(WhyStep {
+    let anchor_step = WhyStep {
         uri: start_uri.clone(),
         kind: start_kind.clone(),
         depth: 0,
         path: start_uri.clone(),
-    });
+    };
+    let mut out = Vec::new();
+    out.push(anchor_step.clone());
 
-    // BFS frontier: Vec<(uri, kind, depth, path)>.
-    let mut frontier: Vec<(String, String, i64, String)> =
-        vec![(start_uri.clone(), start_kind.clone(), 0, start_uri.clone())];
+    // BFS frontier of WhyStep values.
+    let mut frontier: Vec<WhyStep> = vec![anchor_step];
 
     let edge_sql = r#"
         SELECT e.from_uri, n.kind
@@ -122,39 +148,36 @@ pub fn why(conn: &Connection, uri: &str, max_depth: i64) -> UltraResult<Vec<WhyS
     "#;
 
     while !frontier.is_empty() {
-        let mut next: Vec<(String, String, i64, String)> = Vec::new();
-        for (cur_uri, _cur_kind, depth, path) in &frontier {
-            if *depth >= max_depth - 1 {
+        let mut next: Vec<WhyStep> = Vec::new();
+        for step in &frontier {
+            if step.depth >= max_depth - 1 {
                 continue;
             }
             // prepare_cached: rusqlite reuses the prepared statement across
             // iterations — avoids re-parsing edge_sql per BFS step.
             let mut stmt = conn.prepare_cached(edge_sql)?;
-            let rows = stmt.query_map(params![cur_uri], |row| {
+            let rows = stmt.query_map(params![step.uri], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?;
             for r in rows {
                 let (n_uri, n_kind) = r?;
                 if visited.insert(n_uri.clone()) {
-                    let new_path = format!("{path} <- {n_uri}");
-                    out.push(WhyStep {
-                        uri: n_uri.clone(),
-                        kind: n_kind.clone(),
-                        depth: depth + 1,
-                        path: new_path.clone(),
-                    });
-                    next.push((n_uri, n_kind, depth + 1, new_path));
+                    let new_path = format!("{} <- {n_uri}", step.path);
+                    let new_step = WhyStep {
+                        uri: n_uri,
+                        kind: n_kind,
+                        depth: step.depth + 1,
+                        path: new_path,
+                    };
+                    out.push(new_step.clone());
+                    next.push(new_step);
                 }
             }
         }
         frontier = next;
     }
 
-    out.sort_by(|a, b| {
-        a.depth
-            .cmp(&b.depth)
-            .then_with(|| a.uri.cmp(&b.uri))
-    });
+    out.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.uri.cmp(&b.uri)));
     Ok(out)
 }
 
@@ -182,16 +205,15 @@ pub fn why_at(conn: &Connection, uri: &str, max_depth: i64, at: i64) -> UltraRes
 
     let mut visited: HashSet<String> = HashSet::new();
     visited.insert(start_uri.clone());
-    let mut out = Vec::new();
-    out.push(WhyStep {
+    let anchor_step = WhyStep {
         uri: start_uri.clone(),
         kind: start_kind.clone(),
         depth: 0,
         path: start_uri.clone(),
-    });
-
-    let mut frontier: Vec<(String, String, i64, String)> =
-        vec![(start_uri.clone(), start_kind.clone(), 0, start_uri.clone())];
+    };
+    let mut out = Vec::new();
+    out.push(anchor_step.clone());
+    let mut frontier: Vec<WhyStep> = vec![anchor_step];
 
     let edge_sql = r#"
         SELECT e.from_uri, n.kind
@@ -204,37 +226,34 @@ pub fn why_at(conn: &Connection, uri: &str, max_depth: i64, at: i64) -> UltraRes
     "#;
 
     while !frontier.is_empty() {
-        let mut next: Vec<(String, String, i64, String)> = Vec::new();
-        for (cur_uri, _cur_kind, depth, path) in &frontier {
-            if *depth >= max_depth - 1 {
+        let mut next: Vec<WhyStep> = Vec::new();
+        for step in &frontier {
+            if step.depth >= max_depth - 1 {
                 continue;
             }
             let mut stmt = conn.prepare_cached(edge_sql)?;
-            let rows = stmt.query_map(params![cur_uri, at], |row| {
+            let rows = stmt.query_map(params![step.uri, at], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?;
             for r in rows {
                 let (n_uri, n_kind) = r?;
                 if visited.insert(n_uri.clone()) {
-                    let new_path = format!("{path} <- {n_uri}");
-                    out.push(WhyStep {
-                        uri: n_uri.clone(),
-                        kind: n_kind.clone(),
-                        depth: depth + 1,
-                        path: new_path.clone(),
-                    });
-                    next.push((n_uri, n_kind, depth + 1, new_path));
+                    let new_path = format!("{} <- {n_uri}", step.path);
+                    let new_step = WhyStep {
+                        uri: n_uri,
+                        kind: n_kind,
+                        depth: step.depth + 1,
+                        path: new_path,
+                    };
+                    out.push(new_step.clone());
+                    next.push(new_step);
                 }
             }
         }
         frontier = next;
     }
 
-    out.sort_by(|a, b| {
-        a.depth
-            .cmp(&b.depth)
-            .then_with(|| a.uri.cmp(&b.uri))
-    });
+    out.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.uri.cmp(&b.uri)));
     Ok(out)
 }
 
@@ -258,16 +277,15 @@ pub fn graph_expand(conn: &Connection, uri: &str, max_depth: i64) -> UltraResult
 
     let mut visited: HashSet<String> = HashSet::new();
     visited.insert(start_uri.clone());
-    let mut out = Vec::new();
-    out.push(WhyStep {
+    let anchor_step = WhyStep {
         uri: start_uri.clone(),
         kind: start_kind.clone(),
         depth: 0,
         path: start_uri.clone(),
-    });
-
-    let mut frontier: Vec<(String, String, i64, String)> =
-        vec![(start_uri.clone(), start_kind.clone(), 0, start_uri.clone())];
+    };
+    let mut out = Vec::new();
+    out.push(anchor_step.clone());
+    let mut frontier: Vec<WhyStep> = vec![anchor_step];
 
     let edge_sql = r#"
         SELECT e.to_uri, n.kind
@@ -278,37 +296,34 @@ pub fn graph_expand(conn: &Connection, uri: &str, max_depth: i64) -> UltraResult
     "#;
 
     while !frontier.is_empty() {
-        let mut next: Vec<(String, String, i64, String)> = Vec::new();
-        for (cur_uri, _cur_kind, depth, path) in &frontier {
-            if *depth >= max_depth - 1 {
+        let mut next: Vec<WhyStep> = Vec::new();
+        for step in &frontier {
+            if step.depth >= max_depth - 1 {
                 continue;
             }
             let mut stmt = conn.prepare_cached(edge_sql)?;
-            let rows = stmt.query_map(params![cur_uri], |row| {
+            let rows = stmt.query_map(params![step.uri], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
             })?;
             for r in rows {
                 let (n_uri, n_kind) = r?;
                 if visited.insert(n_uri.clone()) {
-                    let new_path = format!("{path} -> {n_uri}");
-                    out.push(WhyStep {
-                        uri: n_uri.clone(),
-                        kind: n_kind.clone(),
-                        depth: depth + 1,
-                        path: new_path.clone(),
-                    });
-                    next.push((n_uri, n_kind, depth + 1, new_path));
+                    let new_path = format!("{} -> {n_uri}", step.path);
+                    let new_step = WhyStep {
+                        uri: n_uri,
+                        kind: n_kind,
+                        depth: step.depth + 1,
+                        path: new_path,
+                    };
+                    out.push(new_step.clone());
+                    next.push(new_step);
                 }
             }
         }
         frontier = next;
     }
 
-    out.sort_by(|a, b| {
-        a.depth
-            .cmp(&b.depth)
-            .then_with(|| a.uri.cmp(&b.uri))
-    });
+    out.sort_by(|a, b| a.depth.cmp(&b.depth).then_with(|| a.uri.cmp(&b.uri)));
     Ok(out)
 }
 
@@ -385,7 +400,8 @@ pub fn to_dot(conn: &Connection, uri: &str, max_depth: i64) -> UltraResult<Strin
     let steps = graph_expand(conn, uri, max_depth)?;
     let mut dot = String::from("digraph synapse {\n  rankdir=LR;\n  node [shape=box];\n");
     let mut seen_nodes: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut seen_edges: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
+    let mut seen_edges: std::collections::HashSet<(String, String)> =
+        std::collections::HashSet::new();
     for s in &steps {
         if seen_nodes.insert(s.uri.clone()) {
             dot.push_str(&format!("  \"{}\" [label=\"{}\"];\n", s.uri, s.uri));

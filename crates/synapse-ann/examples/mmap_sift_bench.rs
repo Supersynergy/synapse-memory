@@ -83,7 +83,7 @@ fn main() {
 
     // ── 3. mmap load + MADV_WILLNEED prefetch ────────────────────────────────
     #[cfg(target_family = "unix")]
-    let mmap_load_ms = {
+    let _mmap_load_ms = {
         use std::os::unix::fs::OpenOptionsExt as _;
         let t = std::time::Instant::now();
         let file = std::fs::OpenOptions::new()
@@ -117,7 +117,7 @@ fn main() {
     };
 
     #[cfg(not(target_family = "unix"))]
-    let mmap_load_ms = {
+    let _mmap_load_ms = {
         println!("mmap: not unix, skipping");
         0.0f64
     };

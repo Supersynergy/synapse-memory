@@ -12,6 +12,7 @@ fn main() {
 
     // Register sqlite-vec extension BEFORE opening the connection
     // (auto_extension registers it globally in the SQLite library)
+    #[allow(clippy::missing_transmute_annotations)]
     unsafe {
         rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
             sqlite_vec::sqlite3_vec_init as *const (),
@@ -19,7 +20,7 @@ fn main() {
     }
 
     // Test 1: Direct rusqlite connection (works)
-    let conn = rusqlite::Connection::open(&brain_db).expect("open db");
+    let conn = rusqlite::Connection::open(brain_db).expect("open db");
     let t0 = Instant::now();
     println!("Test 1: Direct rusqlite Connection...");
     let search = synapse_core::turbo::ndarray_search::NdArraySearch::from_connection(&conn)
@@ -32,7 +33,7 @@ fn main() {
     );
 
     // Use a deterministic query vector
-    let query: Vec<f32> = (0..384).map(|i| ((i as f32 * 0.01).sin())).collect();
+    let query: Vec<f32> = (0..384).map(|i| (i as f32 * 0.01).sin()).collect();
 
     // ── ndarray search ──
     println!("\n--- ndarray (BLAS/Accelerate) ---");
@@ -51,11 +52,7 @@ fn main() {
     t_ndarray.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let p50 = t_ndarray[t_ndarray.len() / 2];
     let p95 = t_ndarray[(t_ndarray.len() as f64 * 0.95) as usize];
-    println!(
-        "  p50={}ms  p95={}ms",
-        format!("{:.2}", p50),
-        format!("{:.2}", p95)
-    );
+    println!("  p50={:.2}ms  p95={:.2}ms", p50, p95);
 
     // ── simsimd search ──
     #[cfg(feature = "simsimd")]
@@ -73,12 +70,8 @@ fn main() {
         t_simd.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let p50s = t_simd[t_simd.len() / 2];
         let p95s = t_simd[(t_simd.len() as f64 * 0.95) as usize];
-        println!(
-            "  p50={}ms  p95={}ms",
-            format!("{:.2}", p50s),
-            format!("{:.2}", p95s)
-        );
-        println!("  ndarray vs simsimd: {}x", format!("{:.1}", p50 / p50s));
+        println!("  p50={:.2}ms  p95={:.2}ms", p50s, p95s);
+        println!("  ndarray vs simsimd: {:.1}x", p50 / p50s);
     }
 
     // Test 2: Via Store::open (was hanging)
@@ -87,7 +80,7 @@ fn main() {
 
     println!("\n=== Test 2: Via Store::open ===");
     let t1 = Instant::now();
-    let store = synapse_core::Store::open(&brain_db).expect("open store");
+    let store = synapse_core::Store::open(brain_db).expect("open store");
     println!("  Store opened in {:.1}s", t1.elapsed().as_secs_f64());
 
     let t2 = Instant::now();

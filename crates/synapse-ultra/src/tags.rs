@@ -12,7 +12,7 @@
 //!   - Auto-tag rules fire on event insert via trigger
 
 use crate::UltraResult;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 /// A tag definition row.
@@ -106,9 +106,8 @@ pub fn create_tag(
 
 /// List all tags.
 pub fn list_tags(conn: &Connection) -> UltraResult<Vec<Tag>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, color, description, created_ts FROM tags ORDER BY name",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT id, name, color, description, created_ts FROM tags ORDER BY name")?;
     let rows = stmt.query_map([], |row| {
         Ok(Tag {
             id: row.get(0)?,
@@ -126,12 +125,7 @@ pub fn list_tags(conn: &Connection) -> UltraResult<Vec<Tag>> {
 }
 
 /// Tag a doc/event. Idempotent. `source` = "manual" | "auto" | "import".
-pub fn tag_doc(
-    conn: &Connection,
-    doc_id: i64,
-    tag_name: &str,
-    source: &str,
-) -> UltraResult<()> {
+pub fn tag_doc(conn: &Connection, doc_id: i64, tag_name: &str, source: &str) -> UltraResult<()> {
     let now = chrono::Utc::now().timestamp();
     let tag_id = create_tag(conn, tag_name, None, None)?;
     conn.execute(
@@ -251,15 +245,14 @@ pub fn list_rules(conn: &Connection) -> UltraResult<Vec<TagRule>> {
 }
 
 /// Apply auto-tag rules to a single event/doc. Returns tags applied.
-pub fn apply_rules(
-    conn: &Connection,
-    doc_id: i64,
-    content: &str,
-) -> UltraResult<Vec<String>> {
+pub fn apply_rules(conn: &Connection, doc_id: i64, content: &str) -> UltraResult<Vec<String>> {
     let rules = list_rules(conn)?;
     let mut applied = Vec::new();
     for rule in rules.iter().filter(|r| r.enabled) {
-        if content.to_lowercase().contains(&rule.keyword.to_lowercase()) {
+        if content
+            .to_lowercase()
+            .contains(&rule.keyword.to_lowercase())
+        {
             tag_doc(conn, doc_id, &rule.tag_name, "auto")?;
             applied.push(rule.tag_name.clone());
         }
@@ -342,7 +335,12 @@ pub fn export(conn: &Connection) -> UltraResult<TagExport> {
 pub fn import(conn: &Connection, data: &TagExport) -> UltraResult<usize> {
     let mut count = 0;
     for tag in &data.tags {
-        create_tag(conn, &tag.name, tag.color.as_deref(), tag.description.as_deref())?;
+        create_tag(
+            conn,
+            &tag.name,
+            tag.color.as_deref(),
+            tag.description.as_deref(),
+        )?;
         count += 1;
     }
     for rule in &data.rules {
@@ -382,7 +380,9 @@ pub fn stats(conn: &Connection) -> UltraResult<TagStats> {
          LEFT JOIN doc_tags dt ON dt.tag_id = t.id
          GROUP BY t.id ORDER BY n DESC LIMIT 10",
     )?;
-    let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    })?;
     let mut top_tags = Vec::new();
     for r in rows {
         top_tags.push(r?);

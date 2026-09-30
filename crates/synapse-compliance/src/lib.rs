@@ -88,7 +88,8 @@ pub struct PiiMasker {
 
 impl PiiMasker {
     pub fn new() -> Result<Self> {
-        let rules = vec![
+        let rules =
+            vec![
             PiiRule {
                 pii_type: PiiType::Email,
                 pattern: Regex::new(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
@@ -148,7 +149,10 @@ impl PiiMasker {
             let placeholder = format!("[REDACTED:{}]", rule.pii_type.as_str());
             let count = rule.pattern.find_iter(&masked.clone()).count() as u32;
             if count > 0 {
-                masked = rule.pattern.replace_all(&masked, placeholder.as_str()).to_string();
+                masked = rule
+                    .pattern
+                    .replace_all(&masked, placeholder.as_str())
+                    .to_string();
                 *counts.entry(rule.pii_type.clone()).or_insert(0) += count;
             }
         }
@@ -216,11 +220,9 @@ pub fn export_memories(
     } else {
         String::new()
     };
-    let mut stmt = conn.prepare(
-        &format!(
-            "SELECT id, agent, ts, content, uri FROM docs ORDER BY ts ASC {limit_clause}"
-        ),
-    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT id, agent, ts, content, uri FROM docs ORDER BY ts ASC {limit_clause}"
+    ))?;
     let mut rows = stmt.query([])?;
     let mut out = Vec::new();
     while let Some(row) = rows.next()? {
@@ -239,7 +241,11 @@ pub fn export_memories(
             agent,
             ts,
             content_masked: masked,
-            pii_counts: if opts.include_pii_counts { pii_counts } else { HashMap::new() },
+            pii_counts: if opts.include_pii_counts {
+                pii_counts
+            } else {
+                HashMap::new()
+            },
             source_uri: if opts.include_source { uri } else { None },
         });
     }
@@ -254,8 +260,15 @@ pub fn to_json(records: &[ExportRecord]) -> Result<String> {
 /// Serialize export records as CSV.
 pub fn to_csv(records: &[ExportRecord]) -> Result<String> {
     let mut wtr = csv_writer::Writer::new();
-    wtr.write_row(&["doc_id", "agent", "ts", "pii_types", "pii_total", "content_masked"])
-        .map_err(|e| ComplianceError::Export(e))?;
+    wtr.write_row(&[
+        "doc_id",
+        "agent",
+        "ts",
+        "pii_types",
+        "pii_total",
+        "content_masked",
+    ])
+    .map_err(ComplianceError::Export)?;
     for r in records {
         let pii_types: Vec<&str> = r.pii_counts.keys().map(|s| s.as_str()).collect();
         let pii_total: u32 = r.pii_counts.values().sum();
@@ -267,7 +280,7 @@ pub fn to_csv(records: &[ExportRecord]) -> Result<String> {
             &pii_total.to_string(),
             &r.content_masked,
         ])
-        .map_err(|e| ComplianceError::Export(e))?;
+        .map_err(ComplianceError::Export)?;
     }
     Ok(wtr.into_string())
 }
@@ -278,7 +291,10 @@ pub fn to_markdown(records: &[ExportRecord]) -> Result<String> {
     md.push_str("# Synapse Memory Compliance Export\n\n");
     md.push_str(&format!("Generated: {}\n\n", Utc::now().to_rfc3339()));
     md.push_str(&format!("Total records: {}\n\n", records.len()));
-    let total_pii: u32 = records.iter().map(|r| r.pii_counts.values().sum::<u32>()).sum();
+    let total_pii: u32 = records
+        .iter()
+        .map(|r| r.pii_counts.values().sum::<u32>())
+        .sum();
     md.push_str(&format!("Total PII detections: {total_pii}\n\n"));
     md.push_str("---\n\n");
     for r in records {
@@ -349,7 +365,14 @@ mod tests {
         conn
     }
 
-    fn insert_doc(conn: &Connection, id: &str, agent: &str, ts: i64, content: &str, uri: Option<&str>) {
+    fn insert_doc(
+        conn: &Connection,
+        id: &str,
+        agent: &str,
+        ts: i64,
+        content: &str,
+        uri: Option<&str>,
+    ) {
         conn.execute(
             "INSERT INTO docs (id, agent, ts, content, uri) VALUES (?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![id, agent, ts, content, uri],
@@ -453,7 +476,14 @@ mod tests {
     #[test]
     fn export_excludes_source_when_disabled() {
         let conn = fresh_conn();
-        insert_doc(&conn, "doc-1", "claude", 1000, "content", Some("file:///secret.rs"));
+        insert_doc(
+            &conn,
+            "doc-1",
+            "claude",
+            1000,
+            "content",
+            Some("file:///secret.rs"),
+        );
         let m = PiiMasker::new().unwrap();
         let opts = ExportOptions {
             include_source: false,

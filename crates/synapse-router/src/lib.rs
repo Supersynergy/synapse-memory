@@ -58,14 +58,18 @@ impl CliTarget {
             CliTarget::Custom(s) => s.as_str(),
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for CliTarget {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "kimi" => CliTarget::Kimi,
             "codex" => CliTarget::Codex,
             "claude" | "cascade" => CliTarget::Cascade,
             other => CliTarget::Custom(other.to_string()),
-        }
+        })
     }
 }
 
@@ -141,19 +145,18 @@ pub async fn route(req: RoutingRequest) -> Result<RoutingResult> {
     let mut cmd = Command::new(cli_name);
     cmd.arg("--prompt").arg(&req.prompt);
 
-    let temp_path: Option<PathBuf>;
-    if use_file {
+    let temp_path: Option<PathBuf> = if use_file {
         let tmp = tempfile::NamedTempFile::new()
             .context("failed to create temp file")?
             .into_temp_path();
         let path = tmp.keep().map_err(|e| RouterError::Io(e.into()))?;
         std::fs::write(&path, &req.context)?;
         cmd.arg("--context-file").arg(&path);
-        temp_path = Some(path);
+        Some(path)
     } else {
         cmd.arg("--context").arg(&req.context);
-        temp_path = None;
-    }
+        None
+    };
 
     cmd.stdin(std::process::Stdio::null());
     cmd.stdout(std::process::Stdio::piped());
@@ -261,7 +264,7 @@ mod tests {
     #[test]
     fn cli_target_roundtrip() {
         for s in ["kimi", "codex", "claude", "custom-cli"] {
-            let t = CliTarget::from_str(s);
+            let t = s.parse::<CliTarget>().unwrap();
             assert_eq!(t.as_str(), s);
         }
     }
@@ -279,7 +282,10 @@ mod tests {
             temp_file_path: None,
         };
         assert!(r.success());
-        let r2 = RoutingResult { exit_code: Some(1), ..r };
+        let r2 = RoutingResult {
+            exit_code: Some(1),
+            ..r
+        };
         assert!(!r2.success());
     }
 
@@ -297,7 +303,10 @@ mod tests {
         assert!(r.is_err());
         let e = r.unwrap_err();
         let msg = e.to_string();
-        assert!(msg.contains("not found") || msg.contains("cli not found"), "got: {msg}");
+        assert!(
+            msg.contains("not found") || msg.contains("cli not found"),
+            "got: {msg}"
+        );
     }
 
     #[tokio::test]

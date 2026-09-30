@@ -24,7 +24,7 @@ synapse-core = { path = "../../vendor/synapse-db/crates/synapse-core" }
 tempfile = "3"
 csv = "1"
 # optional: parquet import/export via arrow2 (lightweight, no arrow ecosystem pull)
-parquet = { version = "54", optional = true, default-features = false, features = ["snap"] }
+parquet = { version = "54", optional = true, default-features = false, features = ["snap", "arrow"] }
 arrow-array = { version = "54", optional = true }
 arrow-schema = { version = "54", optional = true }
 

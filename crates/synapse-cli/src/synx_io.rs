@@ -248,7 +248,7 @@ fn json_to_put(v: &serde_json::Value) -> Result<PutRequest> {
 
 #[cfg(feature = "import-parquet")]
 fn import_parquet(src: &Path, store: &mut Store) -> Result<u64> {
-    use arrow_array::RecordBatch;
+    use arrow_array::{Array, RecordBatch};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
     let f = std::fs::File::open(src)?;

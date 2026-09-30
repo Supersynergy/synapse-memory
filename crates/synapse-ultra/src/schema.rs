@@ -286,24 +286,16 @@ fn column_exists(conn: &Connection, table: &str, col: &str) -> bool {
 pub fn migrate_bitemporal(conn: &Connection) -> UltraResult<()> {
     // decisions: valid_time (when the fact was true), transaction_time (when stored)
     if !column_exists(conn, "decisions", "valid_time") {
-        conn.execute_batch(
-            "ALTER TABLE decisions ADD COLUMN valid_time INTEGER;",
-        )?;
+        conn.execute_batch("ALTER TABLE decisions ADD COLUMN valid_time INTEGER;")?;
     }
     if !column_exists(conn, "decisions", "transaction_time") {
-        conn.execute_batch(
-            "ALTER TABLE decisions ADD COLUMN transaction_time INTEGER;",
-        )?;
+        conn.execute_batch("ALTER TABLE decisions ADD COLUMN transaction_time INTEGER;")?;
     }
     if !column_exists(conn, "synapse_events", "valid_time") {
-        conn.execute_batch(
-            "ALTER TABLE synapse_events ADD COLUMN valid_time INTEGER;",
-        )?;
+        conn.execute_batch("ALTER TABLE synapse_events ADD COLUMN valid_time INTEGER;")?;
     }
     if !column_exists(conn, "synapse_events", "transaction_time") {
-        conn.execute_batch(
-            "ALTER TABLE synapse_events ADD COLUMN transaction_time INTEGER;",
-        )?;
+        conn.execute_batch("ALTER TABLE synapse_events ADD COLUMN transaction_time INTEGER;")?;
     }
     // Backfill: rows without valid_time/transaction_time default to ts.
     conn.execute_batch(
@@ -340,9 +332,7 @@ SELECT * FROM chain;
 "#,
     )?;
     // Update schema version.
-    conn.execute_batch(
-        "INSERT OR REPLACE INTO meta(k, v) VALUES ('ultra_schema_version', '3');",
-    )?;
+    conn.execute_batch("INSERT OR REPLACE INTO meta(k, v) VALUES ('ultra_schema_version', '3');")?;
     Ok(())
 }
 
