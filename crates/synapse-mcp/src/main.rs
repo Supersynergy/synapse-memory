@@ -2789,13 +2789,34 @@ async fn provenance_sign(args: &Value) -> Result<Value> {
     let home = dirs_next::home_dir().context("no home dir")?;
     let agents_dir = home.join(".synapse/agents");
     std::fs::create_dir_all(&agents_dir).ok();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&agents_dir, std::fs::Permissions::from_mode(0o700));
+    }
     let id_path = agents_dir.join(format!("{agent_id}.json"));
     let identity = if id_path.exists() {
         let text = std::fs::read_to_string(&id_path)?;
         serde_json::from_str(&text)?
     } else {
         let id = synapse_provenance::AgentIdentity::new(agent_id);
-        std::fs::write(&id_path, serde_json::to_string_pretty(&id)?)?;
+        // Identity carries a signing secret — never world-readable.
+        {
+            let mut opts = std::fs::OpenOptions::new();
+            opts.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                opts.mode(0o600);
+            }
+            let mut f = opts.open(&id_path)?;
+            std::io::Write::write_all(&mut f, serde_json::to_string_pretty(&id)?.as_bytes())?;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&id_path, std::fs::Permissions::from_mode(0o600));
+        }
         id
     };
     let rec = synapse_provenance::sign_and_append(
