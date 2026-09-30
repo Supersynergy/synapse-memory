@@ -116,4 +116,24 @@ fn socket_is_0600_and_auth_is_default_on() {
 
     let r = frame(&mut s, &sql);
     assert!(r.get("Err").is_none(), "authed Sql must succeed, got {r}");
+
+    // 4. SnapMerge must refuse paths outside --snap-dir (arbitrary file write).
+    let r = frame(
+        &mut s,
+        &json!({
+            "op": "SnapMerge",
+            "args": {
+                "snapshot_path": "/etc/passwd",
+                "out_path": "/tmp/synapse-escape-test",
+                "level": 0,
+            }
+        }),
+    );
+    assert!(
+        r.get("Err")
+            .and_then(Value::as_str)
+            .is_some_and(|e| e.contains("snap")),
+        "SnapMerge escape must be refused, got {r}"
+    );
+    assert!(!Path::new("/tmp/synapse-escape-test").exists());
 }
