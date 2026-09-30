@@ -22,6 +22,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 synapse-core = { path = "../../vendor/synapse-db/crates/synapse-core", default-features = false, features = ["backend-rusqlite", "embed", "turbo"] }
+synapse-audit = { path = "../synapse-audit" }
 synapse-rerank = { path = "../synapse-rerank", features = [] }
 synapse-license = { path = "../../vendor/synapse-db/crates/synapse-license", optional = true }
 hex = { version = "0.4", optional = true }

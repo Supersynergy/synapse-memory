@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex as PlMutex;
+use synapse_audit::Action as AuditAction;
 use synapse_core::db::rrf_merge_neon;
 use synapse_core::turbo::ndarray_search::NdArraySearch;
 use synapse_core::{Hit, PutRequest, SearchMode, Store, embedder_trait::TextEmbedder, snap};
@@ -271,6 +272,9 @@ async fn main() -> Result<()> {
     tokio::spawn(metrics::serve(metrics_handle.handle.clone(), metrics_addr));
 
     let store = open_store(&cli.file, &cli.license_jwt, &cli.license_pubkey)?;
+    if let Err(e) = synapse_audit::init_schema(&store.conn) {
+        warn!("audit schema init failed: {e}");
+    }
     // Keep startup default-alive: bind the socket first, then warm the turbo
     // matrix in the background. Fast reads use the top-level index once ready.
     let ndarray_idx = Arc::new(parking_lot::RwLock::new(None));
@@ -374,6 +378,7 @@ async fn main() -> Result<()> {
     }
 
     spawn_turbo_warm(state.clone(), cli.file.clone());
+    spawn_wal_checkpoint(cli.file.clone());
 
     // SIGTERM/SIGINT handler — persist ANN sidecar before exit.
     // Saves 5min HNSW rebuild on next start.
@@ -396,6 +401,20 @@ async fn main() -> Result<()> {
                 info!("ANN sidecar persisted");
             }
         }
+        // Final WAL TRUNCATE so the .db file is self-contained for backup/copy.
+        {
+            let p = sig_state.db_path.clone();
+            if let Ok(c) = rusqlite::Connection::open(&p) {
+                let _ = c.pragma_update(None, "busy_timeout", 5_000_i64);
+                match c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+                    r.get::<_, i64>(0)
+                }) {
+                    Ok(0) => info!("wal truncated on exit"),
+                    Ok(_) => info!("wal checkpoint on exit busy — wal file remains"),
+                    Err(e) => warn!("wal checkpoint on exit failed: {e}"),
+                }
+            }
+        }
         std::process::exit(0);
     });
 
@@ -414,6 +433,38 @@ async fn main() -> Result<()> {
             }
         });
     }
+}
+
+/// The store runs `wal_autocheckpoint=0` (write-stall avoidance), so nothing
+/// else bounds WAL growth. This task runs a PASSIVE checkpoint every
+/// `SYNAPSE_WAL_CHECKPOINT_SECS` (default 300s) — non-blocking, readers keep
+/// their snapshots; a busy WAL is retried next tick.
+fn spawn_wal_checkpoint(db_path: PathBuf) {
+    let interval = env_duration_ms("SYNAPSE_WAL_CHECKPOINT_MS", 300_000);
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(interval);
+        tick.tick().await; // consume the immediate first tick
+        loop {
+            tick.tick().await;
+            let p = db_path.clone();
+            let r = tokio::task::spawn_blocking(move || -> rusqlite::Result<(i64, i64, i64)> {
+                let c = rusqlite::Connection::open(&p)?;
+                c.pragma_update(None, "busy_timeout", 5_000_i64)?;
+                c.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })
+            })
+            .await;
+            match r {
+                Ok(Ok((0, log, ckpt))) => {
+                    tracing::debug!("wal checkpoint ok (log={log} ckpt={ckpt})")
+                }
+                Ok(Ok(_)) => tracing::debug!("wal checkpoint busy — retry next tick"),
+                Ok(Err(e)) => warn!("wal checkpoint failed: {e}"),
+                Err(e) => warn!("wal checkpoint task failed: {e}"),
+            }
+        }
+    });
 }
 
 fn spawn_turbo_warm(state: Arc<State>, db_path: PathBuf) {
@@ -504,6 +555,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
             metrics::record_put(t0.elapsed());
             match result {
                 Ok(id) => {
+                    audit(state, AuditAction::Write, &format!("doc:{id}"), None);
                     // P2.2 LiveQuery emit
                     state.live_broker.emit(livequery::LiveEvent {
                         op: "Put".into(),
@@ -542,6 +594,19 @@ async fn dispatch(state: &State, req: Request) -> Response {
                             uri: uri.clone(),
                             ts: now,
                         });
+                    }
+                    {
+                        let store = state.store.lock();
+                        for id in &ids {
+                            let _ = synapse_audit::append(
+                                &store.conn,
+                                "daemon",
+                                AuditAction::Write,
+                                &format!("doc:{id}"),
+                                None,
+                                None,
+                            );
+                        }
                     }
                     Response::Ids(ids)
                 }
@@ -649,6 +714,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
             state: crdt_state,
         } => match state.store.lock().merge_crdt(id, &crdt_state) {
             Ok(()) => {
+                audit(state, AuditAction::Write, &format!("merge:{id}"), None);
                 clear_query_cache(state);
                 Response::Ok
             }
@@ -656,6 +722,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
         },
         Request::Delete { id } => match state.store.lock().delete(id) {
             Ok(_) => {
+                audit(state, AuditAction::Delete, &format!("doc:{id}"), None);
                 clear_query_cache(state);
                 Response::Ok
             }
@@ -722,6 +789,12 @@ async fn dispatch(state: &State, req: Request) -> Response {
             {
                 Ok(_) => {
                     let _ = std::fs::remove_file(&tmp);
+                    audit(
+                        state,
+                        AuditAction::Write,
+                        &format!("snapmerge:{snapshot_path}"),
+                        None,
+                    );
                     Response::Ok
                 }
                 Err(e) => {
@@ -840,7 +913,22 @@ async fn dispatch(state: &State, req: Request) -> Response {
             // Atomic batch via put_batch (single SQL transaction in store).
             let result = put_batch(state, ops).await;
             match result {
-                Ok(ids) => Response::Ids(ids),
+                Ok(ids) => {
+                    {
+                        let store = state.store.lock();
+                        for id in &ids {
+                            let _ = synapse_audit::append(
+                                &store.conn,
+                                "daemon",
+                                AuditAction::Write,
+                                &format!("tx-doc:{id}"),
+                                None,
+                                None,
+                            );
+                        }
+                    }
+                    Response::Ids(ids)
+                }
                 Err(e) => Response::Err(e.to_string()),
             }
         }
@@ -911,6 +999,21 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(e) => Response::Err(e),
             }
         }
+    }
+}
+
+/// Append an audit event on the store conn. Audit failure degrades to a
+/// warning — the op itself must not fail because the trail is unavailable.
+fn audit(state: &State, action: AuditAction, target: &str, meta: Option<&str>) {
+    if let Err(e) = synapse_audit::append(
+        &state.store.lock().conn,
+        "daemon",
+        action,
+        target,
+        None,
+        meta,
+    ) {
+        warn!("audit append failed: {e}");
     }
 }
 
