@@ -35,6 +35,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   in the tool-surface assertion) — those tools were already cut from `synapse-mcp`.
   Tool-surface threshold corrected 20 -> 16 to match the real served surface.
 
+### Security
+- `synapsed` now binds the unix socket with `0600` permissions and enables
+  token auth **by default**: without `SYNAPSE_API_KEY`, a 256-bit token is
+  generated at `<brain-dir>/auth.token` (0600). `synx` and `synapse-mcp` read
+  it automatically (`SYNAPSE_AUTH_TOKEN_FILE` overrides). Other local users
+  can no longer issue ops against the socket. Custom socket clients must send
+  `{"op":"Auth","args":{"token":…}}` first. Fixes a session-auth bypass where
+  any `Ok` response (e.g. `Ping`) marked the connection as authed.
+
 ### Fixed
 - Lexical search (`synapse find`) returned the same document twice when the
   vendored tantivy FTS index held a doc across multiple segments; the read path

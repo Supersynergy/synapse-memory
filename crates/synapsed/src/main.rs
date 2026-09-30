@@ -11,10 +11,11 @@ mod proto;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use proto::{PutReq, Request, Response};
+use rand::Rng;
 use rusqlite::params;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -113,6 +114,9 @@ struct State {
     embed_cache: PlMutex<EmbedCacheMap>,
     /// LiveQuery broadcast broker (P2.2). Emits on Put/PutBatch/Merge.
     live_broker: livequery::LiveBroker,
+    /// Shared-secret token required for non-Ping/Stats/Auth ops.
+    /// `None` only when neither env nor token file could provide one.
+    expected_token: Option<String>,
 }
 
 impl State {
@@ -304,8 +308,10 @@ async fn main() -> Result<()> {
             }
         }
     };
+    let expected_token = resolve_auth_token(&cli.file);
     let state = Arc::new(State {
         store: PlMutex::new(store),
+        expected_token,
         ndarray_idx,
         embedder: Mutex::new(embedder),
         embedder_init: Mutex::new(()),
@@ -332,6 +338,14 @@ async fn main() -> Result<()> {
     let _ = std::fs::remove_file(&cli.sock);
     let listener =
         UnixListener::bind(&cli.sock).with_context(|| format!("bind {}", cli.sock.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = std::fs::set_permissions(&cli.sock, std::fs::Permissions::from_mode(0o600))
+        {
+            warn!("chmod 0600 {} failed: {e}", cli.sock.display());
+        }
+    }
     info!(
         "listening on {} (db={})",
         cli.sock.display(),
@@ -417,8 +431,7 @@ fn spawn_turbo_warm(state: Arc<State>, db_path: PathBuf) {
 }
 
 async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
-    let api_key = std::env::var("SYNAPSE_API_KEY").ok();
-    let auth_required = api_key.is_some();
+    let auth_required = state.expected_token.is_some();
     let mut authed = !auth_required; // session-scoped auth state
     loop {
         let mut lenbuf = [0u8; 4];
@@ -449,10 +462,10 @@ async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
                     continue;
                 }
             }
-            // Process as normal — may include Auth which sets authed=true below.
+            // Process as normal — only a successful Auth flips the session flag.
+            let is_auth = matches!(req, Request::Auth { .. });
             let r = dispatch(&state, req).await;
-            // If just authed successfully, flip flag.
-            if let Response::Ok = r {
+            if is_auth && matches!(r, Response::Ok) {
                 authed = true;
             }
             r
@@ -795,19 +808,17 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(e) => Response::Err(e),
             }
         }
-        Request::Auth { token } => {
-            // Constant-time compare to thwart timing attacks (basic).
-            match std::env::var("SYNAPSE_API_KEY") {
-                Ok(k) if !k.is_empty() => {
-                    if subtle_eq(&token, &k) {
-                        Response::Ok
-                    } else {
-                        Response::Err("invalid token".into())
-                    }
+        Request::Auth { token } => match &state.expected_token {
+            Some(k) => {
+                // Constant-time compare to thwart timing attacks (basic).
+                if subtle_eq(&token, k) {
+                    Response::Ok
+                } else {
+                    Response::Err("invalid token".into())
                 }
-                _ => Response::Ok, // no key configured — auth always passes
             }
-        }
+            None => Response::Ok, // no token resolvable — auth passes (warned at startup)
+        },
         Request::Transaction { ops } => {
             // Atomic batch via put_batch (single SQL transaction in store).
             let result = put_batch(state, ops).await;
@@ -879,6 +890,61 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
         }
     }
+}
+
+/// Resolve the shared-secret token for socket auth. `SYNAPSE_API_KEY` wins;
+/// otherwise a per-brain `auth.token` file (0600) is created next to the DB so
+/// auth is on by default without breaking local UX for the owner.
+fn resolve_auth_token(db_path: &Path) -> Option<String> {
+    if let Ok(k) = std::env::var("SYNAPSE_API_KEY")
+        && !k.is_empty()
+    {
+        return Some(k);
+    }
+    let dir = db_path.parent().unwrap_or_else(|| Path::new("."));
+    let tok_path = dir.join("auth.token");
+    if let Ok(t) = std::fs::read_to_string(&tok_path) {
+        let t = t.trim().to_string();
+        if !t.is_empty() {
+            return Some(t);
+        }
+    }
+    match write_auth_token(&tok_path) {
+        Ok(t) => {
+            info!("generated auth token at {} (0600)", tok_path.display());
+            Some(t)
+        }
+        Err(e) => {
+            warn!(
+                "auth token file {} unusable ({e}) — daemon accepts unauthenticated ops",
+                tok_path.display()
+            );
+            None
+        }
+    }
+}
+
+fn write_auth_token(path: &Path) -> std::io::Result<String> {
+    use std::io::Write;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    let token: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path)?;
+    f.write_all(token.as_bytes())?;
+    f.write_all(b"\n")?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+    }
+    Ok(token)
 }
 
 /// Constant-time equality compare — prevents timing attacks on token check.

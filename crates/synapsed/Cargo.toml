@@ -31,8 +31,12 @@ axum.workspace = true
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
 parking_lot.workspace = true
+rand.workspace = true
 rusqlite.workspace = true
 mimalloc = { version = "0.1", default-features = false }
+
+[dev-dependencies]
+tempfile = "3"
 
 [features]
 default = ["embed-mlx", "ann-usearch", "simsimd", "tantivy-fts"]
