@@ -148,6 +148,9 @@ fn auth_token() -> Option<String> {
                 .display()
                 .to_string()
         }),
+        // Daemon default `-f .synapse/brain.db` writes the token next to the
+        // project-local brain — check cwd too.
+        Some(".synapse/auth.token".to_string()),
     ]
     .into_iter()
     .flatten()

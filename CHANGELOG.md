@@ -43,6 +43,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   can no longer issue ops against the socket. Custom socket clients must send
   `{"op":"Auth","args":{"token":…}}` first. Fixes a session-auth bypass where
   any `Ok` response (e.g. `Ping`) marked the connection as authed.
+- `SnapMerge` socket op no longer accepts arbitrary paths: `snapshot_path` and
+  `out_path` are confined to `--snap-dir`, and existing files are fully
+  canonicalized so symlinks inside snap-dir can't escape.
+- Raw `Sql` socket op is sandboxed: an SQLite authorizer now denies ATTACH
+  (except read-only URIs under `~/.synapse/tenants/`), PRAGMA, and all writes;
+  a progress handler interrupts queries after a 5s deadline and results are
+  capped at 10k rows. Closes the `ATTACH` bypass of the read-only connection
+  and the recursive-CTE DoS vector.
 
 ### Fixed
 - Lexical search (`synapse find`) returned the same document twice when the
