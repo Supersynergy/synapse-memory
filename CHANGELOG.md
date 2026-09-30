@@ -51,6 +51,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   a progress handler interrupts queries after a 5s deadline and results are
   capped at 10k rows. Closes the `ATTACH` bypass of the read-only connection
   and the recursive-CTE DoS vector.
+- Private files are no longer world-readable: `keygen` writes signing secrets
+  with 0600, `Store::open` chmods `brain.db` to 0600, and MCP provenance
+  identities land in `~/.synapse/agents/` (0700) as 0600 files.
 
 ### Fixed
 - Lexical search (`synapse find`) returned the same document twice when the

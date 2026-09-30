@@ -14,7 +14,7 @@ use std::path::Path;
 /// Generate a new keypair, writing secret key and public key to files.
 pub fn keygen(secret_path: impl AsRef<Path>, public_path: impl AsRef<Path>) -> Result<()> {
     let sk = random_signing_key();
-    std::fs::write(secret_path, sk.to_bytes())?;
+    write_secret(secret_path, &sk.to_bytes())?;
     std::fs::write(public_path, sk.verifying_key().to_bytes())?;
     Ok(())
 }
@@ -37,6 +37,26 @@ pub fn load_verifying_key(path: impl AsRef<Path>) -> Result<VerifyingKey> {
     VerifyingKey::from_bytes(&arr).map_err(|e| Error::Other(e.to_string()))
 }
 
+/// Write a private key file with 0600 perms (unix) so signing secrets are
+/// never world-readable — regression for bd issue synapse-memory-lwn.
+fn write_secret(path: impl AsRef<Path>, bytes: &[u8]) -> Result<()> {
+    let path = path.as_ref();
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut f = opts.open(path)?;
+    std::io::Write::write_all(&mut f, bytes)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
 /// Sign a byte slice, returning 64-byte signature.
 pub fn sign_bytes(key: &SigningKey, data: &[u8]) -> [u8; 64] {
     key.sign(data).to_bytes()
