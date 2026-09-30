@@ -692,16 +692,21 @@ async fn dispatch(state: &State, req: Request) -> Response {
             out_path,
             level,
         } => {
+            // Both paths must stay inside --snap-dir: out_path is an arbitrary
+            // file-write primitive, snapshot_path an arbitrary read.
+            let snap_in = match sanitize_snap_path(&state.snap_dir, &snapshot_path) {
+                Ok(p) => p,
+                Err(e) => return Response::Err(e.to_string()),
+            };
+            let snap_out = match sanitize_snap_path(&state.snap_dir, &out_path) {
+                Ok(p) => p,
+                Err(e) => return Response::Err(e.to_string()),
+            };
             let db_path = state.db_path.clone();
             let tmp =
                 std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
             match synapse_core::snap::export(&db_path, &tmp, level).and_then(|_| {
-                synapse_core::snap::merge_packs(
-                    &tmp,
-                    std::path::Path::new(&snapshot_path),
-                    std::path::Path::new(&out_path),
-                    level,
-                )
+                synapse_core::snap::merge_packs(&tmp, &snap_in, &snap_out, level)
             }) {
                 Ok(_) => {
                     let _ = std::fs::remove_file(&tmp);
@@ -969,6 +974,21 @@ async fn embed_one(state: &State, text: &str) -> Result<Vec<f32>> {
 fn sanitize_snap_path(base: &std::path::Path, out: &str) -> Result<PathBuf> {
     let p = PathBuf::from(out);
     let absolute = if p.is_absolute() { p } else { base.join(p) };
+    let canon_base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf());
+    // If the file exists, canonicalize it fully — catches symlink escapes
+    // inside snap_dir (canonicalizing the parent alone would miss those).
+    if absolute.exists() {
+        let canon = absolute
+            .canonicalize()
+            .map_err(|e| anyhow::anyhow!("canonicalize {}: {e}", absolute.display()))?;
+        if !canon.starts_with(&canon_base) {
+            anyhow::bail!(
+                "snap path escapes --snap-dir via symlink ({})",
+                canon_base.display()
+            );
+        }
+        return Ok(canon);
+    }
     // Canonicalize what we can; canonicalize won't work if file doesn't exist yet, so canonicalize parent.
     let parent = absolute
         .parent()
@@ -976,7 +996,6 @@ fn sanitize_snap_path(base: &std::path::Path, out: &str) -> Result<PathBuf> {
     let canon_parent = parent
         .canonicalize()
         .unwrap_or_else(|_| parent.to_path_buf());
-    let canon_base = base.canonicalize().unwrap_or_else(|_| base.to_path_buf());
     if !canon_parent.starts_with(&canon_base) {
         anyhow::bail!("snap path outside --snap-dir ({})", canon_base.display());
     }
