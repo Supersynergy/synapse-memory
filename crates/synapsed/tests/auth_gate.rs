@@ -117,6 +117,40 @@ fn socket_is_0600_and_auth_is_default_on() {
     let r = frame(&mut s, &sql);
     assert!(r.get("Err").is_none(), "authed Sql must succeed, got {r}");
 
+    // Sql sandbox (oracle for -4oi): ATTACH denied, PRAGMA denied, write denied.
+    for bad in [
+        "ATTACH DATABASE '/tmp/evil.db' AS evil",
+        "PRAGMA writable_schema=ON",
+        "DELETE FROM docs",
+        "CREATE TABLE x(y)",
+    ] {
+        let r = frame(
+            &mut s,
+            &json!({"op": "Sql", "args": {"query": bad, "params": []}}),
+        );
+        assert!(
+            r.get("Err").is_some(),
+            "sandboxed query must fail: {bad} → {r}"
+        );
+    }
+    // Recursion bomb must be interrupted by the progress-handler deadline.
+    let t = Instant::now();
+    let r = frame(
+        &mut s,
+        &json!({"op": "Sql", "args": {"query":
+            "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT COUNT(*) FROM c",
+            "params": []}}),
+    );
+    assert!(
+        r.get("Err").is_some(),
+        "recursion bomb must be interrupted, got {r}"
+    );
+    assert!(
+        t.elapsed() < Duration::from_secs(15),
+        "bomb ran too long: {:?}",
+        t.elapsed()
+    );
+
     // 4. SnapMerge must refuse paths outside --snap-dir (arbitrary file write).
     let r = frame(
         &mut s,

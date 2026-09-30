@@ -591,6 +591,8 @@ async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
                 std::env::var("HOME")
                     .ok()
                     .map(|h| format!("{h}/.synapse/auth.token")),
+                // Daemon default `-f .synapse/brain.db` = project-local brain.
+                Some(".synapse/auth.token".to_string()),
             ]
             .into_iter()
             .flatten()

@@ -103,6 +103,8 @@ struct State {
     max_put_bytes: usize,
     /// Read-only PRAGMA-tuned connection for Sql op. Avoid per-call open/PRAGMA overhead.
     sql_conn: PlMutex<Option<rusqlite::Connection>>,
+    /// Per-query wall-clock deadline enforced by the Sql progress handler.
+    sql_deadline: Arc<PlMutex<Instant>>,
     /// Hot read-through cache for repeated user/agent queries. Cleared on writes.
     query_cache: PlMutex<QueryCacheMap>,
     /// TTL cache for stats; COUNT over docs_vec is measurable at 178k+ vecs.
@@ -290,6 +292,7 @@ async fn main() -> Result<()> {
     let reranker: Box<dyn Reranker> = build_reranker(&cli.rerank_model);
     let stats_ttl = env_duration_ms("SYNAPSE_STATS_TTL_MS", DEFAULT_STATS_TTL_MS);
     // Pre-open PRAGMA-tuned read-only Sql conn for analytics ops.
+    let sql_deadline = Arc::new(PlMutex::new(Instant::now()));
     let sql_conn = {
         use rusqlite::{Connection, OpenFlags};
         match Connection::open_with_flags(
@@ -300,6 +303,7 @@ async fn main() -> Result<()> {
                 let _ = c.pragma_update(None, "mmap_size", 1_073_741_824_i64);
                 let _ = c.pragma_update(None, "cache_size", -262_144_i64);
                 let _ = c.pragma_update(None, "temp_store", 2_i64);
+                configure_sql_sandbox(&c, sql_deadline.clone());
                 Some(c)
             }
             Err(e) => {
@@ -321,6 +325,7 @@ async fn main() -> Result<()> {
         snap_dir,
         max_put_bytes: cli.max_put_bytes,
         sql_conn: PlMutex::new(sql_conn),
+        sql_deadline,
         query_cache: PlMutex::new(HashMap::new()),
         stats_cache: PlMutex::new(None),
         stats_ttl,
@@ -705,9 +710,9 @@ async fn dispatch(state: &State, req: Request) -> Response {
             let db_path = state.db_path.clone();
             let tmp =
                 std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
-            match synapse_core::snap::export(&db_path, &tmp, level).and_then(|_| {
-                synapse_core::snap::merge_packs(&tmp, &snap_in, &snap_out, level)
-            }) {
+            match synapse_core::snap::export(&db_path, &tmp, level)
+                .and_then(|_| synapse_core::snap::merge_packs(&tmp, &snap_in, &snap_out, level))
+            {
                 Ok(_) => {
                     let _ = std::fs::remove_file(&tmp);
                     Response::Ok
@@ -836,6 +841,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
             // Read-only raw SQL via pooled PRAGMA-tuned conn (avoid per-call open + PRAGMA cost).
             let result: Result<SqlResultRows, String> = tokio::task::block_in_place(|| {
                 use rusqlite::types::ValueRef;
+                *state.sql_deadline.lock() = Instant::now() + Duration::from_secs(5);
                 let guard = state.sql_conn.lock();
                 let conn = guard
                     .as_ref()
@@ -869,7 +875,11 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 let mut rows_iter = stmt
                     .query(rusqlite::params_from_iter(&param_refs))
                     .map_err(|e| e.to_string())?;
+                const MAX_SQL_ROWS: usize = 10_000;
                 while let Some(row) = rows_iter.next().map_err(|e| e.to_string())? {
+                    if rows_out.len() >= MAX_SQL_ROWS {
+                        return Err(format!("row cap {MAX_SQL_ROWS} exceeded"));
+                    }
                     let mut row_vals = Vec::with_capacity(n_cols);
                     for i in 0..n_cols {
                         let v = row.get_ref(i).map_err(|e| e.to_string())?;
@@ -894,6 +904,47 @@ async fn dispatch(state: &State, req: Request) -> Response {
                 Err(e) => Response::Err(e),
             }
         }
+    }
+}
+
+/// Sandbox the raw-Sql connection: authorizer whitelist (read-only: SELECT,
+/// READ, FUNCTION, RECURSIVE, TRANSACTION) so `ATTACH`/`PRAGMA`/writes fail,
+/// plus a progress handler that interrupts queries past `sql_deadline`.
+fn configure_sql_sandbox(conn: &rusqlite::Connection, deadline: Arc<PlMutex<Instant>>) {
+    use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+    if let Err(e) = conn.authorizer(Some(|ctx: AuthContext<'_>| {
+        match ctx.action {
+            AuthAction::Select
+            | AuthAction::Read { .. }
+            | AuthAction::Function { .. }
+            | AuthAction::Recursive
+            | AuthAction::Transaction { .. } => Authorization::Allow,
+            // Tenant support needs ATTACH — but only read-only URIs confined
+            // to ~/.synapse/tenants/. Everything else stays denied.
+            AuthAction::Attach { filename } => {
+                let ok = filename.starts_with("file:")
+                    && filename.contains("mode=ro")
+                    && filename.contains("/.synapse/tenants/");
+                if ok {
+                    Authorization::Allow
+                } else {
+                    Authorization::Deny
+                }
+            }
+            AuthAction::Detach { database_name, .. } => {
+                if database_name == "tenant" {
+                    Authorization::Allow
+                } else {
+                    Authorization::Deny
+                }
+            }
+            _ => Authorization::Deny,
+        }
+    })) {
+        warn!("sql authorizer install failed: {e}");
+    }
+    if let Err(e) = conn.progress_handler(1_000, Some(move || Instant::now() > *deadline.lock())) {
+        warn!("sql progress_handler install failed: {e}");
     }
 }
 
