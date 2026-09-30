@@ -579,9 +579,32 @@ async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
     let mut stream = UnixStream::connect(sock)
         .await
         .context("connect synapsed")?;
-    if let Ok(token) = std::env::var("SYNAPSE_API_KEY")
-        && !token.is_empty()
-    {
+    // Token: SYNAPSE_API_KEY env, else SYNAPSE_AUTH_TOKEN_FILE, else the
+    // daemon-generated ~/.synapse/auth.token file.
+    let token = std::env::var("SYNAPSE_API_KEY")
+        .ok()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .or_else(|| {
+            for path in [
+                std::env::var("SYNAPSE_AUTH_TOKEN_FILE").ok(),
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| format!("{h}/.synapse/auth.token")),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if let Ok(t) = std::fs::read_to_string(&path) {
+                    let t = t.trim().to_string();
+                    if !t.is_empty() {
+                        return Some(t);
+                    }
+                }
+            }
+            None
+        });
+    if let Some(token) = token {
         let auth =
             daemon_roundtrip(&mut stream, json!({"op": "Auth", "args": {"token": token}})).await?;
         if let Some(err) = auth.get("Err").and_then(|v| v.as_str()) {

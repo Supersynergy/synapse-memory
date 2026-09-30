@@ -131,10 +131,50 @@ fn socket_path() -> String {
     env::var("SYNAPSE_SOCK").unwrap_or_else(|_| "/tmp/synapse.sock".to_string())
 }
 
+/// Auth token: `SYNAPSE_API_KEY` env first, else `SYNAPSE_AUTH_TOKEN_FILE`,
+/// else the per-brain `~/.synapse/auth.token` file the daemon generates (0600).
+fn auth_token() -> Option<String> {
+    if let Ok(t) = env::var("SYNAPSE_API_KEY") {
+        let t = t.trim().to_string();
+        if !t.is_empty() {
+            return Some(t);
+        }
+    }
+    for path in [
+        env::var("SYNAPSE_AUTH_TOKEN_FILE").ok(),
+        env::var("HOME").ok().map(|h| {
+            Path::new(&h)
+                .join(".synapse/auth.token")
+                .display()
+                .to_string()
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if let Ok(t) = std::fs::read_to_string(&path) {
+            let t = t.trim().to_string();
+            if !t.is_empty() {
+                return Some(t);
+            }
+        }
+    }
+    None
+}
+
 fn call(req: &Value, timeout: Duration) -> Result<Value> {
     let mut stream = UnixStream::connect(socket_path()).context("daemon offline")?;
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
+    if let Some(token) = auth_token() {
+        let r = send_on_stream(
+            &mut stream,
+            &json!({"op": "Auth", "args": {"token": token}}),
+        )?;
+        if let Some(err) = r.get("Err").and_then(|v| v.as_str()) {
+            anyhow::bail!("auth failed: {err}");
+        }
+    }
     send_on_stream(&mut stream, req)
 }
 
