@@ -81,7 +81,8 @@ fn fresh_env() -> (TempDir, PathBuf, PathBuf) {
     (tmp, brain, home)
 }
 
-/// Create a minimal `docs` table so compliance_export can query it.
+/// Create a minimal `docs` table matching the real synapse schema so
+/// compliance_export can query it (agent lives in the meta JSON doc).
 fn init_docs_schema(brain: &PathBuf) {
     let conn = rusqlite::Connection::open(brain).expect("open brain");
     conn.execute_batch(
@@ -89,9 +90,9 @@ fn init_docs_schema(brain: &PathBuf) {
             id      INTEGER PRIMARY KEY AUTOINCREMENT,
             uri     TEXT UNIQUE,
             title   TEXT,
-            content TEXT,
-            agent   TEXT,
-            ts      INTEGER
+            text    TEXT NOT NULL,
+            meta    TEXT,
+            ts      INTEGER NOT NULL
         );",
     )
     .expect("create docs table");

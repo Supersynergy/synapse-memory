@@ -220,13 +220,17 @@ pub fn export_memories(
     } else {
         String::new()
     };
+    // Real synapse schema: docs(id INTEGER, uri, title, text, meta JSON, ts).
+    // `agent` lives inside the meta JSON document.
     let mut stmt = conn.prepare(&format!(
-        "SELECT id, agent, ts, content, uri FROM docs ORDER BY ts ASC {limit_clause}"
+        "SELECT id, COALESCE(json_extract(meta, '$.agent'), ''), ts, text, uri \
+         FROM docs ORDER BY ts ASC {limit_clause}"
     ))?;
     let mut rows = stmt.query([])?;
     let mut out = Vec::new();
     while let Some(row) = rows.next()? {
-        let doc_id: String = row.get(0)?;
+        let doc_id: i64 = row.get(0)?;
+        let doc_id = doc_id.to_string();
         let agent: String = row.get(1).unwrap_or_default();
         let ts: i64 = row.get(2).unwrap_or_default();
         let content: String = row.get(3).unwrap_or_default();
@@ -354,11 +358,12 @@ mod tests {
         let conn = Connection::open(&f).unwrap();
         conn.execute_batch(
             "CREATE TABLE docs (
-                id TEXT PRIMARY KEY,
-                agent TEXT,
-                ts INTEGER,
-                content TEXT,
-                uri TEXT
+                id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                uri     TEXT UNIQUE,
+                title   TEXT,
+                text    TEXT NOT NULL,
+                meta    TEXT,
+                ts      INTEGER NOT NULL
             );",
         )
         .unwrap();
@@ -367,15 +372,16 @@ mod tests {
 
     fn insert_doc(
         conn: &Connection,
-        id: &str,
+        id: i64,
         agent: &str,
         ts: i64,
         content: &str,
         uri: Option<&str>,
     ) {
+        let meta = serde_json::json!({"agent": agent}).to_string();
         conn.execute(
-            "INSERT INTO docs (id, agent, ts, content, uri) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![id, agent, ts, content, uri],
+            "INSERT INTO docs (id, uri, ts, text, meta) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, uri, ts, content, meta],
         )
         .unwrap();
     }
@@ -444,7 +450,7 @@ mod tests {
         let conn = fresh_conn();
         insert_doc(
             &conn,
-            "doc-1",
+            1,
             "claude",
             1000,
             "Email: alice@example.com and IP 1.2.3.4",
@@ -462,7 +468,7 @@ mod tests {
     fn export_respects_max_records() {
         let conn = fresh_conn();
         for i in 0..10 {
-            insert_doc(&conn, &format!("doc-{i}"), "claude", i, "no pii", None);
+            insert_doc(&conn, i, "claude", i, "no pii", None);
         }
         let m = PiiMasker::new().unwrap();
         let opts = ExportOptions {
@@ -478,7 +484,7 @@ mod tests {
         let conn = fresh_conn();
         insert_doc(
             &conn,
-            "doc-1",
+            1,
             "claude",
             1000,
             "content",
