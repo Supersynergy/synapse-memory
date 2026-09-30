@@ -62,3 +62,9 @@ docs/strategy/
 # crash coredumps (never ship)
 core
 *.core
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
+*.gate.lock*
