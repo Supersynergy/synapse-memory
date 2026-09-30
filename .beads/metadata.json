@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "synapse_memory",
+  "project_id": "4c6604b8-03c4-41d6-b9f7-01c4ac74b246"
+}
