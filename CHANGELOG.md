@@ -51,6 +51,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   a progress handler interrupts queries after a 5s deadline and results are
   capped at 10k rows. Closes the `ATTACH` bypass of the read-only connection
   and the recursive-CTE DoS vector.
+- LiveQuery WebSocket (`:9091/live`) now shares the daemon token — clients
+  must present it via `Authorization: Bearer` or `?token=`. Browser clients
+  are restricted to loopback `Origin`s. `--no-live`/`SYNAPSE_NO_LIVE=1`
+  disables the server entirely.
 - Private files are no longer world-readable: `keygen` writes signing secrets
   with 0600, `Store::open` chmods `brain.db` to 0600, and MCP provenance
   identities land in `~/.synapse/agents/` (0700) as 0600 files.

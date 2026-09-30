@@ -81,6 +81,9 @@ struct Cli {
     /// LiveQuery WebSocket endpoint. Default: 127.0.0.1:9091. Env: SYNAPSE_LIVE_ADDR.
     #[arg(long, env = "SYNAPSE_LIVE_ADDR", default_value = "127.0.0.1:9091")]
     live_addr: SocketAddr,
+    /// Disable the LiveQuery WebSocket server entirely.
+    #[arg(long, env = "SYNAPSE_NO_LIVE", default_value_t = false)]
+    no_live: bool,
     /// Path to ONNX cross-encoder model for reranking (requires --features onnx).
     /// Default: ~/.synapse/models/ms-marco-MiniLM-L-6-v2.onnx (auto-download via fastembed).
     /// If not set and onnx feature is active, BGE-reranker-v2-m3 is auto-downloaded on first use.
@@ -333,12 +336,16 @@ async fn main() -> Result<()> {
         live_broker: livequery::LiveBroker::new(256),
     });
 
-    // Spawn LiveQuery WebSocket server (P2.2).
-    let live_broker_clone = state.live_broker.clone();
-    let live_addr = cli.live_addr;
-    tokio::spawn(async move {
-        livequery::serve(live_broker_clone, live_addr).await;
-    });
+    // Spawn LiveQuery WebSocket server (P2.2) — shares the daemon token;
+    // --no-live disables it entirely.
+    if !cli.no_live {
+        let live_broker_clone = state.live_broker.clone();
+        let live_addr = cli.live_addr;
+        let live_token = state.expected_token.clone();
+        tokio::spawn(async move {
+            livequery::serve(live_broker_clone, live_addr, live_token).await;
+        });
+    }
 
     let _ = std::fs::remove_file(&cli.sock);
     let listener =

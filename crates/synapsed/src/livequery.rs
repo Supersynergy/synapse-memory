@@ -15,9 +15,10 @@
 use axum::{
     Router,
     extract::{
-        State,
+        Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::get,
 };
@@ -71,8 +72,15 @@ impl LiveBroker {
     }
 }
 
-pub async fn serve(broker: LiveBroker, addr: SocketAddr) {
-    let state = Arc::new(broker);
+struct LiveState {
+    broker: LiveBroker,
+    /// Shared daemon token; when set, WS clients must present it via
+    /// `Authorization: Bearer` header or `?token=` query param.
+    token: Option<String>,
+}
+
+pub async fn serve(broker: LiveBroker, addr: SocketAddr, token: Option<String>) {
+    let state = Arc::new(LiveState { broker, token });
     let app = Router::new()
         .route("/live", get(ws_handler))
         .with_state(state);
@@ -91,12 +99,50 @@ pub async fn serve(broker: LiveBroker, addr: SocketAddr) {
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
-    State(broker): State<Arc<LiveBroker>>,
-) -> impl IntoResponse {
+    State(st): State<Arc<LiveState>>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    // Auth: when the daemon has a token, WS clients must present it.
+    if let Some(expected) = &st.token {
+        let bearer = headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "));
+        let given = bearer.or(params.get("token").map(String::as_str));
+        let ok = given.is_some_and(|g| {
+            g.len() == expected.len()
+                && g.as_bytes()
+                    .iter()
+                    .zip(expected.as_bytes())
+                    .fold(0u8, |a, (x, y)| a | (x ^ y))
+                    == 0
+        });
+        if !ok {
+            return (StatusCode::UNAUTHORIZED, "auth required").into_response();
+        }
+    }
+    // Origin check: browser WS clients send Origin — only loopback origins
+    // are allowed (non-browser clients send no Origin at all).
+    if let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) {
+        let host = origin
+            .rsplit("://")
+            .next()
+            .unwrap_or(origin)
+            .split(':')
+            .next()
+            .unwrap_or("");
+        let loopback = matches!(host, "localhost" | "127.0.0.1" | "::1" | "[::1]");
+        if !loopback {
+            return (StatusCode::FORBIDDEN, "origin rejected").into_response();
+        }
+    }
+    let broker = st.broker.clone();
     ws.on_upgrade(move |socket| handle_socket(socket, broker))
+        .into_response()
 }
 
-async fn handle_socket(mut socket: WebSocket, broker: Arc<LiveBroker>) {
+async fn handle_socket(mut socket: WebSocket, broker: LiveBroker) {
     // First message = subscription filter (JSON).
     let filter: SubscribeFilter = match socket.recv().await {
         Some(Ok(Message::Text(t))) => serde_json::from_str(t.as_str()).unwrap_or(SubscribeFilter {
