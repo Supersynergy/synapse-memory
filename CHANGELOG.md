@@ -10,6 +10,30 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ## [Unreleased]
 
 ### Added
+- Windows support end-to-end: `synapsed` binds TCP `127.0.0.1:9477` (loopback
+  only; `--allow-remote` required for wider binds), `synx`/`synx_fast`/
+  `synapse-mcp`/`synapse-space` pick the matching transport, and all unix-only
+  code paths (socket perms, `madvise`/`mlock`/huge-pages, `O_DSYNC`, io_uring,
+  signal handling) are cfg-gated with safe Windows fallbacks. Token auth and
+  the wire protocol are identical on both transports.
+- `docs/QUICKSTART.md`: verified <10-minute setup for macOS/Linux/Windows
+  including MCP client config for Claude Desktop, Cursor and Windsurf.
+- `KNOWN-ISSUES.md`: honest gap list (transport mileage, perf hot paths).
+- `synx init` now prints next steps: created paths, first commands, MCP wiring.
+
+### Changed
+- `vendor/synapse-db` absorbed into the tree (was a submodule pointing at a
+  local filesystem path — unclonable in CI and for contributors). Provenance
+  recorded in `vendor/synapse-db/VENDORING.md`.
+
+### Fixed
+- SPEC.md pointed at a `release/context-os/` tree that no longer exists and
+  MCP tool names/ports that were never shipped; corrected to the real release
+  dir and tool surface.
+- README: removed `--supersedes` flag docs (flag does not exist) and made the
+  context-pack example output match the real binary.
+
+### Added
 - Layering guard `scripts/check-layering.py`, wired into `just check` and CI:
   fails if a product crate depends on an excluded experimental crate (ADR 0001).
   Also exposed as `just check-layers`.
