@@ -21,6 +21,7 @@ pub fn dot_f16(_a: &[u16], _b: &[u16]) -> f32 {
     0.0
 }
 
+#[cfg(target_arch = "aarch64")]
 #[inline]
 fn half_to_f32(h: u16) -> f32 {
     let s = ((h >> 15) & 1) as u32;

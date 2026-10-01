@@ -77,9 +77,9 @@ impl LibsqlBackend {
                 *const (),
                 unsafe extern "C" fn(
                     *mut libsql::ffi::sqlite3,
-                    *mut *const i8,
+                    *mut *const std::ffi::c_char,
                     *const libsql::ffi::sqlite3_api_routines,
-                ) -> i32,
+                ) -> std::ffi::c_int,
             >(
                 sqlite_vec::sqlite3_vec_init as *const ()
             )));

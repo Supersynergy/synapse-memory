@@ -54,8 +54,6 @@ reqwest = { workspace = true, optional = true }
 simsimd = { version = "6.5", optional = true }
 # f16 storage/conversion helpers in turbo::f16_kernels (50% RAM savings).
 half = { version = "2.7", optional = true }
-# Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
-tikv-jemallocator = { version = "0.6", optional = true }
 # mlock / madvise / madvise wrappers in turbo::ram (unix only).
 libc = { version = "0.2", optional = true }
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
@@ -183,6 +181,11 @@ vec-hnsw = ["ann-usearch"]
 # embed-1024: Mxbai-large / Arctic-L (MTEB ≤64.7)
 embed-768 = []
 embed-1024 = []
+
+# Schritt 1 optim #2: opt-in jemalloc for bench binary only (bench-jemalloc
+# feature). tikv-jemallocator has no MSVC support — unix targets only.
+[target.'cfg(unix)'.dependencies]
+tikv-jemallocator = { version = "0.6", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
