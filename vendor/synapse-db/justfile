@@ -1,0 +1,28 @@
+# synapse-db — database engine
+set shell := ["bash", "-uc"]
+
+default: check
+
+# install/verify toolchain
+setup:
+    rustup show
+
+# fmt + clippy + type check (fast gate)
+check:
+    cargo fmt --all --check
+    cargo clippy --workspace --all-targets
+    cargo check --workspace
+
+# run the test suite
+test:
+    cargo nextest run --workspace --no-fail-fast
+
+# full gate: check + test + security
+ci: check test
+    cargo deny check || true
+
+fmt:
+    cargo fmt --all
+
+build:
+    cargo build --workspace --release

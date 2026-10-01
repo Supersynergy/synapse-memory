@@ -1,0 +1,14 @@
+[package]
+name = "synapse-tune"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "SuperML auto-tune for synapse pragmas + batch sizes (Thompson bandit)"
+
+[dependencies]
+thiserror.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+synapse-core = { path = "../synapse-core" }

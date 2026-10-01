@@ -1,0 +1,28 @@
+[package]
+name = "synapse-graph"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Graph traversal layer for Synapse — RELATE/traverse/shortest_path on edges table."
+
+[features]
+default = []
+hippo = ["dep:regex"]
+graph-datalog = []
+
+[dependencies]
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["sync", "rt", "macros"] }
+regex = { version = "1", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["full", "test-util"] }
+
+[[example]]
+name = "datalog_bench"
+path = "examples/datalog_bench.rs"
+required-features = ["graph-datalog"]

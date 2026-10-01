@@ -1,0 +1,22 @@
+target/
+Cargo.lock
+.DS_Store
+*.db
+*.db-wal
+*.db-shm
+*.brainpack
+.fastembed_cache/
+
+# Private strategy docs — never commit
+docs/strategy/
+bench/comprehensive/_qdrant_storage/
+bench/**/_qdrant_storage/
+bench/**/*.parquet
+*.parquet
+bench/**/__pycache__/
+bench/**/target/
+**/*.pyc
+__pycache__/
+catboost_info/
+*.db-journal
+*.rlib

@@ -1,0 +1,32 @@
+[package]
+name = "synapse-kernel"
+version = "0.1.0"
+edition = "2024"
+description = "ns-tier hot-path kernels for Synapse: branchless, prefetch, NEON FMLAL2, AMX, cascade quant"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["neon"]
+neon = []
+amx = []
+mlx = []
+
+[dependencies]
+half = "2"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "ns_microbench"
+harness = false
+
+[[bench]]
+name = "f16_dot"
+harness = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+debug = 1

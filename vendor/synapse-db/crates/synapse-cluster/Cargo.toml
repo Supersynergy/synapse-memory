@@ -1,0 +1,28 @@
+[package]
+name = "synapse-cluster"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Multi-node CRDT gossip cluster for Synapse. AP system, partition-tolerant, Automerge merge."
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util"] }
+tracing.workspace = true
+synapse-core = { path = "../synapse-core", default-features = false }
+blake3.workspace = true
+
+[features]
+default = []
+cluster = []
+cluster-raft = []
+
+[dev-dependencies]
+tokio = { workspace = true }
+tracing-subscriber.workspace = true
+tempfile = "3"

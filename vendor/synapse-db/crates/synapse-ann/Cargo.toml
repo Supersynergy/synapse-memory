@@ -1,0 +1,71 @@
+[package]
+name = "synapse-ann"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Pluggable ANN index backends for Synapse: usearch (PR-A1) + native IVF-PQ (PR-A2). scale-100M branch."
+
+[dependencies]
+thiserror.workspace = true
+usearch = { version = "2.25", optional = true }
+rayon = { version = "1", optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+tempfile = "3"
+proptest = "1"
+rand = "0.8"
+memmap2 = "0.9"
+libc = "0.2"
+
+[features]
+default = []
+# PR-A1: usearch-rs backend. Adds C++ toolchain dep when enabled.
+ann-usearch = ["dep:usearch"]
+# Batch-parallel search via rayon.
+ann-batch = ["dep:rayon"]
+# Parallel HNSW build via rayon (requires usearch + rayon).
+ann-parallel-build = ["dep:usearch", "dep:rayon"]
+# PR-A2: pure-Rust IVF-PQ on faer. No C++ deps.
+ann-ivfpq = []
+# Glass-style SIMD beam-search HNSW (pure Rust, no C++ deps).
+glass-backend = []
+
+[[example]]
+name = "raw_ann_microbench"
+required-features = ["ann-usearch"]
+
+[[example]]
+name = "mmap_sift_bench"
+required-features = ["ann-usearch"]
+
+[[bench]]
+name = "ann_usearch"
+harness = false
+required-features = ["ann-usearch"]
+
+[[bench]]
+name = "ann_hnsw_sweep"
+harness = false
+required-features = ["ann-usearch"]
+
+[[bench]]
+name = "recall_cascade"
+harness = false
+required-features = ["ann-usearch"]
+
+# AOT native bench binary.
+# Build: RUSTFLAGS="-C target-cpu=native" cargo build --profile release-bench -p synapse-ann --bin ann_bench_aot --features ann-usearch,ann-batch
+[[bin]]
+name = "ann_bench_aot"
+path = "src/bin/ann_bench_aot.rs"
+required-features = ["ann-usearch", "ann-batch"]
+
+# Parallel build bench: serial vs parallel HNSW insert.
+# Build: RUSTFLAGS="-C target-cpu=native" cargo build --profile release-bench -p synapse-ann --bin ann_bench_parallel_build --features ann-usearch,ann-parallel-build
+[[bin]]
+name = "ann_bench_parallel_build"
+path = "src/bin/ann_bench_parallel_build.rs"
+required-features = ["ann-usearch", "ann-parallel-build"]

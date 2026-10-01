@@ -1,0 +1,30 @@
+[package]
+name = "synapse-migrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "synapse-migrate"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+tracing-subscriber.workspace = true
+indicatif = "0.17"
+synapse-core = { path = "../synapse-core" }
+
+[features]
+default = ["static-ort"]
+static-ort = ["synapse-core/embed"]
+migrate-qdrant = []
+migrate-lancedb = []
+migrate-chroma = []
+migrate-pinecone = []
+migrate-weaviate = []
+
+[dev-dependencies]
+tempfile = "3"

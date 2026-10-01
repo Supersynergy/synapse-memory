@@ -1,0 +1,27 @@
+[package]
+name = "synapse-ring"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "HFT-pattern in-memory ring buffer with background snapshot. Billion-inserts/s relaxed-durability hot-path."
+
+[lib]
+name = "synapse_ring"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+crossbeam-queue = "0.3"
+parking_lot.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3"
+
+[[bench]]
+name = "ring_throughput"
+harness = false

@@ -1,0 +1,37 @@
+# Synapse workspace cargo config.
+# Kept minimal — no machine-specific paths, no proprietary registries.
+
+[build]
+# Enable incremental only in dev; release is lto=thin which ignores incremental.
+incremental = true
+
+# scale-100M optim #1 (SPEC §6.1): target-cpu=native unlocks NEON/AVX
+# autovectorization on the build host. +5-20% across hot paths per Chroma
+# research (docs/research_chroma_m4max_2026-04-23.md #5).
+# For portable CI artefacts: `CARGO_BUILD_RUSTFLAGS="" cargo build --release`.
+rustflags = ["-C", "target-cpu=native"]
+
+# Cross-compile targets: per-target rustflags REPLACES [build] rustflags,
+# so target-cpu=native (which bricks cross-compile) is cleared here.
+[target.aarch64-unknown-linux-gnu]
+rustflags = []
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = []
+
+[target.'cfg(target_os = "linux")']
+# mold is 2–5x faster than ld/lld for Rust workspaces. Install: `cargo install --git https://github.com/rui314/mold`.
+# Uncomment after installing mold:
+# rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.'cfg(target_os = "macos")']
+# ld64.lld is the default linker on recent macOS toolchains and is usually fine.
+# Uncomment for sccache-accelerated builds (install: `cargo install sccache`):
+# rustc-wrapper = "sccache"
+
+[net]
+# Fetch all dependency git repos with the faster CLI fetcher.
+git-fetch-with-cli = true
+
+[registries.crates-io]
+protocol = "sparse"   # 3x faster dependency resolution since 1.70
