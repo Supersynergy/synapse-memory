@@ -1,14 +1,14 @@
 //! Criterion benchmark — Tantivy BM25 query latency.
 //!
 //! Run with:
-//!   cargo bench -p synapse-core --features fts-tantivy --bench fts
+//!   cargo bench -p synapse-core --features tantivy-fts --bench fts
 //!
 //! Hardware + rustc version are captured by `criterion` into
 //! `target/criterion/**/report.json`. Publish under `docs/BENCH-<date>.md`.
 
 use criterion::{Criterion, criterion_group, criterion_main};
 
-#[cfg(feature = "fts-tantivy")]
+#[cfg(feature = "tantivy-fts")]
 fn bench_bm25(c: &mut Criterion) {
     use synapse_core::synx::fts::FtsIndex;
 
@@ -58,9 +58,9 @@ contradicts summarises agent claude crm event lead scraping research brainpack s
     });
 }
 
-#[cfg(not(feature = "fts-tantivy"))]
+#[cfg(not(feature = "tantivy-fts"))]
 fn bench_bm25(_c: &mut Criterion) {
-    eprintln!("skip: enable --features fts-tantivy");
+    eprintln!("skip: enable --features tantivy-fts");
 }
 
 criterion_group!(benches, bench_bm25);

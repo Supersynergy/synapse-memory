@@ -14,6 +14,12 @@ audit findings are in `docs/reviews/2026-09-30-audit-welle-plan.md`.
 - The unix default `/tmp/synapse.sock` is shared machine-wide. For a private
   brain on a multi-user box, pick a per-user socket, e.g.
   `synapsed -s ~/.synapse/synapse.sock -f ~/.synapse/brain.db`.
+- **Windows ARM64 is not supported yet.** `usearch` (via the vendored ANN
+  stack) pulls `numkong`, whose C feature probes use ARM NEON types that
+  MSVC's `arm_neon.h` does not provide (`float16x8_t`, `bfloat16x8_t`).
+  `cargo check` fails in that dependency on `aarch64-pc-windows-msvc`
+  upstream — the CI leg stays enabled but marked `allow-failure`. Windows
+  on x64 works.
 
 ## Performance hot path
 

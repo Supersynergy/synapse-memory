@@ -36,6 +36,7 @@ jobs:
   test:
     name: test · ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -50,8 +51,12 @@ jobs:
             runner: macos-14
           - os: windows-x64
             runner: windows-2022
+          # windows-arm64: numkong (via usearch -> vendored synapse-ann) can't
+          # compile on MSVC arm64 — MSVC's arm_neon.h lacks float16x8_t/
+          # bfloat16x8_t. Tracked as a bd issue; leg stays as signal.
           - os: windows-arm64
             runner: windows-11-arm
+            allow-failure: true
     steps:
       - uses: actions/checkout@v4
         with:
