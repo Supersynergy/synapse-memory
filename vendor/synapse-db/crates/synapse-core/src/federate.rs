@@ -22,13 +22,21 @@ use yrs::{Doc, ReadTxn, StateVector, Transact, Update, updates::decoder::Decode}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Msg {
+    /// Authenticated state-vector request: `sig` covers
+    /// `b"syn-fed-sync1" || doc_id || sv` and must come from a trusted vk.
     SyncStep1 {
         doc_id: String,
         sv: Vec<u8>,
+        vk: Vec<u8>,
+        sig: Vec<u8>,
     },
+    /// Authenticated diff reply: `sig` covers
+    /// `b"syn-fed-sync2" || doc_id || update`.
     SyncStep2 {
         doc_id: String,
         update: Vec<u8>,
+        vk: Vec<u8>,
+        sig: Vec<u8>,
     },
     Update {
         doc_id: String,
@@ -36,6 +44,128 @@ pub enum Msg {
         sig: Vec<u8>,
         vk: Vec<u8>,
     },
+}
+
+fn auth_payload(domain: &[u8], doc_id: &str, body: &[u8]) -> Vec<u8> {
+    let mut v = Vec::with_capacity(domain.len() + doc_id.len() + body.len() + 8);
+    v.extend_from_slice(domain);
+    v.extend_from_slice(&(doc_id.len() as u32).to_le_bytes());
+    v.extend_from_slice(doc_id.as_bytes());
+    v.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    v.extend_from_slice(body);
+    v
+}
+
+fn parse_vk_sig(vk: &[u8], sig: &[u8]) -> Result<(VerifyingKey, [u8; 64])> {
+    let vk_arr: [u8; 32] = vk
+        .try_into()
+        .map_err(|_| Error::Other("vk must be 32 bytes".into()))?;
+    let sig_arr: [u8; 64] = sig
+        .try_into()
+        .map_err(|_| Error::Other("sig must be 64 bytes".into()))?;
+    let verifying_key =
+        VerifyingKey::from_bytes(&vk_arr).map_err(|e| Error::Other(e.to_string()))?;
+    Ok((verifying_key, sig_arr))
+}
+
+// ── Peer trust store ──────────────────────────────────────────────────────────
+
+/// Pinning store for peer verifying keys. Federation is strict by default:
+/// updates and sync requests from keys not in the store are rejected
+/// (bd -j1u). `trust()` persists to disk with 0600 permissions on unix.
+#[derive(Default)]
+pub struct TrustStore {
+    trusted: std::collections::HashSet<[u8; 32]>,
+    path: Option<PathBuf>,
+}
+
+/// `~/.synapse/federation-trust.json` — same dir as `auth.token`.
+pub fn default_trust_path() -> PathBuf {
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+    home.join(".synapse/federation-trust.json")
+}
+
+impl TrustStore {
+    pub fn in_memory() -> Self {
+        Self::default()
+    }
+
+    /// Load pinned keys from a JSON array of hex-encoded vks.
+    /// Missing file → empty store (strict: everything unknown is rejected).
+    pub fn load(path: &std::path::Path) -> Result<Self> {
+        let mut s = Self {
+            trusted: Default::default(),
+            path: Some(path.to_path_buf()),
+        };
+        match std::fs::read_to_string(path) {
+            Ok(text) => {
+                let keys: Vec<String> = serde_json::from_str(&text)
+                    .map_err(|e| Error::Other(format!("trust store corrupt: {e}")))?;
+                for k in keys {
+                    let bytes = decode_hex(&k)
+                        .ok_or_else(|| Error::Other(format!("bad hex key in trust store: {k}")))?;
+                    let arr: [u8; 32] = bytes
+                        .try_into()
+                        .map_err(|_| Error::Other("trust store key must be 32 bytes".into()))?;
+                    s.trusted.insert(arr);
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(Error::Other(format!("trust store read: {e}"))),
+        }
+        Ok(s)
+    }
+
+    pub fn is_trusted(&self, vk: &[u8; 32]) -> bool {
+        self.trusted.contains(vk)
+    }
+
+    /// Pin a peer key (TOFU happens only through this explicit call).
+    pub fn trust(&mut self, vk: [u8; 32]) -> Result<()> {
+        self.trusted.insert(vk);
+        self.persist()
+    }
+
+    fn persist(&self) -> Result<()> {
+        let Some(path) = &self.path else {
+            return Ok(());
+        };
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| Error::Other(e.to_string()))?;
+        }
+        let keys: Vec<String> = self.trusted.iter().map(encode_hex).collect();
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, serde_json::to_string(&keys).unwrap())
+            .map_err(|e| Error::Other(e.to_string()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))
+                .map_err(|e| Error::Other(e.to_string()))?;
+        }
+        std::fs::rename(&tmp, path).map_err(|e| Error::Other(e.to_string()))
+    }
+}
+
+fn encode_hex(b: &[u8; 32]) -> String {
+    let mut s = String::with_capacity(64);
+    for byte in b {
+        s.push_str(&format!("{byte:02x}"));
+    }
+    s
+}
+
+fn decode_hex(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 {
+        return None;
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+        .collect()
 }
 
 fn encode(msg: &Msg) -> Result<Vec<u8>> {
@@ -140,15 +270,44 @@ pub struct Federation {
     signing_key: SigningKey,
     peers: Arc<Mutex<Vec<Addr>>>,
     store: Arc<Mutex<DocStore>>,
+    trust: Arc<Mutex<TrustStore>>,
 }
 
 impl Federation {
+    /// In-memory trust store holding only our own vk — strictest mode,
+    /// every peer must be pinned via `trust_peer`.
     pub fn new(signing_key: SigningKey) -> Self {
+        Self::with_trust_store(signing_key, TrustStore::in_memory())
+    }
+
+    /// File-backed trust store (see `default_trust_path`): pinned peers
+    /// survive restarts; own vk is always implicitly trusted.
+    pub fn with_trust_store(signing_key: SigningKey, mut trust: TrustStore) -> Self {
+        trust.trusted.insert(signing_key.verifying_key().to_bytes());
         Self {
             signing_key,
             peers: Arc::new(Mutex::new(vec![])),
             store: Arc::new(Mutex::new(DocStore::default())),
+            trust: Arc::new(Mutex::new(trust)),
         }
+    }
+
+    /// File-backed trust store at `default_trust_path()` (`~/.synapse/
+    /// federation-trust.json`) — the right constructor for long-lived tools.
+    pub fn with_default_store(signing_key: SigningKey) -> Result<Self> {
+        Ok(Self::with_trust_store(
+            signing_key,
+            TrustStore::load(&default_trust_path())?,
+        ))
+    }
+
+    /// Pin a peer's verifying key (persists if the store is file-backed).
+    pub fn trust_peer(&self, vk: &VerifyingKey) -> Result<()> {
+        self.trust.lock().unwrap().trust(vk.to_bytes())
+    }
+
+    pub fn is_peer_trusted(&self, vk: &VerifyingKey) -> bool {
+        self.trust.lock().unwrap().is_trusted(&vk.to_bytes())
     }
 
     pub fn add_peer(&self, addr: Addr) {
@@ -207,9 +366,16 @@ impl Federation {
         let mut stream = connect(addr)?;
         for doc_id in &doc_ids {
             let sv = self.store.lock().unwrap().state_vector(doc_id);
+            let sig = sign::sign_bytes(
+                &self.signing_key,
+                &auth_payload(b"syn-fed-sync1", doc_id, &sv),
+            )
+            .to_vec();
             let step1 = encode(&Msg::SyncStep1 {
                 doc_id: doc_id.clone(),
                 sv,
+                vk: self.signing_key.verifying_key().to_bytes().to_vec(),
+                sig,
             })?;
             write_framed(&mut stream, &step1)?;
             let reply = read_framed(&mut stream)?;
@@ -217,10 +383,24 @@ impl Federation {
             if let Msg::SyncStep2 {
                 doc_id: rid,
                 update,
+                vk,
+                sig,
             } = msg
                 && rid == *doc_id
                 && !update.is_empty()
             {
+                // Only apply diffs from trusted peers with a valid sig (bd -j1u).
+                let (peer_key, sig_arr) = parse_vk_sig(&vk, &sig)?;
+                if !self.trust.lock().unwrap().is_trusted(&peer_key.to_bytes()) {
+                    return Err(Error::Other(format!(
+                        "sync reply from untrusted peer for {rid}"
+                    )));
+                }
+                sign::verify_bytes(
+                    &peer_key,
+                    &auth_payload(b"syn-fed-sync2", &rid, &update),
+                    &sig_arr,
+                )?;
                 self.store.lock().unwrap().apply_update(&rid, &update)?;
             }
         }
@@ -242,14 +422,17 @@ impl Federation {
                 sig,
                 vk,
             } => {
-                let vk_arr: [u8; 32] = vk
-                    .try_into()
-                    .map_err(|_| Error::Other("vk must be 32 bytes".into()))?;
-                let sig_arr: [u8; 64] = sig
-                    .try_into()
-                    .map_err(|_| Error::Other("sig must be 64 bytes".into()))?;
-                let verifying_key =
-                    VerifyingKey::from_bytes(&vk_arr).map_err(|e| Error::Other(e.to_string()))?;
+                let (verifying_key, sig_arr) = parse_vk_sig(&vk, &sig)?;
+                if !self
+                    .trust
+                    .lock()
+                    .unwrap()
+                    .is_trusted(&verifying_key.to_bytes())
+                {
+                    return Err(Error::Other(format!(
+                        "update from untrusted peer for {doc_id}"
+                    )));
+                }
                 sign::verify_bytes(&verifying_key, &update, &sig_arr)?;
                 self.store.lock().unwrap().apply_update(&doc_id, &update)?;
             }
@@ -273,15 +456,17 @@ impl Federation {
         let listener = TcpListener::bind(addr).map_err(|e| Error::Other(e.to_string()))?;
         tracing::info!("federation: listening on tcp:{}", addr);
         let store = Arc::clone(&self.store);
+        let trust = Arc::clone(&self.trust);
         let signing_key = self.signing_key.clone();
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 match stream {
                     Ok(mut s) => {
                         let store = Arc::clone(&store);
+                        let trust = Arc::clone(&trust);
                         let sk = signing_key.clone();
                         std::thread::spawn(move || {
-                            if let Err(e) = handle_stream(&mut s, &store, &sk) {
+                            if let Err(e) = handle_stream(&mut s, &store, &trust, &sk) {
                                 tracing::warn!("federation handler error: {}", e);
                             }
                         });
@@ -300,15 +485,17 @@ impl Federation {
         let listener = UnixListener::bind(path).map_err(|e| Error::Other(e.to_string()))?;
         tracing::info!("federation: listening on unix:{}", path.display());
         let store = Arc::clone(&self.store);
+        let trust = Arc::clone(&self.trust);
         let signing_key = self.signing_key.clone();
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 match stream {
                     Ok(mut s) => {
                         let store = Arc::clone(&store);
+                        let trust = Arc::clone(&trust);
                         let sk = signing_key.clone();
                         std::thread::spawn(move || {
-                            if let Err(e) = handle_stream(&mut s, &store, &sk) {
+                            if let Err(e) = handle_stream(&mut s, &store, &trust, &sk) {
                                 tracing::warn!("federation handler error: {}", e);
                             }
                         });
@@ -367,14 +554,40 @@ impl ReadWrite for UnixStream {}
 fn handle_stream(
     stream: &mut (impl Read + Write),
     store: &Arc<Mutex<DocStore>>,
-    _sk: &SigningKey,
+    trust: &Arc<Mutex<TrustStore>>,
+    sk: &SigningKey,
 ) -> Result<()> {
     let buf = read_framed(stream)?;
     let msg = decode(&buf)?;
     match msg {
-        Msg::SyncStep1 { doc_id, sv } => {
+        Msg::SyncStep1 {
+            doc_id,
+            sv,
+            vk,
+            sig,
+        } => {
+            // Require a trusted, signature-verified peer BEFORE leaking any
+            // doc contents via the diff reply (bd -j1u).
+            let (peer_key, sig_arr) = parse_vk_sig(&vk, &sig)?;
+            if !trust.lock().unwrap().is_trusted(&peer_key.to_bytes()) {
+                return Err(Error::Other(format!(
+                    "sync request from untrusted peer for {doc_id}"
+                )));
+            }
+            sign::verify_bytes(
+                &peer_key,
+                &auth_payload(b"syn-fed-sync1", &doc_id, &sv),
+                &sig_arr,
+            )?;
             let update = store.lock().unwrap().diff_since(&doc_id, &sv)?;
-            let reply = encode(&Msg::SyncStep2 { doc_id, update })?;
+            let reply_sig =
+                sign::sign_bytes(sk, &auth_payload(b"syn-fed-sync2", &doc_id, &update)).to_vec();
+            let reply = encode(&Msg::SyncStep2 {
+                doc_id,
+                update,
+                vk: sk.verifying_key().to_bytes().to_vec(),
+                sig: reply_sig,
+            })?;
             write_framed(stream, &reply)?;
         }
         Msg::Update {
@@ -383,14 +596,12 @@ fn handle_stream(
             sig,
             vk,
         } => {
-            let vk_arr: [u8; 32] = vk
-                .try_into()
-                .map_err(|_| Error::Other("vk must be 32 bytes".into()))?;
-            let sig_arr: [u8; 64] = sig
-                .try_into()
-                .map_err(|_| Error::Other("sig must be 64 bytes".into()))?;
-            let verifying_key =
-                VerifyingKey::from_bytes(&vk_arr).map_err(|e| Error::Other(e.to_string()))?;
+            let (verifying_key, sig_arr) = parse_vk_sig(&vk, &sig)?;
+            if !trust.lock().unwrap().is_trusted(&verifying_key.to_bytes()) {
+                return Err(Error::Other(format!(
+                    "update from untrusted peer for {doc_id}"
+                )));
+            }
             sign::verify_bytes(&verifying_key, &update, &sig_arr)?;
             store.lock().unwrap().apply_update(&doc_id, &update)?;
         }
@@ -455,11 +666,60 @@ mod tests {
     }
 
     #[test]
+    fn untrusted_vk_rejected_even_with_valid_sig() {
+        let fed = make_fed();
+        let update = crdt::new_meta(&[("tags", "test")]).unwrap();
+        // Attacker self-signs: valid signature, but key was never pinned.
+        let evil = random_signing_key();
+        let sig = sign::sign_bytes(&evil, &update).to_vec();
+        let msg = Msg::Update {
+            doc_id: "doc1".into(),
+            update,
+            sig,
+            vk: evil.verifying_key().to_bytes().to_vec(),
+        };
+        assert!(fed.receive_update(msg).is_err());
+        // ...and after explicit pinning the same key is accepted.
+        fed.trust_peer(&evil.verifying_key()).unwrap();
+        let update = crdt::new_meta(&[("tags", "test")]).unwrap();
+        let sig = sign::sign_bytes(&evil, &update).to_vec();
+        let msg = Msg::Update {
+            doc_id: "doc1".into(),
+            update,
+            sig,
+            vk: evil.verifying_key().to_bytes().to_vec(),
+        };
+        fed.receive_update(msg).unwrap();
+    }
+
+    #[test]
+    fn trust_store_persists_0600() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("trust.json");
+        let mut ts = TrustStore::load(&path).unwrap();
+        let vk = random_signing_key().verifying_key().to_bytes();
+        ts.trust(vk).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+        let reloaded = TrustStore::load(&path).unwrap();
+        assert!(reloaded.is_trusted(&vk));
+    }
+
+    #[test]
     fn two_nodes_sync_via_tcp() {
         let sk_a = random_signing_key();
         let sk_b = random_signing_key();
-        let fed_a = Federation::new(sk_a);
+        let fed_a = Federation::new(sk_a.clone());
         let fed_b = Federation::new(sk_b.clone());
+        // Mutual pinning is required now — unknown keys are rejected.
+        fed_a.trust_peer(&sk_b.verifying_key()).unwrap();
+        fed_b.trust_peer(&sk_a.verifying_key()).unwrap();
 
         // Put a doc on node-A
         let update = crdt::new_meta(&[("node", "A"), ("data", "hello")]).unwrap();

@@ -46,11 +46,19 @@ Excluded from the default workspace, built on demand (see ADR 0001):
 - **platform/GPU**: `synapse-metal`, `synapse-embed-gpu`
 - **advanced retrieval (research)**: `synapse-colbert`, `synapse-splade`, `synapse-fusion`
 - **multimodal/media**: `synapse-multimodal`, `synapse-media`
+- **divergent twins** (`synapse-core`, `synapse-engine`, `synapse-ann`,
+  `synapse-kernel`, `synapse-quant`, `synapse-fts`, `synapse-graph`,
+  `synapse-spann`, `synapse-obs` under `crates/`): a v2.1.0-era code island
+  with **zero product dependents** — every product crate path-depends on the
+  vendored `vendor/synapse-db` equivalents. The twins stay in tree for
+  reference; build them from their own directories. Gates
+  (`fmt/clippy/test/layering`) intentionally cover only the vendored
+  engine. Convergence → bd `synapse-memory-cpd`.
 
 ## Build & verify
 
 ```bash
-just setup    # git submodule init (vendor/synapse-db) + rustup show
+just setup    # rustup show (vendor/synapse-db is absorbed, no submodule)
 just check    # layering guard + fmt + clippy + cargo check (fast gate)
 just test     # cargo nextest
 just ci       # check + test + cargo deny
