@@ -9,9 +9,10 @@ mod synx_io;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+#[cfg(feature = "embedder")]
+use synapse_core::embed::Embedder;
 use synapse_core::{
     PutRequest, SearchMode, Store,
-    embed::Embedder,
     federate::{Addr, Federation},
     fresh::{FreshMode, FreshOptions, build_fresh_report, render_fresh_context_xml},
     shard, sign, snap,
@@ -501,15 +502,7 @@ fn main() -> Result<()> {
             };
             anyhow::ensure!(!body.is_empty(), "empty text");
             let mut store = Store::open(&cli.file)?;
-            let embedding = if no_embed {
-                None
-            } else {
-                let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                    cli.file.parent().map(|p| p.join(".emb-cache")),
-                )
-                .context("embedder init")?;
-                Some(e.embed_one(&body)?)
-            };
+            let embedding = embed_optional(&cli.file, &body, no_embed)?;
             let meta = build_put_meta(source, updated, kind, status, meta)?;
             let req = PutRequest {
                 title,
@@ -548,10 +541,7 @@ fn main() -> Result<()> {
         }
         Cmd::Vec { query, limit } => {
             let store = Store::open(&cli.file)?;
-            let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                cli.file.parent().map(|p| p.join(".emb-cache")),
-            )?;
-            let q = e.embed_one(&query)?;
+            let q = embed_required(emb_cache(&cli.file), &query)?;
             let hits = store.search("", SearchMode::Vec, Some(&q), limit)?;
             print_hits(&hits);
         }
@@ -561,10 +551,7 @@ fn main() -> Result<()> {
             guarantee,
         } => {
             let store = Store::open(&cli.file)?;
-            let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                cli.file.parent().map(|p| p.join(".emb-cache")),
-            )?;
-            let q = e.embed_one(&query)?;
+            let q = embed_required(emb_cache(&cli.file), &query)?;
             let hits = if guarantee {
                 // Two-stage: hybrid RRF for candidate expansion, then exact brute-force vec
                 let candidates = store.search(&query, SearchMode::Hybrid, Some(&q), limit * 10)?;
@@ -611,15 +598,7 @@ fn main() -> Result<()> {
             anyhow::ensure!(!text.trim().is_empty(), "empty text");
             let mut store = Store::open(&cli.file)?;
             let normalized_kind = normalize_kind(&kind);
-            let embedding = if no_embed {
-                None
-            } else {
-                let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                    cli.file.parent().map(|p| p.join(".emb-cache")),
-                )
-                .context("embedder init")?;
-                Some(e.embed_one(&text)?)
-            };
+            let embedding = embed_optional(&cli.file, &text, no_embed)?;
             let req = PutRequest {
                 title: title.or_else(|| Some(auto_title(&normalized_kind, &text))),
                 uri,
@@ -780,8 +759,7 @@ fn main() -> Result<()> {
                 limit,
             } => {
                 let manager = shard::ShardManager::open(manifest)?;
-                let e = Embedder::new_with_cache::<std::path::PathBuf>(None)?;
-                let q_vec = e.embed_one(&query)?;
+                let q_vec = embed_required(None, &query)?;
                 let q_arr: [f32; synapse_core::types::EMBED_DIM] = q_vec
                     .try_into()
                     .map_err(|_| anyhow::anyhow!("embedding dim mismatch"))?;
@@ -1072,10 +1050,7 @@ fn main() -> Result<()> {
         } => {
             // Pipeline: hybrid → seeds → PPR → traverse → JSON bundle
             let store = Store::open(&cli.file)?;
-            let e = Embedder::new_with_cache::<std::path::PathBuf>(
-                cli.file.parent().map(|p| p.join(".emb-cache")),
-            )?;
-            let q = e.embed_one(&query)?;
+            let q = embed_required(emb_cache(&cli.file), &query)?;
             let hits = store.search(&query, SearchMode::Hybrid, Some(&q), k)?;
 
             let mut seeds: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
@@ -1151,6 +1126,49 @@ fn parse_fresh_input(raw: &str) -> FreshInput {
     }
 
     (trimmed.to_string(), None, None)
+}
+
+/// Best-effort embedding for `put`/`remember`: embeds when an embedder is
+/// linked into this build, otherwise stores text without a vector.
+fn embed_optional(file: &std::path::Path, text: &str, no_embed: bool) -> Result<Option<Vec<f32>>> {
+    if no_embed {
+        return Ok(None);
+    }
+    #[cfg(feature = "embedder")]
+    {
+        let e = Embedder::new_with_cache::<std::path::PathBuf>(
+            file.parent().map(|p| p.join(".emb-cache")),
+        )
+        .context("embedder init")?;
+        return Ok(Some(e.embed_one(text)?));
+    }
+    #[cfg(not(feature = "embedder"))]
+    {
+        let _ = (file, text);
+        eprintln!("note: no embedder in this synx build; storing text only");
+        Ok(None)
+    }
+}
+
+/// Required embedding for vector-first commands (`vec`, `hybrid`, shard
+/// queries, PPR seeds). Errors clearly on a build without an embedder.
+fn embed_required(cache_dir: Option<std::path::PathBuf>, text: &str) -> Result<Vec<f32>> {
+    #[cfg(feature = "embedder")]
+    {
+        let e = Embedder::new_with_cache::<std::path::PathBuf>(cache_dir)?;
+        return e.embed_one(text).context("embed query");
+    }
+    #[cfg(not(feature = "embedder"))]
+    {
+        let _ = (cache_dir, text);
+        anyhow::bail!(
+            "this synx build has no embedder; rebuild with --features static-ort or cross-linux"
+        )
+    }
+}
+
+fn emb_cache(file: &std::path::Path) -> Option<std::path::PathBuf> {
+    file.parent().map(|p| p.join(".emb-cache"))
 }
 
 fn print_hits(hits: &[synapse_core::Hit]) {
@@ -1513,16 +1531,21 @@ fn search_best_effort(
         return Ok((lex, "lexical".to_string()));
     }
 
-    let hybrid =
-        Embedder::new_with_cache::<std::path::PathBuf>(file.parent().map(|p| p.join(".emb-cache")))
-            .ok()
-            .and_then(|e| e.embed_one(query).ok())
-            .and_then(|q| {
-                store
-                    .search(query, SearchMode::Hybrid, Some(&q), limit)
-                    .ok()
-            })
-            .unwrap_or_default();
+    #[cfg(feature = "embedder")]
+    let hybrid = Embedder::new_with_cache::<std::path::PathBuf>(emb_cache(file))
+        .ok()
+        .and_then(|e| e.embed_one(query).ok())
+        .and_then(|q| {
+            store
+                .search(query, SearchMode::Hybrid, Some(&q), limit)
+                .ok()
+        })
+        .unwrap_or_default();
+    #[cfg(not(feature = "embedder"))]
+    let hybrid: Vec<synapse_core::Hit> = {
+        let _ = file;
+        Vec::new()
+    };
     if !hybrid.is_empty() {
         return Ok((hybrid, "hybrid".to_string()));
     }
