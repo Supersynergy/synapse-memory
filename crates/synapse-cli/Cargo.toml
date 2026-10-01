@@ -40,13 +40,17 @@ default = ["static-ort", "jemalloc", "fresh-registry"]
 # jemalloc: replace system allocator with jemalloc for release binary.
 jemalloc = ["dep:tikv-jemallocator"]
 # static-ort: enable synapse-core's `embed` feature (ORT linked statically).
-static-ort = ["synapse-core/embed"]
+static-ort = ["embedder", "synapse-core/embed"]
 # cross-linux: enable synapse-core's `embed-dynamic` feature (ORT via dlopen at runtime).
 # Required when cross-compiling from mac-arm64 to linux without a Linux libstdc++ sysroot.
 # Build: cargo zigbuild --profile release-hardened --target aarch64-unknown-linux-gnu
 #          --no-default-features --features cross-linux --bin synx
 # Ship libonnxruntime.so alongside the binary (see release/README.md for download URL).
-cross-linux = ["synapse-core/embed-dynamic"]
+cross-linux = ["embedder", "synapse-core/embed-dynamic"]
+# Internal marker: an Embedder is linked into this build. Implied by static-ort
+# and cross-linux — a --no-default-features build must still compile, with
+# vector/hybrid commands reporting a clear error instead of an import failure.
+embedder = []
 fresh-registry = ["synapse-core/fresh-registry"]
 embed-768 = ["synapse-core/embed-768"]
 embed-1024 = ["synapse-core/embed-1024"]
