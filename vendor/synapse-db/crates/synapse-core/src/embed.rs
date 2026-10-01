@@ -53,16 +53,16 @@ struct SessionPool {
     total: usize,
 }
 
-static SESSION_POOL: OnceCell<(Mutex<SessionPool>, std::sync::Condvar)> = OnceCell::new();
+static SESSION_POOL: OnceCell<(Mutex<SessionPool>, parking_lot::Condvar)> = OnceCell::new();
 
-fn session_pool() -> &'static (Mutex<SessionPool>, std::sync::Condvar) {
+fn session_pool() -> &'static (Mutex<SessionPool>, parking_lot::Condvar) {
     SESSION_POOL.get_or_init(|| {
         (
             Mutex::new(SessionPool {
                 idle: Vec::new(),
                 total: 0,
             }),
-            std::sync::Condvar::new(),
+            parking_lot::Condvar::new(),
         )
     })
 }
@@ -85,7 +85,7 @@ fn acquire_session() -> Result<TextEmbedding> {
             g.total += 1; // reserve a slot before the slow init
             break;
         }
-        g = cv.wait(g);
+        cv.wait(&mut g);
     }
     drop(g);
     match new_session() {
