@@ -9,6 +9,22 @@ const MAGIC: &[u8; 4] = b"BPK1";
 const VERSION: u8 = 1;
 // VERSION 2 = signed pack: after compressed body, 32-byte pubkey + 64-byte sig over BLAKE3(body)
 const VERSION_SIGNED: u8 = 2;
+/// Upper bound for decompressed pack size — guards against zstd bombs
+/// in untrusted .brainpack files (bd -5ep). 4 GiB covers any sane brain.
+const MAX_PACK_RAW: u64 = 4 << 30;
+
+/// Bounded zstd decode: errors instead of panicking/allocating unbounded.
+fn decompress_bounded(body: &[u8]) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    let mut dec = zstd::stream::read::Decoder::new(body)?;
+    // Read at most MAX_PACK_RAW+1 so we can detect overflow.
+    let n = dec.by_ref().take(MAX_PACK_RAW + 1).read_to_end(&mut out)?;
+    if n as u64 > MAX_PACK_RAW {
+        return Err(Error::Other("brainpack exceeds 4 GiB limit".into()));
+    }
+    Ok(out)
+}
 
 /// Write a signed .brainpack file. Appends pubkey+signature after body.
 pub fn export_signed(
@@ -45,6 +61,10 @@ pub fn import_signed(
     expected_vk: Option<&VerifyingKey>,
 ) -> Result<VerifyingKey> {
     let raw = std::fs::read(pack)?;
+    // length gate BEFORE any slicing — truncated input must not panic (bd -5ep)
+    if raw.len() < 49 + 96 {
+        return Err(Error::Other("signed brainpack too short".into()));
+    }
     if &raw[0..4] != MAGIC {
         return Err(Error::Other("bad magic".into()));
     }
@@ -57,9 +77,6 @@ pub fn import_signed(
     // raw_len at [9..17] is 0 for signed packs
     let hash = &raw[17..49];
     // body: everything between header (49 bytes) and trailer (96 bytes)
-    if raw.len() < 49 + 96 {
-        return Err(Error::Other("signed brainpack too short".into()));
-    }
     let body = &raw[49..raw.len() - 96];
     let pubkey_bytes: [u8; 32] = raw[raw.len() - 96..raw.len() - 64].try_into().unwrap();
     let sig_bytes: [u8; 64] = raw[raw.len() - 64..].try_into().unwrap();
@@ -80,7 +97,7 @@ pub fn import_signed(
             "public key in pack does not match expected".into(),
         ));
     }
-    let data = zstd::decode_all(body)?;
+    let data = decompress_bounded(body)?;
     std::fs::write(out, data)?;
     Ok(vk)
 }
@@ -230,23 +247,26 @@ pub fn import_magic(pack: impl AsRef<Path>, out: impl AsRef<Path>) -> Result<()>
         )));
     }
     if raw[4] == VERSION_SIGNED {
-        // signed pack: just decompress body (skip sig verification for raw restore)
-        let body = &raw[49..raw.len() - 96];
-        let data = zstd::decode_all(body)?;
-        std::fs::write(out, data)?;
-        Ok(())
+        // signed pack via restore path: verify embedded-key sig + body hash
+        // (integrity — any embedded key signs itself; trust needs
+        // import_signed with expected_vk). Never skip the check (bd -5ep).
+        import_signed(pack.as_ref(), &out, None).map(|_| ())
     } else {
         import_raw(&raw, out)
     }
 }
 
 fn import_raw(raw: &[u8], out: impl AsRef<Path>) -> Result<()> {
+    // header is 49 bytes; caller already gated len>=5 — gate the rest (bd -5ep)
+    if raw.len() < 49 {
+        return Err(crate::Error::Other("brainpack header truncated".into()));
+    }
     let _version = raw[4];
     let _level = u32::from_le_bytes(raw[5..9].try_into().unwrap());
     let raw_len = u64::from_le_bytes(raw[9..17].try_into().unwrap()) as usize;
     let hash = &raw[17..49];
     let body = &raw[49..];
-    let data = zstd::decode_all(body)?;
+    let data = decompress_bounded(body)?;
     if data.len() != raw_len {
         return Err(crate::Error::Other("size mismatch".into()));
     }
@@ -296,7 +316,14 @@ pub fn decrypt_pack(
         .decrypt(std::iter::once(&identity as &dyn age::Identity))
         .map_err(|e| Error::Other(e.to_string()))?;
     let mut plaintext = vec![];
-    reader.read_to_end(&mut plaintext)?;
+    // bound decrypted size — same zip-bomb surface as raw zstd (bd -5ep)
+    let n = reader
+        .by_ref()
+        .take(MAX_PACK_RAW + 1)
+        .read_to_end(&mut plaintext)?;
+    if n as u64 > MAX_PACK_RAW {
+        return Err(Error::Other("decrypted pack exceeds 4 GiB limit".into()));
+    }
     std::fs::write(out, plaintext)?;
     Ok(())
 }
@@ -345,6 +372,44 @@ mod tests {
         assert_eq!(vk.as_bytes(), sk.verifying_key().as_bytes());
         let s = Store::open(restored.path()).unwrap();
         assert_eq!(s.stats().unwrap().docs, 1);
+    }
+
+    #[test]
+    fn truncated_packs_err_not_panic() {
+        // every truncation boundary must produce Err, never a slice panic (bd -5ep)
+        for len in [0usize, 3, 4, 5, 8, 16, 48, 49, 100, 144] {
+            let pack = tempfile::NamedTempFile::new().unwrap();
+            let mut raw = b"BPK1\x01".to_vec();
+            raw.resize(len, 0u8);
+            raw[0..4.min(len)].copy_from_slice(&MAGIC[..4.min(len)]);
+            std::fs::write(pack.path(), &raw).unwrap();
+            let out = tempfile::NamedTempFile::new().unwrap();
+            assert!(import(pack.path(), out.path()).is_err(), "len={len}");
+        }
+    }
+
+    #[test]
+    fn signed_pack_restore_verifies_sig() {
+        use crate::sign::random_signing_key;
+        let sk = random_signing_key();
+        let db = tempfile::NamedTempFile::new().unwrap();
+        {
+            let mut s = Store::open(db.path()).unwrap();
+            s.put(&PutRequest {
+                text: "verify me".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        }
+        let pack = tempfile::NamedTempFile::new().unwrap();
+        export_signed(db.path(), pack.path(), 3, &sk).unwrap();
+        // tamper a body byte → import (unsigned path) must still reject
+        let mut raw = std::fs::read(pack.path()).unwrap();
+        raw[60] ^= 0xFF;
+        let tampered = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tampered.path(), &raw).unwrap();
+        let out = tempfile::NamedTempFile::new().unwrap();
+        assert!(import(tampered.path(), out.path()).is_err());
     }
 
     #[test]
