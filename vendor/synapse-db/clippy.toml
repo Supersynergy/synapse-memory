@@ -1,0 +1,12 @@
+# Synapse clippy tuning. Keep strict; allow what noise is actually noise.
+
+msrv = "1.95.0"
+
+# Avoid needless-pass-by-value warnings on tiny Copy types.
+trivial-copy-size-limit = 16
+# Max length for complex stacked traits.
+type-complexity-threshold = 120
+# Single-arg `.clone()` is OK for clarity in hot paths.
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-print-in-tests = true

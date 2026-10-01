@@ -1,0 +1,22 @@
+[package]
+name = "synapse-quant"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Quantization primitives (int8, Matryoshka, PQ) for Synapse vectors. scale-100M PR-C1/C2."
+
+[dependencies]
+thiserror.workspace = true
+rand = { workspace = true, optional = true }
+
+[features]
+default = []
+# Enable core::simd acceleration (nightly) — fallback to scalar path otherwise.
+simd-nightly = []
+# RaBitQ 1-bit quantization (SIGMOD 2024). Requires rand for rotation matrix generation.
+rabitq = ["dep:rand"]
+
+[dev-dependencies]
+rand = { workspace = true }

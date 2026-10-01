@@ -1,0 +1,18 @@
+//! SQL parser layer: fingerprinting, rewriting, caching, transactions.
+//!
+//! Patterns stolen from:
+//! - ProxySQL: statement fingerprinting (normalize literals → `?`)
+//! - Vitess vtgate: query-plan cache keyed by fingerprint
+//! - MyDuck: read/write split on AST node type
+//! - maxpert/marmot: MVCC snapshot isolation (BEGIN READ ONLY / AS OF TIMESTAMP)
+//! - Apache Hive + TanStack/db: predicate pushdown optimization
+
+pub mod cache;
+pub mod fingerprint;
+pub mod rewriter;
+pub mod transactions;
+
+pub use cache::{PlanCache, QueryCache};
+pub use fingerprint::fingerprint;
+pub use rewriter::{RewriteResult, rewrite};
+pub use transactions::{IsolationLevel, TxnStatement, classify_txn, is_txn_statement};

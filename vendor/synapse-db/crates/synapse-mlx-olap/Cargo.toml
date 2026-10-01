@@ -1,0 +1,31 @@
+[package]
+name = "synapse-mlx-olap"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MLX Metal GPU vectorized OLAP engine for M-Series — columnar AGG/GROUP-BY via candle-core Metal backend"
+
+[features]
+default = []
+# Heavy: pulls candle-core with Metal backend. Opt-in only.
+mlx-olap = ["dep:candle-core"]
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dependencies.candle-core]
+version = "0.10"
+optional = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+
+[[bench]]
+name = "olap_bench"
+harness = false
+required-features = ["mlx-olap"]

@@ -1,0 +1,15 @@
+[package]
+name = "synapse-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "synapse auth: API-key + GRANT-style RBAC (closes Tier-4 gap)"
+
+[dependencies]
+thiserror.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+sha2 = "0.10"
+subtle = "2"
