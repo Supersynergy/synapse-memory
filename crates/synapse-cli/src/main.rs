@@ -477,6 +477,7 @@ fn main() -> Result<()> {
         Cmd::Init => {
             Store::open(&cli.file)?;
             println!("ok init {}", cli.file.display());
+            print_init_next_steps(&cli.file);
         }
         Cmd::Put {
             title,
@@ -1163,6 +1164,29 @@ fn print_hits(hits: &[synapse_core::Hit]) {
             println!("{}\t{:.4}\t{}\t{}\t{}", h.id, h.score, title, uri, snippet);
         }
     }
+}
+
+fn print_init_next_steps(file: &std::path::Path) {
+    let dir = file.parent().unwrap_or_else(|| std::path::Path::new("."));
+    println!();
+    println!("created: {}", file.display());
+    println!(
+        "auth token: {} (written by synapsed on first daemon start)",
+        dir.join("auth.token").display()
+    );
+    println!();
+    println!("next steps:");
+    println!(
+        "  synx -f {0} remember --kind decision \"<text>\"",
+        file.display()
+    );
+    println!("  synx -f {0} context \"<task>\"", file.display());
+    println!("  synx -f {0} doctor", file.display());
+    println!();
+    println!("mcp (Claude Desktop / Cursor / Windsurf):");
+    println!("  start the daemon: synapsed -f {}", file.display());
+    println!("  mcpServers entry: \"synapse\": {{\"command\": \"synapse-mcp\"}}");
+    println!("  transport: unix socket /tmp/synapse.sock (Windows: TCP 127.0.0.1:9477)");
 }
 
 #[derive(serde::Serialize)]

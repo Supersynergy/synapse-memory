@@ -15,16 +15,15 @@ first-run product promise.
 
 ## Current Release Scope
 
-The current clean-user release lives in `release/context-os/`.
+The current clean-user release lives in `release/synapse-agent-memory/`.
 
 Verified release commands:
 
 ```bash
-release/context-os/verify.sh
-SYNAPSE_VERIFY_INSTALL=1 SYNAPSE_VERIFY_BUILD_PROFILE=dev release/context-os/verify.sh
-SYNAPSE_PACKAGE_DRY_RUN=1 release/context-os/package.sh
-SYNAPSE_SERVICE_OS=Darwin SYNAPSE_SERVICE_DRY_RUN=1 release/context-os/service.sh install
-SYNAPSE_SERVICE_OS=Linux SYNAPSE_SERVICE_DRY_RUN=1 release/context-os/service.sh install
+release/synapse-agent-memory/verify.sh
+SYNX_BIN=target/release/synx release/synapse-agent-memory/verify.sh
+SYNAPSE_PACKAGE_DRY_RUN=1 release/synapse-agent-memory/package.sh
+release/synapse-agent-memory/install.sh --dry-run
 ```
 
 Release invariants:
@@ -68,7 +67,7 @@ All numbers verified from bench runs in this repo.
 | `synapse-space` | Agent-memory layer: Space→Wing→Room→Drawer hierarchy, sweep/compact/evolve ops |
 | `synapsed` | Unix-socket RPC daemon; multiplexes core across callers without re-opening DB |
 | `synapse-cli` (`synx`) | CLI: `synx put`, `synx hybrid`, `synx find`, `synx stats`, `synx merge`, `synx sign`, `synx verify` |
-| `synapse-mcp` | MCP server: `synapse_search`, `synapse_put`, `synapse_find`, `synapse_stats`, `synapse_merge`, `synapse_verify` |
+| `synapse-mcp` | stdio MCP server → `synapsed`. 40 tools incl. `memory_save`, `memory_search`, `memory_recent`, `memory_delete`, `context_pack`, `context_state`, `context_remember`, `context_feedback`, `agent_observe`, `agent_context`, `session_ingest`, `session_replay`, `why`, `graph_expand`, `put`, `search`, `timeline`, `merge`, `verify`, `synapse_merge`, `synapse_verify` |
 | `synapse-learn` | Bandit router (Thompson sampling), per-query calibration, EWMA feedback |
 | `synapse-rerank` | Cross-encoder rerank; `IdentityReranker` default, `OnnxCrossEncoder` with `--features onnx` |
 | `synapse-extract` | Text extraction and chunking: per-message, fixed-window, semantic boundary |
@@ -85,7 +84,7 @@ All numbers verified from bench runs in this repo.
 
 ## Out of Scope
 
-- **Distributed / cluster mode** — single-node embedded only. See ADR-001 (`docs/adr/ADR-001-no-distributed.md` TBD).
+- **Distributed / cluster mode** — single-node embedded only. See `docs/adr/0001-context-os-product-boundary.md`.
 - **Python runtime in core** — synapse-py is a thin PyO3 wrapper; no Python in the Rust hot path.
 - **Mojo backend** — not planned; Metal kernel covers same use case.
 - **Cloud sync** — no cloud dependency; external sync is user responsibility.
@@ -98,9 +97,9 @@ All numbers verified from bench runs in this repo.
 | Surface | Entry | Notes |
 |---------|-------|-------|
 | Memory layer | `crates/synapse-space` | Space::add, search, search_reranked, sweep, evolve |
-| Daemon | `crates/synapsed` | `/tmp/synapse.sock` by default |
+| Daemon | `crates/synapsed` | unix socket `/tmp/synapse.sock` on macOS/Linux; TCP `127.0.0.1:9477` (loopback) on Windows |
 | CLI | `crates/synapse-cli` | `synx` binary |
-| MCP | `crates/synapse-mcp` | Port 3000 default |
+| MCP | `crates/synapse-mcp` | stdio JSON-RPC bridge to `synapsed` (no own port) |
 | Python wheel | `crates/synapse-py` | `maturin develop` |
 
 ---
