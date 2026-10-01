@@ -32,6 +32,19 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   dir and tool surface.
 - README: removed `--supersedes` flag docs (flag does not exist) and made the
   context-pack example output match the real binary.
+- `synx` now compiles with `--no-default-features` (no embedder): `put`/
+  `remember` store text only, `vec`/`hybrid`/shard/PPR commands fail with a
+  clear rebuild hint instead of an import error. Restores the
+  `portable-release` hardened artifact.
+- CI: `RUSTFLAGS=""` clears `.cargo/config.toml`'s `-C target-cpu=native` on
+  runners (broke `ring`'s const CPU-feature asserts); `windows-arm64` is
+  `allow-failure` because `numkong`/`usearch` can't compile under MSVC arm64.
+- FFI callbacks use `std::ffi::c_char` instead of hardcoded `i8` — fixes
+  aarch64 builds where `c_char` is `u8`.
+- `tikv-jemallocator` is target-gated off Windows; `candle`/Metal only on
+  aarch64-apple-darwin.
+- Dropped the debug-latency assert in the RaBitQ cascade test (flakes on
+  shared CI runners at 169ms/q; recall assert kept).
 
 ### Added
 - Layering guard `scripts/check-layering.py`, wired into `just check` and CI:
