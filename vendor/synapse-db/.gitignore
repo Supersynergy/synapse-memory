@@ -1,5 +1,6 @@
 target/
-Cargo.lock
+# Cargo.lock is tracked: CI runs --locked on this vendored workspace
+!Cargo.lock
 .DS_Store
 *.db
 *.db-wal
