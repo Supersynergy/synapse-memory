@@ -5005,6 +5005,7 @@ dependencies = [
  "blake3",
  "clap",
  "csv",
+ "dirs-next",
  "parquet",
  "rusqlite",
  "serde",

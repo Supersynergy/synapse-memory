@@ -72,6 +72,8 @@ jobs:
         run: |
           cargo build --release --locked --target ${{ matrix.target }} -p synapse-cli
           cargo build --release --locked --target ${{ matrix.target }} -p synapse-ultra --bin synapse-ultra
+          cargo build --release --locked --target ${{ matrix.target }} -p synapsed
+          cargo build --release --locked --target ${{ matrix.target }} -p synapse-mcp
 
       - name: Package (unix)
         if: matrix.archive != 'zip'
@@ -81,6 +83,8 @@ jobs:
           STAGE="synapse-${{ matrix.target }}"
           mkdir -p "$STAGE/bin" "$STAGE/docs"
           cp target/${{ matrix.target }}/release/synx "$STAGE/bin/"
+          cp target/${{ matrix.target }}/release/synapsed "$STAGE/bin/"
+          cp target/${{ matrix.target }}/release/synapse-mcp "$STAGE/bin/"
           cp target/${{ matrix.target }}/release/synapse-ultra "$STAGE/bin/" || true
           cp README.md SYNAPSE-ULTRA.md LICENSE* "$STAGE/docs/" 2>/dev/null || true
           tar czf "$STAGE.tar.gz" "$STAGE"
@@ -93,6 +97,8 @@ jobs:
           $Stage = "synapse-${{ matrix.target }}"
           New-Item -ItemType Directory -Force -Path "$Stage\bin", "$Stage\docs"
           Copy-Item "target\${{ matrix.target }}\release\synx.exe" "$Stage\bin\" -ErrorAction SilentlyContinue
+          Copy-Item "target\${{ matrix.target }}\release\synapsed.exe" "$Stage\bin\" -ErrorAction SilentlyContinue
+          Copy-Item "target\${{ matrix.target }}\release\synapse-mcp.exe" "$Stage\bin\" -ErrorAction SilentlyContinue
           Copy-Item "target\${{ matrix.target }}\release\synapse-ultra.exe" "$Stage\bin\" -ErrorAction SilentlyContinue
           Copy-Item "README.md", "SYNAPSE-ULTRA.md" "$Stage\docs\" -ErrorAction SilentlyContinue
           Compress-Archive -Path "$Stage" -DestinationPath "$Stage.zip"

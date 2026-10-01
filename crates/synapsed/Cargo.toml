@@ -26,7 +26,7 @@ synapse-audit = { path = "../synapse-audit" }
 synapse-rerank = { path = "../synapse-rerank", features = [] }
 synapse-license = { path = "../../vendor/synapse-db/crates/synapse-license", optional = true }
 hex = { version = "0.4", optional = true }
-dirs = { version = "6", optional = true }
+dirs = "6"
 ed25519-dalek.workspace = true
 axum.workspace = true
 metrics = "0.24"
@@ -45,5 +45,5 @@ embed-mlx = ["synapse-core/embed-mlx"]
 ann-usearch = ["synapse-core/ann-usearch"]
 simsimd = ["synapse-core/simsimd"]
 tantivy-fts = ["synapse-core/tantivy-fts"]
-licensed = ["dep:synapse-license", "dep:hex", "dep:dirs", "synapse-core/encryption"]
+licensed = ["dep:synapse-license", "dep:hex", "synapse-core/encryption"]
 onnx = ["synapse-rerank/onnx"]

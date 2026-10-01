@@ -18,6 +18,10 @@ pub struct FtsIndex {
     schema: FtsSchema,
     /// None for in-RAM indices.
     index_path: Option<PathBuf>,
+    /// Docs staged via `add()` but not yet committed. Lets `commit()`
+    /// skip the segment flush entirely when nothing changed — read-path
+    /// callers (search) then pay only a cheap `reader.reload()`.
+    pending: usize,
 }
 
 struct FtsSchema {
@@ -68,21 +72,50 @@ impl FtsIndex {
                 text,
             },
             index_path,
+            pending: 0,
         })
     }
 
+    /// Stage a doc. Stays invisible to `search()` until `commit()` —
+    /// batching `add()` calls without an intermediate commit is the
+    /// intended fast ingest path.
     pub fn add(&mut self, doc_id: u64, text: &str) -> Result<()> {
         self.writer.add_document(doc!(
             self.schema.doc_id => doc_id,
             self.schema.text  => text
         ))?;
+        self.pending += 1;
         Ok(())
     }
 
+    /// Flush staged docs into a segment — only when `pending > 0` —
+    /// then reload the reader so they become searchable.
+    ///
+    /// Safe on the read path: with nothing staged this degenerates to a
+    /// `reader.reload()` (no segment build, no merge pressure, no fsync
+    /// of `meta.json`). Callers that only need the latest *committed*
+    /// state should prefer [`Self::reload`] instead.
     pub fn commit(&mut self) -> Result<()> {
-        self.writer.commit()?;
+        if self.pending > 0 {
+            self.writer.commit()?;
+            self.pending = 0;
+        }
         self.reader.reload()?;
         Ok(())
+    }
+
+    /// Refresh the reader to see already-committed segments. Cheap —
+    /// a no-op when the index generation hasn't changed. Staged
+    /// (uncommitted) docs stay invisible.
+    pub fn reload(&self) -> Result<()> {
+        self.reader.reload()?;
+        Ok(())
+    }
+
+    /// True when staged adds are waiting — i.e. `commit()` would
+    /// actually flush a segment rather than only reload the reader.
+    pub fn has_pending(&self) -> bool {
+        self.pending > 0
     }
 
     /// Persist the highest doc_id that has been indexed into a meta file
@@ -168,6 +201,30 @@ mod tests {
         idx.commit().unwrap();
         let r = idx.search("zzznomatchzzz", 5).unwrap();
         assert!(r.is_empty());
+    }
+
+    #[test]
+    fn test_commit_skips_flush_when_nothing_pending() {
+        let mut idx = make_ram_index();
+        // No staged docs → commit() is a reload-only no-op.
+        assert!(!idx.has_pending());
+        idx.commit().unwrap();
+        idx.reload().unwrap();
+
+        idx.add(1, "hello deferred world").unwrap();
+        assert!(idx.has_pending());
+        // Staged doc is NOT visible before commit — staged writes are
+        // never flushed by the read path.
+        assert!(idx.search("deferred", 5).unwrap().is_empty());
+
+        idx.commit().unwrap();
+        assert!(!idx.has_pending());
+        let r = idx.search("deferred", 5).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].0, 1);
+        // A second commit() with nothing staged stays flush-free.
+        idx.commit().unwrap();
+        assert_eq!(idx.search("deferred", 5).unwrap().len(), 1);
     }
 
     #[test]

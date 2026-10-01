@@ -54,8 +54,10 @@ type DocProjectionMap = HashMap<i64, DocProjection>;
 #[derive(Parser)]
 #[command(name = "synapsed", version, about = "Synapse daemon")]
 struct Cli {
-    #[arg(short = 'f', long, default_value = ".synapse/brain.db")]
-    file: PathBuf,
+    /// Brain DB path. Default: ~/.synapse/brain.db (shared with synx,
+    /// synapse-mcp and synapse-ultra). Pass -f to use a different file.
+    #[arg(short = 'f', long)]
+    file: Option<PathBuf>,
     #[cfg(unix)]
     #[arg(
         short = 's',
@@ -134,6 +136,11 @@ struct State {
     sql_deadline: Arc<PlMutex<Instant>>,
     /// Hot read-through cache for repeated user/agent queries. Cleared on writes.
     query_cache: PlMutex<QueryCacheMap>,
+    /// Last seen (mtime,len) of brain.db + its -wal file. External writers
+    /// (`synx` writes SQLite directly, bypassing this daemon) change it —
+    /// query_cache is then dropped on next read instead of serving stale
+    /// hits forever (bd -b5q).
+    db_seen: PlMutex<Option<DbFingerprint>>,
     /// TTL cache for stats; COUNT over docs_vec is measurable at 178k+ vecs.
     /// Daemon-owned writes update this cache exactly, so hot agent status checks
     /// stay O(1) while external DB writers are still picked up after the TTL.
@@ -276,6 +283,16 @@ fn open_store(
     Store::open(file).context("open store")
 }
 
+/// Default brain location: `~/.synapse/brain.db` — shared with synx,
+/// synapse-mcp and synapse-ultra so every surface hits the same brain.
+/// Falls back to the legacy project-local `./.synapse/brain.db` when no
+/// home directory is resolvable.
+fn default_brain_path() -> PathBuf {
+    dirs::home_dir()
+        .map(|h| h.join(".synapse").join("brain.db"))
+        .unwrap_or_else(|| PathBuf::from(".synapse/brain.db"))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -285,7 +302,20 @@ async fn main() -> Result<()> {
         )
         .init();
     let cli = Cli::parse();
-    if let Some(p) = cli.file.parent() {
+    let file = cli.file.clone().unwrap_or_else(|| {
+        let p = default_brain_path();
+        // One-line hint when the old project-local brain exists but the new
+        // default doesn't — the common "where did my data go" case.
+        if std::path::Path::new(".synapse/brain.db").exists() && !p.exists() {
+            warn!(
+                "./.synapse/brain.db exists but is no longer the default; \
+                 using {} — pass `-f ./.synapse/brain.db` to keep the old file",
+                p.display()
+            );
+        }
+        p
+    });
+    if let Some(p) = file.parent() {
         std::fs::create_dir_all(p).ok();
     }
 
@@ -294,7 +324,7 @@ async fn main() -> Result<()> {
     let metrics_addr = cli.metrics_addr;
     tokio::spawn(metrics::serve(metrics_handle.handle.clone(), metrics_addr));
 
-    let store = open_store(&cli.file, &cli.license_jwt, &cli.license_pubkey)?;
+    let store = open_store(&file, &cli.license_jwt, &cli.license_pubkey)?;
     if let Err(e) = synapse_audit::init_schema(&store.conn) {
         warn!("audit schema init failed: {e}");
     }
@@ -302,7 +332,7 @@ async fn main() -> Result<()> {
     // matrix in the background. Fast reads use the top-level index once ready.
     let ndarray_idx = Arc::new(parking_lot::RwLock::new(None));
     let cache_path = cli.emb_cache.clone().unwrap_or_else(|| {
-        let mut p = cli.file.clone();
+        let mut p = file.clone();
         let name = p
             .file_name()
             .map(|n| format!(".{}.emb-cache", n.to_string_lossy()))
@@ -313,8 +343,7 @@ async fn main() -> Result<()> {
     let warm_embedder = !cli.lazy_embed;
     let embedder: Option<Box<dyn TextEmbedder>> = None;
     let snap_dir = cli.snap_dir.clone().unwrap_or_else(|| {
-        cli.file
-            .parent()
+        file.parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     });
@@ -326,7 +355,7 @@ async fn main() -> Result<()> {
     let sql_conn = {
         use rusqlite::{Connection, OpenFlags};
         match Connection::open_with_flags(
-            &cli.file,
+            &file,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
         ) {
             Ok(c) => {
@@ -342,7 +371,7 @@ async fn main() -> Result<()> {
             }
         }
     };
-    let expected_token = resolve_auth_token(&cli.file);
+    let expected_token = resolve_auth_token(&file);
     let state = Arc::new(State {
         store: PlMutex::new(store),
         expected_token,
@@ -350,13 +379,14 @@ async fn main() -> Result<()> {
         embedder: Mutex::new(embedder),
         embedder_init: Mutex::new(()),
         reranker,
-        db_path: cli.file.clone(),
+        db_path: file.clone(),
         cache_path,
         snap_dir,
         max_put_bytes: cli.max_put_bytes,
         sql_conn: PlMutex::new(sql_conn),
         sql_deadline,
         query_cache: PlMutex::new(HashMap::new()),
+        db_seen: PlMutex::new(None),
         stats_cache: PlMutex::new(None),
         stats_ttl,
         embed_cache: PlMutex::new(HashMap::new()),
@@ -406,7 +436,7 @@ async fn main() -> Result<()> {
     info!(
         "listening on {} (db={})",
         cli.sock.display(),
-        cli.file.display()
+        file.display()
     );
 
     if warm_embedder {
@@ -418,8 +448,8 @@ async fn main() -> Result<()> {
         });
     }
 
-    spawn_turbo_warm(state.clone(), cli.file.clone());
-    spawn_wal_checkpoint(cli.file.clone());
+    spawn_turbo_warm(state.clone(), file.clone());
+    spawn_wal_checkpoint(file.clone());
 
     // SIGTERM/SIGINT handler — persist ANN sidecar before exit.
     // Saves 5min HNSW rebuild on next start.
@@ -1628,6 +1658,30 @@ fn query_terms(q: &str) -> Vec<String> {
     terms
 }
 
+/// (mtime, len) of brain.db and its -wal sidecar. WAL mode means external
+/// writes often touch only the -wal file until a checkpoint, so both are
+/// fingerprinted.
+#[derive(Clone, Copy, PartialEq)]
+struct DbFingerprint {
+    m: Option<std::time::SystemTime>,
+    l: u64,
+    wm: Option<std::time::SystemTime>,
+    wl: u64,
+}
+
+fn db_fingerprint(db_path: &Path) -> DbFingerprint {
+    let stat = |p: &Path| -> (Option<std::time::SystemTime>, u64) {
+        std::fs::metadata(p)
+            .map(|m| (m.modified().ok(), m.len()))
+            .unwrap_or_default()
+    };
+    let mut wal_os = db_path.as_os_str().to_os_string();
+    wal_os.push("-wal");
+    let (m, l) = stat(db_path);
+    let (wm, wl) = stat(Path::new(&wal_os));
+    DbFingerprint { m, l, wm, wl }
+}
+
 fn get_cached_hits(
     state: &State,
     mode: SearchMode,
@@ -1635,6 +1689,16 @@ fn get_cached_hits(
     limit: usize,
     embed_query: bool,
 ) -> Option<Vec<Hit>> {
+    let fp = db_fingerprint(&state.db_path);
+    {
+        let mut seen = state.db_seen.lock();
+        if *seen != Some(fp) {
+            *seen = Some(fp);
+            drop(seen);
+            state.query_cache.lock().clear();
+            return None;
+        }
+    }
     let key = search_cache_key(mode, q, limit, embed_query);
     state.query_cache.lock().get(&key).cloned()
 }

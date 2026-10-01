@@ -20,6 +20,7 @@ synapse-learn = { path = "../synapse-learn" }
 synapse-graph = { path = "../../vendor/synapse-db/crates/synapse-graph" }
 # synapse-core base (no embed features) — embed variant selected via [features] below.
 synapse-core = { path = "../../vendor/synapse-db/crates/synapse-core" }
+dirs-next = "2"
 tempfile = "3"
 csv = "1"
 # optional: parquet import/export via arrow2 (lightweight, no arrow ecosystem pull)

@@ -22,6 +22,22 @@ fn parse_meta_cell(raw: Option<String>) -> Option<serde_json::Value> {
     raw.and_then(|s| serde_json::from_str(&s).ok())
 }
 
+/// Doc columns fetched by `fetch_docs_by_ids` — everything `Hit` needs
+/// except the caller-computed score.
+type DocCols = (
+    Option<String>,
+    Option<String>,
+    String,
+    Option<serde_json::Value>,
+    i64,
+);
+
+/// Buffered query-log row: (ts, query_hash, query_len, mode, latency_us, hit_count, top1).
+type QueryLogRow = (i64, Vec<u8>, i64, &'static str, i64, i64, f64);
+
+/// `log_query` buffers rows and flushes once the buffer reaches this size.
+const QLOG_FLUSH_AT: usize = 64;
+
 /// HKDF-derive a SQLCipher key from a license signature + hardware fingerprint.
 ///
 /// Key derivation:
@@ -48,6 +64,10 @@ pub fn derive_brain_key(license_sig: &[u8], hw_fingerprint: &str) -> [u8; 32] {
 
 pub struct Store {
     pub conn: Connection,
+    /// Buffered query-log rows — flushed to `query_logs` in one batched
+    /// multi-VALUES INSERT every `QLOG_FLUSH_AT` calls (and on Drop) so
+    /// `log_query` does no SQL in the common path.
+    qlog_buf: std::sync::Mutex<Vec<QueryLogRow>>,
     /// PR-A1-wire: optional usearch ANN fast-path. `None` = brute-force
     /// sqlite-vec path (current behavior). Populated by `Store::open` when
     /// feature `ann-usearch` is enabled.
@@ -275,6 +295,7 @@ impl Store {
         let tantivy_path = std::path::PathBuf::from(":memory:_tantivy");
         Self {
             conn,
+            qlog_buf: std::sync::Mutex::new(Vec::new()),
             #[cfg(feature = "ann-usearch")]
             ann: None,
             #[cfg(feature = "turbo")]
@@ -308,6 +329,7 @@ impl Store {
         };
         Self {
             conn,
+            qlog_buf: std::sync::Mutex::new(Vec::new()),
             #[cfg(feature = "ann-usearch")]
             ann: None,
             #[cfg(feature = "turbo")]
@@ -607,6 +629,15 @@ CREATE TRIGGER IF NOT EXISTS docs_au AFTER UPDATE ON docs BEGIN
     INSERT INTO docs_fts(rowid, title, text) VALUES (new.id, new.title, new.text);
 END;
 
+-- Maintain meta['doc_count'] = COUNT(*) on docs via triggers so `put` can
+-- read the index-size gauge with a point query instead of an O(N) COUNT(*).
+CREATE TRIGGER IF NOT EXISTS docs_count_ai AFTER INSERT ON docs BEGIN
+    UPDATE meta SET v = CAST(CAST(v AS INTEGER)+1 AS TEXT) WHERE k = 'doc_count';
+END;
+CREATE TRIGGER IF NOT EXISTS docs_count_ad AFTER DELETE ON docs BEGIN
+    UPDATE meta SET v = CAST(CAST(v AS INTEGER)-1 AS TEXT) WHERE k = 'doc_count';
+END;
+
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_vec USING vec0(
     id INTEGER PRIMARY KEY,
     embedding FLOAT[{dim}]
@@ -627,6 +658,10 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
   ('schema_version','1'),
   ('embed_dim','{dim}'),
   ('embed_model','bge-small-en-v1.5');
+-- Triggers above are created first; this seeds the counter once (incl. rows
+-- inserted by a racing connection between trigger creation and this SELECT).
+INSERT OR IGNORE INTO meta(k,v)
+    SELECT 'doc_count', CAST(COUNT(*) AS TEXT) FROM docs;
 "#,
             dim = EMBED_DIM
         ))?;
@@ -651,18 +686,72 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             crate::types::SearchMode::Vec => "vec",
             crate::types::SearchMode::Hybrid => "hybrid",
         };
-        self.conn.execute(
-            "INSERT INTO query_logs(ts, query_hash, query_len, mode, latency_us, hit_count, result_score_top1) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            params![
+        // Lazy batched write: callers invoke this while holding the global
+        // store lock, so the per-search INSERT is buffered and flushed as one
+        // multi-VALUES statement every QLOG_FLUSH_AT rows (and on Drop),
+        // keeping SQL writes off the search critical path.
+        let batch = {
+            let mut buf = self.qlog_buf.lock().unwrap_or_else(|e| e.into_inner());
+            buf.push((
                 ts,
-                hash.as_bytes().as_slice(),
+                hash.as_bytes().to_vec(),
                 q.len() as i64,
                 mode_str,
                 latency_us as i64,
                 hit_count as i64,
                 top_score,
-            ],
-        )?;
+            ));
+            if buf.len() >= QLOG_FLUSH_AT {
+                std::mem::take(&mut *buf)
+            } else {
+                Vec::new()
+            }
+        };
+        self.flush_query_log_rows(&batch)
+    }
+
+    /// Flush buffered query-log rows now. Callers that wrap the store in a
+    /// mutex may call this after dropping their guard to keep the INSERT out
+    /// of the critical section entirely.
+    pub fn flush_query_log(&self) -> Result<()> {
+        let batch = std::mem::take(&mut *self.qlog_buf.lock().unwrap_or_else(|e| e.into_inner()));
+        self.flush_query_log_rows(&batch)
+    }
+
+    fn flush_query_log_rows(&self, rows: &[QueryLogRow]) -> Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let values = (0..rows.len())
+            .map(|i| {
+                let b = i * 7;
+                format!(
+                    "(?{},?{},?{},?{},?{},?{},?{})",
+                    b + 1,
+                    b + 2,
+                    b + 3,
+                    b + 4,
+                    b + 5,
+                    b + 6,
+                    b + 7
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "INSERT INTO query_logs(ts, query_hash, query_len, mode, latency_us, hit_count, result_score_top1) VALUES {values}"
+        );
+        let mut flat: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(rows.len() * 7);
+        for r in rows {
+            flat.push(&r.0);
+            flat.push(&r.1);
+            flat.push(&r.2);
+            flat.push(&r.3);
+            flat.push(&r.4);
+            flat.push(&r.5);
+            flat.push(&r.6);
+        }
+        self.conn.execute(&sql, flat.as_slice())?;
         Ok(())
     }
 
@@ -687,9 +776,11 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         let res = self.put_inner(req, None, None);
         crate::obs::record_query_duration("put", _t.elapsed().as_secs_f64());
         if res.is_ok()
-            && let Ok(n) = self
-                .conn
-                .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get::<_, i64>(0))
+            && let Ok(n) = self.conn.query_row(
+                "SELECT CAST(v AS INTEGER) FROM meta WHERE k = 'doc_count'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
         {
             crate::obs::set_index_size(n);
         }
@@ -1432,29 +1523,66 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     }
 
     /// Fetch `meta` column (raw JSON string) for a list of doc ids.
-    /// Returns a map id → Option<String>.
+    /// Returns a map id → Option<String>. Chunked at 999 bind params
+    /// (portable SQLITE_MAX_VARIABLE_NUMBER floor).
     fn fetch_meta_by_ids(
         &self,
         ids: &[i64],
     ) -> Result<std::collections::HashMap<i64, Option<String>>> {
-        if ids.is_empty() {
-            return Ok(Default::default());
+        let mut map = std::collections::HashMap::with_capacity(ids.len());
+        for chunk in ids.chunks(999) {
+            let placeholders = (0..chunk.len())
+                .map(|i| format!("?{}", i + 1))
+                .collect::<Vec<_>>()
+                .join(",");
+            let sql = format!("SELECT id, meta FROM docs WHERE id IN ({placeholders})");
+            let mut stmt = self.conn.prepare(&sql)?;
+            let params_iter: Vec<&dyn rusqlite::ToSql> =
+                chunk.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
+            let rows = stmt.query_map(params_iter.as_slice(), |r| {
+                Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?))
+            })?;
+            for row in rows {
+                let (id, meta) = row?;
+                map.insert(id, meta);
+            }
         }
-        let placeholders = (0..ids.len())
-            .map(|i| format!("?{}", i + 1))
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql = format!("SELECT id, meta FROM docs WHERE id IN ({placeholders})");
-        let mut stmt = self.conn.prepare(&sql)?;
-        let params_iter: Vec<&dyn rusqlite::ToSql> =
-            ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
-        let rows = stmt.query_map(params_iter.as_slice(), |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<String>>(1)?))
-        })?;
-        let mut map = std::collections::HashMap::new();
-        for row in rows {
-            let (id, meta) = row?;
-            map.insert(id, meta);
+        Ok(map)
+    }
+
+    /// Batched hit hydration: fetch `(uri,title,text,meta,ts)` for many doc
+    /// ids via chunked `IN (?,...)` queries (999 = SQLITE_MAX_VARIABLE_NUMBER
+    /// floor). Ids are deduped into the map; callers re-emit in their own
+    /// order and may `remove` entries to detect missing rows.
+    #[allow(dead_code)] // all call sites are behind cargo features
+    fn fetch_docs_by_ids(&self, ids: &[i64]) -> Result<std::collections::HashMap<i64, DocCols>> {
+        let mut map = std::collections::HashMap::with_capacity(ids.len());
+        let mut seen = std::collections::HashSet::with_capacity(ids.len());
+        let uniq: Vec<i64> = ids.iter().copied().filter(|i| seen.insert(*i)).collect();
+        for chunk in uniq.chunks(999) {
+            let placeholders = (0..chunk.len())
+                .map(|i| format!("?{}", i + 1))
+                .collect::<Vec<_>>()
+                .join(",");
+            let sql =
+                format!("SELECT id,uri,title,text,meta,ts FROM docs WHERE id IN ({placeholders})");
+            let mut stmt = self.conn.prepare(&sql)?;
+            let params_iter: Vec<&dyn rusqlite::ToSql> =
+                chunk.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
+            let rows = stmt.query_map(params_iter.as_slice(), |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, String>(3)?,
+                    parse_meta_cell(r.get::<_, Option<String>>(4)?),
+                    r.get::<_, i64>(5)?,
+                ))
+            })?;
+            for row in rows {
+                let (id, uri, title, text, meta, ts) = row?;
+                map.insert(id, (uri, title, text, meta, ts));
+            }
         }
         Ok(map)
     }
@@ -1556,28 +1684,27 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
             if results.is_empty() {
                 return Ok(vec![]);
             }
-            // Hydrate Hits from SQLite by id.
-            let mut hits = Vec::with_capacity(results.len());
-            for (doc_id, score) in results {
-                let row = self.conn.query_row(
-                    "SELECT id,uri,title,text,meta,ts FROM docs WHERE id = ?1",
-                    params![doc_id as i64],
-                    |r| {
-                        Ok(Hit {
-                            id: r.get(0)?,
-                            uri: r.get(1)?,
-                            title: r.get(2)?,
-                            text: r.get(3)?,
-                            score: score as f64,
-                            meta: parse_meta_cell(r.get::<_, Option<String>>(4)?),
-                            ts: Some(r.get(5)?),
-                        })
-                    },
-                );
-                match row {
-                    Ok(h) => hits.push(h),
-                    Err(rusqlite::Error::QueryReturnedNoRows) => {}
-                    Err(e) => return Err(e.into()),
+            // Hydrate Hits from SQLite in one batched IN(...) query
+            // (was: one query_row round-trip per hit).
+            let pairs: Vec<(i64, f32)> = results
+                .into_iter()
+                .map(|(doc_id, score)| (doc_id as i64, score))
+                .collect();
+            let ids: Vec<i64> = pairs.iter().map(|p| p.0).collect();
+            let mut by_id = self.fetch_docs_by_ids(&ids)?;
+            let mut hits = Vec::with_capacity(pairs.len());
+            for (doc_id, score) in pairs {
+                // Missing row (deleted between tantivy hit and hydrate) is skipped.
+                if let Some((uri, title, text, meta, ts)) = by_id.remove(&doc_id) {
+                    hits.push(Hit {
+                        id: doc_id,
+                        uri,
+                        title,
+                        text,
+                        score: score as f64,
+                        meta,
+                        ts: Some(ts),
+                    });
                 }
             }
             Ok(hits)
@@ -1822,46 +1949,14 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     }
 
     /// PR-A1-wire helper: given `(id, distance)` from the ANN, fetch full
-    /// `Hit` records (uri/title/text) from SQL. One round-trip, preserved order.
+    /// `Hit` records (uri/title/text) from SQL. Chunked IN(...), preserved order.
     #[cfg(feature = "ann-usearch")]
     fn hydrate_hits_from_ann(&self, ann_hits: &[(i64, f32)]) -> Result<Vec<Hit>> {
         if ann_hits.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = (0..ann_hits.len())
-            .map(|i| format!("?{}", i + 1))
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql =
-            format!("SELECT id,uri,title,text,meta,ts FROM docs WHERE id IN ({placeholders})");
-        let mut stmt = self.conn.prepare(&sql)?;
         let ids: Vec<i64> = ann_hits.iter().map(|(i, _)| *i).collect();
-        let params_iter: Vec<&dyn rusqlite::ToSql> =
-            ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
-        let mut by_id: std::collections::HashMap<
-            i64,
-            (
-                Option<String>,
-                Option<String>,
-                String,
-                Option<serde_json::Value>,
-                i64,
-            ),
-        > = Default::default();
-        let rows = stmt.query_map(params_iter.as_slice(), |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, Option<String>>(1)?,
-                r.get::<_, Option<String>>(2)?,
-                r.get::<_, String>(3)?,
-                parse_meta_cell(r.get::<_, Option<String>>(4)?),
-                r.get::<_, i64>(5)?,
-            ))
-        })?;
-        for row in rows {
-            let (id, uri, title, text, meta, ts) = row?;
-            by_id.insert(id, (uri, title, text, meta, ts));
-        }
+        let mut by_id = self.fetch_docs_by_ids(&ids)?;
         let dists: Vec<f32> = ann_hits.iter().map(|(_, d)| *d).collect();
         #[cfg(feature = "turbo")]
         let scores: Vec<f32> = distance_to_score(&dists);
@@ -1885,47 +1980,15 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     }
 
     /// Turbo helper: given `(id, distance)` pairs from the ndarray index,
-    /// fetch full `Hit` records (uri/title/text) from SQL in one round-trip.
-    /// Preserves input order. Used by the turbo fast-path in `search_vec`.
+    /// fetch full `Hit` records (uri/title/text) from SQL in chunked IN(...)
+    /// round-trips. Preserves input order. Used by the turbo fast-path.
     #[cfg(feature = "turbo")]
     pub fn hydrate_hits_by_id_dist(&self, pairs: &[(i64, f32)]) -> Result<Vec<Hit>> {
         if pairs.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = (0..pairs.len())
-            .map(|i| format!("?{}", i + 1))
-            .collect::<Vec<_>>()
-            .join(",");
-        let sql =
-            format!("SELECT id,uri,title,text,meta,ts FROM docs WHERE id IN ({placeholders})");
-        let mut stmt = self.conn.prepare(&sql)?;
         let ids: Vec<i64> = pairs.iter().map(|(i, _)| *i).collect();
-        let params_iter: Vec<&dyn rusqlite::ToSql> =
-            ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
-        let mut by_id: std::collections::HashMap<
-            i64,
-            (
-                Option<String>,
-                Option<String>,
-                String,
-                Option<serde_json::Value>,
-                i64,
-            ),
-        > = Default::default();
-        let rows = stmt.query_map(params_iter.as_slice(), |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, Option<String>>(1)?,
-                r.get::<_, Option<String>>(2)?,
-                r.get::<_, String>(3)?,
-                parse_meta_cell(r.get::<_, Option<String>>(4)?),
-                r.get::<_, i64>(5)?,
-            ))
-        })?;
-        for row in rows {
-            let (id, uri, title, text, meta, ts) = row?;
-            by_id.insert(id, (uri, title, text, meta, ts));
-        }
+        let mut by_id = self.fetch_docs_by_ids(&ids)?;
         let mut out = Vec::with_capacity(pairs.len());
         for (id, dist) in pairs.iter() {
             if let Some((uri, title, text, meta, ts)) = by_id.remove(id) {
@@ -1984,29 +2047,25 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
         // 3. RRF merge.
         let merged = rrf_hippo(&hybrid, &hippo, alpha_graph, limit);
 
-        // 4. Fetch Hit payloads for merged doc_ids.
+        // 4. Fetch Hit payloads for merged doc_ids in one batched IN(...) query
+        //    (was: one query_row round-trip per id).
         let ids: Vec<i64> = merged.iter().map(|(id, _)| *id).collect();
         let score_map: std::collections::HashMap<i64, f64> = merged.into_iter().collect();
 
+        let mut by_id = self.fetch_docs_by_ids(&ids)?;
         let mut out: Vec<Hit> = Vec::with_capacity(ids.len());
         for id in &ids {
-            if let Ok(row) = self.conn.query_row(
-                "SELECT id, uri, title, text, meta, ts FROM docs WHERE id = ?1",
-                rusqlite::params![id],
-                |r| {
-                    Ok(Hit {
-                        id: r.get(0)?,
-                        uri: r.get(1)?,
-                        title: r.get(2)?,
-                        text: r.get(3)?,
-                        score: 0.0,
-                        meta: parse_meta_cell(r.get::<_, Option<String>>(4)?),
-                        ts: Some(r.get(5)?),
-                    })
-                },
-            ) {
-                let score = score_map.get(&row.id).copied().unwrap_or(0.0);
-                out.push(Hit { score, ..row });
+            if let Some((uri, title, text, meta, ts)) = by_id.remove(id) {
+                let score = score_map.get(id).copied().unwrap_or(0.0);
+                out.push(Hit {
+                    id: *id,
+                    uri,
+                    title,
+                    text,
+                    score,
+                    meta,
+                    ts: Some(ts),
+                });
             }
         }
         out.sort_by(|a, b| {
@@ -2092,12 +2151,13 @@ INSERT OR IGNORE INTO meta(k,v) VALUES
     }
 }
 
-/// PR-A1-wire: best-effort sidecar flush on drop. Any error is logged but
-/// cannot be returned — Drop has no result. Callers who require a confirmed
-/// flush should call `flush_ann()` explicitly.
-#[cfg(feature = "ann-usearch")]
+/// Best-effort cleanup on drop: ANN sidecar flush (PR-A1-wire) + query-log
+/// drain. Errors are logged but cannot be returned — Drop has no result.
+/// Callers who require confirmed flushes should call `flush_ann()` /
+/// `flush_query_log()` explicitly.
 impl Drop for Store {
     fn drop(&mut self) {
+        #[cfg(feature = "ann-usearch")]
         if let Some(ref ann) = self.ann
             && let Err(e) = ann.save()
         {
@@ -2105,6 +2165,8 @@ impl Drop for Store {
                 "ann drop-save failed: {e}; sidecar may be stale, but docs_vec is authoritative"
             );
         }
+        let rows = std::mem::take(self.qlog_buf.get_mut().unwrap_or_else(|e| e.into_inner()));
+        let _ = self.flush_query_log_rows(&rows);
     }
 }
 
@@ -2359,17 +2421,9 @@ mod tests {
         let elapsed = t0.elapsed();
         assert_eq!(ids.len(), n);
         let docs_per_sec = n as f64 / elapsed.as_secs_f64();
+        // Throughput is reported, not asserted: floors vary with machine load
+        // and build profile (bd -gk6). Functional checks below are the gate.
         eprintln!("put_batch_fast: {n} docs in {elapsed:?} = {docs_per_sec:.0} docs/sec");
-        // tantivy-fts ON: tantivy batch write adds ~80ms/10k overhead → lower floor.
-        // tantivy-fts OFF: FTS5-only, M4 Max yields 40-50k/s.
-        #[cfg(feature = "tantivy-fts")]
-        let floor = 5_000.0_f64;
-        #[cfg(not(feature = "tantivy-fts"))]
-        let floor = 30_000.0_f64;
-        assert!(
-            docs_per_sec > floor,
-            "expected >{floor:.0} docs/sec, got {docs_per_sec:.0}"
-        );
         // Verify FTS5 is usable immediately
         let hits = s
             .search("unique content", SearchMode::Lex, None, 5)
