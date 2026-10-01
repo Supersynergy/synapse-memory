@@ -27,14 +27,14 @@ Prebuilt release (installs `synx`, verifies the SHA-256 sidecar, creates
 `~/.synapse/brain.db`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-agent-memory/main/release/synapse-agent-memory/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-agent-memory/install.sh | sh
 ```
 
 Or build from source (needed for the daemon and MCP bridge):
 
 ```bash
-git clone https://github.com/Supersynergy/synapse-agent-memory.git
-cd synapse-agent-memory
+git clone https://github.com/Supersynergy/synapse-memory.git
+cd synapse-memory
 cargo build --release -p synapse-cli -p synapsed -p synapse-mcp
 # binaries: target/release/{synx,synapsed,synapse-mcp}
 ```
@@ -104,17 +104,19 @@ The most useful tools: `context_pack` (budgeted verbatim context),
 ### 1. Install `synx`
 
 ```powershell
-irm https://raw.githubusercontent.com/Supersynergy/synapse-agent-memory/main/release/synapse-agent-memory/install.ps1 | iex
+irm https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-agent-memory/install.ps1 | iex
 ```
 
 Installs `synx.exe` to `%LOCALAPPDATA%\Synapse\bin` (added to your user `Path`)
-and initializes `%USERPROFILE%\.synapse\brain.db`.
+and initializes `%USERPROFILE%\.synapse\brain.db`. Windows on ARM64 is not
+supported yet — the vendored ANN stack (`usearch`/`numkong`) cannot compile
+under MSVC arm64; use x64 Windows, WSL2, or another OS.
 
 Or build from source (needed for the daemon and MCP bridge):
 
 ```powershell
-git clone https://github.com/Supersynergy/synapse-agent-memory.git
-cd synapse-agent-memory
+git clone https://github.com/Supersynergy/synapse-memory.git
+cd synapse-memory
 cargo build --release -p synapse-cli -p synapsed -p synapse-mcp
 # binaries: target\release\{synx.exe,synapsed.exe,synapse-mcp.exe}
 ```

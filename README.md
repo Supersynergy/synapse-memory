@@ -22,13 +22,13 @@ background service.
 macOS and Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-agent-memory/main/release/synapse-agent-memory/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-agent-memory/install.sh | sh
 ```
 
 Windows (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/Supersynergy/synapse-agent-memory/main/release/synapse-agent-memory/install.ps1 | iex
+irm https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-agent-memory/install.ps1 | iex
 ```
 
 The installer downloads one binary, `synx`, for your system. It verifies the
@@ -160,10 +160,10 @@ it yourself.
 
 ## What the download includes
 
-The installer ships the portable release, version `1.1.0-rc.3`. It includes
+The installer ships the portable release, version `2.1.0`. It includes
 the `synx` command line with keyword search, cited context briefs, typed and
 dated memories, feedback, health checks, backup, restore, merge and Ed25519
-signatures. It runs on macOS, Linux and Windows, each on x86-64 and ARM64.
+signatures. It runs on macOS, Linux and Windows, on x86-64 and on macOS/Linux ARM64 (Windows ARM64 is not built yet — the vendored usearch/numkong stack cannot compile under MSVC arm64).
 
 Search in the download is keyword-based. Vector search, the `synapsed` daemon
 and the `synapse-mcp` MCP server are part of this repository and need a build
@@ -179,8 +179,8 @@ How each release is verified: [PROOF.md](release/synapse-agent-memory/PROOF.md).
 You need a Rust toolchain ([rustup](https://rustup.rs)).
 
 ```sh
-git clone https://github.com/Supersynergy/synapse-agent-memory.git
-cd synapse-agent-memory
+git clone https://github.com/Supersynergy/synapse-memory.git
+cd synapse-memory
 cargo build --release --locked -p synapse-cli
 ./target/release/synx --version
 ```
@@ -208,7 +208,7 @@ third-party dependencies with their licenses.
 
 ## Help and contributing
 
-- Bugs and questions: [GitHub Issues](https://github.com/Supersynergy/synapse-agent-memory/issues)
+- Bugs and questions: [GitHub Issues](https://github.com/Supersynergy/synapse-memory/issues)
 - Known gaps: [KNOWN-ISSUES.md](KNOWN-ISSUES.md)
 - Security reports: [SECURITY.md](SECURITY.md)
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
