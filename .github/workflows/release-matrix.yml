@@ -15,6 +15,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Release artifacts must run on any CPU of their arch; .cargo/config.toml's
+  # target-cpu=native would bake in the builder's ISA and breaks ring's asserts.
+  RUSTFLAGS: ""
 
 jobs:
   build-native:
