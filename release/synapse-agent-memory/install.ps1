@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$DefaultVersion = "1.1.0-rc.3"
+$DefaultVersion = "2.1.0"
 $Repo = if ($env:SYNAPSE_REPO) { $env:SYNAPSE_REPO } else { "https://github.com/Supersynergy/synapse-agent-memory" }
 $Arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 $Target = switch ($Arch) {
