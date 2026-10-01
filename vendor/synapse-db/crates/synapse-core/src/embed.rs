@@ -30,16 +30,78 @@ pub fn cache_counters() -> (u64, u64) {
     )
 }
 
-/// Returns number of ONNX sessions: half of logical cores, min 2.
-/// On M4 Max (12 cores) → 6 sessions. Replaces old `POOL_SIZE = 2`.
+/// Max number of ONNX sessions: half of logical cores, min 2.
+/// Overridable via `SYNAPSE_EMBED_POOL`. Sessions are created lazily —
+/// the cap is a ceiling, not eager cost (bd -frt): a one-shot `synx put`
+/// pays a single model load instead of `cores/2`.
 fn get_pool_size() -> usize {
-    std::thread::available_parallelism()
-        .map(|n| (n.get() / 2).max(2))
-        .unwrap_or(4)
+    std::env::var("SYNAPSE_EMBED_POOL")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| (n.get() / 2).max(2))
+                .unwrap_or(4)
+        })
 }
 
-/// Global pool of pre-warmed TextEmbedding sessions.
-static SESSION_POOL: OnceCell<Mutex<Vec<TextEmbedding>>> = OnceCell::new();
+/// Lazily-grown session pool: `idle` holds reusable sessions, `total`
+/// counts created+in-flight ones against `get_pool_size()`.
+struct SessionPool {
+    idle: Vec<TextEmbedding>,
+    total: usize,
+}
+
+static SESSION_POOL: OnceCell<(Mutex<SessionPool>, std::sync::Condvar)> = OnceCell::new();
+
+fn session_pool() -> &'static (Mutex<SessionPool>, std::sync::Condvar) {
+    SESSION_POOL.get_or_init(|| {
+        (
+            Mutex::new(SessionPool {
+                idle: Vec::new(),
+                total: 0,
+            }),
+            std::sync::Condvar::new(),
+        )
+    })
+}
+
+fn new_session() -> Result<TextEmbedding> {
+    TextEmbedding::try_new(InitOptions::new(select_model()).with_show_download_progress(false))
+        .map_err(|e| Error::Other(format!("fastembed init: {e}")))
+}
+
+/// Take a session: reuse an idle one, or create one under the cap
+/// (creation happens outside the lock), or wait for a release.
+fn acquire_session() -> Result<TextEmbedding> {
+    let (m, cv) = session_pool();
+    let mut g = m.lock();
+    loop {
+        if let Some(s) = g.idle.pop() {
+            return Ok(s);
+        }
+        if g.total < get_pool_size() {
+            g.total += 1; // reserve a slot before the slow init
+            break;
+        }
+        g = cv.wait(g);
+    }
+    drop(g);
+    match new_session() {
+        Ok(s) => Ok(s),
+        Err(e) => {
+            session_pool().0.lock().total -= 1;
+            Err(e)
+        }
+    }
+}
+
+fn release_session(s: TextEmbedding) {
+    let (m, cv) = session_pool();
+    m.lock().idle.push(s);
+    cv.notify_one();
+}
 
 /// Select embedding model from `SYNAPSE_EMBED_MODEL` env-var.
 /// Default `bge-small` (384-dim, MTEB 53.0) for backward compatibility.
@@ -73,25 +135,19 @@ fn select_model() -> EmbeddingModel {
     }
 }
 
-fn get_or_init_pool() -> Result<&'static Mutex<Vec<TextEmbedding>>> {
-    SESSION_POOL.get_or_try_init(|| {
-        let pool_size = get_pool_size();
-        let model = select_model();
-        let mut sessions = Vec::with_capacity(pool_size);
-        for _ in 0..pool_size {
-            let m = TextEmbedding::try_new(
-                InitOptions::new(model.clone()).with_show_download_progress(false),
-            )
-            .map_err(|e| Error::Other(format!("fastembed init: {e}")))?;
-            sessions.push(m);
-        }
-        Ok(Mutex::new(sessions))
-    })
-}
-
-/// Warm the global ONNX session pool eagerly (call once at daemon start).
+/// Warm the session pool eagerly up to the cap — call once at daemon
+/// start so request latency doesn't pay model-init cost. One-shot CLI
+/// paths skip this and grow lazily instead (bd -frt).
 pub fn warm_pool() -> Result<()> {
-    get_or_init_pool()?;
+    let target = get_pool_size();
+    let needed = target.saturating_sub(session_pool().0.lock().total);
+    let mut made = Vec::with_capacity(needed);
+    for _ in 0..needed {
+        made.push(new_session()?);
+    }
+    let mut g = session_pool().0.lock();
+    g.total += made.len();
+    g.idle.extend(made);
     Ok(())
 }
 
@@ -101,12 +157,11 @@ pub struct Embedder {
 
 impl Embedder {
     pub fn new() -> Result<Self> {
-        get_or_init_pool()?;
+        // No eager model load — sessions materialize on first embed (bd -frt).
         Ok(Self { cache: None })
     }
 
     pub fn new_with_cache<P: AsRef<Path>>(cache_path: Option<P>) -> Result<Self> {
-        get_or_init_pool()?;
         let cache = match cache_path {
             Some(p) => {
                 if let Some(parent) = p.as_ref().parent() {
@@ -132,19 +187,12 @@ impl Embedder {
     }
 
     fn embed_raw(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
-        let pool = get_or_init_pool()?;
-        // Acquire lock only to pop — drop guard before ONNX inference (~5-15ms).
-        let mut session = {
-            let mut guard = pool.lock();
-            guard
-                .pop()
-                .ok_or_else(|| Error::Other("pool empty".into()))?
-        };
+        // Lazy acquire: reuse idle session, create under cap, or wait (bd -frt).
+        let mut session = acquire_session()?;
         let result = session
             .embed(texts, None)
             .map_err(|e| Error::Other(format!("embed: {e}")));
-        // Re-acquire to push back.
-        pool.lock().push(session);
+        release_session(session);
         result
     }
 
