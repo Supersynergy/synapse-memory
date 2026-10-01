@@ -10,6 +10,9 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # .cargo/config.toml pins `-C target-cpu=native` for local dev; on CI it
+  # breaks ring's const CPU-feature asserts and yields non-portable builds.
+  RUSTFLAGS: ""
 
 jobs:
   lint:
