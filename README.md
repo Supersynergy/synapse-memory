@@ -1,336 +1,200 @@
 # Synapse Memory
 
-[![CI](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/ci.yml)
-[![Release](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/release-matrix.yml/badge.svg)](https://github.com/Supersynergy/synapse-agent-memory/actions/workflows/release-matrix.yml)
-[![Crates.io](https://img.shields.io/crates/v/synapse-core.svg)](https://crates.io/crates/synapse-core)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-CORE.md)
-[![LoCoMo](https://img.shields.io/badge/eval-LoCoMo%20%2B%20LongMemEval-blueviolet)](eval/)
-[![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-lightgrey)](#install)
-[![Arch](https://img.shields.io/badge/arch-x86__64%20%2B%20aarch64-orange)](#install)
+![Synapse Memory: come back tomorrow, the why is still here](docs/assets/social-preview.png)
 
-**A memory for your coding assistant. One file on your disk. Nothing to install, nothing to keep running, nothing sent anywhere.**
+[![License: FSL-1.1-ALv2 + MIT](https://img.shields.io/badge/license-FSL--1.1--ALv2%20%2B%20MIT-blue)](#license)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#install)
 
-Your assistant forgets everything between sessions. Synapse Memory gives it somewhere to look
-things up: past decisions, what worked, what broke. It hands back a short relevant answer with
-a source instead of a wall of text, and it knows when a fact was true, so an old note does not
-outrank a newer one.
+Long-term memory for coding agents such as Claude Code, Codex and Cursor.
+It keeps decisions, fixes and facts in one SQLite file on your disk and gives
+your agent a short brief with sources before it starts a task.
 
-It is one binary. Searches come back in well under a millisecond whether the file holds five
-notes or 294,000.
+Every new agent session starts empty. The bug you fixed last week, the reason
+you picked Postgres, the deploy rule your team agreed on: the agent has to ask
+again. Synapse Memory stores these as dated notes and hands back the ones that
+matter for the task at hand.
 
-> **Core promise:** best context, not biggest context.
-
----
-
-## Why Synapse Memory
-
-| | Synapse Memory | Mem0 | Letta (MemGPT) | Zep | Chroma | Qdrant |
-|---|---|---|---|---|---|---|
-| **Local-first, no Docker** | ✅ one binary | ❌ Python+Docker | ❌ Python+Docker | ❌ server | ⚠️ embedded | ❌ server |
-| **SQLite-backed** | ✅ one file | ❌ Postgres/Neo4j | ❌ Postgres/SQLite | ❌ Postgres | ✅ | ❌ custom |
-| **Hybrid search (FTS5 + ANN + RRF + rerank)** | ✅ sub-ms | ⚠️ basic | ❌ | ⚠️ basic | ⚠️ ANN only | ⚠️ ANN only |
-| **Decision-chain graph (`why()`)** | ✅ recursive CTE | ❌ | ⚠️ messages | ❌ | ❌ | ❌ |
-| **Ed25519 doc signing** | ✅ 25µs s+v | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **CRDT merge (offline sync)** | ✅ | ❌ | ❌ | ⚠️ | ❌ | ❌ |
-| **MCP server (Claude/Cursor native)** | ✅ 6+ tools | ⚠️ | ⚠️ | ❌ | ❌ | ❌ |
-| **Tag system + auto-rules** | ✅ | ⚠️ basic | ❌ | ⚠️ | ❌ | ❌ |
-| **Prometheus + JSON metrics** | ✅ | ❌ | ❌ | ⚠️ | ❌ | ⚠️ |
-| **zstd backup (64% compression)** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **LoCoMo + LongMemEval bench** | ✅ | ❌ | ❌ | ⚠️ | ❌ | ❌ |
-| **6-native CI (linux/macos/windows × x64/arm64)** | ✅ | ❌ | ❌ | ❌ | ⚠️ | ⚠️ |
-| **License** | MIT | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 | Apache-2.0 |
-
----
+Everything stays on your machine. You need no account, API key, Docker or
+background service.
 
 ## Install
 
-### Option 1 — Prebuilt binary (recommended)
+macOS and Linux:
 
-Download the latest release for your platform from
-[GitHub Releases](https://github.com/Supersynergy/synapse-agent-memory/releases):
-
-```bash
-# Linux/macOS
-tar -xzf synapse-<target>.tar.gz
-cd synapse-<target>
-sudo cp bin/synx bin/synapse-ultra /usr/local/bin/
-
-# Windows
-Expand-Archive synapse-x86_64-pc-windows-msvc.zip
-# Copy bin\synx.exe and bin\synapse-ultra.exe to a PATH directory
+```sh
+curl -fsSL https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-agent-memory/install.sh | sh
 ```
 
-### Option 2 — Cargo install
+Windows (PowerShell):
 
-```bash
-cargo install --locked --path crates/synapse-cli
-cargo install --locked --path crates/synapse-ultra
+```powershell
+irm https://raw.githubusercontent.com/Supersynergy/synapse-memory/main/release/synapse-agent-memory/install.ps1 | iex
 ```
 
-### Option 3 — Build from source
+The installer downloads one binary, `synx`, for your system. It verifies the
+SHA-256 checksum before it unpacks anything and creates your memory file at
+`~/.synapse/brain.db`. An existing memory file is kept as it is.
 
-```bash
-git clone https://github.com/Supersynergy/synapse-agent-memory.git
-cd synapse-agent-memory
-cargo build --release -p synapse-cli -p synapse-ultra
-# Binaries at target/release/synx and target/release/synapse-ultra
-```
+Check that it worked:
 
-### Verify
-
-```bash
+```sh
 synx --version
-synapse-ultra --version
-synx doctor -f ~/.synapse/brain.db
 ```
 
----
+If your shell cannot find `synx`, add the install folder to your `PATH`:
+`~/.local/bin` on macOS and Linux, `%LOCALAPPDATA%\Synapse\bin` on Windows.
+On macOS and Linux the installer prints the exact line for you.
 
-## 5-line demo
+## First steps
 
-```bash
-synx -f ~/.synapse/brain.db prime .
-synx -f ~/.synapse/brain.db remember --kind decision "Use Synapse context packs before major code edits."
-synx -f ~/.synapse/brain.db context "current repo task" --mode coding
-synx -f ~/.synapse/brain.db fresh-context --cwd . --prompt "latest package API changes"
-synx -f ~/.synapse/brain.db doctor --fix
+Store something you want to keep:
+
+```sh
+synx remember --kind bugfix --title "Login loop" \
+  "Login loop on Safari came from SameSite=Strict on the session cookie. Fixed with SameSite=Lax."
 ```
 
----
+Ask for it later, from any folder and any session:
 
-## Production tools (new in v2.1.0)
-
-### Health check — 11-point audit
-
-```bash
-synapse-ultra health --db ~/.synapse/brain.db
-synapse-ultra health --db ~/.synapse/brain.db --json   # for monitoring
+```sh
+synx context "safari login loop"
 ```
 
-Checks: integrity, WAL mode, synchronous, foreign keys, FTS5 index, indexes, triggers,
-schema version, DB size, page cache, ultra schema.
+The answer is a short Markdown brief that an agent can read directly:
 
-### Backup — zstd-compressed with manifest
+```text
+# Synapse Agent Memory Context Pack
 
-```bash
-synapse-ultra backup --db ~/.synapse/brain.db
-# → ~/.synapse/backups/brain-<ts>.db.zst (64% compression, sha256 manifest)
+context_id: 0cba73da100ec9d2
+query: safari login loop
+route: lexical
+budget: 239/2400 chars
+...
+
+### [2] Login loop score=0.5970
+kind: bugfix priority: normal
+captured_at: 2026-10-01T00:28:01Z occurred_at: unspecified
+Login loop on Safari came from SameSite=Strict on the session cookie. Fixed with SameSite=Lax.
+...
 ```
 
-### Metrics — Prometheus + JSON
+Each entry carries its id, type and date, so the agent can cite it and you can
+check it. The brief stays within a character budget (2,400 by default), so a
+large memory never floods the prompt.
 
-```bash
-synapse-ultra metrics --db ~/.synapse/brain.db --format prometheus
-synapse-ultra metrics --db ~/.synapse/brain.db --format json
+When a fact changes, save the new version and name the id of the old one (the
+number in brackets in a context brief). The history stays in the file:
+
+```sh
+synx remember --kind fact --supersedes 3 "Staging runs Postgres 18 since 2026-09-20."
 ```
 
-Exposes: `synapse_events_total`, `synapse_decisions_total`, `synapse_docs_total`,
-`synapse_db_size_bytes`, `synapse_tags_total`, `synapse_tag_associations_total`, and more.
+From then on, context briefs show the new fact and skip the old one.
 
-### Tag system — auto-rules, bulk-tagging, export/import
+## Connect your agent
 
-```bash
-synapse-ultra tags add rust --color "#dea584" --description "Rust language"
-synapse-ultra tags tag 42 rust --source manual
-synapse-ultra tags bulk --ids 1,2,3,4,5 rust --source auto
-synapse-ultra tags rule refactor refactoring      # keyword → tag auto-applied on ingest
-synapse-ultra tags merge rust-lang into rust      # repoint + delete
-synapse-ultra tags cleanup                         # remove orphan tags
-synapse-ultra tags stats
-synapse-ultra tags export > tags.json
-synapse-ultra tags import tags.json
+Paste this into the `AGENTS.md` or `CLAUDE.md` of your project. Codex and Cursor
+read `AGENTS.md`, Claude Code reads `CLAUDE.md`.
+
+```markdown
+## Memory
+- Before a non-trivial task, run `synx context "<task>" --mode coding` and read the result.
+- After a decision, a fix or a lesson, save it:
+  `synx remember --kind decision|bugfix|fact "<what happened and why>"`.
+- If a memory helped, run the `synx feedback` command printed in the brief.
 ```
 
----
+At the start of a session, `synx prime .` briefs the agent on the repository in
+front of it. The brief lists Git state, key documents, test commands and recent
+memories.
 
-## Architecture
+Codex users can add crash-safe resume. After an interrupted session, the next
+one starts with a short checkpoint that names the working directory, the last
+tool and the changed files. It never stores the conversation, file contents or
+tool output.
+Setup: [integrations/codex](integrations/codex/README.md).
 
-```mermaid
-graph TD
-    CLI["synx CLI"] --> Daemon["synapsed (Unix-socket)"]
-    MCP["synapse-mcp (agent memory tools)"] --> Daemon
-    Daemon --> Core["synapse-core (SQLite + FTS5 + sqlite-vec)"]
-    CLI --> Context["context / prime / fresh-context / feedback"]
-    Context --> Core
-    Context --> Learn["synapse-learn feedback loop"]
-    Daemon --> Ann["synapse-ann (usearch HNSW)"]
-    Daemon --> Fts["synapse-fts (Tantivy)"]
-    Daemon --> Rerank["synapse-rerank (ColBERT-i8)"]
-    Core --> DB[(brain.db)]
-    Ann --> DB
-    Fts --> DB
-    Ultra["synapse-ultra (events + graph + tags + ops)"] --> DB
+## Everyday commands
+
+| You want to | Command |
+|---|---|
+| Save a decision, fix or fact | `synx remember --kind decision "..."` |
+| Replace an outdated memory | `synx remember --supersedes <id> "..."` |
+| Get context for a task | `synx context "<task>" --mode coding` |
+| Brief a new session on a repo | `synx prime .` |
+| Rate a context brief | `synx feedback context:<id> <doc_id> --gate pass` |
+| Check health, repair the search index | `synx doctor --fix` |
+| Back up your memory | `synx backup brain-backup.synx` |
+| Restore a backup | `synx db-restore brain-backup.synx` |
+
+`--kind` accepts `decision`, `fact`, `preference`, `bugfix`, `benchmark`,
+`command`, `session`, `adr`, `research` and `note`. Run `synx <command> --help`
+for every option.
+
+## Where your memory lives
+
+`synx` uses `~/.synapse/brain.db`. If a folder contains its own
+`.synapse/brain.db`, commands run inside that folder use the project file
+instead. Pass `-f <file>` to choose a file yourself. On Windows, pass
+`-f $env:USERPROFILE\.synapse\brain.db` explicitly.
+
+The file is plain SQLite. You can copy it, back it up with any tool and open it
+with `sqlite3`. Synapse Memory stores only what you or your agent save with
+`remember`. It never records transcripts.
+
+To uninstall on macOS or Linux, delete `~/.local/bin/synx` and, after an
+upgrade, `~/.local/bin/synx.previous`. Your memory file stays until you delete
+it yourself.
+
+## What the download includes
+
+The installer ships the portable release, version `1.1.0-rc.3`. It includes
+the `synx` command line with keyword search, cited context briefs, typed and
+dated memories, supersession, feedback, health checks, backup, restore, merge
+and Ed25519 signatures. It runs on macOS, Linux and Windows, each on x86-64
+and ARM64.
+
+Search in the download is keyword-based. Vector search, the `synapsed` daemon
+and the `synapse-mcp` MCP server are part of this repository and need a build
+from source. MCP setup for Claude Code and Cursor:
+[crates/synapse-mcp](crates/synapse-mcp/README.md).
+
+Exact capability list: [FEATURES.md](release/synapse-agent-memory/FEATURES.md).
+How each release is verified: [PROOF.md](release/synapse-agent-memory/PROOF.md).
+
+## Build from source
+
+You need a Rust toolchain ([rustup](https://rustup.rs)).
+
+```sh
+git clone https://github.com/Supersynergy/synapse-memory.git
+cd synapse-memory
+cargo build --release --locked -p synapse-cli
+./target/release/synx --version
 ```
 
----
+The first build takes a few minutes. A source build of `main` reports its
+workspace version (`2.1.0`), which differs from the release numbering.
 
-## Crate map
-
-### Production (`crates/`)
-
-| Crate | Role |
-|-------|------|
-| `synapse-core` | Store, FTS5, sqlite-vec index, KG triples, zstd/blake3 |
-| `synapse-engine` | ABI bridge + RRF fusion |
-| `synapsed` | Unix-socket RPC daemon |
-| `synapse-cli` | CLI: put / find / hybrid / merge / sign / verify / stats |
-| `synapse-mcp` | MCP server (6+ tools, Claude/Cursor native) |
-| `synapse-ultra` | Event log + graph-v2 + tags + ops (health/backup/metrics) |
-| `synapse-space` | Agent-memory hierarchy: Space → Wing → Room → Drawer |
-| `synapse-learn` | Thompson-sampling bandit router |
-| `synapse-rerank` | Cross-encoder rerank (identity default; ONNX optional) |
-| `synapse-extract` | Text extraction + chunking |
-| `synapse-temporal` | NL date parser, bitemporal filter |
-| `synapse-kernel` | NEON int8/f16/hamming kernel crate |
-| `synapse-quant` | f32→i8/f16/binary, Matryoshka MRL |
-| `synapse-ann` | HNSW via usearch + brute-force SIMD scan |
-| `synapse-fts` | Tantivy persistent index (BMP block-max pruning) |
-| `synapse-fusion` | MUVERA RRF API |
-| `synapse-colbert` | MaxSim late-interaction scaffold |
-| `synapse-splade` | Neural-sparse inverted index (SPLADE-v3) |
-| `synapse-cluster` | CRDT gossip + Raft CP-mode |
-| `synapse-graph` | Knowledge-graph triples + Datalog (⚠️ semi-naive broken above 100 facts) |
-| `synapse-media` | Video keyframe + audio + image embedding index |
-| `synapse-multimodal` | Multimodal asset pipeline |
-| `synapse-py` | PyO3 wheel (Brain, LangChain/LlamaIndex adapters) |
-| `synapse-js` | JS/TS SDK via napi-rs |
-| `synapse-cms` | WordPress/CMS Thompson-Beta TTL bandit |
-| `synapse-market` | HFT/backtest: OHLCV + regime-vec |
-| `synapse-migrate` | Import from Qdrant/LanceDB/Chroma |
-| `synapse-obs` | OTel + Prometheus dashboards |
-| `synapse-stream` | Pub/sub + CDC (pub/sub: 76 ns/msg; CDC: 2,241/s SQLite-bottleneck) |
-| `synapse-tsdb` | Time-series: 4.26M inserts/s (fallback store; Arrow-path unbenched) |
-| `synapse-mlx-olap` | GROUP BY analytics CPU: ~25M rows/s (Metal path not verified) |
-| `synapse-jit` | Cranelift JIT filter: 2× vs SQLite (no speedup vs interpreter) |
-| `synapsql` | MySQL-wire proxy (MariaDB bench: 700×/32×/1.85×) |
-| `synapse-raft` | WAL-Raft segments, 3-node election <1s |
-| `synapse-spann` | Disk-tier SPANN scaffold |
-
-### Experimental (`experimental/`)
-
-Stubs — excluded from default workspace build.
-
-| Crate | Status |
-|-------|--------|
-| `synapse-mysql` | MySQL wire-protocol proxy (0 tests) |
-| `synapse-pg` | Postgres wire-protocol proxy (0 tests) |
-| `synapse-edge` | Pingora HTTP frontend (RUSTSEC blocked) |
-| `synapse-rank` | LambdaMART scaffold (skeleton only) |
-| `synapse-embed-gpu` | GPU embedding bridge (standalone workspace) |
-
----
-
-## Benchmarks (verified, M4 Max)
-
-Full bench files in [`bench-dashboard/`](bench-dashboard/).
-
-### ANN — SIFT-1M 128d (1M vectors, 1000 queries)
-
-Source: [SIFT1M_BENCH_2026-05-12.md](bench-dashboard/SIFT1M_BENCH_2026-05-12.md)
-
-| Mode | p50 ms | QPS | R@10 | Notes |
-|------|--------|-----|------|-------|
-| hnsw-i8 (ef=64) | **0.10** | 10 474 | 0.908 | lowest latency, recall loss |
-| hnsw-f16 (ef=64) | 0.18 | 5 723 | 0.979 | balanced |
-| hnsw-f16 (ef=192) | 0.32 | 3 240 | 0.993 | recommended production |
-| hnsw-f32 (ef=64) | 0.34 | 3 013 | 0.982 | highest recall potential |
-| brute-force i8 | 5.43 | 182 | 0.969 | exact, no index |
-| brute-force f32 | 18.53 | 54 | 1.000 | exact, no index |
-
-### Hybrid search — production daemon (294k docs)
-
-Source: [REAL_BENCH_2026-05-11.md](bench-dashboard/REAL_BENCH_2026-05-11.md)
-
-| Metric | Value |
-|--------|-------|
-| hybrid search p50 | **35 ms** (FTS5 + ANN + RRF + rerank, single Unix-socket call) |
-| put-batch | **334 k/s** (FTS5 + vec + CRDT, persisted) |
-| Qdrant gRPC vs synapse put-batch | Synapse 56× faster (local, not iso-recall) |
-
-### Eval — LoCoMo + LongMemEval
-
-Automated harness in [`eval/`](eval/). Run:
-
-```bash
-python3 eval/harness.py download
-python3 eval/harness.py ingest --db /tmp/eval-brain.db
-python3 eval/harness.py run --db /tmp/eval-brain.db --k 5
-python3 eval/harness.py report
-```
-
-Metrics: Recall@k, MRR, latency p50/p95, per-category breakdown.
-
-### Durability — SQLite-WAL
-
-Source: [FAIR_DURABILITY_BENCH_2026-05-13.md](bench-dashboard/FAIR_DURABILITY_BENCH_2026-05-13.md)
-
-| Durability | Batch-1 | Batch-1000 |
-|------------|---------|------------|
-| strict (fsync) | 7 K/s | 943 K/s |
-| batched | 45 K/s | 926 K/s |
-| fast (no fsync) | 110 K/s | 1.1 M/s |
-| in-memory | 384 K/s | 1.3 M/s |
-
----
-
-## Feature matrix
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| BM25 full-text (FTS5) | ✅ stable | 23µs/q on 10k docs |
-| sqlite-vec ANN | ✅ stable | |
-| Tantivy BM25 | ✅ stable | 18.3× warm-start |
-| usearch HNSW | ✅ stable | 0.10ms p50 at ef=64 (SIFT-1M) |
-| RRF hybrid fusion | ✅ stable | NEON SIMD 5–8× vs scalar |
-| ColBERT-i8 rerank | ✅ stable | 12.2× speed, 3.9× storage vs f32 |
-| SPLADE neural-sparse (BMP) | ✅ stable | 9.7× vs naive scan |
-| MUVERA full pipeline | ✅ stable | Dense+SPLADE+RRF+ColBERT, sub-ms |
-| Conformal R=1.0 guarantee | ✅ stable | split-conformal, LongMemEval validated |
-| CRDT gossip cluster | ✅ stable | <200ms LAN convergence |
-| Raft CP-mode | ✅ minimal | `cluster-raft` feature, 3-node <1s election |
-| Ed25519 signing | ✅ stable | 25µs sign + verify |
-| MCP server (6+ tools) | ✅ stable | Claude + Cursor native |
-| **Tag system + auto-rules** | ✅ stable v2.1.0 | bulk-tag, merge, cleanup, export/import |
-| **Health check (11-point)** | ✅ stable v2.1.0 | integrity, WAL, FTS, indexes, triggers |
-| **zstd backup** | ✅ stable v2.1.0 | 64% compression, sha256 manifest |
-| **Prometheus + JSON metrics** | ✅ stable v2.1.0 | `synapse_*` exposition format |
-| **Event log + `why()` operator** | ✅ stable v2.0.0 | recursive CTE, BLAKE3 dedup |
-| **Graph-v2 (SQLite CTE)** | ✅ stable v2.0.0 | replaces broken Datalog |
-| **Token cost log** | ✅ stable v2.0.0 | per-call usage analytics |
-| **LoCoMo + LongMemEval bench** | ✅ stable v2.1.0 | automated harness in `eval/` |
-| **6-native CI matrix** | ✅ stable v2.1.0 | linux/macos/windows × x64/arm64 |
-| Pub/sub stream | ✅ stable | 76 ns/msg |
-| TSDB insert | ✅ partial | fallback store 4.26M/s; Arrow-path unbenched |
-| JIT filter (Cranelift) | ✅ partial | 2× vs SQLite, no gain vs interpreter |
-| Metal/MLX OLAP | ⚠️ unverified | CPU-only confirmed; Metal dispatch not observed |
-| Datalog (synapse-graph) | ❌ broken | semi-naive quadratic, 7s for 100 facts |
-| Python wheel (PyO3) | 🔜 planned | `synapse-py` maturin publish |
-| CLIP cross-modal | ✅ scaffold | `multimodal` feature, ONNX swap-path |
-| Audio CLAP | ✅ scaffold | `audio-clap` feature |
-| VJEPA-2 video | ✅ scaffold | ONNX swap-path |
-
----
-
-## Roadmap
-
-- [ ] Datalog semi-naive: delta-join + HashMap index (currently broken above 100 facts)
-- [ ] HNSW parallel batch insert (target <10s for 1M vs current 197–672s)
-- [ ] glass-backend CPU-SIMD beam search (expected ≥2× QPS vs usearch)
-- [ ] io_uring durability bench on bare-metal Linux
-- [ ] Metal dispatch verification for `synapse-mlx-olap`
-- [ ] MTEB full 56-task suite (2/56 measured today)
-- [ ] Python wheel publish to PyPI (`synapse-py` via maturin)
-- [ ] `synapse-raft` production hardening
-
----
+Layer map: [ARCHITECTURE.md](ARCHITECTURE.md). Workflow and checks:
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT — library crates.
-`synapse-engine` — source-available Engine License (non-commercial free; commercial license available).
+- `synapse-core` uses [FSL-1.1-ALv2](LICENSES/FSL-1.1-ALv2.txt). You may use,
+  change and share it for any purpose except a competing commercial product.
+  Two years after each release, that release becomes Apache-2.0.
+- The command line and most other crates use [MIT](LICENSES/MIT.txt).
+  `synapse-kernel` and `synapse-embed-gpu` use MIT or Apache-2.0.
+- `synapse-engine` is proprietary and is not part of the download. See
+  [LICENSE-ENGINE.md](LICENSE-ENGINE.md).
 
-See [LICENSE-CORE.md](LICENSE-CORE.md) and [LICENSE-ENGINE.md](LICENSE-ENGINE.md).
+Every release archive contains both license texts and a list of all
+third-party dependencies with their licenses.
 
-## Contributing
+## Help and contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Known issues: [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
+- Bugs and questions: [GitHub Issues](https://github.com/Supersynergy/synapse-memory/issues)
+- Security reports: [SECURITY.md](SECURITY.md)
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Changes per version: [CHANGELOG.md](CHANGELOG.md)

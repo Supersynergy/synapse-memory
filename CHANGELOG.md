@@ -16,6 +16,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Root `ARCHITECTURE.md` with the L0 substrate / L1 domain / L2 interface overview.
 
 ### Changed
+- README rewritten for users: install, first steps, agent setup and data
+  location come first, every command checked against the `1.1.0-rc.3` release
+  binary. Removed the competitor table, the 35-crate map, benchmark tables that
+  linked to a missing `bench-dashboard/`, and the MIT-only license badge
+  (`synapse-core` is FSL-1.1-ALv2). Links now use the `synapse-memory` repo name.
 - Default workspace build is now the Context-OS product surface only:
   `synapsed`, `synapse-cli`, `synapse-mcp`, `synapse-rerank`, `synapse-learn`,
   `synapse-extract`, `synapse-space`, `synapse-temporal` (8 crates, down from
