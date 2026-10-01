@@ -1,8 +1,15 @@
 [advisories]
+# Transitive advisories pinned by deps we cannot upgrade; see
+# release/synapse-agent-memory/audit.sh `allowed` list for pullers/reasons.
+ignore = [
+  "RUSTSEC-2024-0384", # instant — via tantivy/measure_time
+  "RUSTSEC-2024-0436", # paste — via statrs/nalgebra
+  "RUSTSEC-2026-0173", # proc-macro-error2 — via age
+  "RUSTSEC-2026-0215", # smallstr — via yrs
+]
 
 [licenses]
 allow = [
-  "FSL-1.1-ALv2",
   "Apache-2.0",
   "MIT",
   "BSD-2-Clause",

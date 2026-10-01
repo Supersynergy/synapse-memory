@@ -24,7 +24,7 @@ type FreshInput = (String, Option<PathBuf>, Option<String>);
 type SearchBestEffortResult = (Vec<synapse_core::Hit>, String);
 
 #[derive(Parser)]
-#[command(name = "synapse", version, about = "Single-file memory for AI agents")]
+#[command(name = "synx", version, about = "Single-file memory for AI agents")]
 struct Cli {
     /// Brain DB path. Default: ~/.synapse/brain.db (shared with synapsed,
     /// synapse-mcp and synapse-ultra). Pass -f to use a different file.
