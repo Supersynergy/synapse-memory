@@ -1136,11 +1136,9 @@ fn embed_optional(file: &std::path::Path, text: &str, no_embed: bool) -> Result<
     }
     #[cfg(feature = "embedder")]
     {
-        let e = Embedder::new_with_cache::<std::path::PathBuf>(
-            file.parent().map(|p| p.join(".emb-cache")),
-        )
-        .context("embedder init")?;
-        return Ok(Some(e.embed_one(text)?));
+        let e = Embedder::new_with_cache::<std::path::PathBuf>(emb_cache(file))
+            .context("embedder init")?;
+        Ok(Some(e.embed_one(text)?))
     }
     #[cfg(not(feature = "embedder"))]
     {
@@ -1156,7 +1154,7 @@ fn embed_required(cache_dir: Option<std::path::PathBuf>, text: &str) -> Result<V
     #[cfg(feature = "embedder")]
     {
         let e = Embedder::new_with_cache::<std::path::PathBuf>(cache_dir)?;
-        return e.embed_one(text).context("embed query");
+        e.embed_one(text).context("embed query")
     }
     #[cfg(not(feature = "embedder"))]
     {

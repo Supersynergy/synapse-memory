@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license = "LicenseRef-Proprietary"
-license-file = "../../LICENSE-ENGINE.md"
 
 [lib]
 name = "synapse_engine"
