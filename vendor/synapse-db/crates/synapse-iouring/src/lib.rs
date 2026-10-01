@@ -26,7 +26,7 @@ pub mod error;
 pub mod lsm;
 pub mod store;
 
-#[cfg(feature = "io-uring")]
+#[cfg(all(feature = "io-uring", target_os = "linux"))]
 pub mod uring;
 
 pub use compaction::{CompactCmd, Compactor, TieredConfig};
@@ -34,7 +34,7 @@ pub use error::IoUringError;
 pub use lsm::{BloomFilter, Entry, Key};
 pub use store::IoUringStore;
 
-#[cfg(feature = "io-uring")]
+#[cfg(all(feature = "io-uring", target_os = "linux"))]
 pub use uring::Durability;
 
 mod tests;

@@ -2,6 +2,9 @@ use anyhow::{Context, Result, anyhow};
 use serde_json::{Value, json};
 use std::env;
 use std::io::{self, Read, Write};
+#[cfg(not(unix))]
+use std::net::TcpStream;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::time::Duration;
@@ -107,7 +110,8 @@ synx-fast context --scope PROJECT \"query\" [--budget 900]\n  \
 printf 'q1\\nq2\\n' | synx-fast batch hybrid --limit 8 [--scope PROJECT]\n  \
 echo text | synx-fast put --title TITLE [--scope PROJECT]\n  \
 cat items.jsonl | synx-fast put-batch [--scope PROJECT]\n\n\
-Env:\n  SYNAPSE_SOCK   Unix socket path, default /tmp/synapse.sock\n\n\
+Env:\n  SYNAPSE_SOCK   daemon endpoint — unix socket path (default /tmp/synapse.sock)\n  \
+                 or host:port / port on Windows (default 127.0.0.1:9477)\n\n\
 Tip:\n  Use `doctor` first when hooks or Docker feel offline."
     );
 }
@@ -127,8 +131,20 @@ fn parse_sql(args: &[String]) -> Result<String> {
     Ok(query)
 }
 
+#[cfg(unix)]
 fn socket_path() -> String {
     env::var("SYNAPSE_SOCK").unwrap_or_else(|_| "/tmp/synapse.sock".to_string())
+}
+
+/// Windows: `SYNAPSE_SOCK` accepts `host:port` or a bare port (→ loopback).
+#[cfg(not(unix))]
+fn socket_path() -> String {
+    let raw = env::var("SYNAPSE_SOCK").unwrap_or_else(|_| "127.0.0.1:9477".to_string());
+    if raw.parse::<u16>().is_ok() {
+        format!("127.0.0.1:{raw}")
+    } else {
+        raw
+    }
 }
 
 /// Auth token: `SYNAPSE_API_KEY` env first, else `SYNAPSE_AUTH_TOKEN_FILE`,
@@ -142,12 +158,15 @@ fn auth_token() -> Option<String> {
     }
     for path in [
         env::var("SYNAPSE_AUTH_TOKEN_FILE").ok(),
-        env::var("HOME").ok().map(|h| {
-            Path::new(&h)
-                .join(".synapse/auth.token")
-                .display()
-                .to_string()
-        }),
+        env::var("HOME")
+            .ok()
+            .or_else(|| env::var("USERPROFILE").ok())
+            .map(|h| {
+                Path::new(&h)
+                    .join(".synapse/auth.token")
+                    .display()
+                    .to_string()
+            }),
         // Daemon default `-f .synapse/brain.db` writes the token next to the
         // project-local brain — check cwd too.
         Some(".synapse/auth.token".to_string()),
@@ -165,8 +184,18 @@ fn auth_token() -> Option<String> {
     None
 }
 
+#[cfg(unix)]
+fn connect_daemon() -> Result<UnixStream> {
+    UnixStream::connect(socket_path()).context("daemon offline")
+}
+
+#[cfg(not(unix))]
+fn connect_daemon() -> Result<TcpStream> {
+    TcpStream::connect(socket_path()).context("daemon offline")
+}
+
 fn call(req: &Value, timeout: Duration) -> Result<Value> {
-    let mut stream = UnixStream::connect(socket_path()).context("daemon offline")?;
+    let mut stream = connect_daemon()?;
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
     if let Some(token) = auth_token() {
@@ -181,7 +210,7 @@ fn call(req: &Value, timeout: Duration) -> Result<Value> {
     send_on_stream(&mut stream, req)
 }
 
-fn send_on_stream(stream: &mut UnixStream, req: &Value) -> Result<Value> {
+fn send_on_stream(stream: &mut (impl Read + Write), req: &Value) -> Result<Value> {
     let body = rmp_serde::to_vec_named(req)?;
     let len = u32::try_from(body.len()).context("request too large")?;
     stream.write_all(&len.to_le_bytes())?;
@@ -420,7 +449,7 @@ fn run_batch(opts: BatchOpts) -> Result<()> {
     }
 
     let timeout = Duration::from_secs(60);
-    let mut stream = UnixStream::connect(socket_path()).context("daemon offline")?;
+    let mut stream = connect_daemon()?;
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
 
@@ -635,14 +664,11 @@ fn run_doctor() -> Result<()> {
     let sock = socket_path();
     println!("synx-fast doctor");
     println!("socket: {sock}");
-    println!(
-        "socket_exists: {}",
-        if Path::new(&sock).exists() {
-            "yes"
-        } else {
-            "no"
-        }
-    );
+    #[cfg(unix)]
+    let reachable = Path::new(&sock).exists();
+    #[cfg(not(unix))]
+    let reachable = std::net::TcpStream::connect(sock.as_str()).is_ok();
+    println!("socket_exists: {}", if reachable { "yes" } else { "no" });
     match call(&json!({"op": "Ping"}), Duration::from_secs(2)) {
         Ok(resp) => println!("ping: {}", compact_json(&resp)),
         Err(err) => {

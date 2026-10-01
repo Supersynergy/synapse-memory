@@ -2618,6 +2618,8 @@ mod tests {
                 value: serde_json::json!("A"),
             }),
             ef_multiplier: None,
+            #[cfg(feature = "conformal")]
+            conformal_target: None,
         };
         let filtered_hits = s.search_vec_filtered(&query_emb, k, &opts).unwrap();
 
@@ -2676,6 +2678,8 @@ mod tests {
                 value: serde_json::json!("A"),
             }),
             ef_multiplier: None,
+            #[cfg(feature = "conformal")]
+            conformal_target: None,
         };
         let t1 = std::time::Instant::now();
         for _ in 0..iters {

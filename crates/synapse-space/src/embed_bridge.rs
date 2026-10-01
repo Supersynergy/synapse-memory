@@ -8,13 +8,18 @@
 
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::UnixStream,
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+#[cfg(not(unix))]
+use tokio::net::TcpStream;
+#[cfg(unix)]
+use tokio::net::UnixStream;
 
 /// Default socket path — must match synapsed `--sock`.
+#[cfg(unix)]
 pub const SOCK: &str = "/tmp/synapse.sock";
+/// Windows default endpoint — must match synapsed `--sock` (TCP loopback).
+#[cfg(not(unix))]
+pub const SOCK: &str = "127.0.0.1:9477";
 
 /// Subset of synapsed wire protocol (mirrors proto.rs exactly).
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,9 +41,25 @@ enum Response {
     Unknown,
 }
 
+/// Windows endpoint normalization: bare port → `127.0.0.1:port`.
+#[cfg(not(unix))]
+fn daemon_addr(sock: &str) -> String {
+    if sock.parse::<u16>().is_ok() {
+        format!("127.0.0.1:{sock}")
+    } else {
+        sock.to_string()
+    }
+}
+
 /// Send one msgpack-framed RPC and return the response.
 async fn rpc(sock: &str, req: &Request) -> Result<Response> {
+    #[cfg(unix)]
     let mut stream = match UnixStream::connect(sock).await {
+        Ok(s) => s,
+        Err(e) => bail!("synapsed not running at {sock}: {e}. Start with: synapsed --sock {sock}"),
+    };
+    #[cfg(not(unix))]
+    let mut stream = match TcpStream::connect(daemon_addr(sock)).await {
         Ok(s) => s,
         Err(e) => bail!("synapsed not running at {sock}: {e}. Start with: synapsed --sock {sock}"),
     };

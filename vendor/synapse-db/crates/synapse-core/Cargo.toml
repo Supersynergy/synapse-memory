@@ -51,8 +51,6 @@ reqwest = { workspace = true, optional = true }
 simsimd = { version = "6.5", optional = true }
 # f16 storage/conversion helpers in turbo::f16_kernels (50% RAM savings).
 half = "2.7"
-# Schritt 1 optim #2: opt-in jemalloc for bench binary only (see bench-jemalloc feature).
-tikv-jemallocator = { version = "0.6", optional = true }
 # mlock / madvise / madvise wrappers in turbo::ram (unix only).
 libc = "0.2"
 # PR-A1-wire: pluggable ANN, default OFF per SPEC §3 (pure-Rust default).
@@ -78,13 +76,6 @@ synapse-graph = { path = "../synapse-graph", optional = true, features = ["hippo
 synapse-spann = { path = "../synapse-spann", optional = true }
 # Production observability (OTel + Prometheus). Default OFF.
 synapse-obs = { path = "../synapse-obs", optional = true }
-# embed-metal: Candle + Metal backend for BGE-small on Apple Silicon.
-# Feature-gated to avoid 200MB+ deps in default builds.
-candle-core = { version = "0.9", optional = true, features = ["metal"] }
-candle-nn = { version = "0.9", optional = true }
-candle-transformers = { version = "0.9", optional = true }
-tokenizers = { version = "0.21", optional = true, default-features = false, features = ["http", "progressbar", "fancy-regex"] }
-hf-hub = { version = "0.4", optional = true, features = ["tokio"] }
 # Optional .synx helpers (off by default).
 automerge = { version = "0.6", optional = true }
 hex = { version = "0.4", optional = true }
@@ -97,6 +88,18 @@ version = "0.9"
 optional = true
 default-features = false
 features = ["core"]
+
+# Apple Silicon only: `embed-metal` pulls candle with Metal backend (~200MB deps).
+# `bench-jemalloc` is unix-only (tikv-jemallocator has no MSVC support).
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+candle-core = { version = "0.9", optional = true, features = ["metal"] }
+candle-nn = { version = "0.9", optional = true }
+candle-transformers = { version = "0.9", optional = true }
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["http", "progressbar", "fancy-regex"] }
+hf-hub = { version = "0.4", optional = true, features = ["tokio"] }
+
+[target.'cfg(unix)'.dependencies]
+tikv-jemallocator = { version = "0.6", optional = true }
 
 [features]
 # 2026-05-10: simsimd enabled by default — 1.5× NEON cosine on M4 Max,

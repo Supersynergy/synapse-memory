@@ -11,13 +11,19 @@
 //!   - HNSW build time on 100k synthetic f32 vectors
 //!   - Batch-search QPS single vs parallel (if ann-batch feature present)
 
-#[cfg(not(feature = "ann-usearch"))]
+#[cfg(not(unix))]
+fn main() {
+    eprintln!("mmap_sift_bench is unix-only (madvise mmap path)");
+    std::process::exit(1);
+}
+
+#[cfg(all(unix, not(feature = "ann-usearch")))]
 fn main() {
     eprintln!("Requires --features ann-usearch");
     std::process::exit(1);
 }
 
-#[cfg(feature = "ann-usearch")]
+#[cfg(all(unix, feature = "ann-usearch"))]
 fn main() {
     use std::io::Write as _;
     use synapse_ann::AnnIndex as _;
@@ -180,6 +186,7 @@ fn main() {
     let _ = expected_bytes;
 }
 
+#[cfg(unix)]
 fn synthetic_vec(seed: u64, dim: usize) -> Vec<f32> {
     (0..dim)
         .map(|i| {

@@ -25,8 +25,11 @@ use synapse_core::db::rrf_merge_neon;
 use synapse_core::turbo::ndarray_search::NdArraySearch;
 use synapse_core::{Hit, PutRequest, SearchMode, Store, embedder_trait::TextEmbedder, snap};
 use synapse_rerank::{IdentityReranker, Reranker, build_reranker_from_env};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+#[cfg(not(unix))]
+use tokio::net::TcpListener;
+#[cfg(unix)]
+use tokio::net::UnixListener;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tracing::{error, info, warn};
@@ -53,8 +56,28 @@ type DocProjectionMap = HashMap<i64, DocProjection>;
 struct Cli {
     #[arg(short = 'f', long, default_value = ".synapse/brain.db")]
     file: PathBuf,
-    #[arg(short = 's', long, default_value = "/tmp/synapse.sock")]
+    #[cfg(unix)]
+    #[arg(
+        short = 's',
+        long,
+        env = "SYNAPSE_SOCK",
+        default_value = "/tmp/synapse.sock"
+    )]
     sock: PathBuf,
+    /// Windows: TCP `host:port` or a bare port number. Loopback-only unless
+    /// `--allow-remote` is passed.
+    #[cfg(not(unix))]
+    #[arg(
+        short = 's',
+        long,
+        env = "SYNAPSE_SOCK",
+        default_value = "127.0.0.1:9477"
+    )]
+    sock: PathBuf,
+    /// Allow binding the daemon socket to non-loopback addresses (Windows TCP).
+    #[cfg(not(unix))]
+    #[arg(long, default_value_t = false)]
+    allow_remote: bool,
     /// Skip loading the embedding model at startup (lazy init on first use)
     #[arg(long, default_value_t = false)]
     lazy_embed: bool,
@@ -351,17 +374,35 @@ async fn main() -> Result<()> {
         });
     }
 
-    let _ = std::fs::remove_file(&cli.sock);
-    let listener =
-        UnixListener::bind(&cli.sock).with_context(|| format!("bind {}", cli.sock.display()))?;
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if let Err(e) = std::fs::set_permissions(&cli.sock, std::fs::Permissions::from_mode(0o600))
+    let listener = {
+        let _ = std::fs::remove_file(&cli.sock);
+        let l = UnixListener::bind(&cli.sock)
+            .with_context(|| format!("bind {}", cli.sock.display()))?;
         {
-            warn!("chmod 0600 {} failed: {e}", cli.sock.display());
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(e) =
+                std::fs::set_permissions(&cli.sock, std::fs::Permissions::from_mode(0o600))
+            {
+                warn!("chmod 0600 {} failed: {e}", cli.sock.display());
+            }
         }
-    }
+        l
+    };
+    #[cfg(not(unix))]
+    let listener = {
+        let raw = cli
+            .sock
+            .to_str()
+            .context("--sock must be a host:port or port number")?;
+        let addr = parse_sock_addr(raw)?;
+        if !addr.ip().is_loopback() && !cli.allow_remote {
+            anyhow::bail!("refusing non-loopback bind {addr} (pass --allow-remote to override)");
+        }
+        TcpListener::bind(addr)
+            .await
+            .with_context(|| format!("bind {addr}"))?
+    };
     info!(
         "listening on {} (db={})",
         cli.sock.display(),
@@ -384,12 +425,22 @@ async fn main() -> Result<()> {
     // Saves 5min HNSW rebuild on next start.
     let sig_state = state.clone();
     tokio::spawn(async move {
-        use tokio::signal::unix::{SignalKind, signal};
-        let mut sigterm = signal(SignalKind::terminate()).expect("install SIGTERM");
-        let mut sigint = signal(SignalKind::interrupt()).expect("install SIGINT");
-        tokio::select! {
-            _ = sigterm.recv() => info!("SIGTERM received"),
-            _ = sigint.recv() => info!("SIGINT received"),
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+            let mut sigterm = signal(SignalKind::terminate()).expect("install SIGTERM");
+            let mut sigint = signal(SignalKind::interrupt()).expect("install SIGINT");
+            tokio::select! {
+                _ = sigterm.recv() => info!("SIGTERM received"),
+                _ = sigint.recv() => info!("SIGINT received"),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            tokio::signal::ctrl_c()
+                .await
+                .expect("install Ctrl-C handler");
+            info!("Ctrl-C received");
         }
         info!("persisting ANN sidecar before exit…");
         #[cfg(feature = "ann-usearch")]
@@ -493,7 +544,25 @@ fn spawn_turbo_warm(state: Arc<State>, db_path: PathBuf) {
     });
 }
 
-async fn handle_conn(mut stream: UnixStream, state: Arc<State>) -> Result<()> {
+/// Parse `--sock`/`SYNAPSE_SOCK` on Windows: `host:port` (SocketAddr) or a
+/// bare port number (→ `127.0.0.1:port`).
+#[cfg(not(unix))]
+fn parse_sock_addr(raw: &str) -> Result<SocketAddr> {
+    if let Ok(addr) = raw.parse::<SocketAddr>() {
+        return Ok(addr);
+    }
+    if let Ok(port) = raw.parse::<u16>() {
+        return Ok(SocketAddr::from(([127, 0, 0, 1], port)));
+    }
+    Err(anyhow!(
+        "invalid --sock `{raw}` (expected host:port or port)"
+    ))
+}
+
+async fn handle_conn<S>(mut stream: S, state: Arc<State>) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let auth_required = state.expected_token.is_some();
     let mut authed = !auth_required; // session-scoped auth state
     loop {

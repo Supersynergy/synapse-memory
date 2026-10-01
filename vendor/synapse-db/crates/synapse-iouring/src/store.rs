@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{debug, info, warn};
 
 /// Batch size: number of io_uring SQEs submitted per syscall.
-#[cfg(feature = "io-uring")]
+#[cfg(all(feature = "io-uring", target_os = "linux"))]
 const BATCH_SZ: usize = 32;
 
 /// L0 flush threshold (entries).
@@ -30,7 +30,7 @@ pub struct IoUringStore {
     sstables: Vec<SSTable>,
     seq: AtomicU64,
 
-    #[cfg(feature = "io-uring")]
+    #[cfg(all(feature = "io-uring", target_os = "linux"))]
     uring: crate::uring::UringWal,
 }
 
@@ -43,7 +43,7 @@ impl IoUringStore {
         let dir = dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&dir)?;
 
-        #[cfg(feature = "io-uring")]
+        #[cfg(all(feature = "io-uring", target_os = "linux"))]
         {
             let wal_path = dir.join("WAL");
             let uring = crate::uring::UringWal::open(&wal_path, BATCH_SZ)?;
@@ -57,7 +57,7 @@ impl IoUringStore {
             });
         }
 
-        #[cfg(not(feature = "io-uring"))]
+        #[cfg(not(all(feature = "io-uring", target_os = "linux")))]
         {
             warn!("io_uring feature disabled — store opened in no-op mode");
             Ok(Self {
@@ -79,10 +79,10 @@ impl IoUringStore {
             return Ok(());
         }
 
-        #[cfg(not(feature = "io-uring"))]
+        #[cfg(not(all(feature = "io-uring", target_os = "linux")))]
         return Err(IoUringError::UnsupportedPlatform);
 
-        #[cfg(feature = "io-uring")]
+        #[cfg(all(feature = "io-uring", target_os = "linux"))]
         {
             // Assign sequence numbers
             let mut stamped: Vec<Entry> = entries
@@ -121,17 +121,17 @@ impl IoUringStore {
     pub async fn batched_append(
         &mut self,
         entries: Vec<Entry>,
-        #[cfg(feature = "io-uring")] durability: crate::uring::Durability,
-        #[cfg(not(feature = "io-uring"))] _durability: (),
+        #[cfg(all(feature = "io-uring", target_os = "linux"))] durability: crate::uring::Durability,
+        #[cfg(not(all(feature = "io-uring", target_os = "linux")))] _durability: (),
     ) -> Result<()> {
         if entries.is_empty() {
             return Ok(());
         }
 
-        #[cfg(not(feature = "io-uring"))]
+        #[cfg(not(all(feature = "io-uring", target_os = "linux")))]
         return Err(IoUringError::UnsupportedPlatform);
 
-        #[cfg(feature = "io-uring")]
+        #[cfg(all(feature = "io-uring", target_os = "linux"))]
         {
             let stamped: Vec<Entry> = entries
                 .into_iter()
@@ -160,10 +160,10 @@ impl IoUringStore {
 
     /// Range scan: L0 + SSTables (L0 wins on conflict by higher seq).
     pub async fn read_range(&self, _key_range: Range<Key>) -> Result<Vec<Entry>> {
-        #[cfg(not(feature = "io-uring"))]
+        #[cfg(not(all(feature = "io-uring", target_os = "linux")))]
         return Err(IoUringError::UnsupportedPlatform);
 
-        #[cfg(feature = "io-uring")]
+        #[cfg(all(feature = "io-uring", target_os = "linux"))]
         {
             let mut out = self.l0.scan(&_key_range);
             // TODO: merge SSTable results (L1+ scan) — deduped by seq
