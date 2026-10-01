@@ -179,9 +179,9 @@ mod tests {
         let mut store = IoUringStore::open(dir.path()).unwrap();
         let entries = vec![make_entry("k1", "v1", 0)];
         let result = store.append_batch(entries).await;
-        #[cfg(not(feature = "io-uring"))]
+        #[cfg(not(all(feature = "io-uring", target_os = "linux")))]
         assert!(matches!(result, Err(IoUringError::UnsupportedPlatform)));
-        #[cfg(feature = "io-uring")]
+        #[cfg(all(feature = "io-uring", target_os = "linux"))]
         result.expect("should succeed with io-uring feature on Linux");
     }
 }

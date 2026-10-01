@@ -14,7 +14,7 @@ use crate::error::{Error, Result};
 pub struct CandleMetalEmbedder {
     model_id: String,
     dim: usize,
-    #[cfg(feature = "embed-metal")]
+    #[cfg(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64"))]
     inner: std::sync::Arc<MetalBertInner>,
 }
 
@@ -37,7 +37,7 @@ impl CandleMetalEmbedder {
                 "candle-metal: only bge-small supported, got {model_id}"
             )));
         }
-        #[cfg(feature = "embed-metal")]
+        #[cfg(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64"))]
         {
             let inner = MetalBertInner::load("BAAI/bge-small-en-v1.5")?;
             Ok(Self {
@@ -46,7 +46,7 @@ impl CandleMetalEmbedder {
                 inner: std::sync::Arc::new(inner),
             })
         }
-        #[cfg(not(feature = "embed-metal"))]
+        #[cfg(not(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64")))]
         Ok(Self {
             model_id: "BAAI/bge-small-en-v1.5".to_string(),
             dim: 384,
@@ -55,11 +55,11 @@ impl CandleMetalEmbedder {
 
     /// Embed batch of texts. Requires `embed-metal` feature for real inference.
     pub fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        #[cfg(feature = "embed-metal")]
+        #[cfg(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64"))]
         {
             self.inner.embed(texts)
         }
-        #[cfg(not(feature = "embed-metal"))]
+        #[cfg(not(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64")))]
         {
             let _ = texts;
             Err(Error::Other(
@@ -85,14 +85,14 @@ impl CandleMetalEmbedder {
 // Real inference (embed-metal feature)
 // ---------------------------------------------------------------------------
 
-#[cfg(feature = "embed-metal")]
+#[cfg(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64"))]
 struct MetalBertInner {
     model: std::sync::Mutex<candle_transformers::models::bert::BertModel>,
     tokenizer: tokenizers::Tokenizer,
     device: candle_core::Device,
 }
 
-#[cfg(feature = "embed-metal")]
+#[cfg(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64"))]
 impl MetalBertInner {
     fn load(repo_id: &str) -> Result<Self> {
         use candle_core::{DType, Device};
@@ -262,13 +262,13 @@ mod tests {
     fn new_accepts_bge_small_alias() {
         // Without embed-metal: new() succeeds (stub).
         // With embed-metal: new() attempts model load (may fail in CI).
-        #[cfg(not(feature = "embed-metal"))]
+        #[cfg(not(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64")))]
         {
             assert!(CandleMetalEmbedder::new("bge-small").is_ok());
             assert!(CandleMetalEmbedder::new("BAAI/bge-small-en-v1.5").is_ok());
         }
         // With embed-metal we only test if model files are present.
-        #[cfg(feature = "embed-metal")]
+        #[cfg(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64"))]
         {
             let r = CandleMetalEmbedder::new("bge-small");
             // Accept either Ok (model cached) or Err (CI no cache).
@@ -282,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "embed-metal"))]
+    #[cfg(not(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64")))]
     fn stub_batch_returns_error() {
         let e = CandleMetalEmbedder::new("bge-small").unwrap();
         assert!(e.embed_batch(&["hi".into()]).is_err());
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn dim_is_384_for_bge_small() {
-        #[cfg(not(feature = "embed-metal"))]
+        #[cfg(not(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64")))]
         {
             let e = CandleMetalEmbedder::new("bge-small").unwrap();
             assert_eq!(e.dim(), 384);
@@ -298,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "embed-metal")]
+    #[cfg(all(feature = "embed-metal", target_os = "macos", target_arch = "aarch64"))]
     #[ignore = "requires model cache; run with --ignored"]
     fn metal_embed_roundtrip() {
         let e = CandleMetalEmbedder::new("bge-small").expect("load model");

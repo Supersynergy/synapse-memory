@@ -27,6 +27,7 @@ crossbeam-queue = "0.3"
 blake3 = "1"
 
 # Only pulled on --features io-uring (Linux)
+[target.'cfg(target_os = "linux")'.dependencies]
 io-uring = { version = "0.7", optional = true }
 libc = { version = "0.2", optional = true }
 # Bench binary (SQLite baseline comparison)

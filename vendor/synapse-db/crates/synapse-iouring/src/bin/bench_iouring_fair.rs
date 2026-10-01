@@ -3,7 +3,7 @@
 //! Run on Linux: cargo run --bin bench_iouring_fair --features io-uring --release
 //! macOS: prints "io-uring feature required" (io_uring is Linux-only)
 
-#[cfg(feature = "io-uring")]
+#[cfg(all(feature = "io-uring", target_os = "linux"))]
 mod bench {
     use std::time::Instant;
     use synapse_iouring::{Durability, Entry, IoUringStore};
@@ -240,10 +240,10 @@ On macOS: compile passes, runtime returns UnsupportedPlatform.
 
 #[tokio::main]
 async fn main() {
-    #[cfg(feature = "io-uring")]
+    #[cfg(all(feature = "io-uring", target_os = "linux"))]
     bench::run().await;
 
-    #[cfg(not(feature = "io-uring"))]
+    #[cfg(not(all(feature = "io-uring", target_os = "linux")))]
     eprintln!(
         "io-uring feature not enabled — run with --features io-uring on Linux.\n\
          macOS: io_uring is Linux-only (no kernel support). Use colima for bench."

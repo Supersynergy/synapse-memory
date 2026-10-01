@@ -11,6 +11,7 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -293,6 +294,7 @@ impl Federation {
     }
 
     /// Start a Unix socket listener.
+    #[cfg(unix)]
     pub fn listen_unix(&self, path: &std::path::Path) -> Result<()> {
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path).map_err(|e| Error::Other(e.to_string()))?;
@@ -317,6 +319,22 @@ impl Federation {
         });
         Ok(())
     }
+
+    /// Windows has no unix sockets — fall back to a loopback TCP listener
+    /// whose port is derived from `path` (same mapping as `connect`).
+    #[cfg(not(unix))]
+    pub fn listen_unix(&self, path: &std::path::Path) -> Result<()> {
+        self.listen_tcp(&unix_fallback_addr(path))
+    }
+}
+
+/// Map a unix-socket path to a deterministic 127.0.0.1 port (non-unix only).
+#[cfg(not(unix))]
+fn unix_fallback_addr(path: &std::path::Path) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut h);
+    format!("127.0.0.1:{}", 40_000 + h.finish() % 20_000)
 }
 
 fn connect(addr: &Addr) -> Result<Box<dyn ReadWrite>> {
@@ -325,15 +343,25 @@ fn connect(addr: &Addr) -> Result<Box<dyn ReadWrite>> {
             let s = TcpStream::connect(s).map_err(|e| Error::Other(e.to_string()))?;
             Ok(Box::new(s))
         }
-        Addr::Unix(p) => {
-            let s = UnixStream::connect(p).map_err(|e| Error::Other(e.to_string()))?;
-            Ok(Box::new(s))
-        }
+        Addr::Unix(p) => unix_connect(p),
     }
+}
+
+#[cfg(unix)]
+fn unix_connect(p: &std::path::Path) -> Result<Box<dyn ReadWrite>> {
+    let s = UnixStream::connect(p).map_err(|e| Error::Other(e.to_string()))?;
+    Ok(Box::new(s))
+}
+
+#[cfg(not(unix))]
+fn unix_connect(p: &std::path::Path) -> Result<Box<dyn ReadWrite>> {
+    let s = TcpStream::connect(unix_fallback_addr(p)).map_err(|e| Error::Other(e.to_string()))?;
+    Ok(Box::new(s))
 }
 
 trait ReadWrite: Read + Write + Send {}
 impl ReadWrite for TcpStream {}
+#[cfg(unix)]
 impl ReadWrite for UnixStream {}
 
 fn handle_stream(

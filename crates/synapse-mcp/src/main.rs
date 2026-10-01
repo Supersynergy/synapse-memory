@@ -10,7 +10,10 @@ use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+#[cfg(not(unix))]
+use tokio::net::TcpStream;
+#[cfg(unix)]
 use tokio::net::UnixStream;
 
 use synapse_pack::{
@@ -86,7 +89,22 @@ static PACK_CACHE: LazyLock<std::sync::Mutex<PackCache>> =
 #[derive(Parser)]
 #[command(name = "synapse-mcp", about = "MCP server (stdio) for synapsed")]
 struct Cli {
-    #[arg(short = 's', long, default_value = "/tmp/synapse.sock")]
+    #[cfg(unix)]
+    #[arg(
+        short = 's',
+        long,
+        env = "SYNAPSE_SOCK",
+        default_value = "/tmp/synapse.sock"
+    )]
+    sock: PathBuf,
+    /// Windows: TCP `host:port` or a bare port number (→ 127.0.0.1).
+    #[cfg(not(unix))]
+    #[arg(
+        short = 's',
+        long,
+        env = "SYNAPSE_SOCK",
+        default_value = "127.0.0.1:9477"
+    )]
     sock: PathBuf,
     /// Brain DB whose sibling `*.learn.db` holds the self-learning reward tables.
     /// Default: $SYNAPSE_BRAIN or ~/.synapse/brain.db.
@@ -575,8 +593,25 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
     daemon_call(sock, req).await
 }
 
+/// Windows: `SYNAPSE_SOCK`/`--sock` accepts `host:port` or a bare port
+/// (→ loopback). Token auth is mandatory either way.
+#[cfg(not(unix))]
+fn daemon_addr(sock: &PathBuf) -> Result<String> {
+    let raw = sock.to_str().context("--sock must be UTF-8")?;
+    if raw.parse::<u16>().is_ok() {
+        Ok(format!("127.0.0.1:{raw}"))
+    } else {
+        Ok(raw.to_string())
+    }
+}
+
 async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
+    #[cfg(unix)]
     let mut stream = UnixStream::connect(sock)
+        .await
+        .context("connect synapsed")?;
+    #[cfg(not(unix))]
+    let mut stream = TcpStream::connect(daemon_addr(sock)?)
         .await
         .context("connect synapsed")?;
     // Token: SYNAPSE_API_KEY env, else SYNAPSE_AUTH_TOKEN_FILE, else the
@@ -590,6 +625,7 @@ async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
                 std::env::var("SYNAPSE_AUTH_TOKEN_FILE").ok(),
                 std::env::var("HOME")
                     .ok()
+                    .or_else(|| std::env::var("USERPROFILE").ok())
                     .map(|h| format!("{h}/.synapse/auth.token")),
                 // Daemon default `-f .synapse/brain.db` = project-local brain.
                 Some(".synapse/auth.token".to_string()),
@@ -616,7 +652,10 @@ async fn daemon_call(sock: &PathBuf, req: Value) -> Result<Value> {
     daemon_roundtrip(&mut stream, req).await
 }
 
-async fn daemon_roundtrip(stream: &mut UnixStream, req: Value) -> Result<Value> {
+async fn daemon_roundtrip<S>(stream: &mut S, req: Value) -> Result<Value>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let body = rmp_serde::to_vec_named(&req)?;
     use tokio::io::AsyncReadExt;
     stream.write_all(&(body.len() as u32).to_le_bytes()).await?;

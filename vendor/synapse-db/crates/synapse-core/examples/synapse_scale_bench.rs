@@ -25,7 +25,7 @@ use synapse_core::types::{PutRequest, SearchMode};
 // scale-100M Schritt 1 optim #2 (SPEC §6 item 2): tikv-jemallocator as global
 // allocator for this bench binary. Keeps synapse-core lib pure-Rust (policy),
 // lets us honestly measure jemalloc impact on the bench workload.
-#[cfg(feature = "bench-jemalloc")]
+#[cfg(all(feature = "bench-jemalloc", unix))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 

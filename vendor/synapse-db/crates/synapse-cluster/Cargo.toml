@@ -17,6 +17,10 @@ tracing.workspace = true
 synapse-core = { path = "../synapse-core", default-features = false }
 blake3.workspace = true
 
+# raft.rs open_dsync uses libc::O_DSYNC under #[cfg(target_os = "linux")].
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
 [features]
 default = []
 cluster = []

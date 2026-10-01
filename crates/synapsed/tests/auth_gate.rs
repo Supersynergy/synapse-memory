@@ -1,10 +1,16 @@
-//! Integration test: unix-socket permissions + default-on token auth.
+//! Integration test: socket permissions + default-on token auth.
 //! Oracle for bd issue `synapse-memory-cx4`.
+//!
+//! Unix: daemon binds a unix socket (must be 0600). Windows: TCP loopback
+//! `127.0.0.1:<port>` (token auth is the access control there).
 
 use serde_json::{Value, json};
 use std::io::{Read, Write};
+#[cfg(not(unix))]
+use std::net::TcpStream;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -17,7 +23,12 @@ impl Drop for Daemon {
     }
 }
 
-fn frame(stream: &mut UnixStream, req: &Value) -> Value {
+#[cfg(unix)]
+type Conn = UnixStream;
+#[cfg(not(unix))]
+type Conn = TcpStream;
+
+fn frame(stream: &mut Conn, req: &Value) -> Value {
     let body = rmp_serde::to_vec_named(req).unwrap();
     stream
         .write_all(&(body.len() as u32).to_le_bytes())
@@ -32,41 +43,76 @@ fn frame(stream: &mut UnixStream, req: &Value) -> Value {
     rmp_serde::from_slice(&buf).unwrap()
 }
 
-fn spawn_daemon(dir: &Path) -> (Daemon, PathBuf) {
+#[cfg(unix)]
+fn connect(endpoint: &str) -> Conn {
+    UnixStream::connect(endpoint).unwrap()
+}
+
+#[cfg(not(unix))]
+fn connect(endpoint: &str) -> Conn {
+    TcpStream::connect(endpoint).unwrap()
+}
+
+#[cfg(unix)]
+fn wait_ready(endpoint: &str) {
+    // Wait for the socket file to appear.
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !Path::new(endpoint).exists() {
+        assert!(Instant::now() < deadline, "daemon did not bind socket");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(not(unix))]
+fn wait_ready(endpoint: &str) {
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while TcpStream::connect(endpoint).is_err() {
+        assert!(Instant::now() < deadline, "daemon did not bind {endpoint}");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn spawn_daemon(dir: &Path) -> (Daemon, String) {
     let db = dir.join("brain.db");
-    let sock = dir.join("test.sock");
+    #[cfg(unix)]
+    let endpoint = dir.join("test.sock").display().to_string();
+    #[cfg(not(unix))]
+    let endpoint = {
+        // Reserve a free port from the OS, release it, hand it to the daemon.
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        format!("127.0.0.1:{port}")
+    };
     // Ensure the API-key env var cannot leak in from the dev environment.
     let child = Command::new(env!("CARGO_BIN_EXE_synapsed"))
-        .args(["-f", db.to_str().unwrap(), "-s", sock.to_str().unwrap()])
+        .args(["-f", db.to_str().unwrap(), "-s", &endpoint])
         .env_remove("SYNAPSE_API_KEY")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn synapsed");
-    // Wait for the socket file to appear.
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while !sock.exists() {
-        assert!(Instant::now() < deadline, "daemon did not bind socket");
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    (Daemon(child), sock)
+    wait_ready(&endpoint);
+    (Daemon(child), endpoint)
 }
 
 #[test]
 fn socket_is_0600_and_auth_is_default_on() {
     let dir = tempfile::tempdir().unwrap();
-    let (_d, sock) = spawn_daemon(dir.path());
+    let (_d, endpoint) = spawn_daemon(dir.path());
 
     // 1. Socket file must not be world/group accessible.
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(&sock).unwrap().permissions().mode() & 0o777;
+        let mode = std::fs::metadata(&endpoint).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "socket perms: {mode:o}");
     }
 
     // 2. Protected op without auth is refused; Ping is allowed.
-    let mut s = UnixStream::connect(&sock).unwrap();
+    let mut s = connect(&endpoint);
     let sql = json!({"op": "Sql", "args": {"query": "SELECT COUNT(*) FROM docs", "params": []}});
     let r = frame(&mut s, &sql);
     assert!(
@@ -99,6 +145,7 @@ fn socket_is_0600_and_auth_is_default_on() {
     }
     let token = std::fs::read_to_string(&tok_path).unwrap();
     let token = token.trim();
+    assert!(!token.is_empty(), "auth.token must be non-empty");
 
     let r = frame(
         &mut s,
@@ -180,22 +227,25 @@ fn socket_is_0600_and_auth_is_default_on() {
     assert!(n >= 1, "expected audit_events after Put, got {n} ({r})");
 
     // 4. SnapMerge must refuse paths outside --snap-dir (arbitrary file write).
-    let r = frame(
-        &mut s,
-        &json!({
-            "op": "SnapMerge",
-            "args": {
-                "snapshot_path": "/etc/passwd",
-                "out_path": "/tmp/synapse-escape-test",
-                "level": 0,
-            }
-        }),
-    );
-    assert!(
-        r.get("Err")
-            .and_then(Value::as_str)
-            .is_some_and(|e| e.contains("snap")),
-        "SnapMerge escape must be refused, got {r}"
-    );
-    assert!(!Path::new("/tmp/synapse-escape-test").exists());
+    #[cfg(unix)]
+    {
+        let r = frame(
+            &mut s,
+            &json!({
+                "op": "SnapMerge",
+                "args": {
+                    "snapshot_path": "/etc/passwd",
+                    "out_path": "/tmp/synapse-escape-test",
+                    "level": 0,
+                }
+            }),
+        );
+        assert!(
+            r.get("Err")
+                .and_then(Value::as_str)
+                .is_some_and(|e| e.contains("snap")),
+            "SnapMerge escape must be refused, got {r}"
+        );
+        assert!(!Path::new("/tmp/synapse-escape-test").exists());
+    }
 }

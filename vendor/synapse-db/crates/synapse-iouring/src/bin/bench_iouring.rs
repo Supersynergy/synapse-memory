@@ -3,7 +3,7 @@
 //! Run on Linux with: cargo run --bin bench_iouring --features io-uring --release
 //! On macOS: no-op (prints "io-uring feature required").
 
-#[cfg(feature = "io-uring")]
+#[cfg(all(feature = "io-uring", target_os = "linux"))]
 mod bench {
     use std::time::Instant;
     use synapse_iouring::{Entry, IoUringStore};
@@ -111,9 +111,9 @@ mod bench {
 
 #[tokio::main]
 async fn main() {
-    #[cfg(feature = "io-uring")]
+    #[cfg(all(feature = "io-uring", target_os = "linux"))]
     bench::run().await;
 
-    #[cfg(not(feature = "io-uring"))]
+    #[cfg(not(all(feature = "io-uring", target_os = "linux")))]
     eprintln!("io-uring feature not enabled — run with --features io-uring on Linux");
 }
