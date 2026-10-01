@@ -41,6 +41,13 @@ const SEARCH_SNIPPET_CHARS: usize = 512;
 const QUERY_CACHE_MAX: usize = 4096;
 const EMBED_CACHE_MAX: usize = 4096;
 const DEFAULT_STATS_TTL_MS: u64 = 30_000;
+// DoS bounds (bd -gqd): wire frames are already capped at 256 MiB; these cap
+// the fields inside a Put and the fan-out of searches/connections.
+const MAX_TITLE_BYTES: usize = 8 * 1024;
+const MAX_URI_BYTES: usize = 2 * 1024;
+const MAX_META_BYTES: usize = 256 * 1024;
+const MAX_SEARCH_LIMIT: usize = 1_000;
+const MAX_CONNS: usize = 128;
 
 type DynEmbedder = Box<dyn TextEmbedder>;
 type QueryCacheMap = HashMap<String, Vec<Hit>>;
@@ -499,6 +506,7 @@ async fn main() -> Result<()> {
         std::process::exit(0);
     });
 
+    let conn_sem = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_CONNS));
     loop {
         let (stream, _) = match listener.accept().await {
             Ok(p) => p,
@@ -508,7 +516,12 @@ async fn main() -> Result<()> {
             }
         };
         let s = state.clone();
+        let Ok(permit) = conn_sem.clone().try_acquire_owned() else {
+            warn!("conn limit {MAX_CONNS} reached — dropping connection");
+            continue;
+        };
         tokio::spawn(async move {
+            let _permit = permit;
             if let Err(e) = handle_conn(stream, s).await {
                 warn!("conn: {e}");
             }
@@ -903,6 +916,7 @@ async fn dispatch(state: &State, req: Request) -> Response {
             }
         }
         Request::SearchVec { embedding, limit } => {
+            let limit = limit.min(MAX_SEARCH_LIMIT);
             // Hot path: ANN search on the lifted RwLock index (no Store mutex).
             // Multiple concurrent readers proceed in parallel on the 12-core M4 Max.
             let ann_pairs = {
@@ -1265,10 +1279,31 @@ fn sanitize_snap_path(base: &std::path::Path, out: &str) -> Result<PathBuf> {
     Ok(canon_parent.join(fname))
 }
 
-async fn put_one(state: &State, p: PutReq) -> Result<i64> {
-    if p.text.len() > state.max_put_bytes {
-        anyhow::bail!("text too large: {} > {}", p.text.len(), state.max_put_bytes);
+/// Field-level DoS bounds shared by put_one/put_batch (bd -gqd).
+fn check_put_bounds(p: &PutReq, max_put_bytes: usize) -> Result<()> {
+    if p.text.len() > max_put_bytes {
+        anyhow::bail!("text too large: {} > {}", p.text.len(), max_put_bytes);
     }
+    if let Some(t) = &p.title
+        && t.len() > MAX_TITLE_BYTES
+    {
+        anyhow::bail!("title too large: {} > {}", t.len(), MAX_TITLE_BYTES);
+    }
+    if let Some(u) = &p.uri
+        && u.len() > MAX_URI_BYTES
+    {
+        anyhow::bail!("uri too large: {} > {}", u.len(), MAX_URI_BYTES);
+    }
+    if let Some(m) = &p.meta
+        && m.to_string().len() > MAX_META_BYTES
+    {
+        anyhow::bail!("meta too large > {}", MAX_META_BYTES);
+    }
+    Ok(())
+}
+
+async fn put_one(state: &State, p: PutReq) -> Result<i64> {
+    check_put_bounds(&p, state.max_put_bytes)?;
     let embedding = if let Some(v) = p.embedding.clone() {
         Some(v)
     } else if p.embed {
@@ -1295,9 +1330,7 @@ async fn put_one(state: &State, p: PutReq) -> Result<i64> {
 
 async fn put_batch(state: &State, batch: Vec<PutReq>) -> Result<Vec<i64>> {
     for r in &batch {
-        if r.text.len() > state.max_put_bytes {
-            anyhow::bail!("text too large: {} > {}", r.text.len(), state.max_put_bytes);
-        }
+        check_put_bounds(r, state.max_put_bytes)?;
     }
     let need_server_embed: Vec<bool> = batch
         .iter()
@@ -1361,6 +1394,7 @@ async fn search(
     limit: usize,
     embed_query: bool,
 ) -> Result<Vec<synapse_core::Hit>> {
+    let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
     if let Some(hits) = get_cached_hits(state, mode, q, limit, embed_query) {
         return Ok(hits);
     }
@@ -1429,10 +1463,11 @@ async fn search_scoped(
     scope_value: &str,
     candidate_limit: Option<usize>,
 ) -> Result<Vec<synapse_core::Hit>> {
-    let limit = limit.max(1);
+    let limit = limit.clamp(1, MAX_SEARCH_LIMIT);
     let fetch_k = candidate_limit
         .unwrap_or_else(|| limit.saturating_mul(10))
-        .max(limit);
+        .max(limit)
+        .min(MAX_SEARCH_LIMIT * 10);
     let scope_key = sanitize_meta_key(scope_key)?;
 
     let mut candidates = tokio::task::block_in_place(|| {
