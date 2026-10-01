@@ -43,9 +43,8 @@ jobs:
           - target: x86_64-pc-windows-msvc
             runner: windows-2022
             archive: zip
-          - target: aarch64-pc-windows-msvc
-            runner: windows-11-arm
-            archive: zip
+          # aarch64-pc-windows-msvc excluded: numkong (via usearch) cannot
+          # compile under MSVC arm64. Re-enable once upstream supports it.
     steps:
       - uses: actions/checkout@v4
         with:
