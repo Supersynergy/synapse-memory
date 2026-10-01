@@ -515,7 +515,9 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
                 "uri": if uri_str.is_empty() { Value::Null } else { Value::String(uri_str) },
                 "text": args.get("text").and_then(|v| v.as_str()).unwrap_or_default(),
                 "meta": null,
-                "embed": false,
+                // embed=true: the daemon embeds server-side so MCP-saved docs
+                // stay visible to vector/hybrid search (bd -2ej).
+                "embed": true,
             }})
         }
         "memory_search" => json!({"op": "Search", "args": {
@@ -540,7 +542,7 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
             "title": args.get("title"), "uri": args.get("uri"),
             "text": args.get("text").and_then(|v| v.as_str()).unwrap_or_default(),
             "meta": null,
-            "embed": args.get("embed").and_then(|v| v.as_bool()).unwrap_or(false),
+            "embed": args.get("embed").and_then(|v| v.as_bool()).unwrap_or(true),
         }}),
         "search" => json!({"op": "Search", "args": {
             "mode": args.get("mode").and_then(|v| v.as_str()).unwrap_or("Lex"),

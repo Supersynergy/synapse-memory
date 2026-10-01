@@ -9,20 +9,28 @@
 //! Uses ARM NEON SIMD automatically on M4 Max / Apple Silicon.
 
 use crate::error::{Error, Result};
-use ndarray::{Array1, Array2, arr1};
+use ndarray::{Array1, Array2, ArrayView2, arr1, s};
 use rusqlite::{Connection, params};
+use std::collections::HashSet;
 use std::path::Path;
 
 /// In-memory vector search using ndarray
 pub struct NdArraySearch {
-    /// Pre-normalized vectors [n_vectors, dim]
+    /// Pre-normalized vectors, backing store `[capacity, dim]` where
+    /// `capacity >= n_vectors`. Only the first `n_vectors` rows are live;
+    /// the tail is zero-filled spare capacity so `add_row` amortizes to
+    /// O(dim) instead of a full-matrix rebuild per insert.
+    /// All readers must go through [`Self::live`].
     matrix: Array2<f32>,
     /// Binary sketch: each row packed as ceil(dim/64) u64 words (sign bit of each f32).
     /// Used for Hamming pre-filter in `search_cascade`.
     binary_matrix: Vec<u64>,
     /// Document IDs corresponding to each row
     ids: Vec<i64>,
-    /// Number of vectors
+    /// O(1) membership check — mirrors `ids`. Replaces the O(n)
+    /// `ids.contains()` scan that made ingest O(n²).
+    id_set: HashSet<i64>,
+    /// Number of vectors (live rows in `matrix`)
     n_vectors: usize,
     /// Embedding dimension
     dim: usize,
@@ -41,10 +49,12 @@ impl NdArraySearch {
         let n_vectors = ids.len();
         let matrix = Array2::from_shape_vec((n_vectors, dim), flat)
             .map_err(|e| Error::Other(format!("ndarray shape: {e}")))?;
+        let id_set: HashSet<i64> = ids.iter().copied().collect();
         let mut s = Self {
             matrix,
             binary_matrix: Vec::new(),
             ids,
+            id_set,
             n_vectors,
             dim,
         };
@@ -65,9 +75,41 @@ impl NdArraySearch {
             matrix: Array2::<f32>::zeros((0, dim)),
             binary_matrix: Vec::new(),
             ids: Vec::new(),
+            id_set: HashSet::new(),
             n_vectors: 0,
             dim,
         }
+    }
+
+    /// Live rows view — `matrix` may carry spare capacity (rows ≥
+    /// `n_vectors` are zero-filled and never read). The prefix of a
+    /// row-major `Array2` stays contiguous, so `as_slice()` on this view
+    /// still returns `Some`.
+    #[inline]
+    fn live(&self) -> ArrayView2<'_, f32> {
+        self.matrix.slice(s![..self.n_vectors, ..])
+    }
+
+    /// Grow the backing store geometrically (2×, floor 64 rows) so
+    /// `add_row` is amortized O(dim) per insert instead of O(n·dim).
+    fn ensure_capacity(&mut self, extra: usize) {
+        let needed = self.n_vectors + extra;
+        if needed <= self.matrix.nrows() {
+            return;
+        }
+        let new_cap = needed.max(self.matrix.nrows().saturating_mul(2)).max(64);
+        let mut grown = Array2::<f32>::zeros((new_cap, self.dim));
+        if self.n_vectors > 0 {
+            grown
+                .slice_mut(s![..self.n_vectors, ..])
+                .assign(&self.live());
+        }
+        self.matrix = grown;
+        // Re-hint the OS — realloc moved the base pointer, access
+        // pattern (HNSW-style random row reads) is unchanged.
+        let ptr = self.matrix.as_ptr() as *mut u8;
+        let len = new_cap * self.dim * std::mem::size_of::<f32>();
+        crate::turbo::ram::madvise_random(ptr, len);
     }
 
     /// Pack a normalized f32 row into `words` u64 words using sign bit (>0 → 1).
@@ -126,7 +168,8 @@ impl NdArraySearch {
         ham_scores.truncate(binary_k);
 
         // Phase 2: f32 cosine rerank on the candidate set.
-        let flat = self.matrix.as_slice().expect("row-major contiguous");
+        let live = self.live();
+        let flat = live.as_slice().expect("row-major contiguous");
         let k = k.min(binary_k);
         let mut cos_scores: Vec<(f32, usize)> = ham_scores
             .iter()
@@ -200,10 +243,12 @@ impl NdArraySearch {
         let matrix = Array2::from_shape_vec((n_vectors, dim), flat_vectors)
             .map_err(|e| Error::Other(format!("ndarray shape: {e}")))?;
 
+        let id_set: HashSet<i64> = ids.iter().copied().collect();
         let mut search = Self {
             matrix,
             binary_matrix: Vec::new(),
             ids,
+            id_set,
             n_vectors,
             dim,
         };
@@ -224,10 +269,11 @@ impl NdArraySearch {
     /// vectorized by ndarray/BLAS, not a Rust loop.
     fn normalize_rows(&mut self) {
         use ndarray::Zip;
-        // Compute all row norms in one vectorized pass.
+        // Compute all row norms in one vectorized pass — live rows only,
+        // the spare-capacity tail is zero-filled and must stay untouched.
         // ndarray/BLAS handles the SIMD internally on macOS (Accelerate).
         let norms: Array1<f32> = self
-            .matrix
+            .live()
             .rows()
             .into_iter()
             .map(|row| {
@@ -239,7 +285,8 @@ impl NdArraySearch {
         let norms_col = norms
             .into_shape_with_order((self.n_vectors, 1))
             .expect("shape matches");
-        Zip::from(&mut self.matrix)
+        let mut live = self.matrix.slice_mut(s![..self.n_vectors, ..]);
+        Zip::from(&mut live)
             .and_broadcast(&norms_col)
             .for_each(|val, &norm| {
                 *val = if norm > 1e-10 { *val / norm } else { 0.0 };
@@ -249,7 +296,8 @@ impl NdArraySearch {
     /// Build binary sketch from the current (already-normalized) matrix.
     fn build_binary_matrix(&mut self) {
         let words = self.dim.div_ceil(64);
-        let flat = self.matrix.as_slice().expect("row-major contiguous");
+        let live = self.live();
+        let flat = live.as_slice().expect("row-major contiguous");
         let mut bm = Vec::with_capacity(self.n_vectors * words);
         for i in 0..self.n_vectors {
             let row = &flat[i * self.dim..(i + 1) * self.dim];
@@ -283,7 +331,8 @@ impl NdArraySearch {
         }
 
         // Row-major view into the ndarray matrix (already normalized in `add_batch`).
-        let flat = self.matrix.as_slice().expect("row-major contiguous");
+        let live = self.live();
+        let flat = live.as_slice().expect("row-major contiguous");
 
         let k = k.min(self.n_vectors);
 
@@ -326,9 +375,9 @@ impl NdArraySearch {
         }
         let q_normalized = &q / q_norm;
 
-        // Compute cosine similarities: matrix @ q
+        // Compute cosine similarities: live_rows @ q
         // Result shape: (n_vectors,)
-        let similarities = self.matrix.dot(&q_normalized);
+        let similarities = self.live().dot(&q_normalized);
 
         // Find top-k indices using argpartition (O(n) vs O(n log n))
         let k = k.min(self.n_vectors);
@@ -357,10 +406,11 @@ impl NdArraySearch {
         results
     }
 
-    /// Append a single row (will be normalized in place).
-    /// Cheap-ish (Array2 reallocates), but bounded by put rate.
+    /// Append a single row (normalized in place).
+    /// Amortized O(dim): the backing store grows geometrically — no
+    /// full-matrix rebuild per insert.
     pub fn add_row(&mut self, id: i64, embedding: &[f32]) -> Result<()> {
-        if self.ids.contains(&id) {
+        if self.id_set.contains(&id) {
             return Ok(());
         }
         if embedding.len() != self.dim {
@@ -373,16 +423,15 @@ impl NdArraySearch {
         let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
         let inv = if norm > 1e-10 { 1.0 / norm } else { 0.0 };
         let normalized: Vec<f32> = embedding.iter().map(|x| x * inv).collect();
-        // Append binary sketch for this row before matrix realloc.
         let words = self.dim.div_ceil(64);
         let packed = Self::pack_binary(&normalized, words);
-        let row = Array2::from_shape_vec((1, self.dim), normalized)
-            .map_err(|e| Error::Other(format!("ndarray add_row shape: {e}")))?;
-        let new_matrix = ndarray::concatenate(ndarray::Axis(0), &[self.matrix.view(), row.view()])
-            .map_err(|e| Error::Other(format!("ndarray concatenate: {e}")))?;
-        self.matrix = new_matrix;
+        self.ensure_capacity(1);
+        self.matrix
+            .row_mut(self.n_vectors)
+            .assign(&arr1(&normalized));
         self.binary_matrix.extend_from_slice(&packed);
         self.ids.push(id);
+        self.id_set.insert(id);
         self.n_vectors += 1;
         Ok(())
     }
@@ -527,5 +576,44 @@ mod tests {
         let search = NdArraySearch::from_sqlite(":memory:");
         // Will fail with no vectors, but tests the error path
         assert!(search.is_err());
+    }
+
+    #[test]
+    fn test_add_row_push_only_growth() {
+        // 300 inserts exercise geometric growth: 0 -> 64 -> 128 -> 256 -> 512.
+        let dim = 8;
+        let mut idx = NdArraySearch::empty(dim);
+        for i in 0..300i64 {
+            let mut e = vec![0.0f32; dim];
+            e[(i as usize) % dim] = 1.0;
+            idx.add_row(i, &e).unwrap();
+        }
+        assert_eq!(idx.len(), 300);
+        // Spare capacity allocated, live count still exact.
+        assert!(idx.matrix.nrows() >= 300);
+        // Duplicate id is rejected by the HashSet membership check — no dup row.
+        idx.add_row(5, &vec![1.0f32; dim]).unwrap();
+        assert_eq!(idx.len(), 300);
+        // Dim mismatch still errors.
+        assert!(idx.add_row(999, &[1.0, 2.0]).is_err());
+
+        let mut q = vec![0.0f32; dim];
+        q[3] = 1.0;
+        // ndarray/BLAS path
+        let hits = idx.search(&q, 5);
+        assert!(!hits.is_empty());
+        assert_eq!(hits[0].0 % dim as i64, 3);
+        assert!(hits[0].1 < 1e-5);
+        // Hamming-prefilter cascade path
+        let hits = idx.search_cascade(&q, 5, 64);
+        assert!(!hits.is_empty());
+        assert_eq!(hits[0].0 % dim as i64, 3);
+        // SimSIMD path (feature-gated)
+        #[cfg(feature = "simsimd")]
+        {
+            let hits = idx.search_simsimd(&q, 5);
+            assert!(!hits.is_empty());
+            assert_eq!(hits[0].0 % dim as i64, 3);
+        }
     }
 }

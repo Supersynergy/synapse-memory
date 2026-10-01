@@ -58,7 +58,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
 {
   "mcpServers": {
     "synapse": {
-      "command": "/Users/master/projects/synapse/target/release/synapse-mcp",
+      "command": "/absolute/path/to/synapse-mcp",
       "args": ["-s", "/tmp/synapse.sock"]
     }
   }
@@ -71,12 +71,14 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
 {
   "mcpServers": {
     "synapse": {
-      "command": "/Users/master/projects/synapse/target/release/synapse-mcp",
+      "command": "/absolute/path/to/synapse-mcp",
       "args": ["-s", "/tmp/synapse.sock"]
     }
   }
 }
 ```
+
+On Windows use the TCP endpoint instead: `"args": ["-s", "127.0.0.1:9477"]`.
 
 ## Benchmark
 

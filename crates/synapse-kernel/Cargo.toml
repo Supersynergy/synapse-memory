@@ -24,9 +24,3 @@ harness = false
 [[bench]]
 name = "f16_dot"
 harness = false
-
-[profile.release]
-lto = "fat"
-codegen-units = 1
-opt-level = 3
-debug = 1

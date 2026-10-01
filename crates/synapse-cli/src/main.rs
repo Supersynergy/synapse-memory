@@ -26,8 +26,10 @@ type SearchBestEffortResult = (Vec<synapse_core::Hit>, String);
 #[derive(Parser)]
 #[command(name = "synapse", version, about = "Single-file memory for AI agents")]
 struct Cli {
-    #[arg(short = 'f', long, default_value = ".synapse/brain.db", global = true)]
-    file: PathBuf,
+    /// Brain DB path. Default: ~/.synapse/brain.db (shared with synapsed,
+    /// synapse-mcp and synapse-ultra). Pass -f to use a different file.
+    #[arg(short = 'f', long, global = true)]
+    file: Option<PathBuf>,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -466,19 +468,58 @@ enum ShardCmd {
     },
 }
 
+/// Default brain location: `~/.synapse/brain.db` — shared with synapsed,
+/// synapse-mcp and synapse-ultra so every surface hits the same brain.
+/// Falls back to the legacy project-local `./.synapse/brain.db` when no
+/// home directory is resolvable.
+fn default_brain_path() -> PathBuf {
+    dirs_next::home_dir()
+        .map(|h| h.join(".synapse").join("brain.db"))
+        .unwrap_or_else(|| PathBuf::from(".synapse/brain.db"))
+}
+
+/// One-line stderr hint when the old project-local brain exists but the new
+/// default doesn't — the common "where did my data go" case. No migration,
+/// just a pointer.
+fn hint_legacy_local_brain(new_default: &std::path::Path) {
+    let legacy = std::path::Path::new(".synapse/brain.db");
+    if legacy.exists() && !new_default.exists() {
+        eprintln!(
+            "note: ./.synapse/brain.db exists but is no longer the default; \
+             using {} — pass `-f ./.synapse/brain.db` to keep the old file",
+            new_default.display()
+        );
+    }
+}
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
     let cli = Cli::parse();
-    if let Some(p) = cli.file.parent() {
+    let file = cli.file.clone().unwrap_or_else(|| {
+        let p = default_brain_path();
+        hint_legacy_local_brain(&p);
+        p
+    });
+    if let Some(p) = file.parent() {
         std::fs::create_dir_all(p).ok();
     }
+    // `--sk` defaults to `synapse.sk`; a missing key gets a fix-it hint.
+    let load_sk = |p: &std::path::Path| -> Result<_> {
+        if !p.exists() {
+            anyhow::bail!(
+                "signing key {} not found — run `synx keygen` first",
+                p.display()
+            );
+        }
+        sign::load_signing_key(p).context("load signing key")
+    };
     match cli.cmd {
         Cmd::Init => {
-            Store::open(&cli.file)?;
-            println!("ok init {}", cli.file.display());
-            print_init_next_steps(&cli.file);
+            Store::open(&file)?;
+            println!("ok init {}", file.display());
+            print_init_next_steps(&file);
         }
         Cmd::Put {
             title,
@@ -501,8 +542,8 @@ fn main() -> Result<()> {
                 }
             };
             anyhow::ensure!(!body.is_empty(), "empty text");
-            let mut store = Store::open(&cli.file)?;
-            let embedding = embed_optional(&cli.file, &body, no_embed)?;
+            let mut store = Store::open(&file)?;
+            let embedding = embed_optional(&file, &body, no_embed)?;
             let meta = build_put_meta(source, updated, kind, status, meta)?;
             let req = PutRequest {
                 title,
@@ -512,7 +553,7 @@ fn main() -> Result<()> {
                 embedding,
             };
             let id = if let Some(sk_path) = sign_path {
-                let sk = sign::load_signing_key(&sk_path).context("load signing key")?;
+                let sk = load_sk(&sk_path)?;
                 store.put_signed(&req, Some(&sk))?
             } else {
                 store.put(&req)?
@@ -520,7 +561,7 @@ fn main() -> Result<()> {
             println!("{}", id);
         }
         Cmd::Verify { id, vk } => {
-            let store = Store::open(&cli.file)?;
+            let store = Store::open(&file)?;
             let vk = sign::load_verifying_key(&vk).context("load verifying key")?;
             store.verify(id, &vk)?;
             println!("ok verified id={}", id);
@@ -530,18 +571,18 @@ fn main() -> Result<()> {
             println!("ok sk={} vk={}", sk.display(), vk.display());
         }
         Cmd::SnapSigned { out, level, sk } => {
-            let signing_key = sign::load_signing_key(&sk).context("load signing key")?;
-            snap::export_signed(&cli.file, &out, level, &signing_key)?;
+            let signing_key = load_sk(&sk)?;
+            snap::export_signed(&file, &out, level, &signing_key)?;
             println!("ok snap-signed {}", out.display());
         }
         Cmd::Find { query, limit } => {
-            let store = Store::open(&cli.file)?;
+            let store = Store::open(&file)?;
             let hits = store.search(&query, SearchMode::Lex, None, limit)?;
             print_hits(&hits);
         }
         Cmd::Vec { query, limit } => {
-            let store = Store::open(&cli.file)?;
-            let q = embed_required(emb_cache(&cli.file), &query)?;
+            let store = Store::open(&file)?;
+            let q = embed_required(emb_cache(&file), &query)?;
             let hits = store.search("", SearchMode::Vec, Some(&q), limit)?;
             print_hits(&hits);
         }
@@ -550,8 +591,8 @@ fn main() -> Result<()> {
             limit,
             guarantee,
         } => {
-            let store = Store::open(&cli.file)?;
-            let q = embed_required(emb_cache(&cli.file), &query)?;
+            let store = Store::open(&file)?;
+            let q = embed_required(emb_cache(&file), &query)?;
             let hits = if guarantee {
                 // Two-stage: hybrid RRF for candidate expansion, then exact brute-force vec
                 let candidates = store.search(&query, SearchMode::Hybrid, Some(&q), limit * 10)?;
@@ -570,10 +611,10 @@ fn main() -> Result<()> {
             budget,
             json,
         } => {
-            let store = Store::open(&cli.file)?;
-            let learn_path = cli.file.with_extension("learn.db");
+            let store = Store::open(&file)?;
+            let learn_path = file.with_extension("learn.db");
             let lstore = LearnStore::open(&learn_path).ok();
-            let (hits, route) = search_best_effort(&store, &cli.file, &query, limit)?;
+            let (hits, route) = search_best_effort(&store, &file, &query, limit)?;
             let ranked = rank_context_hits(&store, lstore.as_ref(), hits)?;
             let context_id = context_id(&query, &mode, &ranked);
             if let Some(ls) = lstore.as_ref() {
@@ -596,9 +637,9 @@ fn main() -> Result<()> {
             no_embed,
         } => {
             anyhow::ensure!(!text.trim().is_empty(), "empty text");
-            let mut store = Store::open(&cli.file)?;
+            let mut store = Store::open(&file)?;
             let normalized_kind = normalize_kind(&kind);
-            let embedding = embed_optional(&cli.file, &text, no_embed)?;
+            let embedding = embed_optional(&file, &text, no_embed)?;
             let req = PutRequest {
                 title: title.or_else(|| Some(auto_title(&normalized_kind, &text))),
                 uri,
@@ -617,8 +658,8 @@ fn main() -> Result<()> {
             println!("ok remembered id={} kind={}", id, normalized_kind);
         }
         Cmd::Doctor { fix, json } => {
-            let store = Store::open(&cli.file)?;
-            let report = doctor_report(&store, &cli.file)?;
+            let store = Store::open(&file)?;
+            let report = doctor_report(&store, &file)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -632,8 +673,8 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Fallback { query, limit } => {
-            let store = Store::open(&cli.file)?;
-            let (hits, _) = search_best_effort(&store, &cli.file, &query, limit)?;
+            let store = Store::open(&file)?;
+            let (hits, _) = search_best_effort(&store, &file, &query, limit)?;
             print_hits(&hits);
         }
         Cmd::Prime {
@@ -642,8 +683,8 @@ fn main() -> Result<()> {
             limit,
             json,
         } => {
-            let store = Store::open(&cli.file).ok();
-            let report = build_prime_report(&path, store.as_ref(), &cli.file, &mode, limit)?;
+            let store = Store::open(&file).ok();
+            let report = build_prime_report(&path, store.as_ref(), &file, &mode, limit)?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {
@@ -651,7 +692,7 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Stats => {
-            let store = Store::open(&cli.file)?;
+            let store = Store::open(&file)?;
             let s = store.stats()?;
             println!("{}", serde_json::to_string_pretty(&s)?);
         }
@@ -696,12 +737,12 @@ fn main() -> Result<()> {
             }
         }
         Cmd::Snap { out, level } => {
-            snap::export(&cli.file, &out, level)?;
+            snap::export(&file, &out, level)?;
             println!("ok snap {}", out.display());
         }
         Cmd::Restore { pack } => {
-            snap::import(&pack, &cli.file)?;
-            println!("ok restore {}", cli.file.display());
+            snap::import(&pack, &file)?;
+            println!("ok restore {}", file.display());
         }
         Cmd::Merge {
             file_a,
@@ -716,15 +757,15 @@ fn main() -> Result<()> {
             // Export current brain as a temp snap, then merge with peer.
             let tmp =
                 std::env::temp_dir().join(format!("synapse-snap-{}.brainpack", std::process::id()));
-            snap::export(&cli.file, &tmp, level)?;
+            snap::export(&file, &tmp, level)?;
             snap::merge_packs(&tmp, &peer, &out, level)?;
             let _ = std::fs::remove_file(&tmp);
             println!("ok merge-snap {}", out.display());
         }
         Cmd::Sign { id, sk } => {
-            let store = Store::open(&cli.file)?;
+            let store = Store::open(&file)?;
             let doc = store.get(id)?;
-            let signing_key = sign::load_signing_key(&sk).context("load signing key")?;
+            let signing_key = load_sk(&sk)?;
             // Sign blake3(text) — same algorithm as Store::verify uses
             let hash = blake3::hash(doc.text.as_bytes());
             let sig = sign::sign_bytes(&signing_key, hash.as_bytes());
@@ -769,14 +810,14 @@ fn main() -> Result<()> {
         },
         Cmd::Federate { action } => match action {
             FederateCmd::Add { addr, sk } => {
-                let sk = sign::load_signing_key(&sk).context("load signing key")?;
+                let sk = load_sk(&sk)?;
                 let fed = Federation::new(sk);
                 let peer: Addr = addr.parse().context("parse peer addr")?;
                 fed.add_peer(peer.clone());
                 println!("ok added peer {}", peer);
             }
             FederateCmd::Sync { sk, peers } => {
-                let sk = sign::load_signing_key(&sk).context("load signing key")?;
+                let sk = load_sk(&sk)?;
                 let fed = Federation::new(sk);
                 for p in &peers {
                     let peer: Addr = p.parse().context("parse peer addr")?;
@@ -786,7 +827,7 @@ fn main() -> Result<()> {
                 println!("ok synced {} peers", peers.len());
             }
             FederateCmd::Peers { sk, peers } => {
-                let sk = sign::load_signing_key(&sk).context("load signing key")?;
+                let sk = load_sk(&sk)?;
                 let fed = Federation::new(sk);
                 for p in &peers {
                     let peer: Addr = p.parse().context("parse peer addr")?;
@@ -798,7 +839,7 @@ fn main() -> Result<()> {
             }
         },
         Cmd::Learn { action } => {
-            let learn_path = cli.file.with_extension("learn.db");
+            let learn_path = file.with_extension("learn.db");
             let lstore = LearnStore::open(&learn_path)?;
             match action {
                 LearnCmd::Status => {
@@ -816,7 +857,7 @@ fn main() -> Result<()> {
                     );
                 }
                 LearnCmd::Consolidate => {
-                    let store = Store::open(&cli.file)?;
+                    let store = Store::open(&file)?;
                     let report = synapse_learn::consolidate::run_consolidate(&store.conn)?;
                     println!(
                         "pairs_found={} merged={}",
@@ -837,7 +878,7 @@ fn main() -> Result<()> {
             accepted_doc_id,
             shard_id,
         } => {
-            let learn_path = cli.file.with_extension("learn.db");
+            let learn_path = file.with_extension("learn.db");
             let lstore = LearnStore::open(&learn_path)?;
             synapse_learn::feedback::record_accept(&lstore, &query_id, accepted_doc_id, &shard_id)?;
             println!(
@@ -852,7 +893,7 @@ fn main() -> Result<()> {
             encrypt,
             passphrase,
         } => {
-            let db_path = db.as_ref().unwrap_or(&cli.file);
+            let db_path = db.as_ref().unwrap_or(&file);
             if encrypt {
                 let pass = passphrase
                     .as_deref()
@@ -873,7 +914,7 @@ fn main() -> Result<()> {
             db,
             passphrase,
         } => {
-            let db_path = db.as_ref().unwrap_or(&cli.file);
+            let db_path = db.as_ref().unwrap_or(&file);
             if let Some(p) = db_path.parent() {
                 std::fs::create_dir_all(p).ok();
             }
@@ -892,7 +933,7 @@ fn main() -> Result<()> {
             println!("ok restore {} docs → {}", count, db_path.display());
         }
         Cmd::DbVerify { db } => {
-            let db_path = db.as_ref().unwrap_or(&cli.file);
+            let db_path = db.as_ref().unwrap_or(&file);
             let store = Store::open(db_path)?;
             let mut stmt = store
                 .conn
@@ -917,7 +958,7 @@ fn main() -> Result<()> {
             }
         }
         Cmd::DbRepair { db } => {
-            let db_path = db.as_ref().unwrap_or(&cli.file);
+            let db_path = db.as_ref().unwrap_or(&file);
             let store = Store::open(db_path)?;
             // Rebuild FTS5
             store
@@ -934,12 +975,12 @@ fn main() -> Result<()> {
             println!("ok repair fts5 rebuilt docs={count}");
         }
         Cmd::Import { src, format } => {
-            let mut store = Store::open(&cli.file)?;
+            let mut store = Store::open(&file)?;
             let n = synx_io::import(&src, &mut store, format.as_deref())?;
-            println!("ok import {} docs → {}", n, cli.file.display());
+            println!("ok import {} docs → {}", n, file.display());
         }
         Cmd::Export { dst, format } => {
-            let store = Store::open(&cli.file)?;
+            let store = Store::open(&file)?;
             let n = synx_io::export(&store, &dst, format.as_deref())?;
             println!("ok export {} docs → {}", n, dst.display());
         }
@@ -956,7 +997,7 @@ fn main() -> Result<()> {
             );
         }
         Cmd::Graph { action } => {
-            let conn = rusqlite::Connection::open(&cli.file)?;
+            let conn = rusqlite::Connection::open(&file)?;
             synapse_graph::ensure_schema(&conn)?;
             match action {
                 GraphCmd::Relate {
@@ -1049,8 +1090,8 @@ fn main() -> Result<()> {
             iters,
         } => {
             // Pipeline: hybrid → seeds → PPR → traverse → JSON bundle
-            let store = Store::open(&cli.file)?;
-            let q = embed_required(emb_cache(&cli.file), &query)?;
+            let store = Store::open(&file)?;
+            let q = embed_required(emb_cache(&file), &query)?;
             let hits = store.search(&query, SearchMode::Hybrid, Some(&q), k)?;
 
             let mut seeds: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
@@ -1058,7 +1099,7 @@ fn main() -> Result<()> {
                 seeds.insert(h.id, h.score);
             }
 
-            let conn = rusqlite::Connection::open(&cli.file)?;
+            let conn = rusqlite::Connection::open(&file)?;
             synapse_graph::ensure_schema(&conn)?;
 
             let ppr_ranked = synapse_core::ppr::personalized_pagerank(
@@ -1128,6 +1169,69 @@ fn parse_fresh_input(raw: &str) -> FreshInput {
     (trimmed.to_string(), None, None)
 }
 
+/// Repo tail of the fastembed model dir inside the HF cache
+/// (`models--<org>--<repo>`). Mirrors `select_model()` in synapse-core embed.
+#[cfg(feature = "embedder")]
+fn embedder_model_repo_tail() -> &'static str {
+    match std::env::var("SYNAPSE_EMBED_MODEL")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "bge-small-q" => "bge-small-en-v1.5-onnx-q",
+        "arctic-xs" => "snowflake-arctic-embed-xs",
+        "arctic-s" => "snowflake-arctic-embed-s",
+        "arctic-m" => "snowflake-arctic-embed-m",
+        "arctic-l" => "snowflake-arctic-embed-l",
+        "mxbai-large" => "mxbai-embed-large-v1",
+        "nomic-1.5" => "nomic-embed-text-v1.5",
+        _ => "bge-small-en-v1.5",
+    }
+}
+
+/// True when the selected model already sits in the fastembed/HF cache —
+/// i.e. the next embed won't trigger the one-time ~100MB download. Cache
+/// resolution mirrors fastembed: $HF_HOME verbatim, else $FASTEMBED_CACHE_DIR
+/// or ./.fastembed_cache.
+#[cfg(feature = "embedder")]
+fn embedder_model_cached() -> bool {
+    let tail = embedder_model_repo_tail();
+    let cache_dir = if let Ok(hf) = std::env::var("HF_HOME") {
+        PathBuf::from(hf)
+    } else {
+        std::env::var("FASTEMBED_CACHE_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(".fastembed_cache"))
+    };
+    let Ok(rd) = std::fs::read_dir(&cache_dir) else {
+        return false;
+    };
+    rd.flatten().any(|e| {
+        e.file_name()
+            .to_str()
+            .is_some_and(|n| n.starts_with("models--") && n.to_ascii_lowercase().ends_with(tail))
+    })
+}
+
+/// First embed on a fresh machine downloads the model while the CLI looks
+/// hung — surface that once per process.
+#[cfg(feature = "embedder")]
+fn note_embed_download_once() {
+    static NOTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if NOTED.swap(true, std::sync::atomic::Ordering::Relaxed) || embedder_model_cached() {
+        return;
+    }
+    eprintln!(
+        "note: downloading embedder model (~100MB, one-time, cached under .fastembed_cache/)..."
+    );
+}
+
+#[cfg(feature = "embedder")]
+fn make_embedder(cache_dir: Option<PathBuf>) -> Result<Embedder> {
+    note_embed_download_once();
+    Embedder::new_with_cache::<PathBuf>(cache_dir).context("embedder init")
+}
+
 /// Best-effort embedding for `put`/`remember`: embeds when an embedder is
 /// linked into this build, otherwise stores text without a vector.
 fn embed_optional(file: &std::path::Path, text: &str, no_embed: bool) -> Result<Option<Vec<f32>>> {
@@ -1136,8 +1240,7 @@ fn embed_optional(file: &std::path::Path, text: &str, no_embed: bool) -> Result<
     }
     #[cfg(feature = "embedder")]
     {
-        let e = Embedder::new_with_cache::<std::path::PathBuf>(emb_cache(file))
-            .context("embedder init")?;
+        let e = make_embedder(emb_cache(file))?;
         Ok(Some(e.embed_one(text)?))
     }
     #[cfg(not(feature = "embedder"))]
@@ -1153,7 +1256,7 @@ fn embed_optional(file: &std::path::Path, text: &str, no_embed: bool) -> Result<
 fn embed_required(cache_dir: Option<std::path::PathBuf>, text: &str) -> Result<Vec<f32>> {
     #[cfg(feature = "embedder")]
     {
-        let e = Embedder::new_with_cache::<std::path::PathBuf>(cache_dir)?;
+        let e = make_embedder(cache_dir)?;
         e.embed_one(text).context("embed query")
     }
     #[cfg(not(feature = "embedder"))]
@@ -1182,6 +1285,20 @@ fn print_hits(hits: &[synapse_core::Hit]) {
     }
 }
 
+/// First-run hint for `synx init`/`synx doctor`: when the embedder model
+/// isn't cached yet, the first vector op downloads ~100MB silently.
+#[cfg(feature = "embedder")]
+fn embed_first_run_hint() {
+    if !embedder_model_cached() {
+        println!(
+            "note: first embedded put/search downloads the embedder model (~100MB, one-time); \
+             `synx put --no-embed` or a `--no-default-features` build skips it"
+        );
+    }
+}
+#[cfg(not(feature = "embedder"))]
+fn embed_first_run_hint() {}
+
 fn print_init_next_steps(file: &std::path::Path) {
     let dir = file.parent().unwrap_or_else(|| std::path::Path::new("."));
     println!();
@@ -1203,6 +1320,7 @@ fn print_init_next_steps(file: &std::path::Path) {
     println!("  start the daemon: synapsed -f {}", file.display());
     println!("  mcpServers entry: \"synapse\": {{\"command\": \"synapse-mcp\"}}");
     println!("  transport: unix socket /tmp/synapse.sock (Windows: TCP 127.0.0.1:9477)");
+    embed_first_run_hint();
 }
 
 #[derive(serde::Serialize)]
@@ -1530,7 +1648,7 @@ fn search_best_effort(
     }
 
     #[cfg(feature = "embedder")]
-    let hybrid = Embedder::new_with_cache::<std::path::PathBuf>(emb_cache(file))
+    let hybrid = make_embedder(emb_cache(file))
         .ok()
         .and_then(|e| e.embed_one(query).ok())
         .and_then(|q| {
@@ -1767,6 +1885,9 @@ struct DoctorReport {
     private_source_hits: i64,
     stale_or_generated_source_hits: i64,
     embed_cache: Option<String>,
+    /// None on builds without an embedder; Some(false) when the model isn't
+    /// downloaded yet (first embed op fetches ~100MB once).
+    embed_model_cached: Option<bool>,
     backup_path: Option<String>,
     backup_age_seconds: Option<i64>,
     fallbacks: Vec<&'static str>,
@@ -1824,6 +1945,10 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
         .map(|p| p.join(".emb-cache"))
         .filter(|p| p.exists())
         .map(|p| p.display().to_string());
+    #[cfg(feature = "embedder")]
+    let embed_model_cached = Some(embedder_model_cached());
+    #[cfg(not(feature = "embedder"))]
+    let embed_model_cached: Option<bool> = None;
     let backup = newest_backup(file);
     let mut warnings = Vec::new();
     if quick_check != "ok" {
@@ -1850,6 +1975,13 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
     if embed_cache.is_none() {
         warnings.push("embedding cache missing; first semantic query may be slow".to_string());
     }
+    if embed_model_cached == Some(false) {
+        warnings.push(
+            "embedder model not downloaded yet; first embed op fetches ~100MB once — \
+             `synx put --no-embed` or a `--no-default-features` build skips it"
+                .to_string(),
+        );
+    }
     if stats.docs > 0 && backup.is_none() {
         warnings.push("no .synx/.brainpack backup found next to db or in backups/".to_string());
     }
@@ -1871,6 +2003,7 @@ fn doctor_report(store: &Store, file: &std::path::Path) -> Result<DoctorReport> 
         private_source_hits,
         stale_or_generated_source_hits,
         embed_cache,
+        embed_model_cached,
         backup_path,
         backup_age_seconds,
         fallbacks: vec!["hybrid", "lexical", "timeline", "fresh-context", "ground"],
@@ -1893,6 +2026,12 @@ fn print_doctor_report(report: &DoctorReport) {
         "embed_cache={}",
         report.embed_cache.as_deref().unwrap_or("missing")
     );
+    if let Some(cached) = report.embed_model_cached {
+        println!(
+            "embed_model={}",
+            if cached { "cached" } else { "not-downloaded" }
+        );
+    }
     println!(
         "backup={}",
         report.backup_path.as_deref().unwrap_or("missing")
