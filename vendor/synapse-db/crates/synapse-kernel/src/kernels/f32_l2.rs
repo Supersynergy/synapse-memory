@@ -5,7 +5,7 @@ use crate::prefetch;
 
 #[inline]
 pub fn l2_sq(a: &[f32], b: &[f32]) -> f32 {
-    debug_assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), b.len());
     let mut acc0 = 0f32;
     let mut acc1 = 0f32;
     let mut acc2 = 0f32;

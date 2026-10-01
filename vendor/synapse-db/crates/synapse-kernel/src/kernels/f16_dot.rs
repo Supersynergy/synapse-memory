@@ -8,7 +8,7 @@ use half::f16;
 /// Scalar fallback — 4-way unrolled.
 #[inline]
 pub fn dot_f16_scalar(a: &[f16], b: &[f16]) -> f32 {
-    debug_assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), b.len());
     let n = a.len();
     let mut acc0 = 0f32;
     let mut acc1 = 0f32;
@@ -39,7 +39,7 @@ pub fn dot_f16_scalar(a: &[f16], b: &[f16]) -> f32 {
 #[inline]
 pub fn dot_f16_neon(a: &[f16], b: &[f16]) -> f32 {
     use std::arch::aarch64::*;
-    debug_assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), b.len());
 
     let n = a.len();
     let mut i = 0;

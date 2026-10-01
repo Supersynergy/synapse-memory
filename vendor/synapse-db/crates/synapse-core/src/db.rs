@@ -18,6 +18,24 @@ type SqliteAutoExtensionFn = unsafe extern "C" fn(
     *const rusqlite::ffi::sqlite3_api_routines,
 ) -> std::ffi::c_int;
 
+/// Register sqlite-vec as an auto-extension exactly once per process —
+/// `sqlite3_auto_extension` is process-global, so per-`open` calls were pure
+/// re-registration overhead (bd -87y).
+fn register_vec_extension() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        #[allow(clippy::missing_transmute_annotations)]
+        unsafe {
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
+                *const (),
+                SqliteAutoExtensionFn,
+            >(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+    });
+}
+
 fn parse_meta_cell(raw: Option<String>) -> Option<serde_json::Value> {
     raw.and_then(|s| serde_json::from_str(&s).ok())
 }
@@ -341,14 +359,7 @@ impl Store {
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         #[allow(clippy::missing_transmute_annotations)]
-        unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
-                *const (),
-                SqliteAutoExtensionFn,
-            >(
-                sqlite_vec::sqlite3_vec_init as *const (),
-            )));
-        }
+        register_vec_extension();
         let db_path = path.as_ref().to_path_buf();
         let conn = Connection::open(&db_path)?;
         // Private memory store: brain.db must not be world-readable (0600).
@@ -500,14 +511,7 @@ impl Store {
             .map(|b| format!("{b:02x}"))
             .collect();
 
-        unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
-                *const (),
-                SqliteAutoExtensionFn,
-            >(
-                sqlite_vec::sqlite3_vec_init as *const (),
-            )));
-        }
+        register_vec_extension();
         let conn = Connection::open(path_ref)?;
         conn.pragma_update(None, "key", format!("x'{key_hex}'"))?;
         conn.pragma_update(None, "kdf_iter", 256000_i64)?;
@@ -2084,14 +2088,7 @@ INSERT OR IGNORE INTO meta(k,v)
     #[cfg(feature = "encryption")]
     pub fn open_with_brain_key(path: impl AsRef<Path>, key: &[u8; 32]) -> Result<Self> {
         let key_hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
-        unsafe {
-            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute::<
-                *const (),
-                SqliteAutoExtensionFn,
-            >(
-                sqlite_vec::sqlite3_vec_init as *const (),
-            )));
-        }
+        register_vec_extension();
         let conn = Connection::open(path.as_ref())?;
         conn.pragma_update(None, "key", format!("x'{key_hex}'"))?;
         // Verify the key is correct by attempting a read; SQLCipher will return
