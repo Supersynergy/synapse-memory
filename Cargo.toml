@@ -20,6 +20,21 @@ exclude = [
     # multimodal / media — SPEC: "multimodal surfaces are not default release claims"
     "crates/synapse-multimodal",
     "crates/synapse-media",
+    # divergent member twins (v2.1.0 island) — zero product dependents; every
+    # product crate path-depends on vendor/synapse-db instead. Keeping them in
+    # `members` produced duplicate lib names (synapse_core, synapse_engine) and
+    # flaky E0463 "can't find crate" in `cargo test --workspace` on CI.
+    # Convergence is tracked as bd issue synapse-memory-cpd; the code stays in
+    # tree, build it from its own dir.
+    "crates/synapse-core",
+    "crates/synapse-engine",
+    "crates/synapse-ann",
+    "crates/synapse-kernel",
+    "crates/synapse-quant",
+    "crates/synapse-fts",
+    "crates/synapse-graph",
+    "crates/synapse-spann",
+    "crates/synapse-obs",
 ]
 
 [workspace.metadata]
