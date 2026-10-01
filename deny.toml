@@ -26,6 +26,17 @@ ignore = [
     # lru 0.12.5 and 0.13.0 IterMut unsound — transitive. No fix released yet (RUSTSEC-2026-0002).
     # Reach: internal LRU cache iteration. Not exposed in public API. Track: upgrade when lru fix lands.
     "RUSTSEC-2026-0002",
+    # proc-macro-error2 2.0.1 unmaintained — transitive via i18n-embed-fl → age →
+    # vendored synapse-core (encryption feature). No upstream migration path yet;
+    # both forks are unmaintained. Track: age/i18n-embed dep refresh.
+    "RUSTSEC-2026-0173",
+    # smallstr unmaintained — transitive via icu_* → i18n-embed → age.
+    # Same chain as above; no direct fix without swapping i18n stack.
+    "RUSTSEC-2026-0215",
+    # ttf-parser unmaintained — transitive via pdf-extract/lopdf (document import).
+    # Reach: PDF text extraction only. Track: swap to maintained pdf stack or
+    # wait for the lopdf ecosystem to move.
+    "RUSTSEC-2026-0192",
 ]
 
 [licenses]
@@ -49,6 +60,8 @@ allow = [
     "LGPL-3.0",
     "GPL-2.0-only",
     "NCSA",
+    "LicenseRef-Proprietary",
+    "FSL-1.1-ALv2",
 ]
 
 [[licenses.exceptions]]
