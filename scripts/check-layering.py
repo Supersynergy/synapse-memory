@@ -35,12 +35,26 @@ def main() -> int:
     )
     members = sorted(p["name"] for p in meta["packages"])
 
-    violations = [
-        (p["name"], d["name"])
-        for p in meta["packages"]
-        for d in p["dependencies"]
-        if d["name"] in forbidden
-    ]
+    # Resolve each dependency by PATH, not name: identical package names exist
+    # twice (product island in crates/ vs vendored substrate). A dep that lands
+    # under vendor/ is L0 substrate and allowed; only deps resolving into an
+    # excluded crates/ dir are violations. Non-path deps keep name-matching.
+    violations = []
+    for p in meta["packages"]:
+        for d in p["dependencies"]:
+            if d["name"] not in forbidden:
+                continue
+            dep_path = d.get("path")
+            if dep_path is not None:
+                try:
+                    rel = pathlib.Path(dep_path).resolve().relative_to(ROOT)
+                except ValueError:
+                    continue  # dep lives outside the repo tree — not ours
+                if not str(rel).startswith("crates/"):
+                    continue  # vendored substrate — allowed
+                if str(rel) not in excluded:
+                    continue  # resolves to a non-excluded crate
+            violations.append((p["name"], d["name"]))
 
     if violations:
         print(
