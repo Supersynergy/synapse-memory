@@ -60,12 +60,13 @@ jobs:
           cargo fmt --all -- --check
           cargo test --locked -p synapse-cli --no-default-features
           cargo test --locked -p synapse-learn
-          cargo test --locked -p synapse-core --no-default-features \
-            --features backend-rusqlite --lib temporal::tests
-          cargo test --locked -p synapse-core --no-default-features \
-            --features backend-rusqlite --lib promote_is_single_row
-          cargo test --locked -p synapse-core --no-default-features \
-            --features backend-rusqlite --lib timeline_between_prefers
+          # vendored core — the storage engine the product actually ships
+          # (member crates/synapse-core is excluded from the workspace: it is a
+          # divergent twin with zero product dependents, see bd -cpd)
+          cargo test --locked \
+            --manifest-path vendor/synapse-db/crates/synapse-core/Cargo.toml \
+            --no-default-features --features backend-rusqlite --lib \
+            open_migrate_put_lex dedup_same_text lex_search_sanitizes_agent_strings
           cargo clippy --locked -p synapse-cli --no-default-features -- -D warnings
       - name: Build hardened host artifact
         run: |
