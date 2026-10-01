@@ -24,7 +24,11 @@ type AgentScope = (String, Option<String>, String);
 
 /// Pack cache: keyed by (query hash, budget, prev_pack_id hash) → rendered pack.
 /// LRU with capacity 64. Hits skip recall+pack entirely → -100 % on repeat queries.
+/// Entries expire after PACK_CACHE_TTL and the whole cache is cleared when this
+/// process writes (memory_save/put/delete/merge) — a long-running MCP server
+/// must not serve stale context forever (bd -hab).
 const PACK_CACHE_CAP: usize = 64;
+const PACK_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 struct PackCacheEntry {
@@ -34,6 +38,7 @@ struct PackCacheEntry {
     naive_tokens: usize,
     savings_pct: f32,
     pack_id: String,
+    inserted: std::time::Instant,
 }
 
 #[derive(Debug, Default)]
@@ -55,12 +60,19 @@ impl PackCache {
     }
 
     fn get(&mut self, k: u64) -> Option<&PackCacheEntry> {
-        if self.inner.contains_key(&k) {
+        if self
+            .inner
+            .get(&k)
+            .is_some_and(|e| e.inserted.elapsed() < PACK_CACHE_TTL)
+        {
             // move to back (most-recent)
             self.order.retain(|&x| x != k);
             self.order.push_back(k);
             self.inner.get(&k)
         } else {
+            if self.inner.remove(&k).is_some() {
+                self.order.retain(|&x| x != k);
+            }
             None
         }
     }
@@ -592,7 +604,28 @@ async fn tool_call(sock: &PathBuf, name: &str, args: Value) -> Result<Value> {
         }
         _ => anyhow::bail!("unknown tool: {name}"),
     };
-    daemon_call(sock, req).await
+    let resp = daemon_call(sock, req).await;
+    // This process wrote → drop cached packs so a later context_pack cannot
+    // serve pre-write context (bd -hab). External writers are still covered
+    // by the 60 s entry TTL.
+    if resp.is_ok()
+        && matches!(
+            name,
+            "memory_save"
+                | "memory_delete"
+                | "put"
+                | "merge"
+                | "delete"
+                | "context_remember"
+                | "session_ingest"
+                | "synapse_merge"
+        )
+        && let Ok(mut cache) = PACK_CACHE.lock()
+    {
+        cache.inner.clear();
+        cache.order.clear();
+    }
+    resp
 }
 
 /// Windows: `SYNAPSE_SOCK`/`--sock` accepts `host:port` or a bare port
@@ -1989,6 +2022,7 @@ async fn context_pack(sock: &PathBuf, args: &Value) -> Result<Value> {
                 naive_tokens,
                 savings_pct,
                 pack_id: pid.clone(),
+                inserted: std::time::Instant::now(),
             },
         );
     }
@@ -3093,6 +3127,7 @@ mod tests {
             naive_tokens: 500,
             savings_pct: 80.0,
             pack_id: "pid-alpha".into(),
+            inserted: std::time::Instant::now(),
         };
         cache.put(k1, e1.clone());
         assert_eq!(cache.len(), 1);
@@ -3134,6 +3169,7 @@ mod tests {
                     naive_tokens: 50,
                     savings_pct: 80.0,
                     pack_id: format!("pid-{i}"),
+                    inserted: std::time::Instant::now(),
                 },
             );
         }
@@ -3149,6 +3185,7 @@ mod tests {
                 naive_tokens: 50,
                 savings_pct: 80.0,
                 pack_id: "pid-new".into(),
+                inserted: std::time::Instant::now(),
             },
         );
         assert_eq!(cache.len(), PACK_CACHE_CAP, "cap must be maintained");

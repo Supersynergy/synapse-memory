@@ -326,12 +326,45 @@ pub fn verify_signature(rec: &ProvenanceRecord, public_key: &VerifyingKey) -> Re
         .map_err(|_| ProvenanceError::InvalidSignature(rec.doc_id.clone()).into())
 }
 
-/// Verify the full chain starting at a root doc. Walks parent_hash pointers.
+/// Load every provenance row keyed by its chain_hash — parent_hash pointers
+/// reference a parent's *chain hash*, not its doc_id, so walking a chain
+/// needs this index (bd -ymy).
+fn records_by_chain_hash(
+    conn: &Connection,
+) -> Result<std::collections::HashMap<Vec<u8>, ProvenanceRecord>> {
+    let mut stmt = conn.prepare(
+        "SELECT doc_id, agent_id, agent_version, source_uri, signature, parent_hash, content_hash, ts
+         FROM provenance",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(ProvenanceRecord {
+            doc_id: r.get(0)?,
+            agent_id: r.get(1)?,
+            agent_version: r.get(2)?,
+            source_uri: r.get(3)?,
+            signature: r.get(4)?,
+            parent_hash: r.get(5)?,
+            content_hash: r.get(6)?,
+            ts: r.get(7)?,
+        })
+    })?;
+    let mut map = std::collections::HashMap::new();
+    for r in rows {
+        let rec = r?;
+        map.insert(chain_hash(&rec).to_vec(), rec);
+    }
+    Ok(map)
+}
+
+/// Verify the full chain starting at a root doc. Walks parent_hash pointers
+/// back to the genesis record — each step re-checks the signature AND that
+/// the pointer resolves to a real record (bd -ymy).
 pub fn verify_chain(
     conn: &Connection,
     root_doc_id: &str,
     public_keys: &std::collections::HashMap<String, VerifyingKey>,
 ) -> Result<()> {
+    let by_hash = records_by_chain_hash(conn)?;
     let mut current = Some(root_doc_id.to_string());
     let mut visited = std::collections::HashSet::new();
     while let Some(doc_id) = current {
@@ -351,22 +384,19 @@ pub fn verify_chain(
                 reason: format!("no public key for agent {}", rec.agent_id),
             })?;
         verify_signature(&rec, pk)?;
-        // Recompute chain hash and check it matches what children would reference.
-        let computed = chain_hash(&rec);
-        if let Some(parent) = &rec.parent_hash {
-            // Verify parent's chain hash matches our parent_hash pointer.
-            if let Some(parent_rec) = get_record(conn, &doc_id)? {
-                // Parent hash pointer should equal chain_hash of parent (looked up separately).
-                // We don't have parent doc_id stored; instead verify by recomputing
-                // from the parent_hash pointer that it's consistent with a real parent.
-                let _ = parent_rec;
-                let _ = parent;
-                let _ = computed;
-            }
-        }
-        // Walk to parent: we need parent doc_id, but we only store parent_hash.
-        // For verification we stop here — full chain walk requires a parent_idx.
-        current = None;
+        current = match &rec.parent_hash {
+            Some(parent_hash) => Some(
+                by_hash
+                    .get(parent_hash)
+                    .ok_or_else(|| ProvenanceError::BrokenChain {
+                        doc: doc_id.clone(),
+                        reason: "parent_hash references missing record".into(),
+                    })?
+                    .doc_id
+                    .clone(),
+            ),
+            None => None,
+        };
     }
     Ok(())
 }
@@ -424,6 +454,41 @@ mod tests {
         let conn = Connection::open(&f).unwrap();
         init_schema(&conn).unwrap();
         conn
+    }
+
+    #[test]
+    fn verify_chain_walks_full_parentage() {
+        let conn = fresh_conn();
+        let id = AgentIdentity::new("cascade-2.1");
+        let mut keys = std::collections::HashMap::new();
+        keys.insert(id.agent_id.clone(), id.verifying_key().unwrap());
+        sign_and_append(&conn, &id, "doc-a", "2.1.0", "file:///a.rs", b"a", None).unwrap();
+        sign_and_append(
+            &conn,
+            &id,
+            "doc-b",
+            "2.1.0",
+            "file:///b.rs",
+            b"b",
+            Some("doc-a"),
+        )
+        .unwrap();
+        sign_and_append(
+            &conn,
+            &id,
+            "doc-c",
+            "2.1.0",
+            "file:///c.rs",
+            b"c",
+            Some("doc-b"),
+        )
+        .unwrap();
+        // walks doc-c → doc-b → doc-a, all signatures valid
+        verify_chain(&conn, "doc-c", &keys).unwrap();
+        // severing the middle link must fail (not silently stop at root)
+        conn.execute("DELETE FROM provenance WHERE doc_id = 'doc-b'", [])
+            .unwrap();
+        assert!(verify_chain(&conn, "doc-c", &keys).is_err());
     }
 
     #[test]
