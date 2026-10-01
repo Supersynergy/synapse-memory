@@ -55,7 +55,7 @@ pub fn pack_f16_rows(rows: &[Vec<f32>]) -> Vec<u8> {
     let dim = rows[0].len();
     let mut out = Vec::with_capacity(rows.len() * dim * 2);
     for row in rows {
-        debug_assert_eq!(row.len(), dim);
+        assert_eq!(row.len(), dim);
         for &v in row {
             out.extend_from_slice(&f16::from_f32(v).to_le_bytes());
         }

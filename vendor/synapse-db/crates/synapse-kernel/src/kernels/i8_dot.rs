@@ -6,7 +6,7 @@
 /// Scalar fallback — 4-way unrolled.
 #[inline]
 pub fn dot_i8_scalar(a: &[i8], b: &[i8]) -> i32 {
-    debug_assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), b.len());
     let n = a.len();
     let mut acc0: i32 = 0;
     let mut acc1: i32 = 0;
@@ -38,7 +38,7 @@ pub fn dot_i8_scalar(a: &[i8], b: &[i8]) -> i32 {
 #[inline]
 pub fn dot_i8_neon(a: &[i8], b: &[i8]) -> i32 {
     use std::arch::aarch64::*;
-    debug_assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), b.len());
 
     let n = a.len();
     let mut i = 0;

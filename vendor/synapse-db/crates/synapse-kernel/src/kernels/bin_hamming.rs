@@ -11,7 +11,7 @@ unsafe fn hamming_u64_neon(a: &[u64], b: &[u64]) -> u32 {
 
 #[inline(always)]
 fn hamming_u64_inner(a: &[u64], b: &[u64]) -> u32 {
-    debug_assert_eq!(a.len(), b.len());
+    assert_eq!(a.len(), b.len());
     let mut acc = 0u32;
     let n = a.len();
     let mut i = 0;
