@@ -17,6 +17,16 @@ matter for the task at hand.
 Everything stays on your machine. You need no account, API key, Docker or
 background service.
 
+## Start here
+
+| Your goal | Start with |
+| --- | --- |
+| Install the CLI | [Installation](#install) |
+| Save and retrieve your first note | [First steps](#first-steps) |
+| Connect a coding assistant | [Agent setup](#connect-your-agent) |
+| Understand local storage | [Memory location](#where-your-memory-lives) |
+| Build or contribute | [Build from source](#build-from-source) · [Contributing](#help-and-contributing) |
+
 ## Install
 
 macOS and Linux:
