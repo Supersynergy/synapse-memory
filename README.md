@@ -1,6 +1,6 @@
 # Synapse Memory
 
-![Synapse Memory: come back tomorrow, the why is still here](docs/assets/social-preview.png)
+![Synapse Memory](docs/assets/social-preview.png)
 
 [![License: FSL-1.1-ALv2 + MIT](https://img.shields.io/badge/license-FSL--1.1--ALv2%20%2B%20MIT-blue)](#license)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#install)
