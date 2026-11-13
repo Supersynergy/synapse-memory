@@ -1,6 +1,9 @@
+<p align="center">
+  <img src="docs/assets/social-preview.png" alt="Synapse Memory" width="960">
+</p>
+
 # Synapse Memory
 
-![Synapse Memory](docs/assets/social-preview.png)
 
 [![License: FSL-1.1-ALv2 + MIT](https://img.shields.io/badge/license-FSL--1.1--ALv2%20%2B%20MIT-blue)](#license)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)](#install)
