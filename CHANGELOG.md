@@ -18,7 +18,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   the wire protocol are identical on both transports.
 - `docs/QUICKSTART.md`: verified <10-minute setup for macOS/Linux/Windows
   including MCP client config for Claude Desktop, Cursor and Windsurf.
-- `KNOWN-ISSUES.md`: honest gap list (transport mileage, perf hot paths).
+- `docs/reference/KNOWN-ISSUES.md`: honest gap list (transport mileage, perf hot paths).
 - `synx init` now prints next steps: created paths, first commands, MCP wiring.
 
 ### Changed
@@ -50,7 +50,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Layering guard `scripts/check-layering.py`, wired into `just check` and CI:
   fails if a product crate depends on an excluded experimental crate (ADR 0001).
   Also exposed as `just check-layers`.
-- Root `ARCHITECTURE.md` with the L0 substrate / L1 domain / L2 interface overview.
+- Root `docs/architecture/ARCHITECTURE.md` with the L0 substrate / L1 domain / L2 interface overview.
 
 ### Changed
 - README rewritten for users: install, first steps, agent setup and data
@@ -331,7 +331,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 ### Added
 - F16 NEON kernel: 4× speed + 50% RAM vs f32
 - Raft-cascade: R@10=1.000 guaranteed via two-stage exact rerank
-- ARCHITECTURE.md
+- docs/architecture/ARCHITECTURE.md
 - `synapse-migrate`: import from Qdrant/LanceDB/Chroma
 - Fuzzer (`cargo fuzz` targets)
 

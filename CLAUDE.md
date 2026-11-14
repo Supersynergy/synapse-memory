@@ -20,7 +20,7 @@ just check-layers # architecture/layer boundary check
 Direct: `cargo clippy --all-targets --all-features -- -D warnings` · `cargo nextest run`.
 
 ## Quality / security
-`deny.toml` (cargo-deny) · `audit.toml` (cargo-audit) · `clippy.toml`. Run before release. `ARCHITECTURE.md` = layer map; `CONTRIBUTING.md` = workflow.
+`deny.toml` (cargo-deny) · `audit.toml` (cargo-audit) · `clippy.toml`. Run before release. `docs/architecture/ARCHITECTURE.md` = layer map; `CONTRIBUTING.md` = workflow.
 
 ## Lean-code notes
 Vendored code (`vendor/synapse-db`) MUST carry provenance (upstream URL + commit SHA + sync-date) and stay visible to `cargo audit` — invisible copies are un-patchable CVEs (xz/CVE-2024-3094 era). Correctness-critical surface (vectors, SQLite, parsers) → KEEP maintained deps, never self-roll. Apply `/leancode` before adding crates.

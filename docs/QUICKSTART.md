@@ -181,4 +181,4 @@ One local SQLite file holds everything; nothing leaves the machine. Back it up
 with `synx -f <db> backup <out>.synx` or `synapse-ultra backup --db <db>`.
 
 Next: [README.md](../README.md) · [SPEC.md](../SPEC.md) ·
-[KNOWN-ISSUES.md](../KNOWN-ISSUES.md)
+[docs/reference/KNOWN-ISSUES.md](reference/KNOWN-ISSUES.md)

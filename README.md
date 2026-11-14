@@ -201,7 +201,7 @@ cargo build --release --locked -p synapse-cli
 The first build takes a few minutes. A source build of `main` reports its
 workspace version (`2.1.0`), which differs from the release numbering.
 
-Layer map: [ARCHITECTURE.md](ARCHITECTURE.md). Workflow and checks:
+Layer map: [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md). Workflow and checks:
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
@@ -222,7 +222,7 @@ third-party dependencies with their licenses.
 ## Help and contributing
 
 - Bugs and questions: [GitHub Issues](https://github.com/Supersynergy/synapse-memory/issues)
-- Known gaps: [KNOWN-ISSUES.md](KNOWN-ISSUES.md)
+- Known gaps: [docs/reference/KNOWN-ISSUES.md](docs/reference/KNOWN-ISSUES.md)
 - Security reports: [SECURITY.md](SECURITY.md)
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Changes per version: [CHANGELOG.md](CHANGELOG.md)

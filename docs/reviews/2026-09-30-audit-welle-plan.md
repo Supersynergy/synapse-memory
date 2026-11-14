@@ -20,7 +20,7 @@
 | ID | Auftrag | Akzeptanz |
 |----|---------|-----------|
 | A1 | Hot-Path-Audit: put/search/context-Pipeline in synapse-core, -engine, -kernel, -fts, -quant — Allocs, I/O, Locks, N+1-Queries | Top-10 Perf-Befunde mit Pfad:Zeile + geschätzter Kostenklasse (init/CPU/alloc/IO/RTT/lock) |
-| A2 | Layer-Verletzungen gegen ARCHITECTURE.md + `just check-layers` Scope | Liste tatsächlicher Verletzungen |
+| A2 | Layer-Verletzungen gegen docs/architecture/ARCHITECTURE.md + `just check-layers` Scope | Liste tatsächlicher Verletzungen |
 | A3 | Flaky-Perf-Asserts rabitq-latency + put_batch-throughput: Ursache, Kalibrierungs-Fix | Konkreter Fix-Vorschlag mit Datei |
 | A4 | Cold-init & Daemon-Pfad: /tmp/synapse.sock :9477, brain.db Fallback — Latenz-Budget | Messbare Empfehlungen |
 

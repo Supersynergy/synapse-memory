@@ -87,11 +87,11 @@ brew install duckdb
 
 ## ADRs
 
-- [ADR 0004 — Synapse Ultra lean extension](docs/adr/0004-synapse-ultra-lean-extension.md)
-- [ADR 0005 — Graph-v2 as SQLite recursive CTE](docs/adr/0005-graph-v2-sqlite-cte.md)
-- [ADR 0006 — Event log as beads-style SQLite table](docs/adr/0006-events-as-beads-style-sqlite.md)
-- [ADR 0007 — DuckLake as optional archive](docs/adr/0007-ducklake-optional-archive.md)
-- [ADR 0008 — Observe CLI now, Astro 7 later](docs/adr/0008-observe-cli-astro-later.md)
+- [ADR 0004 — Synapse Ultra lean extension](../adr/0004-synapse-ultra-lean-extension.md)
+- [ADR 0005 — Graph-v2 as SQLite recursive CTE](../adr/0005-graph-v2-sqlite-cte.md)
+- [ADR 0006 — Event log as beads-style SQLite table](../adr/0006-events-as-beads-style-sqlite.md)
+- [ADR 0007 — DuckLake as optional archive](../adr/0007-ducklake-optional-archive.md)
+- [ADR 0008 — Observe CLI now, Astro 7 later](../adr/0008-observe-cli-astro-later.md)
 
 ## Testing
 
