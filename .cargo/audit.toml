@@ -7,7 +7,6 @@ ignore = [
     # feature (libsql 0.9 -> hyper-rustls 0.25 -> rustls 0.22). Default build and
     # Xi's TLS path (synapse-mysql-async) now use rustls 0.23 / webpki 0.103.13.
     # Remove when libsql upstream migrates to hyper 1.x + rustls 0.23.
-    "RUSTSEC-2026-0104",
     "RUSTSEC-2026-0098",
     "RUSTSEC-2026-0099",
     # rustls-native-certs 0.7.3 -- same libsql optional dep chain only
